@@ -1,0 +1,43 @@
+2024-06-09 feature設計をREADME.mdからFEATURES.mdに分離。README.mdからFEATURES.mdへのリンクを追加。 
+
+Flutterプロジェクト初期化（flutter create .）を実行。 
+
+2024-06-09 フェーズ1のMVP機能（地図表示・点描画・属性入力・GPS現在地表示UI）をmain.dartに実装。flutter_map, latlong2, geolocatorをpubspec.yamlに追加。 
+
+2024-06-09 レイヤ管理機能（追加・削除・切替・Drawer UI）をmain.dartに実装。 
+
+2024-06-09 GeoPackageをレイヤグループとして扱い、GeoPackage追加・削除・レイヤ追加・削除・切替・Drawerの2階層構造UIをmain.dartに実装。 
+
+2024-06-09 README.mdを現状の機能・クラス構成・UI・GeoPackage/レイヤ管理仕様に合わせて詳細化・追記。 
+
+// 2024-06-09: 存在しないgpkgファイルを参照・変更しようとする問題を修正。
+// - LayerManager.addGeoPackageで空パスやファイル存在チェックを追加
+// - KMapsHomePage.initStateでdefaultGpkgPathが空や存在しない場合はGeoPackage追加・レイヤ追加をスキップ
+// - プロジェクトフォルダ選択時、gpkgファイルがなければ警告ダイアログを表示
+// - Google Driveインポートは未実装ダイアログを表示し、空パスで画面遷移しないよう修正 
+
+// 2024-06-09: LayerManager/画面設計を「常に何らかのレイヤが選択されている」前提から脱却。currentLayerをnullableにし、未選択時はUIで案内表示・点描画等を無効化。READMEにも反映。 
+
+2024-06-09: レイヤ名・GeoPackage名のリネーム時、同名の場合はSQLを実行しないようlib/main.dartを修正。 
+
+2024-06-09: GeoPackageファイル名リネーム時、basename部分のみ変更し、ディレクトリや拡張子は維持するようlib/main.dartを修正。 
+
+2024-06-09: レイヤ名リネーム時、gpkg_contentsとgpkg_geometry_columnsのtable_nameもUPDATEするようlib/main.dartを修正。 
+
+2024-06-09: LayerManager.addGeoPackageで、GeoPackageファイル内のgpkg_contents/gpkg_geometry_columnsから既存レイヤ情報を取得し、レイヤ構造に反映する処理を追加。 
+
+2024-06-09 点フィーチャ追加・削除・読み込み時にGeoPackage(DB)と常に同期するよう修正。WKB(Point)生成・DB保存/復元/削除処理をmain.dartに実装。README.md更新。 
+
+2024-06-09 デフォルトレイヤの自動追加を「新規プロジェクト作成時のみ」に修正。既存プロジェクトを開いた場合はDB内のレイヤのみ反映。README.mdにも明記。 
+
+2024-06-09 features.mdにOGC Simple Features仕様に基づくレイヤジオメトリタイプ（MultiPoint, MultiLineString, MultiPolygonのみ対応）を明記する仕様セクションを追加。 
+
+2024-06-09 MultiLineString/MultiPolygonレイヤに対するペン・消しゴム操作（追加・削除・確定）をUI/ロジックに実装。 
+
+MultiPolygonレイヤの多角形が塗りつぶされないバグを修正。PolygonLayerのPolygon生成時、holesではなくholePointsListプロパティを使い、外環＋穴を正しく描画するようにした。
+
+PolygonLayerのPolygon生成時にisFilled: trueを追加し、MultiPolygonレイヤの塗りつぶしが確実に有効になるよう修正。
+
+線・ポリゴン確定時にDB（GeoPackage）へ保存するよう修正。WKBエンコード関数（LineString/Polygon）を追加し、LayerManagerにaddLineToCurrentLayer/addPolygonToCurrentLayerを実装。UI側で確定時にこれらを呼び出すよう変更。
+
+DBからの復元時、WKBデコードで線・ポリゴンも正しく復元できるようparseWkbLineString/parseWkbPolygonを実装し、LayerManager.addGeoPackageで利用するよう修正。

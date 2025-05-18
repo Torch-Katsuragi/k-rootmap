@@ -41,3 +41,104 @@ PolygonLayerのPolygon生成時にisFilled: trueを追加し、MultiPolygonレ�
 線・ポリゴン確定時にDB（GeoPackage）へ保存するよう修正。WKBエンコード関数（LineString/Polygon）を追加し、LayerManagerにaddLineToCurrentLayer/addPolygonToCurrentLayerを実装。UI側で確定時にこれらを呼び出すよう変更。
 
 DBからの復元時、WKBデコードで線・ポリゴンも正しく復元できるようparseWkbLineString/parseWkbPolygonを実装し、LayerManager.addGeoPackageで利用するよう修正。
+
+地図初期表示をGPS現在地に変更（lib/main.dart initStateに現在地取得処理追加）
+
+2024-06-09: 初期化時のGeolocator.getCurrentPositionによる現在地取得処理を削除し、ストリーム購読のみで現在地を扱うように戻した。
+
+2024-06-09: レイヤ名編集UIを「編集ボタン押下時のみ、その場でTextFieldに切り替わるインライン編集」に変更し、ダイアログは使わない形にした。
+
+2024-06-09: フォルダ名・GeoPackage名編集UIをレイヤ名編集UIと同じく「編集ボタン押下時のみ、その場でTextFieldに切り替わるインライン編集」に統一。
+
+lib/main.dart: ListTile以外でtrailing:を使っていた箇所をRowのchildrenに移動し、エラーを修正。
+
+2024-06-09: GeoPackage名表示RowにPopupMenuButton（...メニュー）を追加し、名前変更・削除にアクセスできるようにした。既存のIconButton(削除)は削除し、PopupMenuButtonからリネーム・削除を選択できるようにした。
+
+2024-05-16 main.dartをエントリーポイントのみに整理。screens/home_screen.dart, screens/map_page.dartを新規作成し、UI分割の準備。
+
+2024-05-16 models/layer.dart, models/geopackage.dart, utils/wkb_utils.dart, utils/folder_tree.dart, widgets/inline_edit.dartを新規作成し、main.dartから分割・移植。
+
+2024-05-16 map_page.dartに地図・編集UI本体の再構築を開始し、models/utils/widgetsをimportして新構成に移行。home_screen.dartのimport修正。README.mdに新しいファイル構成・クラス構成・分割方針を詳細に記載。
+
+【2024-06-13】
+- map_page.dartのDrawerに、プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をツリー表示するWidgetを実装
+- GeoPackage・レイヤの選択・追加・削除・リネーム・インライン編集UIを追加
+- LayerManagerと連携し、状態が即時反映されるように
+- README.mdにDrawerツリー表示・操作の内容を反映
+- Drawerのレイヤ構造ツリー表示を旧仕様（カレントディレクトリ直下のサブフォルダ・GeoPackageのみをリスト表示、ルートノードは表示しない）に戻した
+- README.mdも修正
+- LayerManagerにrenameLayerメソッドを追加し、レイヤ名リネーム時にDB（テーブル名・gpkg_contents・gpkg_geometry_columns）とUIを完全同期するよう修正
+- Drawerのインライン編集UIからrenameLayerを呼び出すよう修正
+- Drawerでサブフォルダも展開可能なツリー構造で表示されるよう修正
+- README.mdも修正
+- プロジェクトロード時に全.gpkg・全レイヤを一括ロードし、Drawerバー左の…メニューから「プロジェクト全体を再読み込み」できるように修正
+- LayerManagerを全レイヤ一元管理＋可視フラグ付きに拡張
+- README.mdも修正
+- 地図上のレイヤ表示順をpolygon→line→point（pointが一番上）に統一
+- Drawerのレイヤリストに目玉アイコンで可視切り替えUIを追加
+- README.mdも修正
+
+2024-06-09 レイヤ・GeoPackage・フォルダの可視切り替えUIを「種別アイコンのタップで切り替え、不可視時はグレーアウト＋斜線重ね」に統一。目アイコンや可視切り替えボタンは廃止。README.mdも更新。
+
+2024-06-09 可視状態の親子連動（親を不可視にすると子も一括で不可視、UI上も非表示）仕様に変更。setVisibleRecursiveをFolderNode/GeoPackageGroup/Layerに追加し、Drawerのリスト表示も親が不可視なら子を非表示にするよう修正。README.mdも更新。
+
+// 2024-06-09 サブフォルダ配下のGeoPackageGroupへの可視設定伝播を、サブサブフォルダも含めて厳密に行うよう修正。gpkg.pathがsub.pathと一致、またはsub.path+区切りで始まる場合のみ伝播するように修正
+
+2024-06-09 meta.jsonによる可視状態の伝搬・復元機能を追加。VisibleMetaManager新規作成、LayerManager/LayerDrawer/画面本体に組み込み、親visible切替時に子の状態を復元・保存するようにした。READMEも更新。2024-06-09 meta.jsonのルートノード名をlayerTree→rootNodeに統一。visible_meta_manager.dart, layer_drawer.dart, geopackage.dart, README.mdを修正。
+2024-06-09 meta.json管理をMetaDataクラスに統合。visible_meta_manager.dart→meta_data.dartへリネーム。LayerManager等の参照・READMEも修正。meta.jsonにgeneral/gps/toolProperties等の拡張性を追加。
+
+【リファクタ】
+- FolderNode, GeoPackageGroup, LayerをLayerTreeNode抽象クラスで統一
+- UI（LayerDrawer）をLayerTreeNodeのchildrenを再帰的に描画する方式に変更
+- モデル側も親・子・可視状態・パス取得等を共通化
+
+/*
+ * 変更ログ
+ * - lib/utils/meta_data.dart: restoreVisibleメソッドを追加。meta情報から各ノードのvisible状態を再帰的に復元する処理を実装。
+ * - lib/widgets/layer_drawer.dart: サブフォルダを表示に戻す時、meta情報を利用して子ノードのvisible状態を復元する処理を追加。
+ */
+
+【修正】lib/models/folder_node.dartのLayerTreeNode定義を削除し、lib/models/layer_tree_node.dartのLayerTreeNodeをimportして使うよう修正
+
+【修正】lib全体でLayerTreeNodeのimport・型指定をlib/models/layer_tree_node.dartに統一。getChildrenByTypeをlayer_tree_node.dartに実装。
+
+【修正】LayerTreeNodeにgetFilePathIfAny()を追加し、GeoPackageGroupでoverride。lib/widgets/layer_drawer.dart等でnode.path参照をgetFilePathIfAny()に統一し、NoSuchMethodErrorを解消。
+
+【修正】LayerTreeNodeにexpandedプロパティのgetterを追加し、GeoPackageGroupでインスタンス変数_expandedを返すようoverride。UIでのexpanded参照のNoSuchMethodErrorを解消。
+
+【修正】GeoPackageノードのchildren描画部分をgetChildrenByType("layer")でレイヤを描画するよう修正し、Drawerにレイヤが表示されるようにした。
+
+【修正】GeoPackageGroupのchildren=...の代入を削除し、childrenはgetterのみでlayersを返す設計に統一。Drawerでレイヤが正しく表示されるよう修正。
+
+【修正】scanProjectFolderで.gpkgファイルを見つけたらLayerTreeNodeではなくGeoPackageGroupを生成するよう修正。DrawerでGeoPackage配下のレイヤが正しく表示されるようにした。
+
+lib/widgets/layer_drawer.dart: カレントディレクトリのchildrenのみをリスト表示するファイルエクスプローラ風UIに変更。currentDirPathで指定されたパスのfolderノードを取得し、そのchildrenのみをリスト表示するようにした。フォルダをタップしたらonDirChangedでパスを更新する。再帰的なツリー表示は廃止。
+
+lib/screens/map_page.dart: FolderNode用のimport '../models/folder_node.dart'; を追加し、未定義エラーを解消。
+
+2024-xx-xx: README.mdに現状のプロジェクトディレクトリ構成（ツリー形式）を「プロジェクト構成」セクションとして追加。
+
+// 2024-06-13 createNodesByType→createNodeByTypeにAPI名変更、返り値をList→LayerTreeNode?（単一ノード返却）に修正
+
+GeoPackageFile: ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成する処理を追加（2024-06-13）。
+
+2024-06-13 lib/models/geopackage_file.dartのWKBエンコード・デコード処理をlib/utils/wkb_utils.dartの関数に統一し、重複実装を排除するリファクタリングを実施。
+
+2024-06-13 layer_drawer.dartにフォルダノード右側のGeoPackage追加ボタン（＋）を実装。ファイル名入力→GeoPackageFile自動生成→GeoPackageNode追加・UI即反映の流れを追加。
+
+LayerDrawerをStatefulWidget化し、GeoPackageノードのタップでレイヤリストをトグル展開できるようにした（lib/widgets/layer_drawer.dart）。
+
+GeoPackageノード配下のレイヤタイルをインデント表示（contentPadding: EdgeInsets.only(left: 32)）に変更。
+
+GeoPackageノード右側に…メニュー（PopupMenuButton）を追加し、「削除」操作を実装。削除時は確認ダイアログ→ファイル削除＋ノードdisposeで親childrenから除外＋UI更新。
+
+GeoPackageノードのレイヤ追加ボタンをtrailingからレイヤリスト最下部に移動、トグル展開アイコン（expand_less/expand_more）を削除。
+
+// 2024-06-13 LayerDrawerTitleBarウィジェットをlib/widgets/layer_drawer.dartに追加。
+// Drawer上部にcurrentNodeの名前を青いタイトルパネルで表示するようUIを変更。
+
+// 2024-06-13 LayerTreeNode継承クラス（FolderNode, GeoPackageNode, PointLayerNode, LineLayerNode, PolygonLayerNode）でbaseIcon/baseIconColorを定義。
+// Drawer側はnode.baseIcon/node.baseIconColorを使うだけで種別ごとのアイコン描画が可能に。
+
+// 2024-06-13 タイトルパネル右側にサブフォルダ・GeoPackage追加ボタンを合成アイコンで実装。
+// buildAddIconOverlayメソッドで合成アイコンをWidget化し再利用可能にした。

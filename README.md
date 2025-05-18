@@ -1,112 +1,225 @@
 # K-MAPS
 
-本リポジトリは、直感的なGeoPackage編集・作成モバイルアプリ「K-MAPS」の開発用です。
+## 概要
+K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 
-- 詳細な機能設計・仕様は[FEATURES.md](./FEATURES.md)を参照。
-
-## プロジェクト初期化
-
-Flutterでプロジェクトを初期化済み（`flutter create .`）。
-
-### 主要なファイル・ディレクトリ
-- `lib/main.dart`: Flutterアプリのエントリーポイント。K-MAPSのUI/ロジックを全て実装。
-- `pubspec.yaml`: 依存パッケージ管理ファイル。
-- `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/`: 各プラットフォーム用のビルド設定・ネイティブコード。
-- `test/`: テストコード配置ディレクトリ。
-- `FEATURES.md`: 機能設計・仕様まとめ。
-- `ailog.txt`: 変更履歴ログ。
-
-### クラス構成（現状）
-- `KMapsApp`: アプリ本体（MaterialAppラッパー）
-- `KMapsHomeScreen`: ホーム画面（プロジェクト新規作成・既存プロジェクト/DriveインポートUI）
-- `KMapsHomePage`: 地図・レイヤ・フィーチャ編集画面
-- `LayerManager`: GeoPackage/レイヤ全体管理
-- `GeoPackageGroup`: GeoPackage（レイヤグループ）情報
-- `Layer`: レイヤ情報（名前・種別・点フィーチャリスト）
-- `_PointFeature`: 点フィーチャ（座標＋属性）
-
-### 主要UI・機能
-- ホーム画面でプロジェクト新規作成・ローカル/Driveからインポート
-- プロジェクトごとにGeoPackageファイルを新規作成・初期化
-- 地図表示（OpenStreetMap, flutter_map使用）
-- 地図上での点フィーチャ描画（タップで追加、属性テキスト入力）
-- GPS現在地の取得・表示（ストリームで常時監視、地図上に反映）
-- DrawerでGeoPackage/レイヤの2階層構造管理・追加・削除・切替
-- レイヤ追加時に種別（点・線・ポリゴン）選択、GeoPackageに対応テーブル作成
-- BottomNavigationBarでツール切替（地図/GPS/レイヤ）
-- プロジェクトフォルダ選択時、.gpkgファイルが存在しない場合は警告ダイアログを表示し、画面遷移しない
-- GeoPackageファイルが存在しない場合や空パスの場合は、LayerManagerで追加・参照・変更を行わない安全設計
-- レイヤやGeoPackageが1つもない場合は「未選択」状態となり、地図上の点描画やレイヤUIは非表示。案内メッセージを表示
-- Google Driveインポートは未実装。ボタン押下時は未実装ダイアログを表示し、空パスで画面遷移しない
-- 新規プロジェクト作成時のみ「デフォルトレイヤ」が自動追加される。既存プロジェクトを開いた場合はDB内のレイヤのみ反映。
-
-### GeoPackage/レイヤ管理
-- 複数GeoPackage（.gpkgファイル）の追加・削除が可能
-- 各GeoPackageごとに複数レイヤを追加・削除・切替可能
-- DrawerからGeoPackage（グループ）→レイヤ（子）の2階層構造で管理・操作
-- レイヤ追加時はどのGeoPackageに追加するか選択し、物理ファイルにテーブル作成
-- GeoPackageファイル新規作成時は必須メタテーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を初期化
-
-### 今後の拡張方針
-- 線・ポリゴンフィーチャの描画・属性編集
-- GeoPackage属性テーブルの編集・表示
-- Google Drive連携によるプロジェクト同期
-- サブフォルダ・複数GeoPackageの階層的管理
-- フリーハンド描画・Undo/Redo・高度な編集ツール
-
-## ファイル・クラス構成
-- `lib/main.dart`: アプリ本体・UI・DB操作の主要ロジック
-  - `KMapsApp`: アプリエントリポイント
-  - `KMapsHomeScreen`: プロジェクト新規作成・インポートUI
-  - `KMapsHomePage`: 地図・レイヤ・フィーチャ編集画面
-  - `LayerManager`: GeoPackage/レイヤ全体管理、DBとの同期
-  - `GeoPackageGroup`: GeoPackage（レイヤグループ）情報
-  - `Layer`: レイヤ情報（名前・種別・点フィーチャリスト）
-  - `_PointFeature`: 点フィーチャ（座標＋属性）
-- `pubspec.yaml`: 依存パッケージ管理
-- `README.md`: 本ファイル
-- `ailog.txt`: 変更履歴
-
-## DB仕様（GeoPackage）
-- 各レイヤはSQLiteテーブルとして管理
-- 点フィーチャはWKB(Point)形式で`geom`カラム（BLOB）に格納
-  - WKB: 1バイトエンディアン + 4バイト型 + 8バイトX + 8バイトY（リトルエンディアン）
-- 属性は`attr`カラム（TEXT）
-- レイヤ削除時はDBテーブル・メタ情報も削除
-- プロジェクト・レイヤ読み込み時はDBから点データを復元
-
-## 今後の拡張
-- 線・ポリゴンフィーチャの描画・属性編集
-- GeoPackage属性テーブルの編集・表示
-- Google Drive連携によるプロジェクト同期
-- サブフォルダ・複数GeoPackageの階層的管理
-- フリーハンド描画・Undo/Redo・高度な編集ツール
-
-## 主な機能
-- GeoPackage新規作成・インポート・レイヤ管理
-- 地図上でMultiPoint/MultiLineString/MultiPolygonフィーチャの描画・属性入力
-- GPS現在地の取得・表示
-- DrawerでGeoPackage/レイヤの2階層構造管理
-- レイヤ追加時に種別（MultiPoint・MultiLineString・MultiPolygon）選択、GeoPackageに対応テーブル作成
-- BottomNavigationBarでツール切替（地図/GPS/レイヤ）
-- MultiPolygonレイヤの外環＋穴（hole）を正しく塗りつぶし描画（PolygonLayerのholePointsList対応）
+## 主な設計方針（2024-06-10以降）
+- **LayerManagerは廃止**。GeoPackageFile＋ノード（GeoPackageNode/LayerNode）＋グローバル変数で全体管理。
+- UIはGeoPackageNode/LayerNodeのメソッドを直接呼び、DB操作はGeoPackageFileに集約。
+- 選択状態は「現在選択中のLayerNode/GeoPackageNode」への参照をグローバル変数で保持。
+- 可視状態・meta.json連携はLayerTreeNodeのvisible系メソッドで一元化。
+- 複数ファイル・レイヤの一元管理も、全ノードリストをグローバルで管理。
 
 ## 主要ファイル・クラス構成
-- `lib/main.dart`: アプリ本体・UI・ロジック全体
-  - `KMapsApp`: アプリエントリポイント
-  - `KMapsHomeScreen`: プロジェクト新規作成・インポート画面
-  - `KMapsHomePage`: 地図・レイヤ・フィーチャ編集画面
-  - `LayerManager`: GeoPackage/レイヤ全体管理
-  - `GeoPackageGroup`: GeoPackage（レイヤグループ）情報
-  - `Layer`: レイヤ情報（名前・種別・フィーチャリスト）
-  - `MultiPointFeature`/`MultiLineStringFeature`/`MultiPolygonFeature`: 各種フィーチャ（属性・座標）
-  - PolygonLayerのPolygon生成時、holePointsListプロパティで外環＋穴（hole）をサポート
+- `lib/models/geopackage_file.dart` : GeoPackageFile（GeoPackageファイル管理・DB操作ラッパ）
+  - WKBエンコード・デコード処理はlib/utils/wkb_utils.dartに集約。
+  - ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成（OGC仕様準拠、最小構成）。
+- `lib/models/layer_tree_node.dart` : LayerTreeNode/GeoPackageNode/LayerNode（ツリー構造・可視状態・meta.json連携）
+- `lib/utils/global_config.dart` : グローバル変数（全ノードリスト・選択中ノード等）
+- `lib/widgets/layer_drawer.dart` : レイヤツリーUI（ノード参照で操作）
+  - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
+  - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能。
+- `lib/screens/map_page.dart` : 地図画面本体（ノード・グローバル変数参照で状態管理）
 
-## クラス構成詳細
-- `LayerManager`:
-  - GeoPackageの追加・削除・レイヤ追加・削除・選択・DB同期
-  - MultiPolygonFeatureのpolygons（List<List<List<LatLng>>>）を展開し、PolygonLayerのholePointsListで穴も描画
-- `MultiPolygonFeature`:
-  - polygons: List<List<List<LatLng>>>（外環＋穴のリスト、GeoJSON準拠）
+## クラス構成
+- **GeoPackageFile**: ファイルパスのみ保持し、DB操作（レイヤ追加・削除・リネーム・フィーチャ取得等）を担う。
+- **LayerTreeNode/GeoPackageNode/LayerNode**: ツリー構造・可視状態・meta.json連携・GeoPackageFile参照を持つ。
+- **GlobalConfig**: 全ノードリスト・選択中ノード等のグローバル管理。
+
+## 状態管理
+- 選択状態・可視状態・ファイル/レイヤの追加削除等は、すべてノード＋グローバル変数で一元管理。
+- meta.jsonのロード・保存もLayerTreeNode側で吸収。
+
+## 主な機能
+- レイヤ構造のファイルエクスプローラ風表示・操作
+- GeoPackageファイル・レイヤの追加/削除/可視切り替え
+- **Drawer上部に現在のノード名を青いタイトルパネルで表示（LayerDrawerTitleBarウィジェット）**
+- プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示
+- フォルダ/GeoPackage/レイヤの可視切り替え・リネーム・削除
+- フォルダをタップでカレントディレクトリ移動
+- フォルダノード右側の「GeoPackage追加」ボタン（＋）から、任意の場所に新規GeoPackageファイルを即作成・追加可能
+- GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能
+
+## 主要ファイルとクラス
+- `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
+- `lib/utils/meta_data.dart`: meta.json全体の読み書き・可視状態・設定管理（MetaDataクラス）
+- `lib/utils/folder_tree.dart`: FolderNode（サブフォルダツリー）
+- `lib/widgets/layer_drawer.dart`: レイヤ構造Drawer本体。`LayerDrawer`（StatefulWidget）、`LayerDrawerTitleBar`（タイトルパネルWidget）などを実装。
+- `lib/screens/map_page.dart`: KMapsHomePage（画面本体、LayerManager/Drawer連携）
+- `lib/models/folder_node.dart`: FolderNode（サブフォルダツリー）・scanProjectFolder（.gpkgファイルもchildrenにLayerTreeNode(nodeType: "gpkg")として追加する実装）
+- `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）などのグローバル変数・設定を一元管理。
+- `lib/models/layer_tree_node.dart`: フォルダ/GeoPackage/レイヤのノード構造を定義。
+- `lib/models/layer.dart`: レイヤ情報のモデル。
+
+### クラス構成
+- `LayerTreeNode`：サブフォルダ・GeoPackage・レイヤ共通の抽象クラス。親・子・可視状態・パス取得・再帰可視切替などを統一インターフェースで提供。
+  - **各サブクラスでbaseIcon/baseIconColorをoverrideし、UI側はnode.baseIcon/node.baseIconColorを呼ぶだけで種別ごとのアイコン描画が可能。**
+- `FolderNode`/`GeoPackageGroup`/`Layer`：LayerTreeNodeを実装し、ツリー構造を再帰的に表現。
+- `LayerManager`：GeoPackage/Layerの全体管理。MetaDataを持ち、可視状態や設定をmeta.jsonと同期。
+- `MetaData`：meta.json全体（layerTree, general, gps, toolProperties等）を一元管理。可視状態APIもここに統合。
+- `LayerDrawer`：LayerTreeNodeのchildrenを再帰的に描画する方式でUIを構築。可視状態切替も共通化。
+- `GlobalConfig`: プロジェクト全体のグローバル変数・設定（ルートディレクトリパス、MetaDataインスタンス等）をシングルトンで管理。
+- `LayerDrawerTitleBar` : 現在のノード名を青いパネルで表示するWidget。
+
+## meta.json構造と拡張性
+- meta.jsonはプロジェクト直下に保存。レイヤ構造は"rootNode"ノード配下で管理し、
+  設定（general/gps/toolProperties等）も同階層に格納。
+- 例:
+```
+{
+  "rootNode": {...},
+  "general": {...},
+  "gps": {...},
+  "toolProperties": {...}
+}
+```
+- 親（フォルダ/GeoPackage）を非表示にすると、子も再帰的に非表示
+- 親を再表示したとき、子は非表示前の状態（meta.jsonに記録）で復元
+
+## 使い方
+1. プロジェクトを開くとmeta.jsonが自動生成/読込され、可視状態が復元される
+2. Drawerで可視/不可視を切り替えるとmeta.jsonも即時更新
 
 ---
+
+詳細なクラス・UI・ロジックの説明は`FEATURES.md`も参照。
+
+## 主な機能
+- 地図上でGeoPackageのレイヤ（点・線・面）を編集・表示
+- レイヤ・GeoPackage・フォルダの可視状態を種別アイコンのタップで切り替え可能
+  - 不可視時はアイコンがグレーアウト＋斜線重ねで明示
+- 属性編集・インラインリネーム・レイヤ追加/削除
+- サブフォルダの可視設定を切り替えた場合、その配下のGeoPackageやレイヤにも可視設定が一括で伝播し、UI上も連動して非表示/表示が切り替わる
+
+## 主要ファイル
+- `lib/models/geopackage.dart`: GeoPackage管理、レイヤ/GeoPackageGroup、LayerManagerを実装（meta.json連携）
+- `lib/models/layer_tree_node.dart`: フォルダ・GeoPackage・レイヤの共通抽象基底クラス
+- `lib/models/layer.dart`: レイヤ・フィーチャのモデル
+- `lib/utils/meta_data.dart`: meta.json全体の読み書き・可視状態・設定管理を提供
+- `lib/utils/folder_tree.dart`: FolderNode実装、フォルダツリー構造管理
+- `lib/screens/map_page.dart`: 地図表示およびDrawer UIのメイン画面
+- `lib/widgets/layer_drawer.dart`: Drawer UI実装、レイヤツリーの再帰描画と可視状態管理
+- `lib/widgets/inline_edit.dart`: インライン編集UI（名前変更等の処理）
+
+## クラス構成
+- `KMapsHomePage`: 地図・レイヤ・Drawerの状態管理とUI
+- `LayerManager`: レイヤ・GeoPackageの状態管理
+- `LayerTreeNode`: レイヤツリー共通ノード（FolderNode/GeoPackageGroup/Layerの親）
+- `FolderNode`: フォルダツリーのノード（LayerTreeNode実装）
+- `GeoPackageGroup`: GeoPackageグループ（LayerTreeNode実装）
+- `Layer`: レイヤ（LayerTreeNode実装）
+
+## UI仕様
+- レイヤ・GeoPackage・フォルダの可視状態は、種別アイコン（例: 点/線/面/フォルダ/ストレージ）をタップして切り替え
+  - **アイコン種別・色は各ノードクラスで定義し、Drawer側はnode.baseIcon/node.baseIconColorを呼ぶだけでOK**
+- 不可視時はアイコンがグレーアウトし、斜線が重なる
+- 目アイコンや可視切り替えボタンは廃止
+- 親（フォルダ/GeoPackage/レイヤ）を不可視にすると、子要素も一括で不可視になり、UI上も非表示になる
+- フォルダノード右側の「GeoPackage追加」ボタン（＋）を押すと、ファイル名入力ダイアログが表示され、入力後すぐにGeoPackageファイルが自動生成・Drawerに即反映される
+- **Drawer上部のタイトルパネル右側に「サブフォルダ追加」「GeoPackage追加」ボタンを合成アイコン（右上に緑+）で実装。buildAddIconOverlayでWidget化し再利用可。**
+
+## meta.json全体を管理するユーティリティ
+- MetaData: 可視状態（layerTree）・設定（general/gps/toolProperties等）を一元管理
+- 各ノードは名前で識別し、visibleや設定値を保持
+- meta.jsonはプロジェクト直下に保存
+- レイヤ構造は"rootNode"ノード配下で管理、設定は同階層に格納
+
+- `scanProjectFolder`: 指定ディレクトリ配下を再帰的に探索し、サブフォルダ・.gpkgファイルをchildrenにLayerTreeNodeとして追加する。これによりDrawerツリーUIで.gpkgファイルも正しく表示される。
+
+## LayerDrawerのクラス構成
+- `LayerDrawer`
+  - `folderTree`: ルートのLayerTreeNode
+  - `currentNode`: 現在のディレクトリノード（LayerTreeNode参照管理）
+  - `onDirChanged`: ディレクトリ変更時のコールバック
+  - `setStateCallback`: 親WidgetのsetStateラッパー
+  - `editState`: 編集状態
+  - `metaData`: meta.json管理
+  - `_findNodeByPath`: パスから該当ノードを再帰的に取得
+  - `_parentPath`: 親ディレクトリパス取得
+  - `_buildNodeRow`: 1階層分のノードをリスト表示
+
+## 変更履歴
+- 2024-06-09: LayerDrawerで_findNodeByPathの代わりにLayerTreeNodeのgetNodeByPathを使用するよう修正。
+- 2024-06-09: LayerDrawer/map_page.dartでカレントディレクトリ管理をパス文字列からLayerTreeNode参照に変更。
+- 2024-06-09: GeoPackageGroupにgetFeatureTableNames(), getGeometryType()追加。layerノード生成部でこれらAPIを利用するようリファクタ。
+
+## FolderNodeについて
+- FolderNodeはlib/models/folder_node.dartで定義され、レイヤツリーのフォルダ構造を表現するクラス。
+- map_page.dartでプロジェクト全体の再スキャン時などに利用。
+
+## 主要なグローバル設定
+
+- `GlobalConfig.instance.projectRootDir` : プロジェクトルートディレクトリのパス。プロジェクト読み込み時にhome_screen.dartでセットされ、以降はグローバル参照。
+- `GlobalConfig.instance.folderTree` : プロジェクト内のフォルダ・レイヤ構造。
+
+## KMapsHomePageの初期化フロー
+
+- `defaultGpkgPath` : デフォルトのGeoPackageファイルパス
+- プロジェクトルートパスはグローバル変数(GlobalConfig.instance.projectRootDir)で管理し、引数で渡さない設計に変更
+- 以降、レイヤ管理やフォルダツリーの初期化にこのパスが利用される
+
+## 主なクラスと機能
+
+### LayerTreeNode
+- レイヤツリーのノード共通基底クラス。
+- name, visible, nodeType, parent, childrenなどのプロパティを持つ。
+- 可視状態の再帰変更、メタデータ連携、ファイルパス取得、子ノードの動的生成などを担う。
+- **getNodeByPath(List<String> pathList)**: パスリスト（ルートからのノード名リスト）を受け取り、該当する子孫ノードへの参照を返す。見つからなければnullを返す。
+  - 引数: pathList (例: ["root", "folderA", "layer1"])
+  - 返り値: LayerTreeNode?（該当ノード、なければnull）
+
+### lib/models/geopackage.dart
+- `GeoPackageGroup` : GeoPackageファイルを表現。レイヤ一覧（layers）を持つ。
+  - `getFeatureTableNames()` : このGeoPackage内のフィーチャテーブル名一覧を返す。
+  - `getGeometryType(tableName)` : 指定テーブル名のジオメトリタイプ（POINT/LINESTRING/POLYGON等）を返す。
+
+### lib/models/layer_tree_node.dart
+- `LayerTreeNode.createNodeByType(nodeType, logicalPath, parent: ...):
+  logicalPathで指定されたパスの単一ノード（LayerTreeNode?）を返す（見つからなければnull）。
+  nodeType="folder"の場合: 指定パスが存在すればFolderNodeを返す。
+  nodeType="gpkg"の場合: 指定パスが存在すればGeoPackageNodeを返す。
+  nodeType="layer"の場合: parentがGeoPackageNodeであれば、logicalPathの末尾をテーブル名としてレイヤノードを返す。
+
+## 主要ファイル・クラス構成
+
+- `lib/models/geopackage_file.dart` : GeoPackageFile（GeoPackageファイル管理クラス）
+  - ファイルパスのみ保持し、レイヤ一覧・属性・フィーチャ情報は全てDBからリアルタイムで取得
+  - レイヤ追加・削除・リネーム等の操作メソッドも集約
+- `lib/models/geopackage.dart` : 旧GeoPackageGroup/Layer/LayerManager（今後はノードクラス・マネージャとして整理予定）
+
+## GeoPackageFile設計方針
+
+- GeoPackageFileはファイルパスのみを保持
+- レイヤ一覧や属性・フィーチャ情報は全てDBからリアルタイムで取得
+- レイヤ追加・削除・リネーム等の操作もGeoPackageFile経由で行う
+- ツリー構造のノード（GeoPackageNode, LayerNode等）はGeoPackageFileへの参照のみを持ち、情報取得・操作はGeoPackageFileのメソッドを呼び出す
+- **ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成（OGC仕様準拠、最小構成）する。**
+- **WKBエンコード・デコード処理はlib/utils/wkb_utils.dartに集約し、GeoPackageFile等から呼び出す。**
+
+### GeoPackageFile主要メソッド
+- `getLayerNames()` : レイヤ（フィーチャテーブル）名一覧をDBから取得
+- `getGeometryType(tableName)` : 指定レイヤのジオメトリタイプをDBから取得
+- `getFeatures(tableName)` : 指定レイヤのフィーチャ一覧をDBから取得
+- `addLayer(name, geomType)` : レイヤ追加（DBにテーブル作成）
+- `removeLayer(name)` : レイヤ削除（DBからテーブル削除）
+- `renameLayer(oldName, newName)` : レイヤ名リネーム（DB内のテーブル名・メタ情報も更新）
+
+---
+
+今後、GeoPackageNode/LayerNode等のノードクラスもGeoPackageFile参照型にリファクタリング予定。
+
+## 更新履歴・修正メモ
+- meta.json/MetaDataを全域から排除。可視状態・設定の永続化は一時的に無効化（今後再導入予定）。
+
+## 主なクラス構成
+- LayerTreeNode: レイヤツリーの基底クラス。ノード種別（folder/gpkg/layer）を持つ。
+  - FolderNode: フォルダノード。childrenTypeは["folder", "gpkg"]。
+  - GeoPackageNode: GeoPackageファイルノード。childrenTypeは["layer"]。
+  - PointLayerNode/LineLayerNode/PolygonLayerNode: 各ジオメトリタイプのレイヤノード。
+
+## ノード生成の流れ
+- LayerTreeNode.createNodeByType(nodeType, logicalPath, parent: ...):
+  logicalPathで指定されたパスの単一ノード（LayerTreeNode?）を返す（見つからなければnull）。
+  nodeType="folder"の場合: 指定パスが存在すればFolderNodeを返す。
+  nodeType="gpkg"の場合: 指定パスが存在すればGeoPackageNodeを返す。
+  nodeType="layer"の場合: parentがGeoPackageNodeであれば、logicalPathの末尾をテーブル名としてレイヤノードを返す。

@@ -288,13 +288,36 @@ class _LayerDrawerState extends State<LayerDrawer> {
 
   /// レイヤタイル（可視切り替え・選択・削除）
   Widget _buildLayerTile(LayerNode node) {
+    final isSelected = GlobalConfig.instance.selectedLayerNode == node;
     return ListTile(
       // GeoPackageノード配下のレイヤはインデントして階層感を出す
       contentPadding: const EdgeInsets.only(left: 32, right: 16),
-      leading: _buildIconWithVisibility(node),
+      leading: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color:
+              isSelected ? Colors.blue.withOpacity(0.15) : Colors.transparent,
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Icon(
+          node.baseIcon,
+          color:
+              isSelected
+                  ? Colors.blue
+                  : (node.isVisibleRecursive()
+                      ? node.baseIconColor
+                      : Colors.grey),
+        ),
+      ),
       title: Text(
         node.name,
-        style: TextStyle(color: node.isVisibleRecursive() ? null : Colors.grey),
+        style: TextStyle(
+          color:
+              isSelected
+                  ? Colors.blue
+                  : (node.isVisibleRecursive() ? null : Colors.grey),
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
       ),
       onTap: () {
         GlobalConfig.instance.selectedLayerNode = node;

@@ -137,9 +137,6 @@ abstract class LayerTreeNode {
 
   /// ファイル構造を参照して自分のchildrenを更新する（childrenTypeに基づく）
   void updateChildren() {
-    print(
-      '[DEBUG] updateChildren: 開始 - nodeType=$nodeType, name=$name, childrenType=$childrenType',
-    );
     children.clear();
 
     for (final type in childrenType) {
@@ -153,6 +150,8 @@ abstract class LayerTreeNode {
         addChild(node);
       }
     }
+    final tree = toMap();
+    print("updated: $tree");
   }
 
   /// 子ノードを追加。childrenTypeに合致しない場合は警告を出してスキップ
@@ -163,9 +162,9 @@ abstract class LayerTreeNode {
       );
       return;
     }
-    print(
-      '[DEBUG] addChild: 子ノード追加 - nodeType=${child.nodeType}, name=${child.name}, parent=${name}',
-    );
+    // print(
+    //   '[DEBUG] addChild: 子ノード追加 - nodeType=${child.nodeType}, name=${child.name}, parent=${name}',
+    // );
     children.add(child);
     child.parent = this;
     // child.updateChildren();
@@ -177,9 +176,9 @@ abstract class LayerTreeNode {
     List<String> logicalPath, {
     LayerTreeNode? parent,
   }) {
-    print(
-      '[DEBUG] createNodesByType: nodeType=$nodeType, logicalPath=$logicalPath,parent=${parent?.name}',
-    );
+    // print(
+    //   '[DEBUG] createNodesByType: nodeType=$nodeType, logicalPath=$logicalPath,parent=${parent?.name}',
+    // );
     final nodes = <LayerTreeNode>[];
     final absPath = p.joinAll([
       GlobalConfig.instance.projectRootDir ?? '',
@@ -199,14 +198,17 @@ abstract class LayerTreeNode {
           );
         } else if (entity is File && entity.path.endsWith('.gpkg')) {
           // GeoPackageNodeに置換
-          final gpkgFile = GeoPackageFile(entity.path);
+          final parentPath = logicalPath;
+          final fileName = p.basename(entity.path);
+          final gpkgFile = GeoPackageFile([...parentPath, fileName]);
           nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
         }
       }
     } else if (nodeType == "gpkg") {
       if (File(absPath).existsSync()) {
-        // GeoPackageNodeに置換
-        final gpkgFile = GeoPackageFile(absPath);
+        final parentPath = logicalPath.sublist(0, logicalPath.length - 1);
+        final fileName = p.basename(absPath);
+        final gpkgFile = GeoPackageFile([...parentPath, fileName]);
         nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
       }
     } else if (nodeType == "layer") {
@@ -333,7 +335,7 @@ class GeoPackageNode extends LayerTreeNode {
     bool visible = true,
     LayerTreeNode? parent,
   }) : super(
-         geoPackageFile.path.split(Platform.pathSeparator).last,
+         geoPackageFile.pathList.isNotEmpty ? geoPackageFile.pathList.last : '',
          visible: visible,
          parent: parent,
          nodeType: "gpkg",

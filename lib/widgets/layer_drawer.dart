@@ -43,7 +43,8 @@ class _LayerDrawerState extends State<LayerDrawer> {
     if (node != null) {
       for (final child in node.children) {
         if (child is GeoPackageNode) {
-          expandedGpkgPaths.add(child.geoPackageFile.path);
+          final absPath = child.geoPackageFile.getAbsolutePath();
+          if (absPath != null) expandedGpkgPaths.add(absPath);
         }
       }
     }
@@ -147,7 +148,13 @@ class _LayerDrawerState extends State<LayerDrawer> {
                         );
                         return;
                       }
-                      final gpkgFile = GeoPackageFile(path);
+                      final parentNode = widget.currentNode as FolderNode;
+                      final parentPath = parentNode.getAbsolutePathSegments();
+                      final fileNameList = [fileName];
+                      final gpkgFile = GeoPackageFile([
+                        ...parentPath,
+                        ...fileNameList,
+                      ]);
                       final newNode = GeoPackageNode(
                         gpkgFile,
                         visible: true,
@@ -190,8 +197,8 @@ class _LayerDrawerState extends State<LayerDrawer> {
 
   /// GeoPackageノードのタイル。タップでレイヤリストをトグル展開
   Widget _buildGeoPackageTile(BuildContext context, GeoPackageNode node) {
-    final gpkgPath = node.geoPackageFile.path;
-    final isExpanded = expandedGpkgPaths.contains(gpkgPath);
+    final absPath = node.geoPackageFile.getAbsolutePath();
+    final isExpanded = absPath != null && expandedGpkgPaths.contains(absPath);
     return Column(
       children: [
         ListTile(
@@ -200,9 +207,9 @@ class _LayerDrawerState extends State<LayerDrawer> {
           onTap: () {
             setState(() {
               if (isExpanded) {
-                expandedGpkgPaths.remove(gpkgPath);
+                if (absPath != null) expandedGpkgPaths.remove(absPath);
               } else {
-                expandedGpkgPaths.add(gpkgPath);
+                if (absPath != null) expandedGpkgPaths.add(absPath);
               }
             });
           },
@@ -236,9 +243,12 @@ class _LayerDrawerState extends State<LayerDrawer> {
                     if (confirm == true) {
                       try {
                         // ファイル削除
-                        final file = File(node.geoPackageFile.path);
-                        if (file.existsSync()) {
-                          file.deleteSync();
+                        final absPath = node.geoPackageFile.getAbsolutePath();
+                        if (absPath != null) {
+                          final file = File(absPath);
+                          if (file.existsSync()) {
+                            file.deleteSync();
+                          }
                         }
                         // ノード削除
                         node.dispose();
@@ -528,5 +538,15 @@ class LayerDrawerTitleBar extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// GeoPackageFileの絶対パス取得用メソッドを追加
+extension GeoPackageFilePathExt on GeoPackageFile {
+  /// projectRootDir + pathList で絶対パスを返す
+  String? getAbsolutePath() {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) return null;
+    return p.joinAll([root, ...pathList]);
   }
 }

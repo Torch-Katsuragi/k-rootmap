@@ -127,6 +127,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 親（フォルダ/GeoPackage/レイヤ）を不可視にすると、子要素も一括で不可視になり、UI上も非表示になる
 - フォルダノード右側の「GeoPackage追加」ボタン（＋）を押すと、ファイル名入力ダイアログが表示され、入力後すぐにGeoPackageファイルが自動生成・Drawerに即反映される
 - **Drawer上部のタイトルパネル右側に「サブフォルダ追加」「GeoPackage追加」ボタンを合成アイコン（右上に緑+）で実装。buildAddIconOverlayでWidget化し再利用可。**
+- 地図のパン（ドラッグ移動）は「てのひらツール」選択時のみ有効。他のツール（ペン・選択等）では明示的なメソッド呼び出しがない限りパン不可。
 
 ## meta.json全体を管理するユーティリティ
 - MetaData: 可視状態（layerTree）・設定（general/gps/toolProperties等）を一元管理
@@ -234,3 +235,19 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   nodeType="folder"の場合: 指定パスが存在すればFolderNodeを返す。
   nodeType="gpkg"の場合: 指定パスが存在すればGeoPackageNodeを返す。
   nodeType="layer"の場合: parentがGeoPackageNodeであれば、logicalPathの末尾をテーブル名としてレイヤノードを返す。
+
+## GeoPackageファイルのパス管理方針
+
+- GeoPackageFile等のファイルアクセスは、必ず `GlobalConfig.instance.projectRootDir`（プロジェクトルート）とパスリスト（`List<String>`: サブディレクトリやファイル名のリスト）を組み合わせて行う。
+- 例: `GeoPackageFile(['data', 'test.gpkg'])` → ルート/data/test.gpkg
+- 直接パス文字列を渡す設計は禁止。
+- LayerTreeNode等も同様のパスリスト方式を採用。
+
+### 使い方例
+```dart
+final gpkg = GeoPackageFile(['data', 'test.gpkg']);
+final layerNames = gpkg.getLayerNames();
+```
+
+- ルートディレクトリは `GlobalConfig.instance.projectRootDir` でセット・取得する。
+- ファイルアクセス時は都度 `p.joinAll([GlobalConfig.instance.projectRootDir, ...pathList])` で絶対パスを生成する。

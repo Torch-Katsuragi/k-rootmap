@@ -6,21 +6,33 @@ import 'package:sqlite3/sqlite3.dart' as sql;
 import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
 import 'layer.dart';
+import 'package:path/path.dart' as p;
+import '../utils/global_config.dart';
 
 /// GeoPackageファイルを管理する最小クラス
 class GeoPackageFile {
-  /// GeoPackageファイルの絶対パス
-  final String path;
+  /// ルートからのパスリスト
+  final List<String> pathList;
 
   /// コンストラクタ
-  /// 指定パスにGeoPackageファイルが存在しない場合、親ディレクトリが存在すれば最小構成で新規作成を試みる。
-  GeoPackageFile(this.path) {
-    final file = File(path);
+  /// pathList: ルートからのサブディレクトリ＋ファイル名のリスト
+  GeoPackageFile(this.pathList) {
+    final baseDir = GlobalConfig.instance.projectRootDir;
+    if (baseDir == null) {
+      print('GeoPackageファイル作成失敗: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([baseDir, ...pathList]);
+    final file = File(absPath);
+    final dir = file.parent;
     if (!file.existsSync()) {
-      final dir = file.parent;
-      if (dir.existsSync()) {
+      if (!dir.existsSync()) {
+        print('GeoPackageファイル作成失敗: 親ディレクトリが存在しません (${dir.path})');
+        return;
+      }
+      try {
         // GeoPackage初期化SQL（OGC仕様準拠、最小構成）
-        final db = sql.sqlite3.open(path);
+        final db = sql.sqlite3.open(absPath);
         db.execute('''
           CREATE TABLE gpkg_spatial_ref_sys (
             srs_name TEXT NOT NULL,
@@ -68,13 +80,23 @@ class GeoPackageFile {
           ('Undefined cartesian SRS', -1, 'NONE', -1, 'undefined', 'undefined cartesian coordinate reference system');
         ''');
         db.dispose();
+      } catch (e, stack) {
+        print('GeoPackageファイル作成時にエラー発生:');
+        print(e);
+        print(stack);
       }
     }
   }
 
   /// DBからレイヤ（フィーチャテーブル）名一覧を取得
   List<String> getLayerNames() {
-    final db = sql.sqlite3.open(path);
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getLayerNames: projectRootDirが未設定');
+      return [];
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final contents = db.select(
       'SELECT table_name FROM gpkg_contents WHERE data_type = "features"',
     );
@@ -86,16 +108,18 @@ class GeoPackageFile {
 
   /// DBから指定レイヤの点フィーチャ一覧を取得
   List<LatLng> getPoints(String tableName) {
-    final db = sql.sqlite3.open(path);
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getPoints: projectRootDirが未設定');
+      return [];
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final rows = db.select('SELECT geom FROM "$tableName"');
     final points = <LatLng>[];
     for (final r in rows) {
       final geom = r['geom'] as Uint8List;
-      // WKBユーティリティでデコード
       if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
-        // 旧実装: 手書きデコード
-        // 新実装: createWkbPointはエンコード用なので、ここはparseWkbLineString等を使う
-        // ただし点は専用デコードがないので直接デコード
         final lon = ByteData.sublistView(
           geom,
           5,
@@ -115,8 +139,13 @@ class GeoPackageFile {
 
   /// 点フィーチャを追加（属性付き）
   void addPoint(String tableName, LatLng pt, [String attr = '']) {
-    final db = sql.sqlite3.open(path);
-    // WKBユーティリティでエンコード
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('addPoint: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final wkb = createWkbPoint(pt.longitude, pt.latitude);
     db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
       wkb,
@@ -127,8 +156,13 @@ class GeoPackageFile {
 
   /// 指定座標の点フィーチャを削除
   void removePoint(String tableName, LatLng pt) {
-    final db = sql.sqlite3.open(path);
-    // WKBユーティリティでエンコード
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('removePoint: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final wkb = createWkbPoint(pt.longitude, pt.latitude);
     db.execute('DELETE FROM "$tableName" WHERE geom = ?;', [wkb]);
     db.dispose();
@@ -136,7 +170,13 @@ class GeoPackageFile {
 
   /// 指定レイヤのジオメトリタイプ（POINT/LINESTRING/POLYGON等）を取得
   String? getGeometryType(String tableName) {
-    final db = sql.sqlite3.open(path);
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getGeometryType: projectRootDirが未設定');
+      return null;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final rows = db.select(
       'SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?',
       [tableName],
@@ -148,8 +188,13 @@ class GeoPackageFile {
 
   /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
   List<Feature> getFeatures(String tableName) {
-    final db = sql.sqlite3.open(path);
-    // ジオメトリタイプ取得
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getFeatures: projectRootDirが未設定');
+      return [];
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final typeRows = db.select(
       'SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?',
       [tableName],
@@ -195,7 +240,13 @@ class GeoPackageFile {
 
   /// レイヤ追加（DBにテーブル作成）
   void addLayer(String name, String geomType) {
-    final db = sql.sqlite3.open(path);
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('addLayer: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     db.execute('''
       CREATE TABLE IF NOT EXISTS "$name" (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,7 +273,13 @@ class GeoPackageFile {
 
   /// レイヤ削除（DBからテーブル・メタ情報削除）
   void removeLayer(String name) {
-    final db = sql.sqlite3.open(path);
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('removeLayer: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     db.execute('DROP TABLE IF EXISTS "$name";');
     db.execute('DELETE FROM gpkg_contents WHERE table_name = ?;', [name]);
     db.execute('DELETE FROM gpkg_geometry_columns WHERE table_name = ?;', [
@@ -233,8 +290,13 @@ class GeoPackageFile {
 
   /// 線フィーチャを追加（属性付き）
   void addLine(String tableName, List<LatLng> line, [String attr = '']) {
-    final db = sql.sqlite3.open(path);
-    // WKBユーティリティでエンコード
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('addLine: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final wkb = createWkbLineString(line);
     db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
       wkb,
@@ -245,8 +307,13 @@ class GeoPackageFile {
 
   /// ポリゴンフィーチャを追加（属性付き）
   void addPolygon(String tableName, List<LatLng> polygon, [String attr = '']) {
-    final db = sql.sqlite3.open(path);
-    // WKBユーティリティでエンコード（外環のみ対応）
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('addPolygon: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
     final wkb = createWkbPolygon([polygon]);
     db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
       wkb,

@@ -142,3 +142,7 @@ GeoPackageノードのレイヤ追加ボタンをtrailingからレイヤリス�
 
 // 2024-06-13 タイトルパネル右側にサブフォルダ・GeoPackage追加ボタンを合成アイコンで実装。
 // buildAddIconOverlayメソッドで合成アイコンをWidget化し再利用可能にした。
+
+2024-06-10 ツールクラス設計（MapTool/PanTool/PenTool/SelectTool）、グローバル変数統一（currentTool）、ペン/タップ入力分岐の設計方針をREADME.md・FEATURES.mdに反映
+
+2024-06-10 地図操作ツール（MapTool/PanTool/PenTool/SelectTool）実装、グローバル変数統一、ペン/タップ入力分岐、MapPageへのListener組み込み、ツールバーUI追加、フリーハンド描画・点追加の最低限動作まで実装

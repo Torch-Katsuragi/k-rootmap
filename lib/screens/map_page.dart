@@ -15,6 +15,10 @@ import '../widgets/layer_drawer.dart';
 import '../utils/global_config.dart';
 import '../models/folder_node.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
+import '../tools/pan_tool.dart';
+import '../tools/pen_tool.dart';
+import '../tools/select_tool.dart';
+import '../utils/global_config.dart' show LayerTreeNodeUtils;
 
 /// 地図・編集画面（最小構成）
 class KMapsHomePage extends StatefulWidget {
@@ -265,87 +269,273 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     }
   }
 
+  // --- ツールAPI雛形 ---
+  // フリーハンド描画開始
+  void startFreehand(List<Offset> path) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null) return;
+    if (selected is LineLayerNode) {
+      setState(() {
+        _drawingLine.clear();
+        _drawingLine.add(_offsetToLatLng(path.first));
+      });
+    } else if (selected is PolygonLayerNode) {
+      setState(() {
+        _drawingPolygon.clear();
+        _drawingPolygon.add(_offsetToLatLng(path.first));
+      });
+    }
+  }
+
+  // フリーハンド描画中
+  void updateFreehand(List<Offset> path) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null) return;
+    if (selected is LineLayerNode) {
+      setState(() {
+        _drawingLine.clear();
+        _drawingLine.addAll(path.map(_offsetToLatLng));
+      });
+    } else if (selected is PolygonLayerNode) {
+      setState(() {
+        _drawingPolygon.clear();
+        _drawingPolygon.addAll(path.map(_offsetToLatLng));
+      });
+    }
+  }
+
+  // フリーハンド描画終了
+  void endFreehand(List<Offset> path) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null) return;
+    if (selected is LineLayerNode) {
+      setState(() {
+        _drawingLine.clear();
+        _drawingLine.addAll(path.map(_offsetToLatLng));
+      });
+      // 確定処理はFloatingActionButtonで
+    } else if (selected is PolygonLayerNode) {
+      setState(() {
+        _drawingPolygon.clear();
+        _drawingPolygon.addAll(path.map(_offsetToLatLng));
+      });
+      // 確定処理はFloatingActionButtonで
+    }
+  }
+
+  // タップで点追加
+  void addPoint(Offset pos) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null) return;
+    if (selected is PointLayerNode) {
+      final latlng = _offsetToLatLng(pos);
+      // 属性入力ダイアログは省略し、仮の属性で即追加
+      selected.geoPackageFile.addPoint(selected.layerName, latlng, '');
+      setState(() {});
+    }
+  }
+
+  // --- 画面座標→地図座標変換 ---
+  LatLng _offsetToLatLng(Offset offset) {
+    // FlutterMapのPixel→LatLng変換APIを利用
+    // 参考: https://pub.dev/documentation/flutter_map/latest/flutter_map/MapController/pointToLatLng.html
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return _center;
+    final local = renderBox.globalToLocal(offset);
+    final point = CustomPoint(local.dx, local.dy);
+    final latlng = _mapController.pointToLatLng(point);
+    return latlng ?? _center;
+  }
+
+  // 地図パン
+  void onPan(Offset delta) {
+    // TODO: deltaから地図中心を移動
+    // ここでは仮に未実装
+  }
+
+  // 選択開始
+  void startSelection(Offset start) {
+    // TODO: 選択範囲の初期化
+    // ここでは仮に未実装
+  }
+
+  // 選択範囲更新
+  void updateSelection(Offset start, Offset current) {
+    // TODO: 選択範囲の更新
+    // ここでは仮に未実装
+  }
+
+  // 選択確定
+  void endSelection(Offset start, Offset end) {
+    // TODO: 選択範囲の確定・フィーチャ選択
+    // ここでは仮に未実装
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final folderTree = GlobalConfig.instance.folderTree;
+    final visibleLayers =
+        folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
+    // Point/Line/Polygonごとに分けてfeaturesを集約
+    final pointFeatures = <MultiPointFeature>[];
+    final lineFeatures = <MultiLineStringFeature>[];
+    final polygonFeatures = <MultiPolygonFeature>[];
+    for (final layer in visibleLayers) {
+      if (layer is PointLayerNode) {
+        pointFeatures.addAll(layer.features);
+      } else if (layer is LineLayerNode) {
+        lineFeatures.addAll(layer.features);
+      } else if (layer is PolygonLayerNode) {
+        polygonFeatures.addAll(layer.features);
+      }
+    }
+    final currentTool = GlobalConfig.instance.currentTool;
+    final isPanTool = currentTool.name == 'てのひら';
     return Scaffold(
       appBar: AppBar(title: const Text('K-MAPS 最小構成')),
-      body: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(center: _center, zoom: 16.0, onTap: _onMapTap),
+      body: Column(
         children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.k_maps',
+          // --- ツールバー ---
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.pan_tool_alt,
+                  color:
+                      currentTool.name == 'てのひら' ? Colors.blue : Colors.black,
+                ),
+                tooltip: 'てのひら',
+                onPressed: () {
+                  setState(() {
+                    GlobalConfig.instance.currentTool = PanTool();
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.edit,
+                  color: currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                ),
+                tooltip: 'ペン',
+                onPressed: () {
+                  setState(() {
+                    GlobalConfig.instance.currentTool = PenTool();
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.select_all,
+                  color: currentTool.name == '選択' ? Colors.blue : Colors.black,
+                ),
+                tooltip: '選択',
+                onPressed: () {
+                  setState(() {
+                    GlobalConfig.instance.currentTool = SelectTool();
+                  });
+                },
+              ),
+            ],
           ),
-          MarkerLayer(
-            markers: [
-              ...((selected is PointLayerNode)
-                  ? selected.features.expand(
-                    (f) => f.points.map(
-                      (pt) => Marker(
-                        point: pt,
-                        width: 40,
-                        height: 40,
-                        child: Tooltip(
-                          message: f.attr,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.red,
-                            size: 36,
+          // --- 地図本体 ---
+          Expanded(
+            child: Listener(
+              onPointerDown:
+                  (event) => GlobalConfig.instance.currentTool.onPointerDown(
+                    event,
+                    this,
+                  ),
+              onPointerMove:
+                  (event) => GlobalConfig.instance.currentTool.onPointerMove(
+                    event,
+                    this,
+                  ),
+              onPointerUp:
+                  (event) => GlobalConfig.instance.currentTool.onPointerUp(
+                    event,
+                    this,
+                  ),
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  center: _center,
+                  zoom: 16.0,
+                  onTap: _onMapTap,
+                  interactiveFlags:
+                      isPanTool
+                          ? InteractiveFlag.all
+                          : InteractiveFlag.pinchZoom,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.k_maps',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      for (final f in pointFeatures)
+                        ...f.points.map(
+                          (pt) => Marker(
+                            point: pt,
+                            width: 40,
+                            height: 40,
+                            child: Tooltip(
+                              message: f.attr,
+                              child: const Icon(
+                                Icons.location_on,
+                                color: Colors.red,
+                                size: 36,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  )
-                  : <Marker>[]), // 他レイヤは空
-            ],
-          ),
-          PolylineLayer(
-            polylines: [
-              ...((selected is LineLayerNode)
-                  ? selected.features.expand(
-                    (f) => f.lines.map(
-                      (line) => Polyline(
-                        points: line,
-                        color: Colors.blue,
-                        strokeWidth: 4.0,
-                      ),
-                    ),
-                  )
-                  : <Polyline>[]),
-              if (_drawingLine.isNotEmpty)
-                Polyline(
-                  points: _drawingLine,
-                  color: Colors.orange,
-                  strokeWidth: 4.0,
-                ),
-            ],
-          ),
-          PolygonLayer(
-            polygons: [
-              ...((selected is PolygonLayerNode)
-                  ? selected.features.expand(
-                    (f) => f.polygons.expand(
-                      (poly) => [
-                        Polygon(
-                          points: poly.first,
-                          color: Colors.green.withOpacity(0.3),
-                          borderStrokeWidth: 3.0,
-                          borderColor: Colors.green,
+                    ],
+                  ),
+                  PolylineLayer(
+                    polylines: [
+                      for (final f in lineFeatures)
+                        ...f.lines.map(
+                          (line) => Polyline(
+                            points: line,
+                            color: Colors.blue,
+                            strokeWidth: 4.0,
+                          ),
                         ),
-                      ],
-                    ),
-                  )
-                  : <Polygon>[]),
-              if (_drawingPolygon.length >= 2)
-                Polygon(
-                  points: closeRing(_drawingPolygon),
-                  color: Colors.orange.withOpacity(0.3),
-                  borderStrokeWidth: 3.0,
-                  borderColor: Colors.orange,
-                ),
-            ],
+                      if (_drawingLine.isNotEmpty)
+                        Polyline(
+                          points: _drawingLine,
+                          color: Colors.orange,
+                          strokeWidth: 4.0,
+                        ),
+                    ],
+                  ),
+                  PolygonLayer(
+                    polygons: [
+                      for (final f in polygonFeatures)
+                        ...f.polygons.expand(
+                          (poly) => [
+                            Polygon(
+                              points: poly.first,
+                              color: Colors.green.withOpacity(0.3),
+                              borderStrokeWidth: 3.0,
+                              borderColor: Colors.green,
+                            ),
+                          ],
+                        ),
+                      if (_drawingPolygon.length >= 2)
+                        Polygon(
+                          points: closeRing(_drawingPolygon),
+                          color: Colors.orange.withOpacity(0.3),
+                          borderStrokeWidth: 3.0,
+                          borderColor: Colors.orange,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

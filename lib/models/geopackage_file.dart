@@ -146,26 +146,47 @@ class GeoPackageFile {
     return rows.first['geometry_type_name'] as String?;
   }
 
-  /// 指定レイヤの全フィーチャ（点のみ対応、属性も取得）
+  /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
   List<Feature> getFeatures(String tableName) {
     final db = sql.sqlite3.open(path);
+    // ジオメトリタイプ取得
+    final typeRows = db.select(
+      'SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?',
+      [tableName],
+    );
+    final geomType =
+        typeRows.isNotEmpty
+            ? (typeRows.first['geometry_type_name'] as String).toUpperCase()
+            : '';
     final rows = db.select('SELECT geom, attr FROM "$tableName"');
     final features = <Feature>[];
     for (final r in rows) {
       final geom = r['geom'] as Uint8List;
       final attr = r['attr'] as String? ?? '';
-      if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
-        final lon = ByteData.sublistView(
-          geom,
-          5,
-          13,
-        ).getFloat64(0, Endian.little);
-        final lat = ByteData.sublistView(
-          geom,
-          13,
-          21,
-        ).getFloat64(0, Endian.little);
-        features.add(MultiPointFeature([LatLng(lat, lon)], attr));
+      if (geomType == 'MULTIPOINT' || geomType == 'POINT') {
+        if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
+          final lon = ByteData.sublistView(
+            geom,
+            5,
+            13,
+          ).getFloat64(0, Endian.little);
+          final lat = ByteData.sublistView(
+            geom,
+            13,
+            21,
+          ).getFloat64(0, Endian.little);
+          features.add(MultiPointFeature([LatLng(lat, lon)], attr));
+        }
+      } else if (geomType == 'MULTILINESTRING' || geomType == 'LINESTRING') {
+        final lines = parseWkbLineString(geom);
+        if (lines.isNotEmpty) {
+          features.add(MultiLineStringFeature([lines], attr));
+        }
+      } else if (geomType == 'MULTIPOLYGON' || geomType == 'POLYGON') {
+        final polygons = parseWkbPolygon(geom);
+        if (polygons.isNotEmpty) {
+          features.add(MultiPolygonFeature([polygons], attr));
+        }
       }
     }
     db.dispose();

@@ -9,6 +9,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 選択状態は「現在選択中のLayerNode/GeoPackageNode」への参照をグローバル変数で保持。
 - 可視状態・meta.json連携はLayerTreeNodeのvisible系メソッドで一元化。
 - 複数ファイル・レイヤの一元管理も、全ノードリストをグローバルで管理。
+- **地図操作ツール（MapTool）を導入し、てのひら・ペン・選択などのツール切替をサポート。現在のツールはGlobalConfigで一元管理。**
+- **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、直感的な操作性を実現。**
 
 ## 主要ファイル・クラス構成
 - `lib/models/geopackage_file.dart` : GeoPackageFile（GeoPackageファイル管理・DB操作ラッパ）
@@ -20,6 +22,10 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
   - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能。
 - `lib/screens/map_page.dart` : 地図画面本体（ノード・グローバル変数参照で状態管理）
+- `lib/tools/map_tool.dart` : 地図操作ツールの抽象基底クラス（MapTool）。
+- `lib/tools/pan_tool.dart` : てのひらツール（地図パン専用）。
+- `lib/tools/pen_tool.dart` : ペンツール（レイヤ描画）。
+- `lib/tools/select_tool.dart` : オブジェクト選択ツール。
 
 ## クラス構成
 - **GeoPackageFile**: ファイルパスのみ保持し、DB操作（レイヤ追加・削除・リネーム・フィーチャ取得等）を担う。
@@ -39,6 +45,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - フォルダをタップでカレントディレクトリ移動
 - フォルダノード右側の「GeoPackage追加」ボタン（＋）から、任意の場所に新規GeoPackageファイルを即作成・追加可能
 - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能
+- **地図操作ツールバーで「てのひら」「ペン」「選択」などのツールを切り替え可能。**
+- **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、ペンはフリーハンド描画、タップは点追加や選択など直感的な操作性を実現。**
 
 ## 主要ファイルとクラス
 - `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
@@ -47,7 +55,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `lib/widgets/layer_drawer.dart`: レイヤ構造Drawer本体。`LayerDrawer`（StatefulWidget）、`LayerDrawerTitleBar`（タイトルパネルWidget）などを実装。
 - `lib/screens/map_page.dart`: KMapsHomePage（画面本体、LayerManager/Drawer連携）
 - `lib/models/folder_node.dart`: FolderNode（サブフォルダツリー）・scanProjectFolder（.gpkgファイルもchildrenにLayerTreeNode(nodeType: "gpkg")として追加する実装）
-- `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）などのグローバル変数・設定を一元管理。
+- `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）、**現在のツール（currentTool: MapTool）**などのグローバル変数・設定を一元管理。
 - `lib/models/layer_tree_node.dart`: フォルダ/GeoPackage/レイヤのノード構造を定義。
 - `lib/models/layer.dart`: レイヤ情報のモデル。
 
@@ -60,6 +68,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `LayerDrawer`：LayerTreeNodeのchildrenを再帰的に描画する方式でUIを構築。可視状態切替も共通化。
 - `GlobalConfig`: プロジェクト全体のグローバル変数・設定（ルートディレクトリパス、MetaDataインスタンス等）をシングルトンで管理。
 - `LayerDrawerTitleBar` : 現在のノード名を青いパネルで表示するWidget。
+- **MapTool**: 地図操作ツールの抽象基底クラス。onPointerDown/Move/Up等のイベントを持ち、ペン/タップ入力で挙動を分岐可能。
+  - PanTool, PenTool, SelectToolなどを継承クラスとして実装。
 
 ## meta.json構造と拡張性
 - meta.jsonはプロジェクト直下に保存。レイヤ構造は"rootNode"ノード配下で管理し、
@@ -151,6 +161,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 
 - `GlobalConfig.instance.projectRootDir` : プロジェクトルートディレクトリのパス。プロジェクト読み込み時にhome_screen.dartでセットされ、以降はグローバル参照。
 - `GlobalConfig.instance.folderTree` : プロジェクト内のフォルダ・レイヤ構造。
+- `GlobalConfig.instance.currentTool` : 現在選択中の地図操作ツール（MapToolインスタンス）。
 
 ## KMapsHomePageの初期化フロー
 

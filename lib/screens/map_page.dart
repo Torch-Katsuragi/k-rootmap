@@ -277,12 +277,12 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     if (selected is LineLayerNode) {
       setState(() {
         _drawingLine.clear();
-        _drawingLine.add(_offsetToLatLng(path.first));
+        _drawingLine.add(offsetToLatLng(path.first));
       });
     } else if (selected is PolygonLayerNode) {
       setState(() {
         _drawingPolygon.clear();
-        _drawingPolygon.add(_offsetToLatLng(path.first));
+        _drawingPolygon.add(offsetToLatLng(path.first));
       });
     }
   }
@@ -294,12 +294,12 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     if (selected is LineLayerNode) {
       setState(() {
         _drawingLine.clear();
-        _drawingLine.addAll(path.map(_offsetToLatLng));
+        _drawingLine.addAll(path.map(offsetToLatLng));
       });
     } else if (selected is PolygonLayerNode) {
       setState(() {
         _drawingPolygon.clear();
-        _drawingPolygon.addAll(path.map(_offsetToLatLng));
+        _drawingPolygon.addAll(path.map(offsetToLatLng));
       });
     }
   }
@@ -311,32 +311,20 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     if (selected is LineLayerNode) {
       setState(() {
         _drawingLine.clear();
-        _drawingLine.addAll(path.map(_offsetToLatLng));
+        _drawingLine.addAll(path.map(offsetToLatLng));
       });
       // 確定処理はFloatingActionButtonで
     } else if (selected is PolygonLayerNode) {
       setState(() {
         _drawingPolygon.clear();
-        _drawingPolygon.addAll(path.map(_offsetToLatLng));
+        _drawingPolygon.addAll(path.map(offsetToLatLng));
       });
       // 確定処理はFloatingActionButtonで
     }
   }
 
-  // タップで点追加
-  void addPoint(Offset pos) {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
-    if (selected is PointLayerNode) {
-      final latlng = _offsetToLatLng(pos);
-      // 属性入力ダイアログは省略し、仮の属性で即追加
-      selected.geoPackageFile.addPoint(selected.layerName, latlng, '');
-      setState(() {});
-    }
-  }
-
   // --- 画面座標→地図座標変換 ---
-  LatLng _offsetToLatLng(Offset offset) {
+  LatLng offsetToLatLng(Offset offset) {
     // FlutterMapのPixel→LatLng変換APIを利用
     // 参考: https://pub.dev/documentation/flutter_map/latest/flutter_map/MapController/pointToLatLng.html
     final renderBox = context.findRenderObject() as RenderBox?;
@@ -345,6 +333,20 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final point = CustomPoint(local.dx, local.dy);
     final latlng = _mapController.pointToLatLng(point);
     return latlng ?? _center;
+  }
+
+  /// 線の描画点を追加（setState込み）
+  void addDrawingLinePoint(LatLng latlng) {
+    setState(() {
+      _drawingLine.add(latlng);
+    });
+  }
+
+  /// ポリゴンの描画点を追加（setState込み）
+  void addDrawingPolygonPoint(LatLng latlng) {
+    setState(() {
+      _drawingPolygon.add(latlng);
+    });
   }
 
   // 地図パン
@@ -440,101 +442,110 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
           ),
           // --- 地図本体 ---
           Expanded(
-            child: Listener(
-              onPointerDown:
-                  (event) => GlobalConfig.instance.currentTool.onPointerDown(
-                    event,
-                    this,
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    center: _center,
+                    zoom: 16.0,
+                    // onTap: _onMapTap,
+                    interactiveFlags:
+                        isPanTool
+                            ? InteractiveFlag.all
+                            : InteractiveFlag.pinchZoom,
                   ),
-              onPointerMove:
-                  (event) => GlobalConfig.instance.currentTool.onPointerMove(
-                    event,
-                    this,
-                  ),
-              onPointerUp:
-                  (event) => GlobalConfig.instance.currentTool.onPointerUp(
-                    event,
-                    this,
-                  ),
-              child: FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  center: _center,
-                  zoom: 16.0,
-                  onTap: _onMapTap,
-                  interactiveFlags:
-                      isPanTool
-                          ? InteractiveFlag.all
-                          : InteractiveFlag.pinchZoom,
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.k_maps',
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      for (final f in pointFeatures)
-                        ...f.points.map(
-                          (pt) => Marker(
-                            point: pt,
-                            width: 40,
-                            height: 40,
-                            child: Tooltip(
-                              message: f.attr,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Colors.red,
-                                size: 36,
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.k_maps',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        for (final f in pointFeatures)
+                          ...f.points.map(
+                            (pt) => Marker(
+                              point: pt,
+                              width: 40,
+                              height: 40,
+                              child: Tooltip(
+                                message: f.attr,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 36,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  PolylineLayer(
-                    polylines: [
-                      for (final f in lineFeatures)
-                        ...f.lines.map(
-                          (line) => Polyline(
-                            points: line,
-                            color: Colors.blue,
+                      ],
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        for (final f in lineFeatures)
+                          ...f.lines.map(
+                            (line) => Polyline(
+                              points: line,
+                              color: Colors.blue,
+                              strokeWidth: 4.0,
+                            ),
+                          ),
+                        if (_drawingLine.isNotEmpty)
+                          Polyline(
+                            points: _drawingLine,
+                            color: Colors.orange,
                             strokeWidth: 4.0,
                           ),
-                        ),
-                      if (_drawingLine.isNotEmpty)
-                        Polyline(
-                          points: _drawingLine,
-                          color: Colors.orange,
-                          strokeWidth: 4.0,
-                        ),
-                    ],
-                  ),
-                  PolygonLayer(
-                    polygons: [
-                      for (final f in polygonFeatures)
-                        ...f.polygons.expand(
-                          (poly) => [
-                            Polygon(
-                              points: poly.first,
-                              color: Colors.green.withOpacity(0.3),
-                              borderStrokeWidth: 3.0,
-                              borderColor: Colors.green,
-                            ),
-                          ],
-                        ),
-                      if (_drawingPolygon.length >= 2)
-                        Polygon(
-                          points: closeRing(_drawingPolygon),
-                          color: Colors.orange.withOpacity(0.3),
-                          borderStrokeWidth: 3.0,
-                          borderColor: Colors.orange,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                      ],
+                    ),
+                    PolygonLayer(
+                      polygons: [
+                        for (final f in polygonFeatures)
+                          ...f.polygons.expand(
+                            (poly) => [
+                              Polygon(
+                                points: poly.first,
+                                color: Colors.green.withOpacity(0.3),
+                                borderStrokeWidth: 3.0,
+                                borderColor: Colors.green,
+                              ),
+                            ],
+                          ),
+                        if (_drawingPolygon.length >= 2)
+                          Polygon(
+                            points: closeRing(_drawingPolygon),
+                            color: Colors.orange.withOpacity(0.3),
+                            borderStrokeWidth: 3.0,
+                            borderColor: Colors.orange,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    GlobalConfig.instance.currentTool.onTap(details, this);
+                  },
+                  onScaleStart: (details) {
+                    GlobalConfig.instance.currentTool.onScaleStart(
+                      details,
+                      this,
+                    );
+                  },
+                  onScaleUpdate: (details) {
+                    GlobalConfig.instance.currentTool.onScaleUpdate(
+                      details,
+                      this,
+                    );
+                  },
+                  onScaleEnd: (details) {
+                    GlobalConfig.instance.currentTool.onScaleEnd(details, this);
+                  },
+                  child: Container(),
+                ),
+              ],
             ),
           ),
         ],

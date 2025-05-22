@@ -17,12 +17,15 @@ abstract class MapTool {
   /// ツール無効化時の終了処理
   void onDeactivate() {}
 
-  /// PointerDownイベント
-  void onPointerDown(PointerDownEvent event, dynamic mapState);
+  /// タップイベント
+  void onTap(TapUpDetails details, dynamic mapState) {}
 
-  /// PointerMoveイベント
-  void onPointerMove(PointerMoveEvent event, dynamic mapState);
+  /// スケール開始イベント
+  void onScaleStart(ScaleStartDetails details, dynamic mapState) {}
 
-  /// PointerUpイベント
-  void onPointerUp(PointerUpEvent event, dynamic mapState);
+  /// スケール更新イベント
+  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {}
+
+  /// スケール終了イベント
+  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {}
 }

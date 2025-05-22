@@ -14,23 +14,27 @@ class PanTool extends MapTool {
 
   Offset? _lastPosition;
 
+  /// タップイベント
   @override
-  void onPointerDown(PointerDownEvent event, dynamic mapState) {
-    _lastPosition = event.position;
+  void onTap(TapUpDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 
+  /// スケール開始イベント
   @override
-  void onPointerMove(PointerMoveEvent event, dynamic mapState) {
-    if (_lastPosition != null) {
-      final delta = event.position - _lastPosition!;
-      // mapStateに地図移動処理を委譲（実装はMapPage側で）
-      mapState?.onPan(delta);
-      _lastPosition = event.position;
-    }
+  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 
+  /// スケール更新イベント
   @override
-  void onPointerUp(PointerUpEvent event, dynamic mapState) {
-    _lastPosition = null;
+  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    // 必要に応じて
+  }
+
+  /// スケール終了イベント
+  @override
+  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 }

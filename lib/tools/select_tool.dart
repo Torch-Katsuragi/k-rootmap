@@ -14,24 +14,27 @@ class SelectTool extends MapTool {
 
   Offset? _startPosition;
 
+  /// タップイベント
   @override
-  void onPointerDown(PointerDownEvent event, dynamic mapState) {
-    _startPosition = event.localPosition;
-    mapState?.startSelection(_startPosition!);
+  void onTap(TapUpDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 
+  /// スケール開始イベント
   @override
-  void onPointerMove(PointerMoveEvent event, dynamic mapState) {
-    if (_startPosition != null) {
-      mapState?.updateSelection(_startPosition!, event.localPosition);
-    }
+  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 
+  /// スケール更新イベント
   @override
-  void onPointerUp(PointerUpEvent event, dynamic mapState) {
-    if (_startPosition != null) {
-      mapState?.endSelection(_startPosition!, event.localPosition);
-      _startPosition = null;
-    }
+  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    // 必要に応じて
+  }
+
+  /// スケール終了イベント
+  @override
+  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 }

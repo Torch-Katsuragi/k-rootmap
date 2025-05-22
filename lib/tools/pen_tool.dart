@@ -5,6 +5,8 @@ import 'map_tool.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
+import '../utils/global_config.dart';
+import '../models/layer_tree_node.dart';
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
@@ -16,31 +18,37 @@ class PenTool extends MapTool {
 
   List<Offset> _currentPath = [];
 
+  /// タップイベント
   @override
-  void onPointerDown(PointerDownEvent event, dynamic mapState) {
-    if (event.kind == PointerDeviceKind.stylus) {
-      // ペン入力: フリーハンド描画開始
-      _currentPath = [event.localPosition];
-      mapState?.startFreehand(_currentPath);
-    } else if (event.kind == PointerDeviceKind.touch) {
-      // 指タップ: 点追加
-      mapState?.addPoint(event.localPosition);
+  void onTap(TapUpDetails details, dynamic mapState) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null) return;
+    final latlng = mapState.offsetToLatLng(details.localPosition);
+    if (selected is PointLayerNode) {
+      selected.geoPackageFile.addPoint(selected.layerName, latlng, '');
+      mapState.setState(() {});
+    } else if (selected is LineLayerNode) {
+      mapState.addDrawingLinePoint(latlng);
+    } else if (selected is PolygonLayerNode) {
+      mapState.addDrawingPolygonPoint(latlng);
     }
   }
 
+  /// スケール開始イベント
   @override
-  void onPointerMove(PointerMoveEvent event, dynamic mapState) {
-    if (event.kind == PointerDeviceKind.stylus && _currentPath.isNotEmpty) {
-      _currentPath.add(event.localPosition);
-      mapState?.updateFreehand(_currentPath);
-    }
+  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 
+  /// スケール更新イベント
   @override
-  void onPointerUp(PointerUpEvent event, dynamic mapState) {
-    if (event.kind == PointerDeviceKind.stylus && _currentPath.isNotEmpty) {
-      mapState?.endFreehand(_currentPath);
-      _currentPath = [];
-    }
+  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    // 必要に応じて
+  }
+
+  /// スケール終了イベント
+  @override
+  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+    // 必要に応じて
   }
 }

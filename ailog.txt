@@ -148,3 +148,5 @@ GeoPackageノードのレイヤ追加ボタンをtrailingからレイヤリス�
 2024-06-10 地図操作ツール（MapTool/PanTool/PenTool/SelectTool）実装、グローバル変数統一、ペン/タップ入力分岐、MapPageへのListener組み込み、ツールバーUI追加、フリーハンド描画・点追加の最低限動作まで実装
 
 地図上に透明なGestureDetectorをStackで重ね、onTap, onScale系イベントをMapTool経由でmap_pageに伝える仕組みを実装。MapTool抽象クラスと各ツールにonTap/onScale系メソッドを追加。Listenerは廃止。
+
+2024-xx-xx 地図描画中のFABに「確定」「キャンセル」「1つ取り消し」ボタンを追加。UI/UX向上。

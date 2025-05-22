@@ -114,50 +114,6 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     }
   }
 
-  // --- 地図タップ・レイヤ/フィーチャ編集・Drawer・BottomNavigationBar・属性入力・インライン編集UIの全ロジックを完全移植 ---
-  void _onMapTap(TapPosition tapPosition, LatLng latlng) async {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
-    if (selected is PointLayerNode) {
-      // 点レイヤ: その場で属性入力→保存
-      String? attr = await showDialog<String>(
-        context: context,
-        builder: (context) {
-          String text = '';
-          return AlertDialog(
-            title: const Text('属性入力'),
-            content: TextField(
-              autofocus: true,
-              decoration: const InputDecoration(labelText: '属性（テキスト）'),
-              onChanged: (v) => text = v,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, null),
-                child: const Text('キャンセル'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, text),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-      if (attr == null) return;
-      selected.geoPackageFile.addPoint(selected.layerName, latlng, attr);
-      setState(() {});
-    } else if (selected is LineLayerNode) {
-      setState(() {
-        _drawingLine.add(latlng);
-      });
-    } else if (selected is PolygonLayerNode) {
-      setState(() {
-        _drawingPolygon.add(latlng);
-      });
-    }
-  }
-
   // --- 線・ポリゴン確定処理 ---
   Future<void> _onConfirmDrawing() async {
     final selected = GlobalConfig.instance.selectedLayerNode;
@@ -266,60 +222,6 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       // GPSアイコン: 何か追加したい場合ここに
     } else if (index == 2) {
       _scaffoldKey.currentState?.openEndDrawer();
-    }
-  }
-
-  // --- ツールAPI雛形 ---
-  // フリーハンド描画開始
-  void startFreehand(List<Offset> path) {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
-    if (selected is LineLayerNode) {
-      setState(() {
-        _drawingLine.clear();
-        _drawingLine.add(offsetToLatLng(path.first));
-      });
-    } else if (selected is PolygonLayerNode) {
-      setState(() {
-        _drawingPolygon.clear();
-        _drawingPolygon.add(offsetToLatLng(path.first));
-      });
-    }
-  }
-
-  // フリーハンド描画中
-  void updateFreehand(List<Offset> path) {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
-    if (selected is LineLayerNode) {
-      setState(() {
-        _drawingLine.clear();
-        _drawingLine.addAll(path.map(offsetToLatLng));
-      });
-    } else if (selected is PolygonLayerNode) {
-      setState(() {
-        _drawingPolygon.clear();
-        _drawingPolygon.addAll(path.map(offsetToLatLng));
-      });
-    }
-  }
-
-  // フリーハンド描画終了
-  void endFreehand(List<Offset> path) {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
-    if (selected is LineLayerNode) {
-      setState(() {
-        _drawingLine.clear();
-        _drawingLine.addAll(path.map(offsetToLatLng));
-      });
-      // 確定処理はFloatingActionButtonで
-    } else if (selected is PolygonLayerNode) {
-      setState(() {
-        _drawingPolygon.clear();
-        _drawingPolygon.addAll(path.map(offsetToLatLng));
-      });
-      // 確定処理はFloatingActionButtonで
     }
   }
 
@@ -564,12 +466,55 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       floatingActionButton: Builder(
         builder: (context) {
           final selected = GlobalConfig.instance.selectedLayerNode;
-          if ((selected is LineLayerNode && _drawingLine.length >= 2) ||
-              (selected is PolygonLayerNode && _drawingPolygon.length >= 3)) {
-            return FloatingActionButton.extended(
-              onPressed: _onConfirmDrawing,
-              icon: const Icon(Icons.check),
-              label: const Text('確定'),
+          final isLineDrawing =
+              selected is LineLayerNode && _drawingLine.length >= 2;
+          final isPolygonDrawing =
+              selected is PolygonLayerNode && _drawingPolygon.length >= 3;
+          if (isLineDrawing || isPolygonDrawing) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1つ取り消しボタン
+                FloatingActionButton(
+                  heroTag: 'undo',
+                  onPressed: () {
+                    setState(() {
+                      if (isLineDrawing && _drawingLine.isNotEmpty) {
+                        _drawingLine.removeLast();
+                      } else if (isPolygonDrawing &&
+                          _drawingPolygon.isNotEmpty) {
+                        _drawingPolygon.removeLast();
+                      }
+                    });
+                  },
+                  tooltip: '1つ取り消し',
+                  child: const Icon(Icons.undo),
+                ),
+                const SizedBox(width: 12),
+                // キャンセルボタン
+                FloatingActionButton(
+                  heroTag: 'cancel',
+                  onPressed: () {
+                    setState(() {
+                      if (isLineDrawing) {
+                        _drawingLine.clear();
+                      } else if (isPolygonDrawing) {
+                        _drawingPolygon.clear();
+                      }
+                    });
+                  },
+                  tooltip: 'キャンセル',
+                  child: const Icon(Icons.clear),
+                ),
+                const SizedBox(width: 12),
+                // 確定ボタン
+                FloatingActionButton.extended(
+                  heroTag: 'confirm',
+                  onPressed: _onConfirmDrawing,
+                  icon: const Icon(Icons.check),
+                  label: const Text('確定'),
+                ),
+              ],
             );
           }
           return const SizedBox.shrink();

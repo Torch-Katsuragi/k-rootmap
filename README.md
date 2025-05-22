@@ -251,3 +251,20 @@ final layerNames = gpkg.getLayerNames();
 
 - ルートディレクトリは `GlobalConfig.instance.projectRootDir` でセット・取得する。
 - ファイルアクセス時は都度 `p.joinAll([GlobalConfig.instance.projectRootDir, ...pathList])` で絶対パスを生成する。
+
+## 地図描画UIの改善
+
+- 線・ポリゴン描画中、画面右下に「確定」「キャンセル」「1つ取り消し」ボタンが横並びで表示されるようになりました。
+  - 確定: 描画を保存
+  - キャンセル: 描画点列を全消去
+  - 1つ取り消し: 最後の点を削除
+- これにより、誤操作時のリカバリや描画のやり直しが容易になりました。
+
+### 主要ファイル・クラス構成
+
+- `lib/screens/map_page.dart`: 地図・編集画面本体。地図表示、描画、ツールバー、FAB群のUIロジックを担当。
+  - `KMapsHomePage`: 地図画面のStatefulWidget。
+  - `_KMapsHomePageState`: 地図・描画・ツール・FABの状態管理とUI構築。
+- `lib/models/layer.dart` など: レイヤ・フィーチャのデータモデル。
+- `lib/utils/global_config.dart`: グローバルな設定・状態管理。
+- `lib/widgets/layer_drawer.dart`: レイヤ一覧・編集用Drawer。

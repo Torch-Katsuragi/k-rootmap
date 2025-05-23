@@ -404,9 +404,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     ),
                   ],
                 ),
-                RawGestureDetector(
-                  gestures: const <Type, GestureRecognizerFactory>{}, // デフォルトは空
-                  behavior: HitTestBehavior.translucent,
+                Positioned.fill(
                   child: Listener(
                     onPointerMove: (event) {
                       // 現在のツールのPointerバッファに追加
@@ -447,7 +445,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                           this,
                         );
                       },
-                      child: Container(),
+                      child: Container(color: Colors.transparent),
                     ),
                   ),
                 ),

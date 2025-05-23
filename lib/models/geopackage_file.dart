@@ -177,6 +177,15 @@ class GeoPackageFile {
     }
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
+    // テーブル存在チェック
+    final tables = db.select(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='gpkg_geometry_columns'",
+    );
+    if (tables.isEmpty) {
+      print('[WARN] gpkg_geometry_columnsテーブルが存在しません: $absPath');
+      db.dispose();
+      return null;
+    }
     final rows = db.select(
       'SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?',
       [tableName],
@@ -195,6 +204,15 @@ class GeoPackageFile {
     }
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
+    // テーブル存在チェック
+    final tables = db.select(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='gpkg_geometry_columns'",
+    );
+    if (tables.isEmpty) {
+      print('[WARN] gpkg_geometry_columnsテーブルが存在しません: $absPath');
+      db.dispose();
+      return [];
+    }
     final typeRows = db.select(
       'SELECT geometry_type_name FROM gpkg_geometry_columns WHERE table_name = ?',
       [tableName],

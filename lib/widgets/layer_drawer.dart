@@ -90,7 +90,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
                     );
                     if (result != null && result.isNotEmpty) {
                       final folderNode = widget.currentNode as FolderNode;
-                      final dir = folderNode.getFilePathIfAny();
+                      final dir = folderNode.getAbsoluteFilePath();
                       final path = p.join(dir ?? '', result);
                       if (Directory(path).existsSync()) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -137,7 +137,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
                     );
                     if (result != null && result.isNotEmpty) {
                       final folderNode = widget.currentNode as FolderNode;
-                      final dir = folderNode.getFilePathIfAny();
+                      final dir = folderNode.getAbsoluteFilePath();
                       final fileName =
                           result.endsWith('.gpkg') ? result : '$result.gpkg';
                       final path = p.join(dir ?? '', fileName);
@@ -241,15 +241,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
                     );
                     if (confirm == true) {
                       try {
-                        // ファイル削除
-                        final absPath = node.geoPackageFile.getAbsolutePath();
-                        if (absPath != null) {
-                          final file = File(absPath);
-                          if (file.existsSync()) {
-                            file.deleteSync();
-                          }
-                        }
-                        // ノード削除
+                        // geopakcageノード削除
                         node.dispose();
                         setState(() {});
                       } catch (e) {
@@ -326,9 +318,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
         icon: const Icon(Icons.delete),
         tooltip: 'レイヤ削除',
         onPressed: () {
-          node.geoPackageFile.removeLayer(node.layerName);
           node.dispose();
-          print(GlobalConfig.instance.folderTree?.toDict());
           widget.setStateCallback(() {});
         },
       ),

@@ -8,6 +8,7 @@ import 'package:sqlite3/sqlite3.dart' as sql;
 import 'layer.dart';
 import 'geopackage_file.dart';
 import 'package:flutter/material.dart';
+import 'package:meta/meta.dart';
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -47,13 +48,9 @@ abstract class LayerTreeNode {
     updateChildren();
   }
 
-  /// デストラクタ
-  /// 子ノードの参照を解除し、メモリリークを防止
+  /// ノードのリソース解放・削除処理（サブクラスで必ずsuper.dispose()を呼ぶこと）
+  @mustCallSuper
   void dispose() {
-    for (final child in children) {
-      child.dispose();
-    }
-    children.clear();
     parent?.children.remove(this);
     parent = null;
   }
@@ -117,18 +114,6 @@ abstract class LayerTreeNode {
   /// 指定typeの子ノードリストを返す（例: "folder", "gpkg", "layer"）
   List<LayerTreeNode> getChildrenByType(String type) {
     return children.where((c) => c.nodeType == type).toList();
-  }
-
-  /// GeoPackage等でファイルパスが必要な場合に返す（デフォルトはnull）
-  /// GlobalConfigのbaseDirを基準にした絶対パスを返す
-  String? getFilePathIfAny() {
-    final baseDir = GlobalConfig.instance.projectRootDir;
-    if (baseDir == null) return null;
-
-    final pathSegments = getAbsolutePathSegments();
-    if (pathSegments.isEmpty) return null;
-
-    return p.joinAll([baseDir, ...pathSegments]);
   }
 
   /// 展開状態（デフォルトはtrue）
@@ -283,6 +268,22 @@ class GeoPackageNode extends LayerTreeNode {
     }
     return nodes;
   }
+
+  @override
+  void dispose() {
+    for (final child in children) {
+      child.dispose();
+    }
+    children.clear();
+    // GeoPackageファイル削除
+    final filePath = getAbsoluteFilePath();
+    if (filePath != null && File(filePath).existsSync()) {
+      File(filePath).deleteSync();
+    } else {
+      print('GeoPackageファイルが見つかりません: $filePath');
+    }
+    super.dispose();
+  }
 }
 
 /// LayerNodeをabstract classにし、PointLayerNode/LineLayerNode/PolygonLayerNodeサブクラスを追加
@@ -336,6 +337,13 @@ abstract class LayerNode extends LayerTreeNode {
       }
     }
     return nodes;
+  }
+
+  @override
+  void dispose() {
+    // レイヤ（DBテーブル）削除
+    geoPackageFile.removeLayer(layerName);
+    super.dispose();
   }
 }
 
@@ -434,5 +442,14 @@ class FolderNode extends LayerTreeNode {
       }
     }
     return nodes;
+  }
+
+  @override
+  void dispose() {
+    for (final child in children) {
+      child.dispose();
+    }
+    children.clear();
+    super.dispose();
   }
 }

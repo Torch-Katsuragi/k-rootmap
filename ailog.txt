@@ -156,3 +156,7 @@ FolderNode, GeoPackageNode等のchildrenTypeもType返却に統一。
 createNodesByTypeもType引数で分岐するよう修正。
 
 LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, GeoPackageNode, LayerNode）にstatic createNodesByType(parent)を分散実装。親ノード直下の子ノードリストを返す設計に統一。README.mdにも反映。
+
+// 2024-06-09 childrenTypeプロパティを廃止し、updateChildrenを各サブクラスで直接子ノードクラスを参照する形にリファクタリング（FolderNode, GeoPackageNode, LayerNode）。linterエラーも修正。
+
+// 2024-06-13 layer_tree_node.dart内のパス結合・Directory生成処理をgetAbsoluteFilePath()に統一し、パス取得ロジックを一元化。

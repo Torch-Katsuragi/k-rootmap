@@ -30,9 +30,6 @@ abstract class LayerTreeNode {
   /// nodeTypeがとりうる値（固定値リスト）
   static const List<String> nodeTypeValues = ["folder", "gpkg", "layer"];
 
-  /// このノードが持つ子ノードの型リスト（例: [FolderNode, GeoPackageNode]など）
-  List<Type> get childrenType => [];
-
   /// ノード種別ごとのベースアイコン（UI用）
   IconData get baseIcon;
   Color get baseIconColor;
@@ -55,14 +52,6 @@ abstract class LayerTreeNode {
     parent = null;
   }
 
-  /// 再帰的に可視状態を変更（本体プロパティのみ）
-  void setVisibleRecursive(bool v) {
-    visible = v;
-    for (final child in children) {
-      child.setVisibleRecursive(v);
-    }
-  }
-
   /// ルートからのパスリスト（meta.json用途）
   List<String> getPathFromRoot() {
     List<String> pathList = [];
@@ -81,19 +70,6 @@ abstract class LayerTreeNode {
     return path.length > 1 ? path.sublist(1) : [];
   }
 
-  /// メタデータも含めて可視状態を変更
-  /// [v]: 設定したい可視状態
-  Future<void> setVisibleWithMeta(bool v, {String? type}) async {
-    if (!v) {
-      setVisibleRecursive(v);
-    } else {
-      visible = true;
-      for (final child in children) {
-        child.restoreVisibleRecursive();
-      }
-    }
-  }
-
   /// 再帰的に子ノードをたどり、ノード構造を辞書形式で返す
   /// @return Map<String, dynamic> ノード構造を示す辞書
   Map<String, dynamic> toDict() {
@@ -106,11 +82,6 @@ abstract class LayerTreeNode {
     return dict;
   }
 
-  /// メタデータから可視状態を読み込んで本体に反映
-  void readVisibleFromMeta({String? type}) {
-    // This method is no longer used as per the new implementation
-  }
-
   /// 指定typeの子ノードリストを返す（例: "folder", "gpkg", "layer"）
   List<LayerTreeNode> getChildrenByType(String type) {
     return children.where((c) => c.nodeType == type).toList();
@@ -119,27 +90,8 @@ abstract class LayerTreeNode {
   /// 展開状態（デフォルトはtrue）
   bool get expanded => true;
 
-  /// ファイル構造を参照して自分のchildrenを更新する（childrenTypeに基づく）
-  void updateChildren() {
-    children.clear();
-
-    for (final type in childrenType) {
-      // 各クラスのcreateNodesByTypeを呼び出す
-      List<LayerTreeNode> nodes = [];
-      if (type == FolderNode) {
-        nodes = FolderNode.createNodesByType(this);
-      } else if (type == GeoPackageNode) {
-        nodes = GeoPackageNode.createNodesByType(this);
-      } else if (type == LayerNode) {
-        nodes = LayerNode.createNodesByType(this);
-      }
-      for (final node in nodes) {
-        addChild(node);
-      }
-    }
-    // final tree = toMap();
-    // print("updated: $tree");
-  }
+  /// ファイル構造を参照して自分のchildrenを更新する（サブクラスで必ずoverrideすること）
+  void updateChildren();
 
   /// 子ノードを追加。childrenTypeに合致しない場合は警告を出してスキップ
   void addChild(LayerTreeNode child) {
@@ -157,11 +109,6 @@ abstract class LayerTreeNode {
         return parent!.isVisibleRecursive();
       }
     }
-  }
-
-  /// メタデータから可視状態を再帰的に復元
-  void restoreVisibleRecursive() {
-    // This method is no longer used as per the new implementation
   }
 
   /// 自分自身を含むツリー構造を再帰的に辞書(Map)として出力
@@ -240,23 +187,28 @@ class GeoPackageNode extends LayerTreeNode {
          nodeType: "gpkg",
        );
 
-  /// このノードが持つ子ノードの型リスト
-  @override
-  List<Type> get childrenType => [LayerNode];
-
+  /// ノード種別ごとのベースアイコン（UI用）
   @override
   IconData get baseIcon => Icons.storage;
   @override
   Color get baseIconColor => Colors.blueGrey;
 
+  /// このGeoPackage内のLayerNodeのみ生成
+  @override
+  void updateChildren() {
+    children.clear();
+    final nodes = LayerNode.createNodesByType(this);
+    for (final node in nodes) {
+      addChild(node);
+    }
+  }
+
   /// このフォルダ直下のGeoPackageNodeリストのみ返す
   static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
-    final absPath = p.joinAll([
-      GlobalConfig.instance.projectRootDir ?? '',
-      ...parent.getAbsolutePathSegments(),
-    ]);
+    final absPath = parent.getAbsoluteFilePath();
+    if (absPath == null) return nodes;
     final dir = Directory(absPath);
     for (var entity in dir.listSync()) {
       if (entity is File && entity.path.endsWith('.gpkg')) {
@@ -345,6 +297,12 @@ abstract class LayerNode extends LayerTreeNode {
     geoPackageFile.removeLayer(layerName);
     super.dispose();
   }
+
+  @override
+  void updateChildren() {
+    // レイヤノードは子ノードを持たない
+    children.clear();
+  }
 }
 
 class PointLayerNode extends LayerNode {
@@ -413,21 +371,30 @@ class FolderNode extends LayerTreeNode {
        );
 
   @override
-  List<Type> get childrenType => [FolderNode, GeoPackageNode];
-
-  @override
   IconData get baseIcon => Icons.folder;
   @override
   Color get baseIconColor => Colors.amber;
+
+  /// このフォルダ直下のFolderNode, GeoPackageNodeのみ生成
+  @override
+  void updateChildren() {
+    children.clear();
+    final folderNodes = FolderNode.createNodesByType(this);
+    final gpkgNodes = GeoPackageNode.createNodesByType(this);
+    for (final node in folderNodes) {
+      addChild(node);
+    }
+    for (final node in gpkgNodes) {
+      addChild(node);
+    }
+  }
 
   /// このフォルダ直下のFolderNodeリストのみ返す
   static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
-    final absPath = p.joinAll([
-      GlobalConfig.instance.projectRootDir ?? '',
-      ...parent.getAbsolutePathSegments(),
-    ]);
+    final absPath = parent.getAbsoluteFilePath();
+    if (absPath == null) return nodes;
     final dir = Directory(absPath);
     for (var entity in dir.listSync()) {
       if (entity is Directory) {

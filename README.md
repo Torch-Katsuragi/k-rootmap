@@ -226,6 +226,64 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 ## 更新履歴・修正メモ
 - meta.json/MetaDataを全域から排除。可視状態・設定の永続化は一時的に無効化（今後再導入予定）。
 
+## モデル構成: LayerTreeNode系
+
+- `LayerTreeNode` (abstract)
+  - レイヤツリーのノード共通基底クラス。
+  - `updateChildren()` はabstractで、サブクラスでファイル構造等を参照し子ノードを生成。
+  - `addChild`, `dispose`, `getPathFromRoot` などツリー操作の共通メソッドを持つ。
+
+- `FolderNode` (LayerTreeNode継承)
+  - サブフォルダ・GeoPackageファイルノードを子ノードとして持つ。
+  - `updateChildren()` で直下のフォルダ・gpkgファイルを探索しノード生成。
+
+- `GeoPackageNode` (LayerTreeNode継承)
+  - 1つのGeoPackageファイルを表現。
+  - `updateChildren()` で自身のGeoPackage内のレイヤ（テーブル）をLayerNodeとして生成。
+
+- `LayerNode` (abstract, LayerTreeNode継承)
+  - 1つのレイヤ（テーブル）を表現。Point/Line/Polygonのサブクラスあり。
+  - 子ノードは持たない。
+
+### ノード生成の流れ
+- FolderNode: 直下のディレクトリ→FolderNode, .gpkgファイル→GeoPackageNode
+- GeoPackageNode: .gpkg内のテーブル→LayerNode (Point/Line/Polygon)
+- LayerNode: 子ノードなし
+
+### 主要ファイル
+- `lib/models/layer_tree_node.dart`: 上記クラス群の実装本体
+
+## 主要ファイル・クラス構成
+
+- `lib/models/geopackage_file.dart` : GeoPackageFile（GeoPackageファイル管理クラス）
+  - ファイルパスのみ保持し、レイヤ一覧・属性・フィーチャ情報は全てDBからリアルタイムで取得
+  - レイヤ追加・削除・リネーム等の操作メソッドも集約
+- `lib/models/geopackage.dart` : 旧GeoPackageGroup/Layer/LayerManager（今後はノードクラス・マネージャとして整理予定）
+
+## GeoPackageFile設計方針
+
+- GeoPackageFileはファイルパスのみを保持
+- レイヤ一覧や属性・フィーチャ情報は全てDBからリアルタイムで取得
+- レイヤ追加・削除・リネーム等の操作もGeoPackageFile経由で行う
+- ツリー構造のノード（GeoPackageNode, LayerNode等）はGeoPackageFileへの参照のみを持ち、情報取得・操作はGeoPackageFileのメソッドを呼び出す
+- **ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成（OGC仕様準拠、最小構成）する。**
+- **WKBエンコード・デコード処理はlib/utils/wkb_utils.dartに集約し、GeoPackageFile等から呼び出す。**
+
+### GeoPackageFile主要メソッド
+- `getLayerNames()` : レイヤ（フィーチャテーブル）名一覧をDBから取得
+- `getGeometryType(tableName)` : 指定レイヤのジオメトリタイプをDBから取得
+- `getFeatures(tableName)` : 指定レイヤのフィーチャ一覧をDBから取得
+- `addLayer(name, geomType)` : レイヤ追加（DBにテーブル作成）
+- `removeLayer(name)` : レイヤ削除（DBからテーブル削除）
+- `renameLayer(oldName, newName)` : レイヤ名リネーム（DB内のテーブル名・メタ情報も更新）
+
+---
+
+今後、GeoPackageNode/LayerNode等のノードクラスもGeoPackageFile参照型にリファクタリング予定。
+
+## 更新履歴・修正メモ
+- meta.json/MetaDataを全域から排除。可視状態・設定の永続化は一時的に無効化（今後再導入予定）。
+
 ## 主なクラス構成
 - LayerTreeNode: レイヤツリーの基底クラス。ノード種別（folder/gpkg/layer）を持つ。
   - FolderNode: フォルダノード。childrenTypeは["folder", "gpkg"]。

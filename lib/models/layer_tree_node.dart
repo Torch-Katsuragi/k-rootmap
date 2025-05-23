@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 import 'layer.dart';
-import 'folder_node.dart';
 import 'geopackage_file.dart';
 import 'package:flutter/material.dart';
 
@@ -30,8 +29,8 @@ abstract class LayerTreeNode {
   /// nodeTypeがとりうる値（固定値リスト）
   static const List<String> nodeTypeValues = ["folder", "gpkg", "layer"];
 
-  /// このノードが持つ子ノードのnodeType（例: ["folder", "gpkg"]など）
-  List<String> get childrenType => [];
+  /// このノードが持つ子ノードの型リスト（例: [FolderNode, GeoPackageNode]など）
+  List<Type> get childrenType => [];
 
   /// ノード種別ごとのベースアイコン（UI用）
   IconData get baseIcon;
@@ -140,117 +139,27 @@ abstract class LayerTreeNode {
     children.clear();
 
     for (final type in childrenType) {
-      final nodes = LayerTreeNode.createNodesByType(
-        type,
-        getAbsolutePathSegments(),
-        parent: this,
-      );
-
+      // 各クラスのcreateNodesByTypeを呼び出す
+      List<LayerTreeNode> nodes = [];
+      if (type == FolderNode) {
+        nodes = FolderNode.createNodesByType(this);
+      } else if (type == GeoPackageNode) {
+        nodes = GeoPackageNode.createNodesByType(this);
+      } else if (type == LayerNode) {
+        nodes = LayerNode.createNodesByType(this);
+      }
       for (final node in nodes) {
         addChild(node);
       }
     }
-    final tree = toMap();
-    print("updated: $tree");
+    // final tree = toMap();
+    // print("updated: $tree");
   }
 
   /// 子ノードを追加。childrenTypeに合致しない場合は警告を出してスキップ
   void addChild(LayerTreeNode child) {
-    if (!childrenType.contains(child.nodeType)) {
-      print(
-        '[WARN] addChild: nodeType=${child.nodeType}はchildrenType=${childrenType}に合致しないため追加をスキップ',
-      );
-      return;
-    }
-    // print(
-    //   '[DEBUG] addChild: 子ノード追加 - nodeType=${child.nodeType}, name=${child.name}, parent=${name}',
-    // );
     children.add(child);
     child.parent = this;
-    // child.updateChildren();
-  }
-
-  /// nodeTypeと論理パス（getPathFromRoot()の返り値）を受け取り、パス直下の該当nodeTypeノードリストを返すfactory
-  static List<LayerTreeNode> createNodesByType(
-    String nodeType,
-    List<String> logicalPath, {
-    LayerTreeNode? parent,
-  }) {
-    // print(
-    //   '[DEBUG] createNodesByType: nodeType=$nodeType, logicalPath=$logicalPath,parent=${parent?.name}',
-    // );
-    final nodes = <LayerTreeNode>[];
-    final absPath = p.joinAll([
-      GlobalConfig.instance.projectRootDir ?? '',
-      ...logicalPath,
-    ]);
-    if (nodeType == "folder") {
-      final dir = Directory(absPath);
-      for (var entity in dir.listSync()) {
-        if (entity is Directory) {
-          nodes.add(
-            FolderNode(
-              p.basename(entity.path),
-              visible: true,
-              parent: parent,
-              children: [],
-            ),
-          );
-        } else if (entity is File && entity.path.endsWith('.gpkg')) {
-          // GeoPackageNodeに置換
-          final parentPath = logicalPath;
-          final fileName = p.basename(entity.path);
-          final gpkgFile = GeoPackageFile([...parentPath, fileName]);
-          nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
-        }
-      }
-    } else if (nodeType == "gpkg") {
-      if (File(absPath).existsSync()) {
-        final parentPath = logicalPath.sublist(0, logicalPath.length - 1);
-        final fileName = p.basename(absPath);
-        final gpkgFile = GeoPackageFile([...parentPath, fileName]);
-        nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
-      }
-    } else if (nodeType == "layer") {
-      if (parent is GeoPackageNode) {
-        final gpkgNode = parent as GeoPackageNode;
-        final tableNames = gpkgNode.geoPackageFile.getLayerNames();
-        print("tableNames: $tableNames");
-        for (final tableName in tableNames) {
-          final type =
-              gpkgNode.geoPackageFile.getGeometryType(tableName)?.toUpperCase();
-          if (type == "MULTIPOINT") {
-            nodes.add(
-              PointLayerNode(
-                gpkgNode.geoPackageFile,
-                tableName,
-                visible: true,
-                parent: parent,
-              ),
-            );
-          } else if (type == "MULTILINESTRING") {
-            nodes.add(
-              LineLayerNode(
-                gpkgNode.geoPackageFile,
-                tableName,
-                visible: true,
-                parent: parent,
-              ),
-            );
-          } else if (type == "MULTIPOLYGON") {
-            nodes.add(
-              PolygonLayerNode(
-                gpkgNode.geoPackageFile,
-                tableName,
-                visible: true,
-                parent: parent,
-              ),
-            );
-          }
-        }
-      }
-    }
-    return nodes;
   }
 
   bool isVisibleRecursive() {
@@ -321,6 +230,11 @@ abstract class LayerTreeNode {
     if (segments.isEmpty) return root;
     return p.joinAll([root, ...segments]);
   }
+
+  /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（デフォルトは空リスト）
+  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+    return <LayerTreeNode>[];
+  }
 }
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
@@ -341,14 +255,34 @@ class GeoPackageNode extends LayerTreeNode {
          nodeType: "gpkg",
        );
 
-  /// このノードが持つ子ノードのnodeType
+  /// このノードが持つ子ノードの型リスト
   @override
-  List<String> get childrenType => ["layer"];
+  List<Type> get childrenType => [LayerNode];
 
   @override
   IconData get baseIcon => Icons.storage;
   @override
   Color get baseIconColor => Colors.blueGrey;
+
+  /// このフォルダ直下のGeoPackageNodeリストのみ返す
+  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+    final nodes = <LayerTreeNode>[];
+    if (parent == null) return nodes;
+    final absPath = p.joinAll([
+      GlobalConfig.instance.projectRootDir ?? '',
+      ...parent.getAbsolutePathSegments(),
+    ]);
+    final dir = Directory(absPath);
+    for (var entity in dir.listSync()) {
+      if (entity is File && entity.path.endsWith('.gpkg')) {
+        final parentPath = parent.getAbsolutePathSegments();
+        final fileName = p.basename(entity.path);
+        final gpkgFile = GeoPackageFile([...parentPath, fileName]);
+        nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
+      }
+    }
+    return nodes;
+  }
 }
 
 /// LayerNodeをabstract classにし、PointLayerNode/LineLayerNode/PolygonLayerNodeサブクラスを追加
@@ -362,6 +296,47 @@ abstract class LayerNode extends LayerTreeNode {
     LayerTreeNode? parent,
   }) : super(layerName, visible: visible, parent: parent, nodeType: "layer");
   List<Feature> get features;
+
+  /// parentがGeoPackageNodeなら、そのGeoPackage内のLayerNodeサブクラス(Point/Line/Polygon)のみ返す
+  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+    final nodes = <LayerTreeNode>[];
+    if (parent is! GeoPackageNode) return nodes;
+    final gpkgNode = parent as GeoPackageNode;
+    final tableNames = gpkgNode.geoPackageFile.getLayerNames();
+    for (final tableName in tableNames) {
+      final type =
+          gpkgNode.geoPackageFile.getGeometryType(tableName)?.toUpperCase();
+      if (type == "MULTIPOINT") {
+        nodes.add(
+          PointLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      } else if (type == "MULTILINESTRING") {
+        nodes.add(
+          LineLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      } else if (type == "MULTIPOLYGON") {
+        nodes.add(
+          PolygonLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      }
+    }
+    return nodes;
+  }
 }
 
 class PointLayerNode extends LayerNode {
@@ -413,4 +388,51 @@ class PolygonLayerNode extends LayerNode {
   IconData get baseIcon => Icons.terrain;
   @override
   Color get baseIconColor => Colors.deepOrange;
+}
+
+class FolderNode extends LayerTreeNode {
+  FolderNode(
+    String name, {
+    bool visible = true,
+    LayerTreeNode? parent,
+    List<LayerTreeNode>? children,
+  }) : super(
+         name,
+         visible: visible,
+         parent: parent,
+         children: children,
+         nodeType: "folder",
+       );
+
+  @override
+  List<Type> get childrenType => [FolderNode, GeoPackageNode];
+
+  @override
+  IconData get baseIcon => Icons.folder;
+  @override
+  Color get baseIconColor => Colors.amber;
+
+  /// このフォルダ直下のFolderNodeリストのみ返す
+  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+    final nodes = <LayerTreeNode>[];
+    if (parent == null) return nodes;
+    final absPath = p.joinAll([
+      GlobalConfig.instance.projectRootDir ?? '',
+      ...parent.getAbsolutePathSegments(),
+    ]);
+    final dir = Directory(absPath);
+    for (var entity in dir.listSync()) {
+      if (entity is Directory) {
+        nodes.add(
+          FolderNode(
+            p.basename(entity.path),
+            visible: true,
+            parent: parent,
+            children: [],
+          ),
+        );
+      }
+    }
+    return nodes;
+  }
 }

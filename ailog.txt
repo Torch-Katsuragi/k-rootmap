@@ -150,3 +150,9 @@ GeoPackageノードのレイヤ追加ボタンをtrailingからレイヤリス�
 地図上に透明なGestureDetectorをStackで重ね、onTap, onScale系イベントをMapTool経由でmap_pageに伝える仕組みを実装。MapTool抽象クラスと各ツールにonTap/onScale系メソッドを追加。Listenerは廃止。
 
 2024-xx-xx 地図描画中のFABに「確定」「キャンセル」「1つ取り消し」ボタンを追加。UI/UX向上。
+
+childrenTypeをList<String>からList<Type>に変更し、型ベースでノード生成・判定するように修正（lib/models/layer_tree_node.dart）。
+FolderNode, GeoPackageNode等のchildrenTypeもType返却に統一。
+createNodesByTypeもType引数で分岐するよう修正。
+
+LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, GeoPackageNode, LayerNode）にstatic createNodesByType(parent)を分散実装。親ノード直下の子ノードリストを返す設計に統一。README.mdにも反映。

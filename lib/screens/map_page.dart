@@ -13,7 +13,6 @@ import '../models/layer_tree_node.dart';
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
 import '../utils/global_config.dart';
-import '../models/folder_node.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';

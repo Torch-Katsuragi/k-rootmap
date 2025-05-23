@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/global_config.dart';
-import '../models/folder_node.dart';
+import '../models/layer_tree_node.dart';
 import 'map_page.dart';
 
 /// ホーム画面（最小構成）

@@ -17,6 +17,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - WKBエンコード・デコード処理はlib/utils/wkb_utils.dartに集約。
   - ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成（OGC仕様準拠、最小構成）。
 - `lib/models/layer_tree_node.dart` : LayerTreeNode/GeoPackageNode/LayerNode（ツリー構造・可視状態・meta.json連携）
+  - 各ノードクラス（FolderNode, GeoPackageNode, LayerNode）に `static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent)` を実装し、親ノード直下の子ノードリストを返す。
 - `lib/utils/global_config.dart` : グローバル変数（全ノードリスト・選択中ノード等）
 - `lib/widgets/layer_drawer.dart` : レイヤツリーUI（ノード参照で操作）
   - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
@@ -48,7 +49,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - **地図操作ツールバーで「てのひら」「ペン」「選択」などのツールを切り替え可能。**
 - **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、ペンはフリーハンド描画、タップは点追加や選択など直感的な操作性を実現。**
 
-## 主要ファイルとクラス
+## 主要ファイルとクラス構成
 - `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
 - `lib/utils/meta_data.dart`: meta.json全体の読み書き・可視状態・設定管理（MetaDataクラス）
 - `lib/utils/folder_tree.dart`: FolderNode（サブフォルダツリー）
@@ -153,6 +154,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 2024-06-09: LayerDrawerで_findNodeByPathの代わりにLayerTreeNodeのgetNodeByPathを使用するよう修正。
 - 2024-06-09: LayerDrawer/map_page.dartでカレントディレクトリ管理をパス文字列からLayerTreeNode参照に変更。
 - 2024-06-09: GeoPackageGroupにgetFeatureTableNames(), getGeometryType()追加。layerノード生成部でこれらAPIを利用するようリファクタ。
+- 2024-xx-xx: childrenTypeをList<Type>に変更し、型ベースでノード管理に統一
+- 2024-xx-xx: LayerTreeNode.createNodesByTypeを廃止し、各継承クラスにstatic createNodesByType(parent)を分散実装
 
 ## FolderNodeについて
 - FolderNodeはlib/models/folder_node.dartで定義され、レイヤツリーのフォルダ構造を表現するクラス。
@@ -230,11 +233,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - PointLayerNode/LineLayerNode/PolygonLayerNode: 各ジオメトリタイプのレイヤノード。
 
 ## ノード生成の流れ
-- LayerTreeNode.createNodeByType(nodeType, logicalPath, parent: ...):
-  logicalPathで指定されたパスの単一ノード（LayerTreeNode?）を返す（見つからなければnull）。
-  nodeType="folder"の場合: 指定パスが存在すればFolderNodeを返す。
-  nodeType="gpkg"の場合: 指定パスが存在すればGeoPackageNodeを返す。
-  nodeType="layer"の場合: parentがGeoPackageNodeであれば、logicalPathの末尾をテーブル名としてレイヤノードを返す。
+- 各ノードクラス（FolderNode, GeoPackageNode, LayerNode）で `static createNodesByType(parent)` を呼び出すことで、親ノード直下の子ノードリストを取得できる。
+  - 例: `FolderNode.createNodesByType(parentFolderNode)`
 
 ## GeoPackageファイルのパス管理方針
 
@@ -268,3 +268,11 @@ final layerNames = gpkg.getLayerNames();
 - `lib/models/layer.dart` など: レイヤ・フィーチャのデータモデル。
 - `lib/utils/global_config.dart`: グローバルな設定・状態管理。
 - `lib/widgets/layer_drawer.dart`: レイヤ一覧・編集用Drawer。
+
+## 主な特徴
+- レイヤツリー構造を型（クラス）ベースで管理
+- childrenTypeはList<Type>で、子ノードの型を明示
+- ノード生成も型分岐で柔軟に拡張可能
+
+## 変更履歴
+- 2024-xx-xx: childrenTypeをList<Type>に変更し、型ベースでノード管理に統一

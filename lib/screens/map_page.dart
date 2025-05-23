@@ -40,8 +40,6 @@ class _EditState {
 
 class _KMapsHomePageState extends State<KMapsHomePage> {
   final LatLng _center = const LatLng(35.681236, 139.767125); // 東京駅
-  final List<LatLng> _drawingLine = [];
-  final List<LatLng> _drawingPolygon = [];
   LatLng? _currentLocation;
   Stream<Position>? _positionStream;
   StreamSubscription<Position>? _positionSubscription;
@@ -118,7 +116,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   Future<void> _onConfirmDrawing() async {
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) return;
-    if (selected is LineLayerNode && _drawingLine.length >= 2) {
+    final penTool = GlobalConfig.instance.currentTool as PenTool;
+    if (selected is LineLayerNode && penTool.drawingLine.length >= 2) {
       String? attr = await showDialog<String>(
         context: context,
         builder: (context) {
@@ -144,11 +143,14 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         },
       );
       if (attr == null) return;
-      selected.geoPackageFile.addLine(selected.layerName, _drawingLine, attr);
-      setState(() {
-        _drawingLine.clear();
-      });
-    } else if (selected is PolygonLayerNode && _drawingPolygon.length >= 3) {
+      penTool.confirm(
+        selected: selected,
+        attr: attr,
+        setState: setState,
+        closeRing: closeRing,
+      );
+    } else if (selected is PolygonLayerNode &&
+        penTool.drawingPolygon.length >= 3) {
       String? attr = await showDialog<String>(
         context: context,
         builder: (context) {
@@ -174,11 +176,12 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         },
       );
       if (attr == null) return;
-      final closed = closeRing(_drawingPolygon);
-      selected.geoPackageFile.addPolygon(selected.layerName, closed, attr);
-      setState(() {
-        _drawingPolygon.clear();
-      });
+      penTool.confirm(
+        selected: selected,
+        attr: attr,
+        setState: setState,
+        closeRing: closeRing,
+      );
     }
   }
 
@@ -235,44 +238,6 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final point = CustomPoint(local.dx, local.dy);
     final latlng = _mapController.pointToLatLng(point);
     return latlng ?? _center;
-  }
-
-  /// 線の描画点を追加（setState込み）
-  void addDrawingLinePoint(LatLng latlng) {
-    setState(() {
-      _drawingLine.add(latlng);
-    });
-  }
-
-  /// ポリゴンの描画点を追加（setState込み）
-  void addDrawingPolygonPoint(LatLng latlng) {
-    setState(() {
-      _drawingPolygon.add(latlng);
-    });
-  }
-
-  // 地図パン
-  void onPan(Offset delta) {
-    // TODO: deltaから地図中心を移動
-    // ここでは仮に未実装
-  }
-
-  // 選択開始
-  void startSelection(Offset start) {
-    // TODO: 選択範囲の初期化
-    // ここでは仮に未実装
-  }
-
-  // 選択範囲更新
-  void updateSelection(Offset start, Offset current) {
-    // TODO: 選択範囲の更新
-    // ここでは仮に未実装
-  }
-
-  // 選択確定
-  void endSelection(Offset start, Offset end) {
-    // TODO: 選択範囲の確定・フィーチャ選択
-    // ここでは仮に未実装
   }
 
   @override
@@ -393,9 +358,14 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               strokeWidth: 4.0,
                             ),
                           ),
-                        if (_drawingLine.isNotEmpty)
+                        if (GlobalConfig.instance.currentTool is PenTool &&
+                            (GlobalConfig.instance.currentTool as PenTool)
+                                .drawingLine
+                                .isNotEmpty)
                           Polyline(
-                            points: _drawingLine,
+                            points:
+                                (GlobalConfig.instance.currentTool as PenTool)
+                                    .drawingLine,
                             color: Colors.orange,
                             strokeWidth: 4.0,
                           ),
@@ -412,40 +382,74 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                                 borderStrokeWidth: 3.0,
                                 borderColor: Colors.green,
                               ),
+                              if (GlobalConfig.instance.currentTool
+                                      is PenTool &&
+                                  (GlobalConfig.instance.currentTool as PenTool)
+                                          .drawingPolygon
+                                          .length >=
+                                      2)
+                                Polygon(
+                                  points: closeRing(
+                                    (GlobalConfig.instance.currentTool
+                                            as PenTool)
+                                        .drawingPolygon,
+                                  ),
+                                  color: Colors.orange.withOpacity(0.3),
+                                  borderStrokeWidth: 3.0,
+                                  borderColor: Colors.orange,
+                                ),
                             ],
-                          ),
-                        if (_drawingPolygon.length >= 2)
-                          Polygon(
-                            points: closeRing(_drawingPolygon),
-                            color: Colors.orange.withOpacity(0.3),
-                            borderStrokeWidth: 3.0,
-                            borderColor: Colors.orange,
                           ),
                       ],
                     ),
                   ],
                 ),
-                GestureDetector(
+                RawGestureDetector(
+                  gestures: const <Type, GestureRecognizerFactory>{}, // デフォルトは空
                   behavior: HitTestBehavior.translucent,
-                  onTapUp: (details) {
-                    GlobalConfig.instance.currentTool.onTap(details, this);
-                  },
-                  onScaleStart: (details) {
-                    GlobalConfig.instance.currentTool.onScaleStart(
-                      details,
-                      this,
-                    );
-                  },
-                  onScaleUpdate: (details) {
-                    GlobalConfig.instance.currentTool.onScaleUpdate(
-                      details,
-                      this,
-                    );
-                  },
-                  onScaleEnd: (details) {
-                    GlobalConfig.instance.currentTool.onScaleEnd(details, this);
-                  },
-                  child: Container(),
+                  child: Listener(
+                    onPointerMove: (event) {
+                      // 現在のツールのPointerバッファに追加
+                      GlobalConfig.instance.currentTool.addPointerToBuffer(
+                        event.localPosition,
+                      );
+                    },
+                    onPointerDown: (event) {
+                      // 必要ならPointerDownもバッファ
+                      GlobalConfig.instance.currentTool.addPointerToBuffer(
+                        event.localPosition,
+                      );
+                    },
+                    onPointerUp: (event) {
+                      // PointerUp時にバッファをクリア
+                      GlobalConfig.instance.currentTool.clearPointerBuffer();
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTapUp: (details) {
+                        GlobalConfig.instance.currentTool.onTap(details, this);
+                      },
+                      onScaleStart: (details) {
+                        GlobalConfig.instance.currentTool.onScaleStart(
+                          details,
+                          this,
+                        );
+                      },
+                      onScaleUpdate: (details) {
+                        GlobalConfig.instance.currentTool.onScaleUpdate(
+                          details,
+                          this,
+                        );
+                      },
+                      onScaleEnd: (details) {
+                        GlobalConfig.instance.currentTool.onScaleEnd(
+                          details,
+                          this,
+                        );
+                      },
+                      child: Container(),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -467,9 +471,17 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         builder: (context) {
           final selected = GlobalConfig.instance.selectedLayerNode;
           final isLineDrawing =
-              selected is LineLayerNode && _drawingLine.length >= 2;
+              selected is LineLayerNode &&
+              GlobalConfig.instance.currentTool is PenTool &&
+              (GlobalConfig.instance.currentTool as PenTool)
+                  .drawingLine
+                  .isNotEmpty;
           final isPolygonDrawing =
-              selected is PolygonLayerNode && _drawingPolygon.length >= 3;
+              selected is PolygonLayerNode &&
+              GlobalConfig.instance.currentTool is PenTool &&
+              (GlobalConfig.instance.currentTool as PenTool)
+                  .drawingPolygon
+                  .isNotEmpty;
           if (isLineDrawing || isPolygonDrawing) {
             return Row(
               mainAxisSize: MainAxisSize.min,
@@ -479,11 +491,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   heroTag: 'undo',
                   onPressed: () {
                     setState(() {
-                      if (isLineDrawing && _drawingLine.isNotEmpty) {
-                        _drawingLine.removeLast();
+                      if (isLineDrawing &&
+                          GlobalConfig.instance.currentTool is PenTool) {
+                        (GlobalConfig.instance.currentTool as PenTool)
+                            .drawingLine
+                            .removeLast();
                       } else if (isPolygonDrawing &&
-                          _drawingPolygon.isNotEmpty) {
-                        _drawingPolygon.removeLast();
+                          GlobalConfig.instance.currentTool is PenTool) {
+                        (GlobalConfig.instance.currentTool as PenTool)
+                            .drawingPolygon
+                            .removeLast();
                       }
                     });
                   },
@@ -496,10 +513,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   heroTag: 'cancel',
                   onPressed: () {
                     setState(() {
-                      if (isLineDrawing) {
-                        _drawingLine.clear();
-                      } else if (isPolygonDrawing) {
-                        _drawingPolygon.clear();
+                      if (isLineDrawing &&
+                          GlobalConfig.instance.currentTool is PenTool) {
+                        (GlobalConfig.instance.currentTool as PenTool)
+                            .drawingLine
+                            .clear();
+                      } else if (isPolygonDrawing &&
+                          GlobalConfig.instance.currentTool is PenTool) {
+                        (GlobalConfig.instance.currentTool as PenTool)
+                            .drawingPolygon
+                            .clear();
                       }
                     });
                   },

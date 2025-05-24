@@ -171,3 +171,5 @@ LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, G
 - Featureクラスの機能（属性・編集・削除など）をFeatureNode系クラス（layer_tree_node.dart）に統合
 - lib/models/layer.dartからFeature/フィーチャ系クラス（Feature, MultiPointFeature, MultiLineStringFeature, MultiPolygonFeature）を削除
 - LayerNode.updateChildrenでFeatureNode生成時、geometry/attrを直接渡す形に修正
+
+[map_page.dart] Polygon描画時にisFilled: trueを明示し、描画中ポリゴンの塗りつぶし透明度も調整

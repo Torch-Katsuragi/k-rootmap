@@ -51,6 +51,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能
 - **地図操作ツールバーで「てのひら」「ペン」「選択」などのツールを切り替え可能。**
 - **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、ペンはフリーハンド描画、タップは点追加や選択など直感的な操作性を実現。**
+- **地図上でポリゴン描画時、描画中・既存ポリゴンともに内部を半透明で塗りつぶし表示（isFilled: true, withOpacity指定）**
 
 ## 主要ファイルとクラス構成
 - `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
@@ -104,6 +105,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - 不可視時はアイコンがグレーアウト＋斜線重ねで明示
 - 属性編集・インラインリネーム・レイヤ追加/削除
 - サブフォルダの可視設定を切り替えた場合、その配下のGeoPackageやレイヤにも可視設定が一括で伝播し、UI上も連動して非表示/表示が切り替わる
+- **地図上でポリゴン描画時、描画中・既存ポリゴンともに内部を半透明で塗りつぶし表示（isFilled: true, withOpacity指定）**
 
 ## 主要ファイル
 - `lib/models/geopackage.dart`: GeoPackage管理、レイヤ/GeoPackageGroup、LayerManagerを実装（meta.json連携）

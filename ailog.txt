@@ -187,8 +187,11 @@ LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, G
 pan_tool.dart: てのひらツールでonScaleStart/onScaleUpdate/onScaleEndを用いた地図パン機能を実装。CustomPoint未定義エラーもflutter_mapからimportして修正。
 
 【pan_tool.dart】
-- onScaleStart/onScaleUpdate/onScaleEndで指の移動量に応じて地図をパンする機能を実装
-- CustomPointのimportを追加
+- 二本指ピンチ・回転時に、指の下の地図上の2点が常に指に追従するように拡張
+- ピンチ開始時の2点のスクリーン座標・地図座標・中心・ズーム・回転を記録し、ピンチ中はmoveAndRotateで地図を更新
+- 1本指パンも従来通り動作
 
 【map_page.dart】
 - StateにlatLngToScreenPoint(LatLng)を追加（ピクセル座標変換用）
+
+lib/tools/pan_tool.dart: onScaleUpdateでdetails.rotation（ラジアン）をdegreeに変換してmapController.moveAndRotateに渡すよう修正。注意コメントも追加。

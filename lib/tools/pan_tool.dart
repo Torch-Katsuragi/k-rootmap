@@ -2,9 +2,11 @@
 // てのひらツール（地図パン専用）
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // pointerEvents用
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart' show CustomPoint;
+import 'dart:math';
 
 /// 地図パン（移動）専用ツール
 class PanTool extends MapTool {
@@ -14,7 +16,10 @@ class PanTool extends MapTool {
   @override
   IconData get icon => Icons.pan_tool_alt;
 
+  // ピンチ・回転用状態
   Offset? _lastFocalPoint;
+  double? _startZoom, _startRotation;
+  LatLng? _startCenter;
 
   /// タップイベント
   @override
@@ -25,8 +30,10 @@ class PanTool extends MapTool {
   /// スケール開始イベント
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
-    // 最初の指位置を記録
     _lastFocalPoint = details.localFocalPoint;
+    _startZoom = mapState.mapController.zoom;
+    _startRotation = mapState.mapController.rotation;
+    _startCenter = mapState.mapController.center;
   }
 
   /// スケール更新イベント
@@ -35,22 +42,17 @@ class PanTool extends MapTool {
     if (_lastFocalPoint == null) return;
     final delta = details.localFocalPoint - _lastFocalPoint!;
     _lastFocalPoint = details.localFocalPoint;
-
-    // mapStateはKMapsHomePageのState。_mapControllerとcenter取得
     final mapController = mapState.mapController;
     final center = mapController.center;
-    final zoom = mapController.zoom;
-
-    // 現在の中心をピクセル座標に変換
+    final zoom = _startZoom! + log(details.scale) / ln2;
+    final rotation = _startRotation! + details.rotation * 180 / pi;
     final centerPx = mapState.latLngToOffset(center);
-    // 移動量を加算（Y軸は画面座標系に注意）
     final newCenterPx = centerPx - delta;
-    // 新しいピクセル座標を地図座標に変換
     final newCenter = mapController.pointToLatLng(
       CustomPoint(newCenterPx.dx, newCenterPx.dy),
     );
     if (newCenter != null) {
-      mapController.move(newCenter, zoom);
+      mapController.moveAndRotate(newCenter, zoom, rotation);
     }
   }
 
@@ -58,5 +60,8 @@ class PanTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
     _lastFocalPoint = null;
+    _startZoom = null;
+    _startRotation = null;
+    _startCenter = null;
   }
 }

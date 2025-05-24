@@ -252,6 +252,11 @@ abstract class LayerNode extends LayerTreeNode {
   /// このレイヤの全FeatureNodeリストを返す
   List<FeatureNode> get features;
 
+  /// このレイヤの属性名一覧を返す（DBカラムから動的取得）
+  List<String> getAttributeNames() {
+    return geoPackageFile.getColumnNames(layerName);
+  }
+
   /// parentがGeoPackageNodeなら、そのGeoPackage内のLayerNodeサブクラス(Point/Line/Polygon)のみ返す
   static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
@@ -335,6 +340,7 @@ class PointLayerNode extends LayerNode {
             map["points"] as List<LatLng>,
             map["attr"] as String,
             parent: this,
+            rowId: map["id"] ?? 0,
           );
         })
         .toList();
@@ -371,6 +377,7 @@ class LineLayerNode extends LayerNode {
             map["lines"] as List<List<LatLng>>,
             map["attr"] as String,
             parent: this,
+            rowId: map["id"] ?? 0,
           );
         })
         .toList();
@@ -407,6 +414,7 @@ class PolygonLayerNode extends LayerNode {
             map["polygons"] as List<List<List<LatLng>>>,
             map["attr"] as String,
             parent: this,
+            rowId: map["id"] ?? 0,
           );
         })
         .toList();
@@ -489,6 +497,15 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 属性値
   String attr;
 
+  /// DB上のrowId（主キー）
+  final int rowId;
+
+  /// 指定した属性名に対応する値をDBから取得
+  dynamic getAttributeValue(String attributeName) {
+    // geoPackageFileから都度取得
+    return geoPackageFile.getFeatureAttribute(layerName, rowId, attributeName);
+  }
+
   /// 属性値編集
   void updateAttr(String newAttr);
 
@@ -503,27 +520,45 @@ abstract class FeatureNode extends LayerTreeNode {
   @override
   final LayerNode parent;
 
-  FeatureNode({required this.attr, required this.parent, required String name})
-    : super(
-        name,
-        visible: parent.visible,
-        parent: parent,
-        children: [],
-        nodeType: 'feature',
-      );
+  FeatureNode({
+    required this.attr,
+    required this.parent,
+    required String name,
+    required this.rowId,
+  }) : super(
+         name,
+         visible: parent.visible,
+         parent: parent,
+         children: [],
+         nodeType: 'feature',
+       );
 
   /// GeoPackageFile参照
   GeoPackageFile get geoPackageFile => parent.geoPackageFile;
 
   /// レイヤ名
   String get layerName => parent.layerName;
+
+  /// 指定した属性名の値をDB上で編集
+  void editAttribute(String attributeName, dynamic newValue) {
+    geoPackageFile.updateFeatureAttribute(
+      layerName,
+      rowId,
+      attributeName,
+      newValue,
+    );
+  }
 }
 
 /// PointFeatureNode: 点フィーチャ用
 class PointFeatureNode extends FeatureNode {
   final List<LatLng> points;
-  PointFeatureNode(this.points, String attr, {required LayerNode parent})
-    : super(attr: attr, parent: parent, name: 'Point');
+  PointFeatureNode(
+    this.points,
+    String attr, {
+    required LayerNode parent,
+    required int rowId,
+  }) : super(attr: attr, parent: parent, name: 'Point', rowId: rowId);
 
   @override
   Object get geometry => points;
@@ -555,8 +590,12 @@ class PointFeatureNode extends FeatureNode {
 /// LineFeatureNode: 線フィーチャ用
 class LineFeatureNode extends FeatureNode {
   final List<List<LatLng>> lines;
-  LineFeatureNode(this.lines, String attr, {required LayerNode parent})
-    : super(attr: attr, parent: parent, name: 'Line');
+  LineFeatureNode(
+    this.lines,
+    String attr, {
+    required LayerNode parent,
+    required int rowId,
+  }) : super(attr: attr, parent: parent, name: 'Line', rowId: rowId);
 
   @override
   Object get geometry => lines;
@@ -586,8 +625,12 @@ class LineFeatureNode extends FeatureNode {
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
   final List<List<List<LatLng>>> polygons;
-  PolygonFeatureNode(this.polygons, String attr, {required LayerNode parent})
-    : super(attr: attr, parent: parent, name: 'Polygon');
+  PolygonFeatureNode(
+    this.polygons,
+    String attr, {
+    required LayerNode parent,
+    required int rowId,
+  }) : super(attr: attr, parent: parent, name: 'Polygon', rowId: rowId);
 
   @override
   Object get geometry => polygons;

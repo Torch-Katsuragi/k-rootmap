@@ -339,3 +339,9 @@ final layerNames = gpkg.getLayerNames();
 
 ## 変更履歴
 - 2024-xx-xx: childrenTypeをList<Type>に変更し、型ベースでノード管理に統一
+
+## 主なクラスとメソッド
+- LayerNode
+  - getAttributeNames(): 属性名一覧をListで取得（DBカラムを動的取得。将来拡張可）
+- FeatureNode
+  - getAttributeValue(String attributeName): 属性名を指定して値を取得（rowIdでDBから都度取得）

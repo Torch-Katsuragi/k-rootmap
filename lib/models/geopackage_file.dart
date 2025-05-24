@@ -220,9 +220,10 @@ class GeoPackageFile {
         typeRows.isNotEmpty
             ? (typeRows.first['geometry_type_name'] as String).toUpperCase()
             : '';
-    final rows = db.select('SELECT geom, attr FROM "$tableName"');
+    final rows = db.select('SELECT id, geom, attr FROM "$tableName"');
     final features = <Map<String, dynamic>>[];
     for (final r in rows) {
+      final id = r['id'] as int? ?? 0;
       final geom = r['geom'] as Uint8List;
       final attr = r['attr'] as String? ?? '';
       if (geomType == 'MULTIPOINT' || geomType == 'POINT') {
@@ -238,6 +239,7 @@ class GeoPackageFile {
             21,
           ).getFloat64(0, Endian.little);
           features.add({
+            'id': id,
             'points': [LatLng(lat, lon)],
             'attr': attr,
           });
@@ -246,6 +248,7 @@ class GeoPackageFile {
         final lines = parseWkbLineString(geom);
         if (lines.isNotEmpty) {
           features.add({
+            'id': id,
             'lines': [lines],
             'attr': attr,
           });
@@ -254,6 +257,7 @@ class GeoPackageFile {
         final polygons = parseWkbPolygon(geom);
         if (polygons.isNotEmpty) {
           features.add({
+            'id': id,
             'polygons': [polygons],
             'attr': attr,
           });
@@ -346,5 +350,71 @@ class GeoPackageFile {
       attr,
     ]);
     db.dispose();
+  }
+
+  /// 指定テーブルのカラム名一覧を返す
+  List<String> getColumnNames(String tableName) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getColumnNames: projectRootDirが未設定');
+      return [];
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    final result = db.select('PRAGMA table_info(\"$tableName\");');
+    final columns = result.map((row) => row['name'] as String).toList();
+    db.dispose();
+    return columns;
+  }
+
+  /// 指定テーブル・rowId・カラム名から値を取得
+  dynamic getFeatureAttribute(
+    String tableName,
+    int rowId,
+    String attributeName,
+  ) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('getFeatureAttribute: projectRootDirが未設定');
+      return null;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    try {
+      final result = db.select(
+        'SELECT "$attributeName" FROM "$tableName" WHERE id = ?;',
+        [rowId],
+      );
+      if (result.isNotEmpty) {
+        return result.first[attributeName];
+      }
+      return null;
+    } finally {
+      db.dispose();
+    }
+  }
+
+  /// 指定テーブル・rowId・カラム名の属性値を更新
+  void updateFeatureAttribute(
+    String tableName,
+    int rowId,
+    String attributeName,
+    dynamic newValue,
+  ) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('updateFeatureAttribute: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    try {
+      db.execute('UPDATE "$tableName" SET "$attributeName" = ? WHERE id = ?;', [
+        newValue,
+        rowId,
+      ]);
+    } finally {
+      db.dispose();
+    }
   }
 }

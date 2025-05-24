@@ -33,6 +33,9 @@ class _LayerDrawerState extends State<LayerDrawer> {
   /// 展開中のGeoPackageノードのファイルパスを保持
   final Set<String> expandedGpkgPaths = {};
 
+  // 属性テーブル表示中かどうか・どのLayerNodeか
+  LayerNode? attributeTableLayerNode;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +55,17 @@ class _LayerDrawerState extends State<LayerDrawer> {
   Widget build(BuildContext context) {
     if (widget.currentNode == null) {
       return const Center(child: Text('ディレクトリが見つかりません'));
+    }
+    // 属性テーブル表示中ならそちらを表示
+    if (attributeTableLayerNode != null) {
+      return AttributeTablePanel(
+        layerNode: attributeTableLayerNode!,
+        onBack: () {
+          setState(() {
+            attributeTableLayerNode = null;
+          });
+        },
+      );
     }
     return Column(
       children: [
@@ -313,13 +327,42 @@ class _LayerDrawerState extends State<LayerDrawer> {
         GlobalConfig.instance.selectedLayerNode = node;
         widget.setStateCallback(() {});
       },
-      trailing: IconButton(
-        icon: const Icon(Icons.delete),
-        tooltip: 'レイヤ削除',
-        onPressed: () {
-          node.dispose();
-          widget.setStateCallback(() {});
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          if (value == 'delete') {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder:
+                  (context) => AlertDialog(
+                    title: const Text('レイヤ削除'),
+                    content: Text('${node.name} を本当に削除しますか？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('キャンセル'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('削除'),
+                      ),
+                    ],
+                  ),
+            );
+            if (confirm == true) {
+              node.dispose();
+              widget.setStateCallback(() {});
+            }
+          } else if (value == 'attributes') {
+            setState(() {
+              attributeTableLayerNode = node;
+            });
+          }
         },
+        itemBuilder:
+            (context) => [
+              const PopupMenuItem(value: 'attributes', child: Text('属性テーブル')),
+              const PopupMenuItem(value: 'delete', child: Text('削除')),
+            ],
       ),
     );
   }
@@ -559,5 +602,172 @@ extension GeoPackageFilePathExt on GeoPackageFile {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) return null;
     return p.joinAll([root, ...pathList]);
+  }
+}
+
+// 属性テーブル表示用パネルWidgetを追加
+class AttributeTablePanel extends StatefulWidget {
+  final LayerNode layerNode;
+  final VoidCallback onBack;
+  const AttributeTablePanel({
+    super.key,
+    required this.layerNode,
+    required this.onBack,
+  });
+
+  @override
+  State<AttributeTablePanel> createState() => _AttributeTablePanelState();
+}
+
+class _AttributeTablePanelState extends State<AttributeTablePanel> {
+  // 編集中セル: rowId, カラム名
+  int? editingRowId;
+  String? editingColumn;
+  String editingValue = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = widget.layerNode.getAttributeNames();
+    final features = widget.layerNode.features;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          color: Colors.blue,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                tooltip: '戻る',
+                onPressed: widget.onBack,
+              ),
+              Expanded(
+                child: Text(
+                  '${widget.layerNode.name} の属性テーブル',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+                columns: [
+                  for (final col in columns) DataColumn(label: Text(col)),
+                ],
+                rows: [
+                  for (final feature in features)
+                    DataRow(
+                      cells: [
+                        for (final col in columns)
+                          col == 'geom'
+                              ? DataCell(
+                                SizedBox(
+                                  height: 28,
+                                  child: TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 0,
+                                      ),
+                                      minimumSize: const Size(40, 28),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () {
+                                      // 今後feature選択等に拡張予定
+                                    },
+                                    child: const Text(
+                                      '選択',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                ),
+                              )
+                              : col == 'id'
+                              ? DataCell(
+                                Text('${feature.getAttributeValue(col) ?? ''}'),
+                              )
+                              : (editingRowId == feature.rowId &&
+                                  editingColumn == col)
+                              ? DataCell(
+                                SizedBox(
+                                  width: 120,
+                                  child: TextField(
+                                    autofocus: true,
+                                    controller: TextEditingController(
+                                        text: editingValue,
+                                      )
+                                      ..selection = TextSelection.collapsed(
+                                        offset: editingValue.length,
+                                      ),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        editingValue = v;
+                                      });
+                                    },
+                                    onSubmitted: (v) {
+                                      feature.editAttribute(col, v);
+                                      setState(() {
+                                        editingRowId = null;
+                                        editingColumn = null;
+                                      });
+                                    },
+                                    onEditingComplete: () {
+                                      feature.editAttribute(col, editingValue);
+                                      setState(() {
+                                        editingRowId = null;
+                                        editingColumn = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              )
+                              : DataCell(
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    setState(() {
+                                      editingRowId = feature.rowId;
+                                      editingColumn = col;
+                                      editingValue =
+                                          '${feature.getAttributeValue(col) ?? ''}';
+                                    });
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.centerLeft,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 80,
+                                      minHeight: 40,
+                                    ),
+                                    child: Text(
+                                      '${feature.getAttributeValue(col) ?? ''}',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

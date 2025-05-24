@@ -51,6 +51,9 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   String? _editingFolderPath;
   String? _editingGpkgPath;
   final _editState = _EditState();
+  double drawerWidth = 320;
+  bool drawerOpen = true;
+  final double minDrawerWidth = 200;
 
   @override
   void initState() {
@@ -248,54 +251,78 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'てのひら';
     return Scaffold(
-      appBar: AppBar(title: const Text('K-MAPS 最小構成')),
-      body: Column(
+      appBar: AppBar(
+        title: const Text('K-MAPS 最小構成'),
+        actions: [
+          if (!drawerOpen)
+            IconButton(
+              icon: Icon(Icons.layers),
+              tooltip: 'レイヤDrawerを開く',
+              onPressed: () {
+                setState(() {
+                  drawerOpen = true;
+                  drawerWidth = 320;
+                });
+              },
+            ),
+        ],
+      ),
+      body: Stack(
         children: [
-          // --- ツールバー ---
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.pan_tool_alt,
-                  color:
-                      currentTool.name == 'てのひら' ? Colors.blue : Colors.black,
+          // --- ツールバー（左端縦並び） ---
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                IconButton(
+                  icon: Icon(
+                    Icons.pan_tool_alt,
+                    color:
+                        currentTool.name == 'てのひら' ? Colors.blue : Colors.black,
+                  ),
+                  tooltip: 'てのひら',
+                  onPressed: () {
+                    setState(() {
+                      GlobalConfig.instance.currentTool = PanTool();
+                    });
+                  },
                 ),
-                tooltip: 'てのひら',
-                onPressed: () {
-                  setState(() {
-                    GlobalConfig.instance.currentTool = PanTool();
-                  });
-                },
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.edit,
-                  color: currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                IconButton(
+                  icon: Icon(
+                    Icons.edit,
+                    color:
+                        currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                  ),
+                  tooltip: 'ペン',
+                  onPressed: () {
+                    setState(() {
+                      GlobalConfig.instance.currentTool = PenTool();
+                    });
+                  },
                 ),
-                tooltip: 'ペン',
-                onPressed: () {
-                  setState(() {
-                    GlobalConfig.instance.currentTool = PenTool();
-                  });
-                },
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.select_all,
-                  color: currentTool.name == '選択' ? Colors.blue : Colors.black,
+                IconButton(
+                  icon: Icon(
+                    Icons.select_all,
+                    color:
+                        currentTool.name == '選択' ? Colors.blue : Colors.black,
+                  ),
+                  tooltip: '選択',
+                  onPressed: () {
+                    setState(() {
+                      GlobalConfig.instance.currentTool = SelectTool();
+                    });
+                  },
                 ),
-                tooltip: '選択',
-                onPressed: () {
-                  setState(() {
-                    GlobalConfig.instance.currentTool = SelectTool();
-                  });
-                },
-              ),
-            ],
+              ],
+            ),
           ),
           // --- 地図本体 ---
-          Expanded(
+          Positioned.fill(
+            left: 56, // ツールバー分だけ地図を右にずらす
             child: Stack(
               children: [
                 FlutterMap(
@@ -303,7 +330,6 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   options: MapOptions(
                     center: _center,
                     zoom: 16.0,
-                    // onTap: _onMapTap,
                     interactiveFlags:
                         isPanTool
                             ? InteractiveFlag.all
@@ -394,19 +420,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 Positioned.fill(
                   child: Listener(
                     onPointerMove: (event) {
-                      // 現在のツールのPointerバッファに追加
                       GlobalConfig.instance.currentTool.addPointerToBuffer(
                         event.localPosition,
                       );
                     },
                     onPointerDown: (event) {
-                      // 必要ならPointerDownもバッファ
                       GlobalConfig.instance.currentTool.addPointerToBuffer(
                         event.localPosition,
                       );
                     },
                     onPointerUp: (event) {
-                      // PointerUp時にバッファをクリア
                       GlobalConfig.instance.currentTool.clearPointerBuffer();
                     },
                     child: GestureDetector(
@@ -439,18 +462,62 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               ],
             ),
           ),
+          // --- カスタムDrawer ---
+          if (drawerOpen)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: drawerWidth,
+              child: Material(
+                elevation: 0,
+                color: Colors.transparent,
+                child: Row(
+                  children: [
+                    // 左端ドラッグハンドル（透明）
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragUpdate: (details) {
+                        setState(() {
+                          drawerWidth -= details.delta.dx;
+                          if (drawerWidth < minDrawerWidth) {
+                            drawerOpen = false;
+                          } else if (drawerWidth > 400) {
+                            drawerWidth = 400;
+                          }
+                        });
+                      },
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: Container(
+                          width: 28,
+                          color: Colors.black12, // 高透明度の黒
+                          child: const Center(
+                            child: VerticalDivider(width: 2, thickness: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // 右側（LayerDrawer本体）は白背景
+                    Expanded(
+                      child: Container(
+                        color: Colors.white,
+                        child: LayerDrawer(
+                          currentNode: _currentNode,
+                          onDirChanged: (node) {
+                            setState(() {
+                              _currentNode = node;
+                            });
+                          },
+                          setStateCallback: (fn) => setState(fn),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
-      ),
-      endDrawer: Drawer(
-        child: LayerDrawer(
-          currentNode: _currentNode,
-          onDirChanged: (node) {
-            setState(() {
-              _currentNode = node;
-            });
-          },
-          setStateCallback: (fn) => setState(fn),
-        ),
       ),
       floatingActionButton: Builder(
         builder: (context) {

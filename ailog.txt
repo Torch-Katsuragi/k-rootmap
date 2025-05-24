@@ -160,3 +160,14 @@ LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, G
 // 2024-06-09 childrenTypeプロパティを廃止し、updateChildrenを各サブクラスで直接子ノードクラスを参照する形にリファクタリング（FolderNode, GeoPackageNode, LayerNode）。linterエラーも修正。
 
 // 2024-06-13 layer_tree_node.dart内のパス結合・Directory生成処理をgetAbsoluteFilePath()に統一し、パス取得ロジックを一元化。
+
+【追加・修正】
+- FeatureNode, PointFeatureNode, LineFeatureNode, PolygonFeatureNodeをlib/models/layer_tree_node.dartに追加
+- LayerNode.updateChildrenでFeatureNodeをchildrenに生成するよう修正
+- FeatureNodeでfeature参照・属性編集・削除（dispose）を提供
+- linterエラー対応でupdateChildren空実装を追加
+
+【統合・整理】
+- Featureクラスの機能（属性・編集・削除など）をFeatureNode系クラス（layer_tree_node.dart）に統合
+- lib/models/layer.dartからFeature/フィーチャ系クラス（Feature, MultiPointFeature, MultiLineStringFeature, MultiPolygonFeature）を削除
+- LayerNode.updateChildrenでFeatureNode生成時、geometry/attrを直接渡す形に修正

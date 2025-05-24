@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:k_maps/utils/global_config.dart';
 import 'package:path/path.dart' as p;
-import '../models/layer.dart';
 // import '../utils/meta_data.dart' as meta_util;
 import 'package:collection/collection.dart';
 import '../models/layer_tree_node.dart';

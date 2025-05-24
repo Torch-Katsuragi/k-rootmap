@@ -18,6 +18,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - ファイルが存在しない場合、親ディレクトリが存在すればGeoPackage必須テーブル（gpkg_spatial_ref_sys, gpkg_contents, gpkg_geometry_columns）を自動作成（OGC仕様準拠、最小構成）。
 - `lib/models/layer_tree_node.dart` : LayerTreeNode/GeoPackageNode/LayerNode（ツリー構造・可視状態・meta.json連携）
   - 各ノードクラス（FolderNode, GeoPackageNode, LayerNode）に `static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent)` を実装し、親ノード直下の子ノードリストを返す。
+  - **2024-06-13: FeatureNode（PointFeatureNode/LineFeatureNode/PolygonFeatureNode）を追加。LayerNode配下にfeature単位でノードを生成し、属性編集・削除（dispose）・feature参照を提供。**
 - `lib/utils/global_config.dart` : グローバル変数（全ノードリスト・選択中ノード等）
 - `lib/widgets/layer_drawer.dart` : レイヤツリーUI（ノード参照で操作）
   - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
@@ -31,6 +32,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 ## クラス構成
 - **GeoPackageFile**: ファイルパスのみ保持し、DB操作（レイヤ追加・削除・リネーム・フィーチャ取得等）を担う。
 - **LayerTreeNode/GeoPackageNode/LayerNode**: ツリー構造・可視状態・meta.json連携・GeoPackageFile参照を持つ。
+- **FeatureNode（PointFeatureNode/LineFeatureNode/PolygonFeatureNode）**: LayerNodeの子としてfeature単位で生成され、feature参照・属性編集・削除（dispose）を提供。
 - **GlobalConfig**: 全ノードリスト・選択中ノード等のグローバル管理。
 
 ## 状態管理
@@ -40,6 +42,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 ## 主な機能
 - レイヤ構造のファイルエクスプローラ風表示・操作
 - GeoPackageファイル・レイヤの追加/削除/可視切り替え
+- **LayerNode配下にfeature単位のノード（FeatureNode）を自動生成し、属性編集・削除・参照が可能。**
 - **Drawer上部に現在のノード名を青いタイトルパネルで表示（LayerDrawerTitleBarウィジェット）**
 - プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示
 - フォルダ/GeoPackage/レイヤの可視切り替え・リネーム・削除

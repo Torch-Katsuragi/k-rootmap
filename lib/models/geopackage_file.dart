@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:sqlite3/sqlite3.dart' as sql;
 import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
-import 'layer.dart';
 import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 
@@ -196,7 +195,7 @@ class GeoPackageFile {
   }
 
   /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
-  List<Feature> getFeatures(String tableName) {
+  List<Map<String, dynamic>> getFeatures(String tableName) {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('getFeatures: projectRootDirが未設定');
@@ -222,7 +221,7 @@ class GeoPackageFile {
             ? (typeRows.first['geometry_type_name'] as String).toUpperCase()
             : '';
     final rows = db.select('SELECT geom, attr FROM "$tableName"');
-    final features = <Feature>[];
+    final features = <Map<String, dynamic>>[];
     for (final r in rows) {
       final geom = r['geom'] as Uint8List;
       final attr = r['attr'] as String? ?? '';
@@ -238,17 +237,26 @@ class GeoPackageFile {
             13,
             21,
           ).getFloat64(0, Endian.little);
-          features.add(MultiPointFeature([LatLng(lat, lon)], attr));
+          features.add({
+            'points': [LatLng(lat, lon)],
+            'attr': attr,
+          });
         }
       } else if (geomType == 'MULTILINESTRING' || geomType == 'LINESTRING') {
         final lines = parseWkbLineString(geom);
         if (lines.isNotEmpty) {
-          features.add(MultiLineStringFeature([lines], attr));
+          features.add({
+            'lines': [lines],
+            'attr': attr,
+          });
         }
       } else if (geomType == 'MULTIPOLYGON' || geomType == 'POLYGON') {
         final polygons = parseWkbPolygon(geom);
         if (polygons.isNotEmpty) {
-          features.add(MultiPolygonFeature([polygons], attr));
+          features.add({
+            'polygons': [polygons],
+            'attr': attr,
+          });
         }
       }
     }

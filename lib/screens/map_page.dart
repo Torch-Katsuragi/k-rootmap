@@ -7,7 +7,6 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import '../models/layer.dart';
 import '../utils/wkb_utils.dart';
 import '../models/layer_tree_node.dart';
 import '../widgets/inline_edit.dart';
@@ -98,17 +97,6 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       return List<LatLng>.from(pts)..add(first);
     }
     return pts;
-  }
-
-  IconData _layerTypeIcon(LayerType type) {
-    switch (type) {
-      case LayerType.point:
-        return Icons.location_on;
-      case LayerType.line:
-        return Icons.show_chart;
-      case LayerType.polygon:
-        return Icons.pentagon;
-    }
   }
 
   // --- 線・ポリゴン確定処理 ---
@@ -245,16 +233,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
     // Point/Line/Polygonごとに分けてfeaturesを集約
-    final pointFeatures = <MultiPointFeature>[];
-    final lineFeatures = <MultiLineStringFeature>[];
-    final polygonFeatures = <MultiPolygonFeature>[];
+    final pointFeatures = <PointFeatureNode>[];
+    final lineFeatures = <LineFeatureNode>[];
+    final polygonFeatures = <PolygonFeatureNode>[];
     for (final layer in visibleLayers) {
       if (layer is PointLayerNode) {
-        pointFeatures.addAll(layer.features);
+        pointFeatures.addAll(layer.features.whereType<PointFeatureNode>());
       } else if (layer is LineLayerNode) {
-        lineFeatures.addAll(layer.features);
+        lineFeatures.addAll(layer.features.whereType<LineFeatureNode>());
       } else if (layer is PolygonLayerNode) {
-        polygonFeatures.addAll(layer.features);
+        polygonFeatures.addAll(layer.features.whereType<PolygonFeatureNode>());
       }
     }
     final currentTool = GlobalConfig.instance.currentTool;
@@ -330,7 +318,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     MarkerLayer(
                       markers: [
                         for (final f in pointFeatures)
-                          ...f.points.map(
+                          ...((f.geometry as List<LatLng>).map(
                             (pt) => Marker(
                               point: pt,
                               width: 40,
@@ -344,19 +332,19 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                                 ),
                               ),
                             ),
-                          ),
+                          )),
                       ],
                     ),
                     PolylineLayer(
                       polylines: [
                         for (final f in lineFeatures)
-                          ...f.lines.map(
+                          ...((f.geometry as List<List<LatLng>>).map(
                             (line) => Polyline(
                               points: line,
                               color: Colors.blue,
                               strokeWidth: 4.0,
                             ),
-                          ),
+                          )),
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
                                 .drawingLine
@@ -373,7 +361,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     PolygonLayer(
                       polygons: [
                         for (final f in polygonFeatures)
-                          ...f.polygons.expand(
+                          ...((f.geometry as List<List<List<LatLng>>>).expand(
                             (poly) => [
                               Polygon(
                                 points: poly.first,
@@ -381,23 +369,21 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                                 borderStrokeWidth: 3.0,
                                 borderColor: Colors.green,
                               ),
-                              if (GlobalConfig.instance.currentTool
-                                      is PenTool &&
-                                  (GlobalConfig.instance.currentTool as PenTool)
-                                          .drawingPolygon
-                                          .length >=
-                                      2)
-                                Polygon(
-                                  points: closeRing(
-                                    (GlobalConfig.instance.currentTool
-                                            as PenTool)
-                                        .drawingPolygon,
-                                  ),
-                                  color: Colors.orange.withOpacity(0.3),
-                                  borderStrokeWidth: 3.0,
-                                  borderColor: Colors.orange,
-                                ),
                             ],
+                          )),
+                        if (GlobalConfig.instance.currentTool is PenTool &&
+                            (GlobalConfig.instance.currentTool as PenTool)
+                                    .drawingPolygon
+                                    .length >=
+                                2)
+                          Polygon(
+                            points: closeRing(
+                              (GlobalConfig.instance.currentTool as PenTool)
+                                  .drawingPolygon,
+                            ),
+                            color: Colors.orange.withOpacity(0.3),
+                            borderStrokeWidth: 3.0,
+                            borderColor: Colors.orange,
                           ),
                       ],
                     ),

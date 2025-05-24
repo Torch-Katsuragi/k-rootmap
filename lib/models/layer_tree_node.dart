@@ -5,10 +5,10 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
-import 'layer.dart';
 import 'geopackage_file.dart';
 import 'package:flutter/material.dart';
 import 'package:meta/meta.dart';
+import 'package:latlong2/latlong.dart';
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -248,7 +248,9 @@ abstract class LayerNode extends LayerTreeNode {
     bool visible = true,
     LayerTreeNode? parent,
   }) : super(layerName, visible: visible, parent: parent, nodeType: "layer");
-  List<Feature> get features;
+
+  /// このレイヤの全FeatureNodeリストを返す
+  List<FeatureNode> get features;
 
   /// parentがGeoPackageNodeなら、そのGeoPackage内のLayerNodeサブクラス(Point/Line/Polygon)のみ返す
   static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
@@ -300,8 +302,11 @@ abstract class LayerNode extends LayerTreeNode {
 
   @override
   void updateChildren() {
-    // レイヤノードは子ノードを持たない
     children.clear();
+    // featuresからFeatureNodeをchildrenに追加
+    for (final node in features) {
+      addChild(node);
+    }
   }
 }
 
@@ -312,9 +317,28 @@ class PointLayerNode extends LayerNode {
     bool visible = true,
     LayerTreeNode? parent,
   }) : super(file, name, visible: visible, parent: parent);
+
   @override
-  List<MultiPointFeature> get features =>
-      geoPackageFile.getFeatures(layerName).cast<MultiPointFeature>();
+  List<FeatureNode> get features {
+    final feats = geoPackageFile.getFeatures(layerName);
+    if (feats == null) return [];
+    return feats
+        .where(
+          (f) =>
+              f != null &&
+              (f as Map<String, dynamic>)["points"] != null &&
+              (f as Map<String, dynamic>)["attr"] != null,
+        )
+        .map((f) {
+          final map = f as Map<String, dynamic>;
+          return PointFeatureNode(
+            map["points"] as List<LatLng>,
+            map["attr"] as String,
+            parent: this,
+          );
+        })
+        .toList();
+  }
 
   @override
   IconData get baseIcon => Icons.scatter_plot;
@@ -329,9 +353,28 @@ class LineLayerNode extends LayerNode {
     bool visible = true,
     LayerTreeNode? parent,
   }) : super(file, name, visible: visible, parent: parent);
+
   @override
-  List<MultiLineStringFeature> get features =>
-      geoPackageFile.getFeatures(layerName).cast<MultiLineStringFeature>();
+  List<FeatureNode> get features {
+    final feats = geoPackageFile.getFeatures(layerName);
+    if (feats == null) return [];
+    return feats
+        .where(
+          (f) =>
+              f != null &&
+              (f as Map<String, dynamic>)["lines"] != null &&
+              (f as Map<String, dynamic>)["attr"] != null,
+        )
+        .map((f) {
+          final map = f as Map<String, dynamic>;
+          return LineFeatureNode(
+            map["lines"] as List<List<LatLng>>,
+            map["attr"] as String,
+            parent: this,
+          );
+        })
+        .toList();
+  }
 
   @override
   IconData get baseIcon => Icons.show_chart;
@@ -346,9 +389,28 @@ class PolygonLayerNode extends LayerNode {
     bool visible = true,
     LayerTreeNode? parent,
   }) : super(file, name, visible: visible, parent: parent);
+
   @override
-  List<MultiPolygonFeature> get features =>
-      geoPackageFile.getFeatures(layerName).cast<MultiPolygonFeature>();
+  List<FeatureNode> get features {
+    final feats = geoPackageFile.getFeatures(layerName);
+    if (feats == null) return [];
+    return feats
+        .where(
+          (f) =>
+              f != null &&
+              (f as Map<String, dynamic>)["polygons"] != null &&
+              (f as Map<String, dynamic>)["attr"] != null,
+        )
+        .map((f) {
+          final map = f as Map<String, dynamic>;
+          return PolygonFeatureNode(
+            map["polygons"] as List<List<List<LatLng>>>,
+            map["attr"] as String,
+            parent: this,
+          );
+        })
+        .toList();
+  }
 
   @override
   IconData get baseIcon => Icons.terrain;
@@ -418,5 +480,136 @@ class FolderNode extends LayerTreeNode {
     }
     children.clear();
     super.dispose();
+  }
+}
+
+/// フィーチャノード基底クラス
+/// LayerNodeの子としてfeature単位で生成される
+abstract class FeatureNode extends LayerTreeNode {
+  /// 属性値
+  String attr;
+
+  /// 属性値編集
+  void updateAttr(String newAttr);
+
+  /// フィーチャ削除（DBからも削除）
+  @override
+  void dispose();
+
+  /// ジオメトリ型ごとのデータ参照（点・線・面）
+  Object get geometry;
+
+  /// 親LayerNode
+  @override
+  final LayerNode parent;
+
+  FeatureNode({required this.attr, required this.parent, required String name})
+    : super(
+        name,
+        visible: parent.visible,
+        parent: parent,
+        children: [],
+        nodeType: 'feature',
+      );
+
+  /// GeoPackageFile参照
+  GeoPackageFile get geoPackageFile => parent.geoPackageFile;
+
+  /// レイヤ名
+  String get layerName => parent.layerName;
+}
+
+/// PointFeatureNode: 点フィーチャ用
+class PointFeatureNode extends FeatureNode {
+  final List<LatLng> points;
+  PointFeatureNode(this.points, String attr, {required LayerNode parent})
+    : super(attr: attr, parent: parent, name: 'Point');
+
+  @override
+  Object get geometry => points;
+
+  @override
+  void updateAttr(String newAttr) {
+    attr = newAttr;
+    // TODO: DBのattrカラムも更新
+  }
+
+  @override
+  void dispose() {
+    if (points.isNotEmpty) {
+      geoPackageFile.removePoint(layerName, points.first);
+    }
+    super.dispose();
+  }
+
+  @override
+  IconData get baseIcon => Icons.location_on;
+  @override
+  Color get baseIconColor => Colors.red;
+  @override
+  void updateChildren() {
+    children.clear();
+  }
+}
+
+/// LineFeatureNode: 線フィーチャ用
+class LineFeatureNode extends FeatureNode {
+  final List<List<LatLng>> lines;
+  LineFeatureNode(this.lines, String attr, {required LayerNode parent})
+    : super(attr: attr, parent: parent, name: 'Line');
+
+  @override
+  Object get geometry => lines;
+
+  @override
+  void updateAttr(String newAttr) {
+    attr = newAttr;
+    // TODO: DBのattrカラムも更新
+  }
+
+  @override
+  void dispose() {
+    // TODO: DBから該当線を削除
+    super.dispose();
+  }
+
+  @override
+  IconData get baseIcon => Icons.timeline;
+  @override
+  Color get baseIconColor => Colors.blueGrey;
+  @override
+  void updateChildren() {
+    children.clear();
+  }
+}
+
+/// PolygonFeatureNode: 面フィーチャ用
+class PolygonFeatureNode extends FeatureNode {
+  final List<List<List<LatLng>>> polygons;
+  PolygonFeatureNode(this.polygons, String attr, {required LayerNode parent})
+    : super(attr: attr, parent: parent, name: 'Polygon');
+
+  @override
+  Object get geometry => polygons;
+
+  @override
+  void updateAttr(String newAttr) {
+    attr = newAttr;
+    // TODO: DBのattrカラムも更新
+  }
+
+  @override
+  void dispose() {
+    // TODO: DBから該当ポリゴンを削除
+    super.dispose();
+  }
+
+  @override
+  IconData get baseIcon => Icons.crop_square;
+  @override
+  Color get baseIconColor => Colors.orange;
+  @override
+  void updateChildren() {
+    children.clear();
   }
 }

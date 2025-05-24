@@ -25,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // グローバル初期化
       GlobalConfig.instance.projectRootDir = dir;
       GlobalConfig.instance.folderTree = FolderNode('rootNode', visible: true);
+      print(GlobalConfig.instance.folderTree?.toMap());
       // フォルダ選択後すぐ地図編集画面へ遷移
       if (mounted) {
         Navigator.push(

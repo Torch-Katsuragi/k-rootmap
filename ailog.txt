@@ -183,3 +183,12 @@ LayerTreeNode.createNodesByTypeを廃止し、各継承クラス（FolderNode, G
 // 2024-06-09 FeatureNodeのattributes Mapを廃止し、rowIdのみ保持・getAttributeValueはgeoPackageFile経由でDBから都度取得する設計に変更。getFeaturesでidを返却、getFeatureAttributeをGeoPackageFileに追加。READMEの該当説明も要修正。
 
 // 2024-06-09 FeatureNodeにeditAttribute（属性編集）を追加、GeoPackageFileにupdateFeatureAttribute（DB属性値更新）を追加。
+
+pan_tool.dart: てのひらツールでonScaleStart/onScaleUpdate/onScaleEndを用いた地図パン機能を実装。CustomPoint未定義エラーもflutter_mapからimportして修正。
+
+【pan_tool.dart】
+- onScaleStart/onScaleUpdate/onScaleEndで指の移動量に応じて地図をパンする機能を実装
+- CustomPointのimportを追加
+
+【map_page.dart】
+- StateにlatLngToScreenPoint(LatLng)を追加（ピクセル座標変換用）

@@ -26,6 +26,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `lib/screens/map_page.dart` : 地図画面本体（ノード・グローバル変数参照で状態管理）
 - `lib/tools/map_tool.dart` : 地図操作ツールの抽象基底クラス（MapTool）。
 - `lib/tools/pan_tool.dart` : てのひらツール（地図パン専用）。
+  - onScaleStart/onScaleUpdate/onScaleEndでドラッグ操作による地図パン（中心移動）を実装。
 - `lib/tools/pen_tool.dart` : ペンツール（レイヤ描画）。
 - `lib/tools/select_tool.dart` : オブジェクト選択ツール。
 
@@ -345,3 +346,23 @@ final layerNames = gpkg.getLayerNames();
   - getAttributeNames(): 属性名一覧をListで取得（DBカラムを動的取得。将来拡張可）
 - FeatureNode
   - getAttributeValue(String attributeName): 属性名を指定して値を取得（rowIdでDBから都度取得）
+
+## 追加機能
+- てのひらツール(PanTool)で指の移動量に応じて地図をパンできるようにした
+
+## 主要ファイル・クラス
+- lib/tools/pan_tool.dart: 地図パン専用ツール。onScaleStart/onScaleUpdate/onScaleEndでパン処理を実装。
+- lib/screens/map_page.dart: 地図画面本体。PanToolから呼ばれるlatLngToScreenPoint/offsetToLatLngを提供。
+- MapController: flutter_mapの地図制御用コントローラ。move/latLngToScreenPoint/pointToLatLng等を利用。
+
+## クラス構成
+- PanTool(MapTool継承):
+    - onScaleStart: 指位置記録
+    - onScaleUpdate: 移動量から中心座標を再計算しmove
+    - onScaleEnd: 状態リセット
+- KMapsHomePage(State):
+    - latLngToScreenPoint/offsetToLatLng: 座標変換
+    - _mapController: 地図制御
+
+## 使い方
+- 左ツールバーで「てのひら」選択後、地図上でドラッグするとパン可能

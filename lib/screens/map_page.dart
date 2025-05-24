@@ -55,6 +55,9 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   bool drawerOpen = true;
   final double minDrawerWidth = 200;
 
+  // パブリックgetterを追加
+  MapController get mapController => _mapController;
+
   @override
   void initState() {
     super.initState();
@@ -228,6 +231,13 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final point = CustomPoint(local.dx, local.dy);
     final latlng = _mapController.pointToLatLng(point);
     return latlng ?? _center;
+  }
+
+  // --- 地図座標→画面ピクセル変換 ---
+  Offset latLngToOffset(LatLng latlng) {
+    // MapControllerのlatLngToScreenPointを利用
+    final point = _mapController.latLngToScreenPoint(latlng);
+    return Offset(point.x.toDouble(), point.y.toDouble());
   }
 
   @override

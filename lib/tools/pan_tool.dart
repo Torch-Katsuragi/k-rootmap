@@ -45,6 +45,7 @@ class PanTool extends MapTool {
     final mapController = mapState.mapController;
     final center = mapController.center;
     final zoom = _startZoom! + log(details.scale) / ln2;
+    // mapcontrollerはdegreeであるが、details.rotationはラジアンなので変換する必要がある
     final rotation = _startRotation! + details.rotation * 180 / pi;
     final centerPx = mapState.latLngToOffset(center);
     final newCenterPx = centerPx - delta;

@@ -17,6 +17,7 @@ import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../utils/global_config.dart' show LayerTreeNodeUtils;
+import '../utils/feature_calc_utils.dart';
 
 /// 地図・編集画面（最小構成）
 class KMapsHomePage extends StatefulWidget {
@@ -474,6 +475,87 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     ),
                   ),
                 ),
+                // --- ペンツール描画プレビュー情報 ---
+                if (GlobalConfig.instance.currentTool is PenTool)
+                  Builder(
+                    builder: (context) {
+                      final selected = GlobalConfig.instance.selectedLayerNode;
+                      final penTool =
+                          GlobalConfig.instance.currentTool as PenTool;
+                      String? previewText;
+                      Offset? previewOffset;
+                      // 点レイヤ
+                      if (selected is PointLayerNode &&
+                          penTool.pointPreview != null) {
+                        final pt = penTool.pointPreview!;
+                        previewText =
+                            '座標: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
+                        previewOffset = latLngToOffset(pt);
+                      }
+                      // 線レイヤ
+                      else if (selected is LineLayerNode &&
+                          penTool.drawingLine.length >= 2) {
+                        final len = GeometryCalc.calcLineLength(
+                          penTool.drawingLine,
+                        );
+                        final centroid = GeometryCalc.calcLineCentroid(
+                          penTool.drawingLine,
+                        );
+                        if (len >= 10000) {
+                          previewText =
+                              '長さ: ${(len / 1000).toStringAsFixed(1)} km';
+                        } else {
+                          previewText = '長さ: ${len.toStringAsFixed(2)} m';
+                        }
+                        previewOffset = latLngToOffset(centroid);
+                      }
+                      // ポリゴンレイヤ
+                      else if (selected is PolygonLayerNode &&
+                          penTool.drawingPolygon.length >= 3) {
+                        final closed = closeRing(penTool.drawingPolygon);
+                        final areaDeg2 = GeometryCalc.calcPolygonArea([closed]);
+                        final centroid = GeometryCalc.calcPolygonCentroid([
+                          closed,
+                        ]);
+                        final areaM2 =
+                            DegreeMeterConverter.convertAreaToMeters2(
+                              areaDeg2,
+                              centroid.latitude,
+                            );
+                        if (areaM2 >= 10000) {
+                          previewText =
+                              '面積: ${(areaM2 / 10000).toStringAsFixed(1)} ha';
+                        } else {
+                          previewText = '面積: ${areaM2.toStringAsFixed(2)} m²';
+                        }
+                        previewOffset = latLngToOffset(centroid);
+                      }
+                      if (previewText != null && previewOffset != null) {
+                        return Positioned(
+                          left: previewOffset.dx + 10,
+                          top: previewOffset.dy - 30,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              previewText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
               ],
             ),
           ),

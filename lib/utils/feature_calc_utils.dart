@@ -91,8 +91,8 @@ class GeometryCalc {
   /// 戻り値: 面積（degree^2）
   static double calcPolygonArea(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].length < 3) return 0.0;
-    double area = 0.0;
-    for (final ring in polygon) {
+    double area = _ringArea(polygon[0]);
+    for (final ring in polygon.skip(1)) {
       area -= _ringArea(ring);
     }
     return area;

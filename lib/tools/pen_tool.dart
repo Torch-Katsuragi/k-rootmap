@@ -34,6 +34,9 @@ class PenTool extends MapTool {
   int _pointerCount = 0;
   LatLng? _pointPreview;
 
+  /// プレビュー用の点座標（外部参照用getter）
+  LatLng? get pointPreview => _pointPreview;
+
   /// タップイベント
   @override
   void onTap(TapUpDetails details, dynamic mapState) {

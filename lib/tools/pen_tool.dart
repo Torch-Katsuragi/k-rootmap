@@ -39,9 +39,17 @@ class PenTool extends MapTool {
   void onTap(TapUpDetails details, dynamic mapState) {
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) return;
+    if (!selected.isVisibleRecursive()) {
+      // 警告ポップアップ
+      final context = mapState.context;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
+      return;
+    }
     final latlng = mapState.offsetToLatLng(details.localPosition);
     if (selected is PointLayerNode) {
-      PointFeatureNode.createIn(selected, latlng, '');
+      PointFeatureNode.createIn(selected, latlng, '', '');
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       addDrawingLinePoint(latlng, mapState.setState);
@@ -54,6 +62,16 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null || !selected.isVisibleRecursive()) {
+      if (selected != null && !selected.isVisibleRecursive()) {
+        final context = mapState.context;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
+      }
+      return;
+    }
     if (_pointerCount == 2) {
       //2本指を離すとき高確率で残った方の指でdetails.pointerCount=1としてonscalestartが呼ばれるので、その場合は一回スキップ(0にするとupdateとendで何もしなくなる)
       _pointerCount = 0;
@@ -65,8 +83,6 @@ class PenTool extends MapTool {
       return;
     }
     if (_pointerCount == 1) {
-      final selected = GlobalConfig.instance.selectedLayerNode;
-      if (selected == null) return;
       // Pointerバッファがあれば最初に反映
       if (pointerBuffer.isNotEmpty) {
         if (selected is LineLayerNode) {
@@ -106,14 +122,14 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 2) {
       panTool.onScaleUpdate(details, mapState);
       // 2本指終了時に1本指状態で呼ばれるので、_pointercount=2のままにしておく(スキップフラグとして利用)
       return;
     }
     if (_pointerCount == 1) {
-      final selected = GlobalConfig.instance.selectedLayerNode;
-      if (selected == null) return;
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
         _pointPreview = latlng;
@@ -130,20 +146,30 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 2) {
       panTool.onScaleEnd(details, mapState);
       // _pointerCount = 0;
       return;
     }
     if (_pointerCount == 1) {
-      final selected = GlobalConfig.instance.selectedLayerNode;
-      if (selected == null) return;
       if (selected is PointLayerNode && _pointPreview != null) {
-        PointFeatureNode.createIn(selected, _pointPreview!, '');
+        PointFeatureNode.createIn(
+          selected,
+          _pointPreview!,
+          'FreeHandPoint',
+          '',
+        );
         _pointPreview = null;
         mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
-        LineFeatureNode.createIn(selected, List<LatLng>.from(drawingLine), '');
+        LineFeatureNode.createIn(
+          selected,
+          List<LatLng>.from(drawingLine),
+          'FreeHandLine',
+          '',
+        );
         drawingLine.clear();
         _isDrawing = false;
         mapState.setState(() {});
@@ -152,6 +178,7 @@ class PenTool extends MapTool {
         PolygonFeatureNode.createIn(
           selected,
           List<List<LatLng>>.from([closed]),
+          'FreeHandPolygon',
           '',
         );
         drawingPolygon.clear();
@@ -207,12 +234,18 @@ class PenTool extends MapTool {
   /// 確定処理（属性入力ダイアログはUI側で呼ぶこと）
   void confirm({
     required LayerNode selected,
-    required String attr,
+    required String name,
+    required String description,
     required void Function(void Function()) setState,
     required List<LatLng> Function(List<LatLng>) closeRing,
   }) {
     if (selected is LineLayerNode && drawingLine.length >= 2) {
-      LineFeatureNode.createIn(selected, List<LatLng>.from(drawingLine), attr);
+      LineFeatureNode.createIn(
+        selected,
+        List<LatLng>.from(drawingLine),
+        name,
+        description,
+      );
       setState(() {
         drawingLine.clear();
       });
@@ -221,7 +254,8 @@ class PenTool extends MapTool {
       PolygonFeatureNode.createIn(
         selected,
         List<List<LatLng>>.from([closed]),
-        attr,
+        name,
+        description,
       );
       setState(() {
         drawingPolygon.clear();

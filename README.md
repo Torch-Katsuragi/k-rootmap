@@ -162,6 +162,8 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 2024-06-09: GeoPackageGroupにgetFeatureTableNames(), getGeometryType()追加。layerノード生成部でこれらAPIを利用するようリファクタ。
 - 2024-xx-xx: childrenTypeをList<Type>に変更し、型ベースでノード管理に統一
 - 2024-xx-xx: LayerTreeNode.createNodesByTypeを廃止し、各継承クラスにstatic createNodesByType(parent)を分散実装
+- 2024-06-09: FeatureNodeおよびサブクラスから`updateAttr`メソッドを削除。属性値の更新は`editAttribute`で一元管理。
+- 2024-06-09: feature属性のDBカラムを`attr`→`name`/`description`に移行。既存レイヤにも自動追加されるよう`ensureNameDescriptionColumns`を実装。
 
 ## FolderNodeについて
 - FolderNodeはlib/models/folder_node.dartで定義され、レイヤツリーのフォルダ構造を表現するクラス。
@@ -341,11 +343,19 @@ final layerNames = gpkg.getLayerNames();
 ## 変更履歴
 - 2024-xx-xx: childrenTypeをList<Type>に変更し、型ベースでノード管理に統一
 
-## 主なクラスとメソッド
-- LayerNode
-  - getAttributeNames(): 属性名一覧をListで取得（DBカラムを動的取得。将来拡張可）
-- FeatureNode
-  - getAttributeValue(String attributeName): 属性名を指定して値を取得（rowIdでDBから都度取得）
+## 主要クラスとメソッド
+
+### FeatureNode（抽象クラス）
+- 属性値: `name`, `description`
+- 属性値の取得: `getAttributeValue(attributeName)`
+- 属性値の編集: `editAttribute(attributeName, newValue)`
+  - DBとメンバ変数を同時に更新
+- フィーチャ削除: `dispose()`
+- ジオメトリ取得: `geometry`
+
+#### PointFeatureNode, LineFeatureNode, PolygonFeatureNode
+- FeatureNodeを継承し、点・線・面のジオメトリを保持
+- それぞれ`geometry`で型ごとのデータを返す
 
 ## 追加機能
 - てのひらツール(PanTool)で指の移動量に応じて地図をパンできるようにした

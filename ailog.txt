@@ -203,3 +203,7 @@ FolderNode, GeoPackageNodeにstaticなcreateInメソッドを追加。親の型�
 lib全体でgeoPackageFile.addLayer/addPoint/addLine/addPolygonの直接呼び出しを廃止し、LayerNode/FeatureNodeのcreateIn経由に統一。
 - layer_drawer.dart: レイヤ追加時はLayerNode.createInを使用
 - pen_tool.dart: feature追加時はFeatureNode.createInを使用
+
+// 2024-06-09 FeatureNodeおよびサブクラスからupdateAttrメソッドを削除（DB更新はeditAttributeに統一）
+
+// 2024-06-09 attr→name/description移行。DBテーブル作成・追加時にname/descriptionカラムを実装。既存レイヤにカラムがなければ追加するensureNameDescriptionColumnsも追加。FeatureNode等もname/descriptionに統一。

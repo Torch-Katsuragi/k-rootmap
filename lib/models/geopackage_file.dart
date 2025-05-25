@@ -13,6 +13,14 @@ class GeoPackageFile {
   /// ルートからのパスリスト
   final List<String> pathList;
 
+  /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
+  final List<String> supportedAttributes = [
+    "id",
+    "geom",
+    "name",
+    "description",
+  ];
+
   /// コンストラクタ
   /// pathList: ルートからのサブディレクトリ＋ファイル名のリスト
   GeoPackageFile(this.pathList) {
@@ -142,7 +150,12 @@ class GeoPackageFile {
   }
 
   /// 点フィーチャを追加（属性付き）
-  void addPoint(String tableName, LatLng pt, [String attr = '']) {
+  void addPoint(
+    String tableName,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+  }) {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('addPoint: projectRootDirが未設定');
@@ -151,10 +164,10 @@ class GeoPackageFile {
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
     final wkb = createWkbPoint(pt.longitude, pt.latitude);
-    db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
-      wkb,
-      attr,
-    ]);
+    db.execute(
+      'INSERT INTO "$tableName" (geom, name, description) VALUES (?, ?, ?);',
+      [wkb, name, description],
+    );
     db.dispose();
   }
 
@@ -201,6 +214,8 @@ class GeoPackageFile {
 
   /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
   List<Map<String, dynamic>> getFeatures(String tableName) {
+    // name/descriptionカラムがなければ自動追加
+    ensureNameDescriptionColumns(tableName);
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('getFeatures: projectRootDirが未設定');
@@ -225,12 +240,15 @@ class GeoPackageFile {
         typeRows.isNotEmpty
             ? (typeRows.first['geometry_type_name'] as String).toUpperCase()
             : '';
-    final rows = db.select('SELECT id, geom, attr FROM "$tableName"');
+    final rows = db.select(
+      'SELECT id, geom, name, description FROM "$tableName"',
+    );
     final features = <Map<String, dynamic>>[];
     for (final r in rows) {
       final id = r['id'] as int? ?? 0;
       final geom = r['geom'] as Uint8List;
-      final attr = r['attr'] as String? ?? '';
+      final name = r['name'] as String? ?? '';
+      final description = r['description'] as String? ?? '';
       if (geomType == 'MULTIPOINT' || geomType == 'POINT') {
         if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
           final lon = ByteData.sublistView(
@@ -246,7 +264,8 @@ class GeoPackageFile {
           features.add({
             'id': id,
             'points': [LatLng(lat, lon)],
-            'attr': attr,
+            'name': name,
+            'description': description,
           });
         }
       } else if (geomType == 'MULTILINESTRING' || geomType == 'LINESTRING') {
@@ -255,7 +274,8 @@ class GeoPackageFile {
           features.add({
             'id': id,
             'lines': [lines],
-            'attr': attr,
+            'name': name,
+            'description': description,
           });
         }
       } else if (geomType == 'MULTIPOLYGON' || geomType == 'POLYGON') {
@@ -264,7 +284,8 @@ class GeoPackageFile {
           features.add({
             'id': id,
             'polygons': [polygons],
-            'attr': attr,
+            'name': name,
+            'description': description,
           });
         }
       }
@@ -286,7 +307,8 @@ class GeoPackageFile {
       CREATE TABLE IF NOT EXISTS "$name" (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         geom BLOB NOT NULL,
-        attr TEXT
+        name TEXT,
+        description TEXT
       );
     ''');
     db.execute(
@@ -324,7 +346,12 @@ class GeoPackageFile {
   }
 
   /// 線フィーチャを追加（属性付き）
-  void addLine(String tableName, List<LatLng> line, [String attr = '']) {
+  void addLine(
+    String tableName,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+  }) {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('addLine: projectRootDirが未設定');
@@ -333,15 +360,20 @@ class GeoPackageFile {
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
     final wkb = createWkbLineString(line);
-    db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
-      wkb,
-      attr,
-    ]);
+    db.execute(
+      'INSERT INTO "$tableName" (geom, name, description) VALUES (?, ?, ?);',
+      [wkb, name, description],
+    );
     db.dispose();
   }
 
   /// ポリゴンフィーチャを追加（属性付き）
-  void addPolygon(String tableName, List<LatLng> polygon, [String attr = '']) {
+  void addPolygon(
+    String tableName,
+    List<LatLng> polygon, {
+    String name = '',
+    String description = '',
+  }) {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('addPolygon: projectRootDirが未設定');
@@ -350,15 +382,15 @@ class GeoPackageFile {
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
     final wkb = createWkbPolygon([polygon]);
-    db.execute('INSERT INTO "$tableName" (geom, attr) VALUES (?, ?);', [
-      wkb,
-      attr,
-    ]);
+    db.execute(
+      'INSERT INTO "$tableName" (geom, name, description) VALUES (?, ?, ?);',
+      [wkb, name, description],
+    );
     db.dispose();
   }
 
-  /// 指定テーブルのカラム名一覧を返す
-  List<String> getColumnNames(String tableName) {
+  /// 指定テーブルのカラム名一覧を返す（getAll=trueなら全カラム、falseならsupportedAttributesのみ）
+  List<String> getColumnNames(String tableName, {bool getAll = false}) {
     final root = GlobalConfig.instance.projectRootDir;
     if (root == null) {
       print('getColumnNames: projectRootDirが未設定');
@@ -366,10 +398,12 @@ class GeoPackageFile {
     }
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
-    final result = db.select('PRAGMA table_info(\"$tableName\");');
+    final result = db.select('PRAGMA table_info("$tableName");');
     final columns = result.map((row) => row['name'] as String).toList();
     db.dispose();
-    return columns;
+    if (getAll) return columns;
+    // supportedAttributesに含まれるものだけ返す
+    return columns.where((c) => supportedAttributes.contains(c)).toList();
   }
 
   /// 指定テーブル・rowId・カラム名から値を取得
@@ -421,5 +455,22 @@ class GeoPackageFile {
     } finally {
       db.dispose();
     }
+  }
+
+  /// レイヤのカラム追加（name/descriptionがなければ追加）
+  void ensureNameDescriptionColumns(String tableName) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) return;
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    final result = db.select('PRAGMA table_info("$tableName");');
+    final columns = result.map((row) => row['name'] as String).toList();
+    if (!columns.contains('name')) {
+      db.execute('ALTER TABLE "$tableName" ADD COLUMN name TEXT;');
+    }
+    if (!columns.contains('description')) {
+      db.execute('ALTER TABLE "$tableName" ADD COLUMN description TEXT;');
+    }
+    db.dispose();
   }
 }

@@ -350,15 +350,16 @@ class PointLayerNode extends LayerNode {
           (f) =>
               f != null &&
               (f as Map<String, dynamic>)["points"] != null &&
-              (f as Map<String, dynamic>)["attr"] != null,
+              (f as Map<String, dynamic>)["name"] != null,
         )
         .map((f) {
           final map = f as Map<String, dynamic>;
           return PointFeatureNode(
             map["points"] as List<LatLng>,
-            map["attr"] as String,
+            map["name"] as String,
             parent: this,
             rowId: map["id"] ?? 0,
+            description: map["description"] as String?,
           );
         })
         .toList();
@@ -399,15 +400,16 @@ class LineLayerNode extends LayerNode {
           (f) =>
               f != null &&
               (f as Map<String, dynamic>)["lines"] != null &&
-              (f as Map<String, dynamic>)["attr"] != null,
+              (f as Map<String, dynamic>)["name"] != null,
         )
         .map((f) {
           final map = f as Map<String, dynamic>;
           return LineFeatureNode(
             map["lines"] as List<List<LatLng>>,
-            map["attr"] as String,
+            map["name"] as String,
             parent: this,
             rowId: map["id"] ?? 0,
+            description: map["description"] as String?,
           );
         })
         .toList();
@@ -448,15 +450,16 @@ class PolygonLayerNode extends LayerNode {
           (f) =>
               f != null &&
               (f as Map<String, dynamic>)["polygons"] != null &&
-              (f as Map<String, dynamic>)["attr"] != null,
+              (f as Map<String, dynamic>)["name"] != null,
         )
         .map((f) {
           final map = f as Map<String, dynamic>;
           return PolygonFeatureNode(
             map["polygons"] as List<List<List<LatLng>>>,
-            map["attr"] as String,
+            map["name"] as String,
             parent: this,
             rowId: map["id"] ?? 0,
+            description: map["description"] as String?,
           );
         })
         .toList();
@@ -565,7 +568,8 @@ class FolderNode extends LayerTreeNode {
 /// LayerNodeの子としてfeature単位で生成される
 abstract class FeatureNode extends LayerTreeNode {
   /// 属性値
-  String attr;
+  String name;
+  String? description;
 
   /// DB上のrowId（主キー）
   final int rowId;
@@ -575,9 +579,6 @@ abstract class FeatureNode extends LayerTreeNode {
     // geoPackageFileから都度取得
     return geoPackageFile.getFeatureAttribute(layerName, rowId, attributeName);
   }
-
-  /// 属性値編集
-  void updateAttr(String newAttr);
 
   /// フィーチャ削除（DBからも削除）
   @override
@@ -591,9 +592,9 @@ abstract class FeatureNode extends LayerTreeNode {
   final LayerNode parent;
 
   FeatureNode({
-    required this.attr,
+    required this.name,
+    this.description,
     required this.parent,
-    required String name,
     required this.rowId,
   }) : super(
          name,
@@ -625,19 +626,19 @@ class PointFeatureNode extends FeatureNode {
   final List<LatLng> points;
   PointFeatureNode(
     this.points,
-    String attr, {
+    String name, {
     required LayerNode parent,
     required int rowId,
-  }) : super(attr: attr, parent: parent, name: 'Point', rowId: rowId);
+    String? description,
+  }) : super(
+         name: name,
+         parent: parent,
+         rowId: rowId,
+         description: description,
+       );
 
   @override
   Object get geometry => points;
-
-  @override
-  void updateAttr(String newAttr) {
-    attr = newAttr;
-    // TODO: DBのattrカラムも更新
-  }
 
   @override
   void dispose() {
@@ -661,14 +662,26 @@ class PointFeatureNode extends FeatureNode {
     LayerNode parent,
     LatLng point,
     String name,
+    String? description,
   ) {
     if (parent is! PointLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
-    gpkgFile.addPoint(layerName, point, name);
+    gpkgFile.addPoint(
+      layerName,
+      point,
+      name: name ?? '',
+      description: description ?? '',
+    );
     final features = gpkgFile.getFeatures(layerName);
     final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
-    final node = PointFeatureNode([point], name, parent: parent, rowId: rowId);
+    final node = PointFeatureNode(
+      [point],
+      name,
+      parent: parent,
+      rowId: rowId,
+      description: description,
+    );
     parent.addChild(node);
     return node;
   }
@@ -679,19 +692,19 @@ class LineFeatureNode extends FeatureNode {
   final List<List<LatLng>> lines;
   LineFeatureNode(
     this.lines,
-    String attr, {
+    String name, {
     required LayerNode parent,
     required int rowId,
-  }) : super(attr: attr, parent: parent, name: 'Line', rowId: rowId);
+    String? description,
+  }) : super(
+         name: name,
+         parent: parent,
+         rowId: rowId,
+         description: description,
+       );
 
   @override
   Object get geometry => lines;
-
-  @override
-  void updateAttr(String newAttr) {
-    attr = newAttr;
-    // TODO: DBのattrカラムも更新
-  }
 
   @override
   void dispose() {
@@ -713,14 +726,26 @@ class LineFeatureNode extends FeatureNode {
     LayerNode parent,
     List<LatLng> line,
     String name,
+    String? description,
   ) {
     if (parent is! LineLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
-    gpkgFile.addLine(layerName, line, name);
+    gpkgFile.addLine(
+      layerName,
+      line,
+      name: name ?? '',
+      description: description ?? '',
+    );
     final features = gpkgFile.getFeatures(layerName);
     final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
-    final node = LineFeatureNode([line], name, parent: parent, rowId: rowId);
+    final node = LineFeatureNode(
+      [line],
+      name,
+      parent: parent,
+      rowId: rowId,
+      description: description,
+    );
     parent.addChild(node);
     return node;
   }
@@ -731,19 +756,19 @@ class PolygonFeatureNode extends FeatureNode {
   final List<List<List<LatLng>>> polygons;
   PolygonFeatureNode(
     this.polygons,
-    String attr, {
+    String name, {
     required LayerNode parent,
     required int rowId,
-  }) : super(attr: attr, parent: parent, name: 'Polygon', rowId: rowId);
+    String? description,
+  }) : super(
+         name: name,
+         parent: parent,
+         rowId: rowId,
+         description: description,
+       );
 
   @override
   Object get geometry => polygons;
-
-  @override
-  void updateAttr(String newAttr) {
-    attr = newAttr;
-    // TODO: DBのattrカラムも更新
-  }
 
   @override
   void dispose() {
@@ -765,12 +790,18 @@ class PolygonFeatureNode extends FeatureNode {
     LayerNode parent,
     List<List<LatLng>> polygon,
     String name,
+    String? description,
   ) {
     if (parent is! PolygonLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
-    gpkgFile.addPolygon(layerName, polygon.first, name); // 外環のみDBに追加
+    gpkgFile.addPolygon(
+      layerName,
+      polygon.first,
+      name: name ?? '',
+      description: description ?? '',
+    );
     final features = gpkgFile.getFeatures(layerName);
     final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
     final node = PolygonFeatureNode(
@@ -778,6 +809,7 @@ class PolygonFeatureNode extends FeatureNode {
       name,
       parent: parent,
       rowId: rowId,
+      description: description,
     );
     parent.addChild(node);
     return node;

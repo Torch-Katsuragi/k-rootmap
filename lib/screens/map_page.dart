@@ -111,7 +111,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     if (selected == null) return;
     final penTool = GlobalConfig.instance.currentTool as PenTool;
     if (selected is LineLayerNode && penTool.drawingLine.length >= 2) {
-      String? attr = await showDialog<String>(
+      String? name = await showDialog<String>(
         context: context,
         builder: (context) {
           String text = '';
@@ -135,16 +135,17 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
           );
         },
       );
-      if (attr == null) return;
+      if (name == null) return;
       penTool.confirm(
         selected: selected,
-        attr: attr,
+        name: name,
+        description: '',
         setState: setState,
         closeRing: closeRing,
       );
     } else if (selected is PolygonLayerNode &&
         penTool.drawingPolygon.length >= 3) {
-      String? attr = await showDialog<String>(
+      String? name = await showDialog<String>(
         context: context,
         builder: (context) {
           String text = '';
@@ -168,10 +169,11 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
           );
         },
       );
-      if (attr == null) return;
+      if (name == null) return;
       penTool.confirm(
         selected: selected,
-        attr: attr,
+        name: name,
+        description: '',
         setState: setState,
         closeRing: closeRing,
       );
@@ -260,6 +262,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     }
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'てのひら';
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxDrawerWidth = screenWidth * 2 / 3;
     return Scaffold(
       appBar: AppBar(
         title: const Text('K-MAPS 最小構成'),
@@ -360,7 +364,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               width: 40,
                               height: 40,
                               child: Tooltip(
-                                message: f.attr,
+                                message: f.name,
                                 child: const Icon(
                                   Icons.location_on,
                                   color: Colors.red,
@@ -478,7 +482,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               right: 0,
               top: 0,
               bottom: 0,
-              width: drawerWidth,
+              width: drawerWidth.clamp(200, maxDrawerWidth),
               child: Material(
                 elevation: 0,
                 color: Colors.transparent,
@@ -492,8 +496,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                           drawerWidth -= details.delta.dx;
                           if (drawerWidth < minDrawerWidth) {
                             drawerOpen = false;
-                          } else if (drawerWidth > 400) {
-                            drawerWidth = 400;
+                          } else if (drawerWidth > maxDrawerWidth) {
+                            drawerWidth = maxDrawerWidth;
                           }
                         });
                       },

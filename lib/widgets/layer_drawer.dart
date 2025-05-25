@@ -296,21 +296,39 @@ class _LayerDrawerState extends State<LayerDrawer> {
     return ListTile(
       // GeoPackageノード配下のレイヤはインデントして階層感を出す
       contentPadding: const EdgeInsets.only(left: 32, right: 16),
-      leading: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color:
-              isSelected ? Colors.blue.withOpacity(0.15) : Colors.transparent,
-        ),
-        padding: const EdgeInsets.all(4),
-        child: Icon(
-          node.baseIcon,
-          color:
-              isSelected
-                  ? Colors.blue
-                  : (node.isVisibleRecursive()
-                      ? node.baseIconColor
-                      : Colors.grey),
+      leading: GestureDetector(
+        onTap: () {
+          node.visible = !node.visible;
+          widget.setStateCallback(() {});
+        },
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color:
+                    isSelected
+                        ? Colors.blue.withOpacity(0.15)
+                        : Colors.transparent,
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                node.baseIcon,
+                color:
+                    isSelected
+                        ? Colors.blue
+                        : (node.isVisibleRecursive()
+                            ? node.baseIconColor
+                            : Colors.grey),
+              ),
+            ),
+            if (!node.visible)
+              Transform.rotate(
+                angle: -0.7,
+                child: Container(width: 32, height: 4, color: Colors.grey),
+              ),
+          ],
         ),
       ),
       title: Text(
@@ -609,10 +627,14 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
   int? editingRowId;
   String? editingColumn;
   String editingValue = '';
+  bool showAllColumns = false;
 
   @override
   Widget build(BuildContext context) {
-    final columns = widget.layerNode.getAttributeNames();
+    final columns = widget.layerNode.geoPackageFile.getColumnNames(
+      widget.layerNode.layerName,
+      getAll: showAllColumns,
+    );
     final features = widget.layerNode.features;
     return Column(
       children: [
@@ -633,13 +655,25 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
               ),
               Expanded(
                 child: Text(
-                  '${widget.layerNode.name} の属性テーブル',
+                  widget.layerNode.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
+              IconButton(
+                icon: Icon(
+                  showAllColumns ? Icons.view_column : Icons.filter_alt,
+                  color: Colors.white,
+                ),
+                tooltip: showAllColumns ? 'supported属性のみ表示' : '全カラム表示',
+                onPressed: () {
+                  setState(() {
+                    showAllColumns = !showAllColumns;
+                  });
+                },
               ),
             ],
           ),

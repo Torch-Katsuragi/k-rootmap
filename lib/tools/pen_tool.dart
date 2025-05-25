@@ -9,6 +9,7 @@ import '../utils/global_config.dart';
 import '../models/layer_tree_node.dart';
 import 'package:latlong2/latlong.dart';
 import 'pan_tool.dart'; // てのひらツールを利用
+import 'select_tool.dart';
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
@@ -40,6 +41,19 @@ class PenTool extends MapTool {
   /// タップイベント
   @override
   void onTap(TapUpDetails details, dynamic mapState) {
+    // フロートボタン押下時は消しゴム動作
+    if (GlobalConfig.instance.isFabActive) {
+      final latlng = mapState.offsetToLatLng(details.localPosition);
+      SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
+      // 選択されたfeatureを消去
+      for (final f in List.from(GlobalConfig.instance.selectedFeatures)) {
+        f.dispose();
+      }
+      GlobalConfig.instance.selectedFeatures = [];
+      mapState.setState(() {});
+      return;
+    }
+    // 通常は描画
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) return;
     if (!selected.isVisibleRecursive()) {
@@ -86,6 +100,9 @@ class PenTool extends MapTool {
       return;
     }
     if (_pointerCount == 1) {
+      if (GlobalConfig.instance.isFabActive) {
+        return;
+      }
       // Pointerバッファがあれば最初に反映
       if (pointerBuffer.isNotEmpty) {
         if (selected is LineLayerNode) {
@@ -125,6 +142,7 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    // 通常は従来通り
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 2) {
@@ -133,6 +151,17 @@ class PenTool extends MapTool {
       return;
     }
     if (_pointerCount == 1) {
+      // フロートボタン押下時は消しゴム動作
+      if (GlobalConfig.instance.isFabActive) {
+        final latlng = mapState.offsetToLatLng(details.localFocalPoint);
+        SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
+        for (final f in List.from(GlobalConfig.instance.selectedFeatures)) {
+          f.dispose();
+        }
+        GlobalConfig.instance.selectedFeatures = [];
+        mapState.setState(() {});
+        return;
+      }
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
         _pointPreview = latlng;

@@ -225,3 +225,5 @@ geom「選択」ボタンでfeatureの中心座標に地図ジャンプする機
 2024-06-14 GlobalConfigにselectedFeatures(List<dynamic>)を追加。今後選択中フィーチャ管理に利用予定。
 
 2024-06-14 map_page.dartでselectedFeaturesによるfeatureハイライト描画（色・太さ等）機能を追加。
+
+2024-06-09 左下に白い丸のフロートボタン追加。押下状態をGlobalConfigでグローバル管理。READMEにfeature・主要ファイル説明を追記。

@@ -596,7 +596,15 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// フィーチャ削除（DBからも削除）
   @override
-  void dispose();
+  void dispose() {
+    // DBから該当線を削除
+    if (parent is LineLayerNode) {
+      final gpkgFile = (parent as LineLayerNode).geoPackageFile;
+      final layerName = (parent as LineLayerNode).layerName;
+      gpkgFile.removeLine(layerName, rowId);
+    }
+    super.dispose();
+  }
 
   /// ジオメトリ型ごとのデータ参照（点・線・面）
   Object get geometry;
@@ -762,7 +770,12 @@ class LineFeatureNode extends FeatureNode {
 
   @override
   void dispose() {
-    // TODO: DBから該当線を削除
+    // DBから該当線を削除
+    if (parent is LineLayerNode) {
+      final gpkgFile = (parent as LineLayerNode).geoPackageFile;
+      final layerName = (parent as LineLayerNode).layerName;
+      gpkgFile.removeLine(layerName, rowId);
+    }
     super.dispose();
   }
 
@@ -848,7 +861,12 @@ class PolygonFeatureNode extends FeatureNode {
 
   @override
   void dispose() {
-    // TODO: DBから該当ポリゴンを削除
+    // DBから該当ポリゴンを削除
+    if (parent is PolygonLayerNode) {
+      final gpkgFile = (parent as PolygonLayerNode).geoPackageFile;
+      final layerName = (parent as PolygonLayerNode).layerName;
+      gpkgFile.removePolygon(layerName, rowId);
+    }
     super.dispose();
   }
 

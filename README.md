@@ -439,3 +439,13 @@ final layerNames = gpkg.getLayerNames();
 - latlong2
 
 ---
+
+## 新機能: 左下フロートボタン
+- 地図画面左下に白い丸のフロートボタンを追加。
+- 押下状態（ON/OFF）は `GlobalConfig.instance.isFabActive` でグローバル管理。
+- ボタンは `lib/screens/map_page.dart` の `_LeftBottomFab` ウィジェットで実装。
+- 状態は今後他機能からも参照・利用可能。
+
+### 主要ファイル・クラス
+- `lib/utils/global_config.dart`: グローバル設定・状態管理クラス。`isFabActive` プロパティ追加。
+- `lib/screens/map_page.dart`: 地図画面本体。左下フロートボタンのUI・状態トグル処理を実装。

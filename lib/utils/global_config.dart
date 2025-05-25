@@ -36,6 +36,9 @@ class GlobalConfig {
   /// 地図画面のStateインスタンス（グローバル参照用）
   dynamic mapState;
 
+  /// 左下フロートボタンの押下状態（true: 押下中, false: 通常）
+  bool isFabActive = false;
+
   // 必要に応じて他のグローバル設定も追加
   // String? userName;
   // int? someGlobalFlag;

@@ -473,4 +473,30 @@ class GeoPackageFile {
     }
     db.dispose();
   }
+
+  /// 線フィーチャをidで削除
+  void removeLine(String tableName, int id) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('removeLine: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    db.execute('DELETE FROM "$tableName" WHERE id = ?;', [id]);
+    db.dispose();
+  }
+
+  /// ポリゴンフィーチャをidで削除
+  void removePolygon(String tableName, int id) {
+    final root = GlobalConfig.instance.projectRootDir;
+    if (root == null) {
+      print('removePolygon: projectRootDirが未設定');
+      return;
+    }
+    final absPath = p.joinAll([root, ...pathList]);
+    final db = sql.sqlite3.open(absPath);
+    db.execute('DELETE FROM "$tableName" WHERE id = ?;', [id]);
+    db.dispose();
+  }
 }

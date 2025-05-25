@@ -292,58 +292,67 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
             left: 0,
             top: 0,
             bottom: 0,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                IconButton(
-                  icon: Icon(
-                    Icons.pan_tool_alt,
-                    color:
-                        currentTool.name == 'てのひら' ? Colors.blue : Colors.black,
+            child: Container(
+              width: 44, // ツールバー幅を細く
+              color: Colors.transparent,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  IconButton(
+                    icon: Icon(
+                      Icons.pan_tool_alt,
+                      color:
+                          currentTool.name == 'てのひら'
+                              ? Colors.blue
+                              : Colors.black,
+                    ),
+                    tooltip: 'てのひら',
+                    onPressed: () {
+                      setState(() {
+                        GlobalConfig.instance.currentTool =
+                            GlobalConfig.instance.panTool;
+                      });
+                    },
+                    iconSize: 32, // アイコンサイズは現状維持
                   ),
-                  tooltip: 'てのひら',
-                  onPressed: () {
-                    setState(() {
-                      GlobalConfig.instance.currentTool =
-                          GlobalConfig.instance.panTool;
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.edit,
-                    color:
-                        currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit,
+                      color:
+                          currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                    ),
+                    tooltip: 'ペン',
+                    onPressed: () {
+                      setState(() {
+                        GlobalConfig.instance.currentTool =
+                            GlobalConfig.instance.penTool;
+                      });
+                    },
+                    iconSize: 32,
                   ),
-                  tooltip: 'ペン',
-                  onPressed: () {
-                    setState(() {
-                      GlobalConfig.instance.currentTool =
-                          GlobalConfig.instance.penTool;
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.select_all,
-                    color:
-                        currentTool.name == '選択' ? Colors.blue : Colors.black,
+                  IconButton(
+                    icon: Icon(
+                      Icons.select_all,
+                      color:
+                          currentTool.name == '選択' ? Colors.blue : Colors.black,
+                    ),
+                    tooltip: '選択',
+                    onPressed: () {
+                      setState(() {
+                        GlobalConfig.instance.currentTool =
+                            GlobalConfig.instance.selectTool;
+                      });
+                    },
+                    iconSize: 32,
                   ),
-                  tooltip: '選択',
-                  onPressed: () {
-                    setState(() {
-                      GlobalConfig.instance.currentTool =
-                          GlobalConfig.instance.selectTool;
-                    });
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // --- 地図本体 ---
           Positioned.fill(
-            left: 56, // ツールバー分だけ地図を右にずらす
+            left: 44, // ツールバー分だけ地図を右にずらす
             child: Stack(
               children: [
                 FlutterMap(
@@ -681,84 +690,90 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 feature: GlobalConfig.instance.selectedFeatures.first,
               ),
             ),
+          // --- 左下フロートボタン（ツールバーの右隣に配置） ---
+          Positioned(
+            left: 56, // ツールバー幅(44)+余白(12)
+            bottom: 24,
+            child: _LeftBottomFab(),
+          ),
         ],
       ),
-      floatingActionButton: Builder(
-        builder: (context) {
-          final selected = GlobalConfig.instance.selectedLayerNode;
-          final isLineDrawing =
-              selected is LineLayerNode &&
-              GlobalConfig.instance.currentTool is PenTool &&
-              (GlobalConfig.instance.currentTool as PenTool)
-                  .drawingLine
-                  .isNotEmpty;
-          final isPolygonDrawing =
-              selected is PolygonLayerNode &&
-              GlobalConfig.instance.currentTool is PenTool &&
-              (GlobalConfig.instance.currentTool as PenTool)
-                  .drawingPolygon
-                  .isNotEmpty;
-          if (isLineDrawing || isPolygonDrawing) {
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1つ取り消しボタン
-                FloatingActionButton(
-                  heroTag: 'undo',
-                  onPressed: () {
-                    setState(() {
-                      if (isLineDrawing &&
-                          GlobalConfig.instance.currentTool is PenTool) {
-                        (GlobalConfig.instance.currentTool as PenTool)
-                            .drawingLine
-                            .removeLast();
-                      } else if (isPolygonDrawing &&
-                          GlobalConfig.instance.currentTool is PenTool) {
-                        (GlobalConfig.instance.currentTool as PenTool)
-                            .drawingPolygon
-                            .removeLast();
-                      }
-                    });
-                  },
-                  tooltip: '1つ取り消し',
-                  child: const Icon(Icons.undo),
-                ),
-                const SizedBox(width: 12),
-                // キャンセルボタン
-                FloatingActionButton(
-                  heroTag: 'cancel',
-                  onPressed: () {
-                    setState(() {
-                      if (isLineDrawing &&
-                          GlobalConfig.instance.currentTool is PenTool) {
-                        (GlobalConfig.instance.currentTool as PenTool)
-                            .drawingLine
-                            .clear();
-                      } else if (isPolygonDrawing &&
-                          GlobalConfig.instance.currentTool is PenTool) {
-                        (GlobalConfig.instance.currentTool as PenTool)
-                            .drawingPolygon
-                            .clear();
-                      }
-                    });
-                  },
-                  tooltip: 'キャンセル',
-                  child: const Icon(Icons.clear),
-                ),
-                const SizedBox(width: 12),
-                // 確定ボタン
-                FloatingActionButton.extended(
-                  heroTag: 'confirm',
-                  onPressed: _onConfirmDrawing,
-                  icon: const Icon(Icons.check),
-                  label: const Text('確定'),
-                ),
-              ],
-            );
-          }
-          return const SizedBox.shrink();
-        },
-      ),
+      floatingActionButton:
+          (() {
+            final selected = GlobalConfig.instance.selectedLayerNode;
+            final isLineDrawing =
+                selected is LineLayerNode &&
+                GlobalConfig.instance.currentTool is PenTool &&
+                (GlobalConfig.instance.currentTool as PenTool)
+                    .drawingLine
+                    .isNotEmpty;
+            final isPolygonDrawing =
+                selected is PolygonLayerNode &&
+                GlobalConfig.instance.currentTool is PenTool &&
+                (GlobalConfig.instance.currentTool as PenTool)
+                    .drawingPolygon
+                    .isNotEmpty;
+            if (isLineDrawing || isPolygonDrawing) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 1つ取り消しボタン
+                  FloatingActionButton(
+                    heroTag: 'undo',
+                    onPressed: () {
+                      setState(() {
+                        if (isLineDrawing &&
+                            GlobalConfig.instance.currentTool is PenTool) {
+                          (GlobalConfig.instance.currentTool as PenTool)
+                              .drawingLine
+                              .removeLast();
+                        } else if (isPolygonDrawing &&
+                            GlobalConfig.instance.currentTool is PenTool) {
+                          (GlobalConfig.instance.currentTool as PenTool)
+                              .drawingPolygon
+                              .removeLast();
+                        }
+                      });
+                    },
+                    tooltip: '1つ取り消し',
+                    child: const Icon(Icons.undo),
+                  ),
+                  const SizedBox(width: 12),
+                  // キャンセルボタン
+                  FloatingActionButton(
+                    heroTag: 'cancel',
+                    onPressed: () {
+                      setState(() {
+                        if (isLineDrawing &&
+                            GlobalConfig.instance.currentTool is PenTool) {
+                          (GlobalConfig.instance.currentTool as PenTool)
+                              .drawingLine
+                              .clear();
+                        } else if (isPolygonDrawing &&
+                            GlobalConfig.instance.currentTool is PenTool) {
+                          (GlobalConfig.instance.currentTool as PenTool)
+                              .drawingPolygon
+                              .clear();
+                        }
+                      });
+                    },
+                    tooltip: 'キャンセル',
+                    child: const Icon(Icons.clear),
+                  ),
+                  const SizedBox(width: 12),
+                  // 確定ボタン
+                  FloatingActionButton.extended(
+                    heroTag: 'confirm',
+                    onPressed: _onConfirmDrawing,
+                    icon: const Icon(Icons.check),
+                    label: const Text('確定'),
+                  ),
+                ],
+              );
+            }
+            return null;
+          })(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -822,6 +837,68 @@ class FeatureDetailPanel extends StatelessWidget {
             ...children,
           ],
         ),
+      ),
+    );
+  }
+}
+
+// --- 左下フロートボタン用Widget ---
+/// 左下に表示される白い丸のフロートボタン。押下状態はGlobalConfigで管理。
+class _LeftBottomFab extends StatefulWidget {
+  @override
+  State<_LeftBottomFab> createState() => _LeftBottomFabState();
+}
+
+class _LeftBottomFabState extends State<_LeftBottomFab> {
+  @override
+  Widget build(BuildContext context) {
+    final isActive = GlobalConfig.instance.isFabActive;
+    final currentTool = GlobalConfig.instance.currentTool;
+    // currentToolに応じて中心アイコンを切り替え
+    Widget centerIcon;
+    switch (currentTool.runtimeType) {
+      case PenTool:
+        centerIcon = Icon(
+          Icons.auto_fix_normal, // 最初に使っていた消しゴム風アイコンに戻す
+          color: isActive ? Colors.white : Colors.grey,
+          size: 32,
+        );
+        break;
+      // 他ツール追加時はここにcaseを追加
+      default:
+        centerIcon = Icon(
+          Icons.circle,
+          color: isActive ? Colors.white : Colors.grey,
+          size: 32,
+        );
+        break;
+    }
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          GlobalConfig.instance.isFabActive = !isActive;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.blue : Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(
+            color: isActive ? Colors.blueAccent : Colors.grey.shade300,
+            width: 2,
+          ),
+        ),
+        child: centerIcon,
       ),
     );
   }

@@ -40,17 +40,12 @@ class SelectTool extends MapTool {
     }
   }
 
-  /// タップイベント
-  @override
-  void onTap(TapUpDetails details, dynamic mapState) {
-    if (mapState == null) return;
-    LatLng? tapLatLng;
-    try {
-      tapLatLng = mapState.offsetToLatLng(details.localPosition);
-    } catch (e) {
-      return;
-    }
-    if (tapLatLng == null) return;
+  /// 指定座標・範囲でfeatureを選択する（PenTool等からも利用可）
+  static void selectFeatureAtLatLng({
+    required LatLng tapLatLng,
+    required dynamic mapState,
+    double? range,
+  }) {
     final layer = GlobalConfig.instance.selectedLayerNode;
     if (layer == null) return;
     String featureType;
@@ -65,24 +60,37 @@ class SelectTool extends MapTool {
     }
     final features = layer.features;
     if (features.isEmpty) return;
-    // ズーム率からrange(m)を計算
-    // 精密にタップするのは難しいので判定を甘めに(3倍)
-    final range = _calcSelectRange(mapState) * 3;
+    // ズーム率からrange(m)を計算（未指定時は通常の範囲）
+    final double selectRange =
+        range ?? SelectTool()._calcSelectRange(mapState) * 3;
     final result = FeatureSearch.findNearestFeature(
       tapLatLng,
       features,
       featureType,
-      range,
+      selectRange,
     );
     if (result == null) {
-      print('result is null');
       GlobalConfig.instance.selectedFeatures = [];
       mapState.setState(() {});
       return;
     }
-    print(result.key);
     GlobalConfig.instance.selectedFeatures = [result.key];
     mapState.setState(() {});
+  }
+
+  /// タップイベント
+  @override
+  void onTap(TapUpDetails details, dynamic mapState) {
+    if (mapState == null) return;
+    LatLng? tapLatLng;
+    try {
+      tapLatLng = mapState.offsetToLatLng(details.localPosition);
+    } catch (e) {
+      return;
+    }
+    if (tapLatLng == null) return;
+    // staticメソッドで共通化
+    selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState);
   }
 
   /// スケール開始イベント

@@ -381,13 +381,11 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     PolylineLayer(
                       polylines: [
                         for (final f in lineFeatures)
-                          ...((f.geometry as List<List<LatLng>>).map(
-                            (line) => Polyline(
-                              points: line,
-                              color: Colors.blue,
-                              strokeWidth: 4.0,
-                            ),
-                          )),
+                          Polyline(
+                            points: f.geometry as List<LatLng>,
+                            color: Colors.blue,
+                            strokeWidth: 4.0,
+                          ),
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
                                 .drawingLine
@@ -404,17 +402,17 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     PolygonLayer(
                       polygons: [
                         for (final f in polygonFeatures)
-                          ...((f.geometry as List<List<List<LatLng>>>).expand(
-                            (poly) => [
-                              Polygon(
-                                points: poly.first,
-                                color: Colors.green.withOpacity(0.3),
-                                borderStrokeWidth: 3.0,
-                                borderColor: Colors.green,
-                                isFilled: true,
-                              ),
-                            ],
-                          )),
+                          Polygon(
+                            points: (f.geometry as List<List<LatLng>>).first,
+                            holePointsList:
+                                (f.geometry as List<List<LatLng>>)
+                                    .skip(1)
+                                    .toList(),
+                            color: Colors.green.withOpacity(0.3),
+                            borderStrokeWidth: 3.0,
+                            borderColor: Colors.green,
+                            isFilled: true,
+                          ),
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
                                     .drawingPolygon
@@ -527,6 +525,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                             });
                           },
                           setStateCallback: (fn) => setState(fn),
+                          onJumpTo: (latLng) {
+                            // 現在のズーム値を維持して中心移動
+                            _mapController.move(latLng, _mapController.zoom);
+                          },
                         ),
                       ),
                     ),

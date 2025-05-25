@@ -273,7 +273,7 @@ class GeoPackageFile {
         if (lines.isNotEmpty) {
           features.add({
             'id': id,
-            'lines': [lines],
+            'lines': lines,
             'name': name,
             'description': description,
           });

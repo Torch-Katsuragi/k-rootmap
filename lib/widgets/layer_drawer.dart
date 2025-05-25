@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:k_maps/utils/global_config.dart';
 import 'package:path/path.dart' as p;
+import 'package:latlong2/latlong.dart';
 // import '../utils/meta_data.dart' as meta_util;
 import 'package:collection/collection.dart';
 import '../models/layer_tree_node.dart';
@@ -17,12 +18,16 @@ class LayerDrawer extends StatefulWidget {
   final void Function(LayerTreeNode? newNode) onDirChanged;
   final void Function(void Function()) setStateCallback;
 
+  /// 地図ジャンプ用コールバック（中心座標に移動）
+  final void Function(LatLng latLng)? onJumpTo;
+
   /// LayerDrawerコンストラクタ
   const LayerDrawer({
     super.key,
     required this.currentNode,
     required this.onDirChanged,
     required this.setStateCallback,
+    this.onJumpTo,
   });
 
   @override
@@ -65,6 +70,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
             attributeTableLayerNode = null;
           });
         },
+        onJumpTo: widget.onJumpTo,
       );
     }
     return Column(
@@ -612,10 +618,14 @@ extension GeoPackageFilePathExt on GeoPackageFile {
 class AttributeTablePanel extends StatefulWidget {
   final LayerNode layerNode;
   final VoidCallback onBack;
+
+  /// 地図ジャンプ用コールバック
+  final void Function(LatLng latLng)? onJumpTo;
   const AttributeTablePanel({
     super.key,
     required this.layerNode,
     required this.onBack,
+    this.onJumpTo,
   });
 
   @override
@@ -708,6 +718,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                           MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     onPressed: () {
+                                      // geom選択時に地図ジャンプ
+                                      if (widget.onJumpTo != null &&
+                                          feature is FeatureNode) {
+                                        widget.onJumpTo!(feature.centroid);
+                                      }
                                       // 今後feature選択等に拡張予定
                                     },
                                     child: const Text(

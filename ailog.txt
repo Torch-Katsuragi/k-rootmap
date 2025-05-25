@@ -217,3 +217,5 @@ FeatureNodeにcentroid（重心座標）プロパティを追加し、Point/Line
 2024-06-09 feature_calc_utils.dart: degree・metre変換系をファイル上部に集約。緯度・経度方向のdegree↔meter変換関数を追加。README.mdも更新。
 
 2024-06-14 feature_calc_utils.dart: 用途ごとにDegreeMeterConverter/GeometryCalc/FeatureSearchクラスに分割し、全てstaticメソッド化。README.mdも修正。
+
+geom「選択」ボタンでfeatureの中心座標に地図ジャンプする機能を追加。LayerDrawer/AttributeTablePanelにonJumpToコールバックを追加し、map_pageからMapController.moveを呼ぶようにした。

@@ -25,6 +25,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `lib/widgets/layer_drawer.dart` : レイヤツリーUI（ノード参照で操作）
   - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
   - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能。
+  - 属性テーブル（AttributeTablePanel）でgeom「選択」ボタンを押すと、そのfeatureの中心座標に地図がジャンプ。
 - `lib/screens/map_page.dart` : 地図画面本体（ノード・グローバル変数参照で状態管理）
 - `lib/tools/map_tool.dart` : 地図操作ツールの抽象基底クラス（MapTool）。
 - `lib/tools/pan_tool.dart` : てのひらツール（地図パン専用）。
@@ -60,6 +61,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - GeoPackageファイル・レイヤの追加/削除/可視切り替え
 - **LayerNode配下にfeature単位のノード（FeatureNode）を自動生成し、属性編集・削除・参照が可能。**
 - **Drawer上部に現在のノード名を青いタイトルパネルで表示（LayerDrawerTitleBarウィジェット）**
+- 属性テーブルでgeom「選択」ボタンを押すと、そのfeatureの中心座標に地図がジャンプ（地図コントローラ連携）。
 - プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示
 - フォルダ/GeoPackage/レイヤの可視切り替え・リネーム・削除
 - フォルダをタップでカレントディレクトリ移動

@@ -221,3 +221,7 @@ FeatureNodeにcentroid（重心座標）プロパティを追加し、Point/Line
 geom「選択」ボタンでfeatureの中心座標に地図ジャンプする機能を追加。LayerDrawer/AttributeTablePanelにonJumpToコールバックを追加し、map_pageからMapController.moveを呼ぶようにした。
 ペンツール描画時のプレビュー情報（点:座標, 線:長さ, 面:面積）をfeature_calc_utils.dartを使って地図上に表示するUIをmap_page.dartに追加。PenToolにpointPreview getterを追加。
 線の長さが10000m以上でkm表記、面積が10000m2以上でha表記に切り替わるようmap_page.dartを修正。
+
+2024-06-14 GlobalConfigにselectedFeatures(List<dynamic>)を追加。今後選択中フィーチャ管理に利用予定。
+
+2024-06-14 map_page.dartでselectedFeaturesによるfeatureハイライト描画（色・太さ等）機能を追加。

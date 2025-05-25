@@ -50,7 +50,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - **GeoPackageFile**: ファイルパスのみ保持し、DB操作（レイヤ追加・削除・リネーム・フィーチャ取得等）を担う。
 - **LayerTreeNode/GeoPackageNode/LayerNode**: ツリー構造・可視状態・meta.json連携・GeoPackageFile参照を持つ。
 - **FeatureNode（PointFeatureNode/LineFeatureNode/PolygonFeatureNode）**: LayerNodeの子としてfeature単位で生成され、feature参照・属性編集・削除（dispose）を提供。
-- **GlobalConfig**: 全ノードリスト・選択中ノード等のグローバル管理。
+- **GlobalConfig**: 全ノードリスト・選択中ノード等のグローバル管理。**選択中フィーチャリスト（selectedFeatures）も追加。**
 
 ## 状態管理
 - 選択状態・可視状態・ファイル/レイヤの追加削除等は、すべてノード＋グローバル変数で一元管理。
@@ -70,6 +70,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - **地図操作ツールバーで「てのひら」「ペン」「選択」などのツールを切り替え可能。**
 - **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、ペンはフリーハンド描画、タップは点追加や選択など直感的な操作性を実現。**
 - **地図上でポリゴン描画時、描画中・既存ポリゴンともに内部を半透明で塗りつぶし表示（isFilled: true, withOpacity指定）**
+- **選択ツールでfeatureを選択すると、selectedFeaturesに格納され、地図上でハイライト表示（色・太さ等で明示）される。**
 
 ## 主要ファイルとクラス構成
 - `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
@@ -78,7 +79,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `lib/widgets/layer_drawer.dart`: レイヤ構造Drawer本体。`LayerDrawer`（StatefulWidget）、`LayerDrawerTitleBar`（タイトルパネルWidget）などを実装。
 - `lib/screens/map_page.dart`: KMapsHomePage（画面本体、LayerManager/Drawer連携）
 - `lib/models/folder_node.dart`: FolderNode（サブフォルダツリー）・scanProjectFolder（.gpkgファイルもchildrenにLayerTreeNode(nodeType: "gpkg")として追加する実装）
-- `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）、**現在のツール（currentTool: MapTool）**などのグローバル変数・設定を一元管理。
+- `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）、**現在のツール（currentTool: MapTool）**、**選択中フィーチャリスト（selectedFeatures）**などのグローバル変数・設定を一元管理。
 - `lib/models/layer_tree_node.dart`: フォルダ/GeoPackage/レイヤのノード構造を定義。
 - `lib/models/layer.dart`: レイヤ情報のモデル。
 
@@ -89,7 +90,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `LayerManager`：GeoPackage/Layerの全体管理。MetaDataを持ち、可視状態や設定をmeta.jsonと同期。
 - `MetaData`：meta.json全体（layerTree, general, gps, toolProperties等）を一元管理。可視状態APIもここに統合。
 - `LayerDrawer`：LayerTreeNodeのchildrenを再帰的に描画する方式でUIを構築。可視状態切替も共通化。
-- `GlobalConfig`: プロジェクト全体のグローバル変数・設定（ルートディレクトリパス、MetaDataインスタンス等）をシングルトンで管理。
+- `GlobalConfig`: プロジェクト全体のグローバル変数・設定（ルートディレクトリパス、MetaDataインスタンス等）をシングルトンで管理。**選択中フィーチャリスト（selectedFeatures）も追加。**
 - `LayerDrawerTitleBar` : 現在のノード名を青いパネルで表示するWidget。
 - **MapTool**: 地図操作ツールの抽象基底クラス。onPointerDown/Move/Up等のイベントを持ち、ペン/タップ入力で挙動を分岐可能。
   - PanTool, PenTool, SelectToolなどを継承クラスとして実装。
@@ -124,6 +125,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 属性編集・インラインリネーム・レイヤ追加/削除
 - サブフォルダの可視設定を切り替えた場合、その配下のGeoPackageやレイヤにも可視設定が一括で伝播し、UI上も連動して非表示/表示が切り替わる
 - **地図上でポリゴン描画時、描画中・既存ポリゴンともに内部を半透明で塗りつぶし表示（isFilled: true, withOpacity指定）**
+- 地図上でfeature選択時、selectedFeaturesに格納されたfeatureが色・太さ等でハイライト表示される
 
 ## 主要ファイル
 - `lib/models/geopackage.dart`: GeoPackage管理、レイヤ/GeoPackageGroup、LayerManagerを実装（meta.json連携）

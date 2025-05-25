@@ -495,6 +495,10 @@ class _LayerDrawerState extends State<LayerDrawer> {
         if (newLayerNode != null) {
           // 追加成功時のみUI更新
           widget.setStateCallback(() {});
+          // 地図本体も即時再描画
+          if (GlobalConfig.instance.mapState != null) {
+            GlobalConfig.instance.mapState.setState(() {});
+          }
         }
       }
     },
@@ -723,7 +727,19 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                           feature is FeatureNode) {
                                         widget.onJumpTo!(feature.centroid);
                                       }
-                                      // 今後feature選択等に拡張予定
+                                      // feature選択: selectedFeaturesにセット
+                                      if (feature is FeatureNode) {
+                                        GlobalConfig
+                                            .instance
+                                            .selectedFeatures = [feature];
+                                        setState(() {});
+                                        // 地図本体も即時再描画
+                                        if (GlobalConfig.instance.mapState !=
+                                            null) {
+                                          GlobalConfig.instance.mapState
+                                              .setState(() {});
+                                        }
+                                      }
                                     },
                                     child: const Text(
                                       '選択',

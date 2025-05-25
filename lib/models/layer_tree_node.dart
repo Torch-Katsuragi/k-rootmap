@@ -578,6 +578,16 @@ abstract class FeatureNode extends LayerTreeNode {
   /// フィーチャの重心座標
   final LatLng centroid;
 
+  /// 詳細情報（項目名と値のペア、順序付き）
+  List<MapEntry<String, String>> get detailEntries => [
+    MapEntry('name', name),
+    if (description != null && description!.isNotEmpty)
+      MapEntry('description', description!),
+    MapEntry('id', rowId.toString()),
+    MapEntry('latitude', centroid.latitude.toStringAsFixed(6)),
+    MapEntry('longitude', centroid.longitude.toStringAsFixed(6)),
+  ];
+
   /// 指定した属性名に対応する値をDBから取得
   dynamic getAttributeValue(String attributeName) {
     // geoPackageFileから都度取得
@@ -624,6 +634,18 @@ abstract class FeatureNode extends LayerTreeNode {
       newValue,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is FeatureNode &&
+        other.rowId == rowId &&
+        other.layerName == layerName &&
+        other.geoPackageFile == geoPackageFile;
+  }
+
+  @override
+  int get hashCode => Object.hash(rowId, layerName, geoPackageFile);
 }
 
 /// PointFeatureNode: 点フィーチャ用
@@ -642,6 +664,11 @@ class PointFeatureNode extends FeatureNode {
          description: description,
          centroid: GeometryCalc.calcPointsCentroid(points),
        );
+
+  @override
+  List<MapEntry<String, String>> get detailEntries {
+    return [...super.detailEntries];
+  }
 
   @override
   Object get geometry => points;
@@ -715,6 +742,22 @@ class LineFeatureNode extends FeatureNode {
        );
 
   @override
+  List<MapEntry<String, String>> get detailEntries {
+    final len = GeometryCalc.calcLineLength(line);
+    String lengthStr;
+    if (len >= 10000) {
+      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
+    } else {
+      lengthStr = '${len.toStringAsFixed(2)} m';
+    }
+    return [
+      ...super.detailEntries,
+      MapEntry('length', lengthStr),
+      MapEntry('vertex_count', '${line.length}'),
+    ];
+  }
+
+  @override
   Object get geometry => line;
 
   @override
@@ -782,6 +825,23 @@ class PolygonFeatureNode extends FeatureNode {
                  ? GeometryCalc.calcPolygonCentroid(polygon)
                  : LatLng(0, 0),
        );
+
+  @override
+  List<MapEntry<String, String>> get detailEntries {
+    final areaDeg2 = GeometryCalc.calcPolygonArea(polygon);
+    final centroid = this.centroid;
+    final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
+      areaDeg2,
+      centroid.latitude,
+    );
+    String areaStr;
+    if (areaM2 >= 10000) {
+      areaStr = '${(areaM2 / 10000).toStringAsFixed(2)} ha';
+    } else {
+      areaStr = '${areaM2.toStringAsFixed(2)} m²';
+    }
+    return [...super.detailEntries, MapEntry('area', areaStr)];
+  }
 
   @override
   Object get geometry => polygon;

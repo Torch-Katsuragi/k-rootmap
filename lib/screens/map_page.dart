@@ -65,7 +65,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     print('[DEBUG] initState: KMapsHomePage start');
     GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
     _currentNode = GlobalConfig.instance.folderTree; // ルートノード参照
-    print('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
+    print(
+      '[DEBUG] initState: folderTree=[38;5;246m${GlobalConfig.instance.folderTree}[0m',
+    );
+    GlobalConfig.instance.mapState = this;
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
@@ -369,10 +372,18 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               height: 40,
                               child: Tooltip(
                                 message: f.name,
-                                child: const Icon(
+                                child: Icon(
                                   Icons.location_on,
-                                  color: Colors.red,
-                                  size: 36,
+                                  color:
+                                      GlobalConfig.instance.selectedFeatures
+                                              .contains(f)
+                                          ? Colors.yellow
+                                          : Colors.red,
+                                  size:
+                                      GlobalConfig.instance.selectedFeatures
+                                              .contains(f)
+                                          ? 44
+                                          : 36,
                                 ),
                               ),
                             ),
@@ -384,8 +395,18 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         for (final f in lineFeatures)
                           Polyline(
                             points: f.geometry as List<LatLng>,
-                            color: Colors.blue,
-                            strokeWidth: 4.0,
+                            color:
+                                GlobalConfig.instance.selectedFeatures.contains(
+                                      f,
+                                    )
+                                    ? Colors.yellow
+                                    : Colors.blue,
+                            strokeWidth:
+                                GlobalConfig.instance.selectedFeatures.contains(
+                                      f,
+                                    )
+                                    ? 5.0
+                                    : 3.0,
                           ),
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
@@ -396,7 +417,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                                 (GlobalConfig.instance.currentTool as PenTool)
                                     .drawingLine,
                             color: Colors.orange,
-                            strokeWidth: 4.0,
+                            strokeWidth: 3.0,
                           ),
                       ],
                     ),
@@ -409,9 +430,24 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                                 (f.geometry as List<List<LatLng>>)
                                     .skip(1)
                                     .toList(),
-                            color: Colors.green.withOpacity(0.3),
-                            borderStrokeWidth: 3.0,
-                            borderColor: Colors.green,
+                            color:
+                                GlobalConfig.instance.selectedFeatures.contains(
+                                      f,
+                                    )
+                                    ? Colors.yellow.withOpacity(0.5)
+                                    : Colors.green.withOpacity(0.3),
+                            borderStrokeWidth:
+                                GlobalConfig.instance.selectedFeatures.contains(
+                                      f,
+                                    )
+                                    ? 6.0
+                                    : 3.0,
+                            borderColor:
+                                GlobalConfig.instance.selectedFeatures.contains(
+                                      f,
+                                    )
+                                    ? Colors.yellow
+                                    : Colors.green,
                             isFilled: true,
                           ),
                         if (GlobalConfig.instance.currentTool is PenTool &&
@@ -427,6 +463,24 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                             color: Colors.orange.withOpacity(0.4),
                             borderStrokeWidth: 3.0,
                             borderColor: Colors.orange,
+                            isFilled: true,
+                          ),
+                        // --- SelectToolの投げ縄プレビュー ---
+                        if (GlobalConfig.instance.currentTool is SelectTool &&
+                            (GlobalConfig.instance.currentTool as SelectTool)
+                                    .lassoPoints
+                                    .length >=
+                                3)
+                          Polygon(
+                            points: closeRing(
+                              (GlobalConfig.instance.currentTool as SelectTool)
+                                  .lassoPoints
+                                  .map((offset) => offsetToLatLng(offset))
+                                  .toList(),
+                            ),
+                            color: Colors.white.withOpacity(0.2),
+                            borderStrokeWidth: 2.0,
+                            borderColor: Colors.black,
                             isFilled: true,
                           ),
                       ],
@@ -618,6 +672,15 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 ),
               ),
             ),
+          // --- Feature詳細パネル ---
+          if (GlobalConfig.instance.selectedFeatures.length == 1)
+            Positioned(
+              left: 60,
+              top: 20,
+              child: FeatureDetailPanel(
+                feature: GlobalConfig.instance.selectedFeatures.first,
+              ),
+            ),
         ],
       ),
       floatingActionButton: Builder(
@@ -695,6 +758,70 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
           }
           return const SizedBox.shrink();
         },
+      ),
+    );
+  }
+}
+
+/// Feature詳細情報パネル
+class FeatureDetailPanel extends StatelessWidget {
+  final dynamic feature;
+  const FeatureDetailPanel({super.key, required this.feature});
+
+  @override
+  Widget build(BuildContext context) {
+    if (feature == null) return const SizedBox.shrink();
+    if (feature is FeatureNode) {
+      final entries = feature.detailEntries;
+      return _buildPanel(
+        context,
+        title: feature.runtimeType.toString(),
+        children: [
+          for (final e in entries)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${e.key}: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Expanded(child: Text(e.value)),
+              ],
+            ),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildPanel(
+    BuildContext context, {
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(12),
+      color: Colors.white,
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            ...children,
+          ],
+        ),
       ),
     );
   }

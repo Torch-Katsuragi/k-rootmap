@@ -29,6 +29,13 @@ class GlobalConfig {
   /// 現在選択中の地図操作ツール
   MapTool currentTool;
 
+  /// 選択中フィーチャのリスト（今後利用予定）
+  /// 例: 地物IDやFeatureインスタンス等を格納
+  List<dynamic> selectedFeatures = [];
+
+  /// 地図画面のStateインスタンス（グローバル参照用）
+  dynamic mapState;
+
   // 必要に応じて他のグローバル設定も追加
   // String? userName;
   // int? someGlobalFlag;

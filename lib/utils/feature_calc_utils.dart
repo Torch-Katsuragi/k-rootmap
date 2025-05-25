@@ -171,12 +171,12 @@ class GeometryCalc {
       }
     }
     // 外環内かつどの穴にも含まれなければ距離0
-    if (_pointInPolygonWithHoles(pt, polygon)) return 0.0;
+    if (pointInPolygonWithHoles(pt, polygon)) return 0.0;
     return minDist;
   }
 
   /// 点が外環＋穴リストのポリゴン内にあるか判定
-  static bool _pointInPolygonWithHoles(LatLng pt, List<List<LatLng>> polygon) {
+  static bool pointInPolygonWithHoles(LatLng pt, List<List<LatLng>> polygon) {
     if (polygon.isEmpty) return false;
     if (!_pointInRing(pt, polygon[0])) return false; // 外環外
     for (int i = 1; i < polygon.length; i++) {
@@ -244,10 +244,12 @@ class FeatureSearch {
         return GeometryCalc.calcDistance(pt, geometry.first);
       }
     } else if (featureType == 'line') {
-      if (geometry is List<List<LatLng>>) {
+      if (geometry is List<LatLng>) {
         double minDist = double.infinity;
-        for (final line in geometry) {
+        for (int i = 0; i < geometry.length - 1; i++) {
+          final line = [geometry[i], geometry[i + 1]];
           final d = GeometryCalc.calcPointToLineDistance(pt, line);
+          // print(d);
           if (d < minDist) minDist = d;
         }
         return minDist;
@@ -264,12 +266,14 @@ class FeatureSearch {
   /// [pt]: 判定点
   /// [features]: FeatureNodeリスト
   /// [featureType]: 'point'|'line'|'polygon'
+  /// [range]: 許容距離（m, nullなら無制限）
   /// 戻り値: 最近傍FeatureNodeと距離のMapEntry（なければnull）
   static MapEntry<FeatureNode, double>? findNearestFeature(
     LatLng pt,
     List<FeatureNode> features,
-    String featureType,
-  ) {
+    String featureType, [
+    double? range,
+  ]) {
     FeatureNode? nearest;
     double minDist = double.infinity;
     for (final f in features) {
@@ -280,6 +284,7 @@ class FeatureSearch {
       }
     }
     if (nearest == null) return null;
+    if (range != null && minDist > range) return null;
     return MapEntry(nearest, minDist);
   }
 }

@@ -41,7 +41,7 @@ class PenTool extends MapTool {
     if (selected == null) return;
     final latlng = mapState.offsetToLatLng(details.localPosition);
     if (selected is PointLayerNode) {
-      selected.geoPackageFile.addPoint(selected.layerName, latlng, '');
+      PointFeatureNode.createIn(selected, latlng, '');
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       addDrawingLinePoint(latlng, mapState.setState);
@@ -139,21 +139,21 @@ class PenTool extends MapTool {
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected == null) return;
       if (selected is PointLayerNode && _pointPreview != null) {
-        selected.geoPackageFile.addPoint(
-          selected.layerName,
-          _pointPreview!,
-          '',
-        );
+        PointFeatureNode.createIn(selected, _pointPreview!, '');
         _pointPreview = null;
         mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
-        selected.geoPackageFile.addLine(selected.layerName, drawingLine, '');
+        LineFeatureNode.createIn(selected, List<LatLng>.from(drawingLine), '');
         drawingLine.clear();
         _isDrawing = false;
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
-        selected.geoPackageFile.addPolygon(selected.layerName, closed, '');
+        PolygonFeatureNode.createIn(
+          selected,
+          List<List<LatLng>>.from([closed]),
+          '',
+        );
         drawingPolygon.clear();
         _isDrawing = false;
         mapState.setState(() {});
@@ -212,13 +212,17 @@ class PenTool extends MapTool {
     required List<LatLng> Function(List<LatLng>) closeRing,
   }) {
     if (selected is LineLayerNode && drawingLine.length >= 2) {
-      selected.geoPackageFile.addLine(selected.layerName, drawingLine, attr);
+      LineFeatureNode.createIn(selected, List<LatLng>.from(drawingLine), attr);
       setState(() {
         drawingLine.clear();
       });
     } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
       final closed = closeRing(drawingPolygon);
-      selected.geoPackageFile.addPolygon(selected.layerName, closed, attr);
+      PolygonFeatureNode.createIn(
+        selected,
+        List<List<LatLng>>.from([closed]),
+        attr,
+      );
       setState(() {
         drawingPolygon.clear();
       });

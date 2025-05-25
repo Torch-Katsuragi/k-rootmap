@@ -390,117 +390,102 @@ class _LayerDrawerState extends State<LayerDrawer> {
   );
 
   /// レイヤ追加ボタン
-  Widget _buildAddLayerButton(BuildContext context, GeoPackageNode node) =>
-      GestureDetector(
-        onTap: () async {
-          final result = await showDialog<Map<String, String>>(
-            context: context,
-            builder: (context) {
-              String input = '';
-              String geomType = 'MULTIPOINT';
-              return AlertDialog(
-                title: const Text('新規レイヤ'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      decoration: const InputDecoration(labelText: 'レイヤ名'),
-                      onChanged: (v) => input = v,
+  Widget _buildAddLayerButton(
+    BuildContext context,
+    GeoPackageNode node,
+  ) => GestureDetector(
+    onTap: () async {
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (context) {
+          String input = '';
+          String geomType = 'MULTIPOINT';
+          return AlertDialog(
+            title: const Text('新規レイヤ'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'レイヤ名'),
+                  onChanged: (v) => input = v,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: geomType,
+                  decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'MULTIPOINT',
+                      child: Text('MULTIPOINT'),
                     ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: geomType,
-                      decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'MULTIPOINT',
-                          child: Text('MULTIPOINT'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'MULTILINESTRING',
-                          child: Text('MULTILINESTRING'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'MULTIPOLYGON',
-                          child: Text('MULTIPOLYGON'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) geomType = v;
-                      },
+                    DropdownMenuItem(
+                      value: 'MULTILINESTRING',
+                      child: Text('MULTILINESTRING'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'MULTIPOLYGON',
+                      child: Text('MULTIPOLYGON'),
                     ),
                   ],
+                  onChanged: (v) {
+                    if (v != null) geomType = v;
+                  },
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, null),
-                    child: const Text('キャンセル'),
-                  ),
-                  TextButton(
-                    onPressed:
-                        () => Navigator.pop(context, {
-                          'name': input,
-                          'geomType': geomType,
-                        }),
-                    child: const Text('作成'),
-                  ),
-                ],
-              );
-            },
-          );
-          if (result != null &&
-              result['name'] != null &&
-              result['name']!.isNotEmpty) {
-            node.geoPackageFile.addLayer(result['name']!, result['geomType']!);
-            // ジオメトリタイプに応じて適切なLayerNodeサブクラスを生成
-            switch (result['geomType']) {
-              case 'MULTIPOINT':
-                node.addChild(
-                  PointLayerNode(
-                    node.geoPackageFile,
-                    result['name']!,
-                    visible: true,
-                    parent: node,
-                  ),
-                );
-                break;
-              case 'MULTILINESTRING':
-                node.addChild(
-                  LineLayerNode(
-                    node.geoPackageFile,
-                    result['name']!,
-                    visible: true,
-                    parent: node,
-                  ),
-                );
-                break;
-              case 'MULTIPOLYGON':
-                node.addChild(
-                  PolygonLayerNode(
-                    node.geoPackageFile,
-                    result['name']!,
-                    visible: true,
-                    parent: node,
-                  ),
-                );
-                break;
-            }
-            widget.setStateCallback(() {});
-          }
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.add, size: 24),
-            SizedBox(width: 8),
-            Text(
-              'Add Layer',
-              style: TextStyle(fontSize: 16, color: Colors.black87),
+              ],
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed:
+                    () => Navigator.pop(context, {
+                      'name': input,
+                      'geomType': geomType,
+                    }),
+                child: const Text('作成'),
+              ),
+            ],
+          );
+        },
       );
+      if (result != null &&
+          result['name'] != null &&
+          result['name']!.isNotEmpty) {
+        // node.geoPackageFile.addLayer(result['name']!, result['geomType']!);
+        // ジオメトリタイプに応じて適切なLayerNodeサブクラスを生成
+        LayerTreeNode? newLayerNode;
+        switch (result['geomType']) {
+          case 'MULTIPOINT':
+            newLayerNode = PointLayerNode.createIn(node, result['name']!);
+            break;
+          case 'MULTILINESTRING':
+            newLayerNode = LineLayerNode.createIn(node, result['name']!);
+            break;
+          case 'MULTIPOLYGON':
+            newLayerNode = PolygonLayerNode.createIn(node, result['name']!);
+            break;
+        }
+        if (newLayerNode != null) {
+          // 追加成功時のみUI更新
+          widget.setStateCallback(() {});
+        }
+      }
+    },
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        Icon(Icons.add, size: 24),
+        SizedBox(width: 8),
+        Text(
+          'Add Layer',
+          style: TextStyle(fontSize: 16, color: Colors.black87),
+        ),
+      ],
+    ),
+  );
 }
 
 /// 青いタイトルパネル（currentNodeの名前を表示＋右側に追加ボタン）

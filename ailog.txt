@@ -197,3 +197,9 @@ pan_tool.dart: てのひらツールでonScaleStart/onScaleUpdate/onScaleEndを�
 lib/tools/pan_tool.dart: onScaleUpdateでdetails.rotation（ラジアン）をdegreeに変換してmapController.moveAndRotateに渡すよう修正。注意コメントも追加。
 
 lib/tools/pen_tool.dart: PanToolのインスタンスを保持し、onScaleStart/onScaleUpdate/onScaleEndで2本指時はpanToolの同名メソッドを呼ぶように修正。1本指は従来通りペン描画。クラス・メソッドに日本語ドックコメントも追加。
+
+FolderNode, GeoPackageNodeにstaticなcreateInメソッドを追加。親の型チェック、ファイル/ディレクトリ作成、インスタンス生成・親への追加まで行う。
+
+lib全体でgeoPackageFile.addLayer/addPoint/addLine/addPolygonの直接呼び出しを廃止し、LayerNode/FeatureNodeのcreateIn経由に統一。
+- layer_drawer.dart: レイヤ追加時はLayerNode.createInを使用
+- pen_tool.dart: feature追加時はFeatureNode.createInを使用

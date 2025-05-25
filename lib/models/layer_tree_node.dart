@@ -164,7 +164,7 @@ abstract class LayerTreeNode {
   }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（デフォルトは空リスト）
-  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+  static List<LayerTreeNode> loadNodes(LayerTreeNode? parent) {
     return <LayerTreeNode>[];
   }
 }
@@ -197,14 +197,14 @@ class GeoPackageNode extends LayerTreeNode {
   @override
   void updateChildren() {
     children.clear();
-    final nodes = LayerNode.createNodesByType(this);
+    final nodes = LayerNode.loadNodes(this);
     for (final node in nodes) {
       addChild(node);
     }
   }
 
   /// このフォルダ直下のGeoPackageNodeリストのみ返す
-  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+  static List<LayerTreeNode> loadNodes(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
     final absPath = parent.getAbsoluteFilePath();
@@ -236,6 +236,24 @@ class GeoPackageNode extends LayerTreeNode {
     }
     super.dispose();
   }
+
+  /// 指定したparentフォルダの下に新しいGeoPackageファイルを作成し、GeoPackageNodeインスタンスを返す
+  /// 失敗時はnullを返す
+  static GeoPackageNode? createIn(LayerTreeNode parent, String fileName) {
+    if (parent is! FolderNode) return null;
+    final parentPath = parent.getAbsoluteFilePath();
+    if (parentPath == null) return null;
+    final filePath = p.join(parentPath, fileName);
+    if (!filePath.endsWith('.gpkg')) return null;
+    final gpkgFile = GeoPackageFile([
+      ...parent.getAbsolutePathSegments(),
+      fileName,
+    ]);
+    gpkgFile.createIfNotExists();
+    final node = GeoPackageNode(gpkgFile, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 /// LayerNodeをabstract classにし、PointLayerNode/LineLayerNode/PolygonLayerNodeサブクラスを追加
@@ -258,7 +276,7 @@ abstract class LayerNode extends LayerTreeNode {
   }
 
   /// parentがGeoPackageNodeなら、そのGeoPackage内のLayerNodeサブクラス(Point/Line/Polygon)のみ返す
-  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+  static List<LayerTreeNode> loadNodes(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
     if (parent is! GeoPackageNode) return nodes;
     final gpkgNode = parent as GeoPackageNode;
@@ -350,6 +368,18 @@ class PointLayerNode extends LayerNode {
   IconData get baseIcon => Icons.scatter_plot;
   @override
   Color get baseIconColor => Colors.blue;
+
+  /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
+  static PointLayerNode? createIn(LayerTreeNode parent, String name) {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final exists = gpkgFile.getLayerNames().contains(name);
+    if (exists) return null;
+    gpkgFile.addLayer(name, "MULTIPOINT");
+    final node = PointLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 class LineLayerNode extends LayerNode {
@@ -387,6 +417,18 @@ class LineLayerNode extends LayerNode {
   IconData get baseIcon => Icons.show_chart;
   @override
   Color get baseIconColor => Colors.green;
+
+  /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
+  static LineLayerNode? createIn(LayerTreeNode parent, String name) {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final exists = gpkgFile.getLayerNames().contains(name);
+    if (exists) return null;
+    gpkgFile.addLayer(name, "MULTILINESTRING");
+    final node = LineLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 class PolygonLayerNode extends LayerNode {
@@ -424,6 +466,18 @@ class PolygonLayerNode extends LayerNode {
   IconData get baseIcon => Icons.terrain;
   @override
   Color get baseIconColor => Colors.deepOrange;
+
+  /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
+  static PolygonLayerNode? createIn(LayerTreeNode parent, String name) {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final exists = gpkgFile.getLayerNames().contains(name);
+    if (exists) return null;
+    gpkgFile.addLayer(name, "MULTIPOLYGON");
+    final node = PolygonLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 class FolderNode extends LayerTreeNode {
@@ -449,8 +503,8 @@ class FolderNode extends LayerTreeNode {
   @override
   void updateChildren() {
     children.clear();
-    final folderNodes = FolderNode.createNodesByType(this);
-    final gpkgNodes = GeoPackageNode.createNodesByType(this);
+    final folderNodes = FolderNode.loadNodes(this);
+    final gpkgNodes = GeoPackageNode.loadNodes(this);
     for (final node in folderNodes) {
       addChild(node);
     }
@@ -460,7 +514,7 @@ class FolderNode extends LayerTreeNode {
   }
 
   /// このフォルダ直下のFolderNodeリストのみ返す
-  static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent) {
+  static List<LayerTreeNode> loadNodes(LayerTreeNode? parent) {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
     final absPath = parent.getAbsoluteFilePath();
@@ -488,6 +542,22 @@ class FolderNode extends LayerTreeNode {
     }
     children.clear();
     super.dispose();
+  }
+
+  /// 指定したparentフォルダの下に新しいフォルダを作成し、FolderNodeインスタンスを返す
+  /// 失敗時はnullを返す
+  static FolderNode? createIn(LayerTreeNode parent, String name) {
+    // 親がFolderNodeでなければ不可
+    if (parent is! FolderNode) return null;
+    final parentPath = parent.getAbsoluteFilePath();
+    if (parentPath == null) return null;
+    final newDir = Directory(p.join(parentPath, name));
+    if (!newDir.existsSync()) {
+      newDir.createSync();
+    }
+    final node = FolderNode(name, parent: parent);
+    parent.addChild(node);
+    return node;
   }
 }
 
@@ -585,6 +655,23 @@ class PointFeatureNode extends FeatureNode {
   void updateChildren() {
     children.clear();
   }
+
+  /// 指定したPointLayerNodeの下に新しい点フィーチャを作成し、PointFeatureNodeインスタンスを返す
+  static PointFeatureNode? createIn(
+    LayerNode parent,
+    LatLng point,
+    String name,
+  ) {
+    if (parent is! PointLayerNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final layerName = parent.layerName;
+    gpkgFile.addPoint(layerName, point, name);
+    final features = gpkgFile.getFeatures(layerName);
+    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+    final node = PointFeatureNode([point], name, parent: parent, rowId: rowId);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 /// LineFeatureNode: 線フィーチャ用
@@ -620,6 +707,23 @@ class LineFeatureNode extends FeatureNode {
   void updateChildren() {
     children.clear();
   }
+
+  /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
+  static LineFeatureNode? createIn(
+    LayerNode parent,
+    List<LatLng> line,
+    String name,
+  ) {
+    if (parent is! LineLayerNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final layerName = parent.layerName;
+    gpkgFile.addLine(layerName, line, name);
+    final features = gpkgFile.getFeatures(layerName);
+    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+    final node = LineFeatureNode([line], name, parent: parent, rowId: rowId);
+    parent.addChild(node);
+    return node;
+  }
 }
 
 /// PolygonFeatureNode: 面フィーチャ用
@@ -654,5 +758,28 @@ class PolygonFeatureNode extends FeatureNode {
   @override
   void updateChildren() {
     children.clear();
+  }
+
+  /// 指定したPolygonLayerNodeの下に新しい面フィーチャを作成し、PolygonFeatureNodeインスタンスを返す
+  static PolygonFeatureNode? createIn(
+    LayerNode parent,
+    List<List<LatLng>> polygon,
+    String name,
+  ) {
+    if (parent is! PolygonLayerNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final layerName = parent.layerName;
+    if (polygon.isEmpty) return null;
+    gpkgFile.addPolygon(layerName, polygon.first, name); // 外環のみDBに追加
+    final features = gpkgFile.getFeatures(layerName);
+    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+    final node = PolygonFeatureNode(
+      [polygon],
+      name,
+      parent: parent,
+      rowId: rowId,
+    );
+    parent.addChild(node);
+    return node;
   }
 }

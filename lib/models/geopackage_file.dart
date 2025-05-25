@@ -16,6 +16,11 @@ class GeoPackageFile {
   /// コンストラクタ
   /// pathList: ルートからのサブディレクトリ＋ファイル名のリスト
   GeoPackageFile(this.pathList) {
+    createIfNotExists();
+  }
+
+  /// ファイルがなければGeoPackageファイルを新規作成（OGC仕様準拠、最小構成）
+  void createIfNotExists() {
     final baseDir = GlobalConfig.instance.projectRootDir;
     if (baseDir == null) {
       print('GeoPackageファイル作成失敗: projectRootDirが未設定');

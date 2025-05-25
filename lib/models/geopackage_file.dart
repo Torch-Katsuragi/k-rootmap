@@ -283,7 +283,7 @@ class GeoPackageFile {
         if (polygons.isNotEmpty) {
           features.add({
             'id': id,
-            'polygons': [polygons],
+            'polygons': polygons,
             'name': name,
             'description': description,
           });
@@ -367,10 +367,10 @@ class GeoPackageFile {
     db.dispose();
   }
 
-  /// ポリゴンフィーチャを追加（属性付き）
+  /// ポリゴンフィーチャを追加（属性付き、外環＋穴リスト対応）
   void addPolygon(
     String tableName,
-    List<LatLng> polygon, {
+    List<List<LatLng>> rings, {
     String name = '',
     String description = '',
   }) {
@@ -381,7 +381,7 @@ class GeoPackageFile {
     }
     final absPath = p.joinAll([root, ...pathList]);
     final db = sql.sqlite3.open(absPath);
-    final wkb = createWkbPolygon([polygon]);
+    final wkb = createWkbPolygon(rings);
     db.execute(
       'INSERT INTO "$tableName" (geom, name, description) VALUES (?, ?, ?);',
       [wkb, name, description],

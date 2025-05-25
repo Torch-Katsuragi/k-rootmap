@@ -209,3 +209,11 @@ lib全体でgeoPackageFile.addLayer/addPoint/addLine/addPolygonの直接呼び�
 // 2024-06-09 attr→name/description移行。DBテーブル作成・追加時にname/descriptionカラムを実装。既存レイヤにカラムがなければ追加するensureNameDescriptionColumnsも追加。FeatureNode等もname/descriptionに統一。
 
 2024-06-14 地図操作ツール（PanTool, PenTool, SelectTool）をGlobalConfigでグローバルインスタンス化し、currentToolはその参照を切り替える形に統一
+
+feature_calc_utils.dartを新規作成し、点・線・面の重心、距離、長さ、面積、点とfeatureの距離、最近傍feature取得などの計算ユーティリティ関数群を実装。全関数に日本語docstring・コメント付き。FeatureNode型利用のためlayer_tree_node.dartをimport。
+
+FeatureNodeにcentroid（重心座標）プロパティを追加し、Point/Line/PolygonFeatureNode生成時にgeometryから自動計算して保持するように修正。重心計算にはfeature_calc_utils.dartの関数を利用。
+
+2024-06-09 feature_calc_utils.dart: degree・metre変換系をファイル上部に集約。緯度・経度方向のdegree↔meter変換関数を追加。README.mdも更新。
+
+2024-06-14 feature_calc_utils.dart: 用途ごとにDegreeMeterConverter/GeometryCalc/FeatureSearchクラスに分割し、全てstaticメソッド化。README.mdも修正。

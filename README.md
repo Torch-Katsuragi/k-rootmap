@@ -31,6 +31,19 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - onScaleStart/onScaleUpdate/onScaleEndでドラッグ操作による地図パン（中心移動）を実装。
 - `lib/tools/pen_tool.dart` : ペンツール（レイヤ描画）。
 - `lib/tools/select_tool.dart` : オブジェクト選択ツール。
+- `lib/utils/feature_calc_utils.dart`: フィーチャ（点・線・面）に関する計算ユーティリティ。重心計算、距離計算、長さ・面積計算、点とfeatureの距離、最近傍feature取得などを提供。
+  - 主な関数:
+    - `calcDistance(LatLng a, LatLng b)`: 2点間の距離（m）
+    - `calcLineLength(List<LatLng> line)`: 線分の長さ（m）
+    - `calcPolygonArea(List<LatLng> polygon)`: ポリゴンの面積（m^2, 平面近似）
+    - `calcLineCentroid(List<LatLng> line)`: 線分の重心
+    - `calcPolygonCentroid(List<LatLng> polygon)`: ポリゴンの重心
+    - `calcPointsCentroid(List<LatLng> points)`: 点集合の重心
+    - `calcPointToLineDistance(LatLng pt, List<LatLng> line)`: 点と線分の最短距離
+    - `calcPointToPolygonDistance(LatLng pt, List<LatLng> polygon)`: 点とポリゴンの最短距離
+    - `calcPointToFeatureDistance(LatLng pt, Object geometry, String featureType)`: 点とfeature（点・線・面）の最短距離
+    - `findNearestFeature(LatLng pt, List<FeatureNode> features, String featureType)`: 点に最も近いfeatureを取得
+  - すべての関数に日本語docstring・コメント付き。FeatureNode型利用のため`layer_tree_node.dart`をimport。
 
 ## クラス構成
 - **GeoPackageFile**: ファイルパスのみ保持し、DB操作（レイヤ追加・削除・リネーム・フィーチャ取得等）を担う。
@@ -378,3 +391,47 @@ final layerNames = gpkg.getLayerNames();
 
 ## 使い方
 - 左ツールバーで「てのひら」選択後、地図上でドラッグするとパン可能
+
+## 主な機能
+- 距離・長さ・面積計算
+- 重心計算
+- 最近傍feature検索
+- degree・metre変換
+
+## 主要ファイル
+- `lib/utils/feature_calc_utils.dart`: フィーチャ計算の静的関数群
+- `lib/models/layer_tree_node.dart`: FeatureNode型定義
+
+## feature_calc_utils.dart の主なクラス・関数
+
+### DegreeMeterConverter（degree・metre変換系）
+- `metersPerDegreeLat()`
+- `metersPerDegreeLng(lat)`
+- `metersToDegreesLat(meters)`
+- `metersToDegreesLng(meters, lat)`
+- `degreesToMetersLat(degrees)`
+- `degreesToMetersLng(degrees, lat)`
+- `convertAreaToMeters2(area, lat)`
+
+### GeometryCalc（距離・長さ・面積・重心計算）
+- `calcDistance(a, b)`
+- `calcLineLength(line)`
+- `calcPolygonArea(polygon)`
+- `calcLineCentroid(line)`
+- `calcPolygonCentroid(polygon)`
+- `calcPointsCentroid(points)`
+- `calcPointToLineDistance(pt, line)`
+- `calcPointToPolygonDistance(pt, polygon)`
+
+### FeatureSearch（feature距離・最近傍feature検索）
+- `calcPointToFeatureDistance(pt, geometry, featureType)`
+- `findNearestFeature(pt, features, featureType)`
+
+---
+- すべてstaticメソッドとして利用可能
+- 例: `GeometryCalc.calcDistance(a, b)`
+
+## 依存
+- latlong2
+
+---

@@ -9,6 +9,7 @@ import 'geopackage_file.dart';
 import 'package:flutter/material.dart';
 import 'package:meta/meta.dart';
 import 'package:latlong2/latlong.dart';
+import '../utils/feature_calc_utils.dart'; // centroid計算用
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -405,7 +406,7 @@ class LineLayerNode extends LayerNode {
         .map((f) {
           final map = f as Map<String, dynamic>;
           return LineFeatureNode(
-            map["lines"] as List<List<LatLng>>,
+            map["lines"] as List<LatLng>,
             map["name"] as String,
             parent: this,
             rowId: map["id"] ?? 0,
@@ -455,7 +456,7 @@ class PolygonLayerNode extends LayerNode {
         .map((f) {
           final map = f as Map<String, dynamic>;
           return PolygonFeatureNode(
-            map["polygons"] as List<List<List<LatLng>>>,
+            map["polygons"] as List<List<LatLng>>,
             map["name"] as String,
             parent: this,
             rowId: map["id"] ?? 0,
@@ -574,6 +575,9 @@ abstract class FeatureNode extends LayerTreeNode {
   /// DB上のrowId（主キー）
   final int rowId;
 
+  /// フィーチャの重心座標
+  final LatLng centroid;
+
   /// 指定した属性名に対応する値をDBから取得
   dynamic getAttributeValue(String attributeName) {
     // geoPackageFileから都度取得
@@ -596,6 +600,7 @@ abstract class FeatureNode extends LayerTreeNode {
     this.description,
     required this.parent,
     required this.rowId,
+    required this.centroid,
   }) : super(
          name,
          visible: parent.visible,
@@ -635,6 +640,7 @@ class PointFeatureNode extends FeatureNode {
          parent: parent,
          rowId: rowId,
          description: description,
+         centroid: GeometryCalc.calcPointsCentroid(points),
        );
 
   @override
@@ -689,9 +695,10 @@ class PointFeatureNode extends FeatureNode {
 
 /// LineFeatureNode: 線フィーチャ用
 class LineFeatureNode extends FeatureNode {
-  final List<List<LatLng>> lines;
+  /// 単一の線分（頂点リスト）
+  final List<LatLng> line;
   LineFeatureNode(
-    this.lines,
+    this.line,
     String name, {
     required LayerNode parent,
     required int rowId,
@@ -701,10 +708,14 @@ class LineFeatureNode extends FeatureNode {
          parent: parent,
          rowId: rowId,
          description: description,
+         centroid:
+             line.isNotEmpty
+                 ? GeometryCalc.calcLineCentroid(line)
+                 : LatLng(0, 0),
        );
 
   @override
-  Object get geometry => lines;
+  Object get geometry => line;
 
   @override
   void dispose() {
@@ -740,7 +751,7 @@ class LineFeatureNode extends FeatureNode {
     final features = gpkgFile.getFeatures(layerName);
     final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
     final node = LineFeatureNode(
-      [line],
+      line,
       name,
       parent: parent,
       rowId: rowId,
@@ -753,9 +764,10 @@ class LineFeatureNode extends FeatureNode {
 
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
-  final List<List<List<LatLng>>> polygons;
+  /// 単一のポリゴン（外環＋穴リスト）
+  final List<List<LatLng>> polygon;
   PolygonFeatureNode(
-    this.polygons,
+    this.polygon,
     String name, {
     required LayerNode parent,
     required int rowId,
@@ -765,10 +777,14 @@ class PolygonFeatureNode extends FeatureNode {
          parent: parent,
          rowId: rowId,
          description: description,
+         centroid:
+             (polygon.isNotEmpty && polygon[0].isNotEmpty)
+                 ? GeometryCalc.calcPolygonCentroid(polygon)
+                 : LatLng(0, 0),
        );
 
   @override
-  Object get geometry => polygons;
+  Object get geometry => polygon;
 
   @override
   void dispose() {
@@ -798,14 +814,14 @@ class PolygonFeatureNode extends FeatureNode {
     if (polygon.isEmpty) return null;
     gpkgFile.addPolygon(
       layerName,
-      polygon.first,
+      polygon,
       name: name ?? '',
       description: description ?? '',
     );
     final features = gpkgFile.getFeatures(layerName);
     final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
     final node = PolygonFeatureNode(
-      [polygon],
+      polygon,
       name,
       parent: parent,
       rowId: rowId,

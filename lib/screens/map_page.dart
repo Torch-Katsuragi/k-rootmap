@@ -301,7 +301,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   tooltip: 'てのひら',
                   onPressed: () {
                     setState(() {
-                      GlobalConfig.instance.currentTool = PanTool();
+                      GlobalConfig.instance.currentTool =
+                          GlobalConfig.instance.panTool;
                     });
                   },
                 ),
@@ -314,7 +315,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   tooltip: 'ペン',
                   onPressed: () {
                     setState(() {
-                      GlobalConfig.instance.currentTool = PenTool();
+                      GlobalConfig.instance.currentTool =
+                          GlobalConfig.instance.penTool;
                     });
                   },
                 ),
@@ -327,7 +329,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                   tooltip: '選択',
                   onPressed: () {
                     setState(() {
-                      GlobalConfig.instance.currentTool = SelectTool();
+                      GlobalConfig.instance.currentTool =
+                          GlobalConfig.instance.selectTool;
                     });
                   },
                 ),

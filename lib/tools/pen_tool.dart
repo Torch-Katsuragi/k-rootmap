@@ -12,8 +12,8 @@ import 'pan_tool.dart'; // てのひらツールを利用
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
-  /// てのひらツールのインスタンス（2本指パン・回転用）
-  final PanTool panTool = PanTool();
+  /// てのひらツールのグローバルインスタンス（2本指パン・回転用）
+  PanTool get panTool => GlobalConfig.instance.panTool;
 
   @override
   String get name => 'ペン';

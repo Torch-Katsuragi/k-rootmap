@@ -11,6 +11,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - 複数ファイル・レイヤの一元管理も、全ノードリストをグローバルで管理。
 - **地図操作ツール（MapTool）を導入し、てのひら・ペン・選択などのツール切替をサポート。現在のツールはGlobalConfigで一元管理。**
 - **ペン入力（スタイラス）とタップ入力（指・マウス）で挙動を分岐し、直感的な操作性を実現。**
+- **地図操作ツール（MapTool）はPanTool, PenTool, SelectToolのグローバルインスタンスをGlobalConfigで生成し、currentToolはその参照を切り替えるだけ。ツールごとに新インスタンスは生成しない。**
 
 ## 主要ファイル・クラス構成
 - `lib/models/geopackage_file.dart` : GeoPackageFile（GeoPackageファイル管理・DB操作ラッパ）
@@ -20,6 +21,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
   - 各ノードクラス（FolderNode, GeoPackageNode, LayerNode）に `static List<LayerTreeNode> createNodesByType(LayerTreeNode? parent)` を実装し、親ノード直下の子ノードリストを返す。
   - **2024-06-13: FeatureNode（PointFeatureNode/LineFeatureNode/PolygonFeatureNode）を追加。LayerNode配下にfeature単位でノードを生成し、属性編集・削除（dispose）・feature参照を提供。**
 - `lib/utils/global_config.dart` : グローバル変数（全ノードリスト・選択中ノード等）
+  - PanTool, PenTool, SelectToolのグローバルインスタンスを保持し、currentToolはその参照を切り替えるだけ。
 - `lib/widgets/layer_drawer.dart` : レイヤツリーUI（ノード参照で操作）
   - フォルダノード右側に「GeoPackage追加」ボタン（＋）を実装。押下でファイル名入力→GeoPackageファイル自動生成→ノード追加・即反映。
   - GeoPackageノード（gpkgパネル）はタップで配下レイヤリストをトグル展開可能。

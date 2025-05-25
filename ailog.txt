@@ -207,3 +207,5 @@ lib全体でgeoPackageFile.addLayer/addPoint/addLine/addPolygonの直接呼び�
 // 2024-06-09 FeatureNodeおよびサブクラスからupdateAttrメソッドを削除（DB更新はeditAttributeに統一）
 
 // 2024-06-09 attr→name/description移行。DBテーブル作成・追加時にname/descriptionカラムを実装。既存レイヤにカラムがなければ追加するensureNameDescriptionColumnsも追加。FeatureNode等もname/descriptionに統一。
+
+2024-06-14 地図操作ツール（PanTool, PenTool, SelectTool）をGlobalConfigでグローバルインスタンス化し、currentToolはその参照を切り替える形に統一

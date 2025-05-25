@@ -3,12 +3,14 @@
 import '../models/layer_tree_node.dart';
 import '../tools/map_tool.dart';
 import '../tools/pan_tool.dart';
+import '../tools/pen_tool.dart';
+import '../tools/select_tool.dart';
 
 class GlobalConfig {
   // シングルトンインスタンス
   static final GlobalConfig instance = GlobalConfig._internal();
   factory GlobalConfig() => instance;
-  GlobalConfig._internal();
+  GlobalConfig._internal() : currentTool = PanTool();
 
   /// プロジェクトのルートディレクトリパス
   String? projectRootDir;
@@ -19,8 +21,13 @@ class GlobalConfig {
   /// 現在選択中のLayerNode（地図編集・描画用）
   LayerNode? selectedLayerNode;
 
+  /// 地図操作ツールのグローバルインスタンス
+  final PanTool panTool = PanTool();
+  final PenTool penTool = PenTool();
+  final SelectTool selectTool = SelectTool();
+
   /// 現在選択中の地図操作ツール
-  MapTool currentTool = PanTool();
+  MapTool currentTool;
 
   // 必要に応じて他のグローバル設定も追加
   // String? userName;

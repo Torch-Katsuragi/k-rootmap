@@ -288,6 +288,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.0"
+  nmea:
+    dependency: "direct main"
+    description:
+      name: nmea
+      sha256: f82d7b1ea032b1f903c85c138a9f7ff90707f6f0fbc783ebf5ffbdebf4d659c9
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   path:
     dependency: transitive
     description:

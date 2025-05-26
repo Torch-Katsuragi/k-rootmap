@@ -449,3 +449,79 @@ final layerNames = gpkg.getLayerNames();
 ### 主要ファイル・クラス
 - `lib/utils/global_config.dart`: グローバル設定・状態管理クラス。`isFabActive` プロパティ追加。
 - `lib/screens/map_page.dart`: 地図画面本体。左下フロートボタンのUI・状態トグル処理を実装。
+
+## 依存パッケージ
+
+- nmea: NMEA0183フォーマットのGPSデータをパースするために使用。
+  - 追加方法: pubspec.yaml の dependencies に `nmea: ^2.0.0` を追記し、`flutter pub get` を実行。
+
+## 主な機能（Features）
+- GPSデータの取得・パース（マルチプラットフォーム対応: Android/iOS/Windows）
+- NMEAセンテンスのストリーム処理
+- 衛星情報の抽出（GSV文対応）
+- 位置情報モデル・衛星情報モデルの提供
+- 権限管理・サービス有効化確認
+
+## 主要ファイルと内容
+
+### lib/tools/gps_utils.dart
+- GPSユーティリティークラス（GpsUtils）
+  - シングルトンパターンでインスタンス化
+  - プラットフォームごとに位置情報取得・ストリーム購読・NMEAパースを分岐実装
+  - NMEAセンテンスのストリームを受け取り、nmeaパッケージでパース
+  - GGA文から位置情報（GpsPosition）を抽出
+  - GSV文から衛星情報（SatelliteInfo）を抽出
+  - 権限確認・リクエスト、サービス有効化確認
+- モデルクラス
+  - SatelliteInfo: 衛星ID・SNR・使用中か
+  - NmeaSentence: NMEA生データ保持
+  - GpsPosition: 緯度・経度・高度・衛星数・HDOP
+
+## クラス構成
+
+- `GpsUtils`
+  - `getCurrentPosition()` : 現在地取得（未実装部分あり）
+  - `getPositionStream()` : 位置情報ストリーム購読
+  - `getNmeaStream(Stream<String>)` : NMEAセンテンスストリーム購読
+  - `getSatellitesFromNmea(Stream<String>)` : 衛星情報抽出
+  - `checkAndRequestPermission()` : 権限確認・リクエスト
+  - `isLocationServiceEnabled()` : サービス有効化確認
+- `SatelliteInfo` : 衛星情報モデル
+- `NmeaSentence` : NMEAセンテンスモデル
+- `GpsPosition` : 位置情報モデル
+
+---
+
+nmeaパッケージの詳細: https://pub.dev/packages/nmea
+
+## 新機能: GPS情報バー
+- 地図画面（map_page.dart）のAppBar直下に、現在のGPS情報（緯度・経度・衛星数・HDOPなど）を表示するバーを追加。
+- `lib/tools/gps_utils.dart` の `GpsUtils` クラスを利用し、現在地・衛星数・HDOP等をリアルタイム表示。
+- テスト用途として、GPS情報の取得・表示の動作確認が可能。
+
+## 機能一覧
+- 地図表示（OpenStreetMapタイル）
+- レイヤ/フィーチャ編集（点・線・ポリゴン）
+- 現在位置取得・地図上への表示（青色アイコン）
+- GPS情報バー（緯度・経度・衛星数・HDOP）
+- カスタムDrawerによるレイヤ管理
+
+## 主要ファイルと内容
+- `lib/screens/map_page.dart`:
+    - 地図・編集画面の本体。`KMapsHomePage`/`_KMapsHomePageState`で地図・UI・ツールバー・Drawer等を管理。
+    - `FlutterMap`の`MarkerLayer`にて、`_currentLocation`が取得できていれば青色の`Icons.my_location`で現在位置を地図上に表示。
+    - GPS情報は`GpsUtils`経由で取得し、画面上部バーに表示。
+    - レイヤ・フィーチャの描画、編集、Drawer管理、ツール切替なども本ファイルで実装。
+- `lib/tools/gps_utils.dart`:
+    - GPS情報取得・NMEAパース・衛星情報抽出などのユーティリティ。
+    - マルチプラットフォーム対応を考慮した設計。
+
+## クラス構成（抜粋）
+- `KMapsHomePage`/`_KMapsHomePageState`：地図・編集画面のStatefulWidget。地図UI・Drawer・ツールバー・GPS情報管理。
+- `GpsUtils`：GPS情報取得・NMEAパース・衛星情報抽出のユーティリティクラス。
+- `GpsPosition`：緯度・経度・高度・衛星数・HDOP等のGPS情報モデル。
+
+## 現在位置アイコンの表示仕様
+- `lib/screens/map_page.dart`の`FlutterMap`内`MarkerLayer`にて、
+  - `_currentLocation`がnullでなければ、青色の`Icons.my_location`アイコンを現在位置に表示。
+  - 既存のフィーチャマーカーと重複しないよう、リストの先頭に追加。

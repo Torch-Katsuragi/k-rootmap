@@ -18,6 +18,7 @@ import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
+import '../tools/gps_utils.dart'; // GPSユーティリティを追加
 
 /// 地図・編集画面（最小構成）
 class KMapsHomePage extends StatefulWidget {
@@ -55,6 +56,12 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   double drawerWidth = 320;
   bool drawerOpen = true;
   final double minDrawerWidth = 200;
+  GpsPosition? _gpsPosition; // GPS情報格納用
+  int? _satelliteCount; // 衛星数
+  double? _hdop; // HDOP
+  StreamSubscription? _gpsStreamSub;
+  int _gpsWaitSeconds = 0; // GPS取得待ち秒数
+  Timer? _gpsWaitTimer;
 
   // パブリックgetterを追加
   MapController get mapController => _mapController;
@@ -81,11 +88,31 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         }
       });
     });
+    // GPS取得待ちタイマー開始
+    _gpsWaitSeconds = 0;
+    _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        _gpsWaitSeconds++;
+      });
+    });
+    // GPS情報ストリーム購読
+    _gpsStreamSub = GpsUtils.instance.getPositionStream().listen((pos) {
+      if (pos is GpsPosition) {
+        setState(() {
+          _gpsPosition = pos;
+          _satelliteCount = pos.satellites;
+          _hdop = pos.hdop;
+          _gpsWaitTimer?.cancel(); // 取得できたらタイマー停止
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _gpsStreamSub?.cancel();
     _positionSubscription?.cancel();
+    _gpsWaitTimer?.cancel();
     super.dispose();
   }
 
@@ -284,6 +311,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               },
             ),
         ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(36),
+          child: _buildGpsInfoBar(),
+        ),
       ),
       body: Stack(
         children: [
@@ -373,6 +404,19 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     ),
                     MarkerLayer(
                       markers: [
+                        // --- 現在位置マーカーを追加 ---
+                        if (_currentLocation != null)
+                          Marker(
+                            point: _currentLocation!,
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.my_location,
+                              color: Colors.blue,
+                              size: 36,
+                            ),
+                          ),
+                        // --- 既存のポイントフィーチャマーカー ---
                         for (final f in pointFeatures)
                           ...((f.geometry as List<LatLng>).map(
                             (pt) => Marker(
@@ -774,6 +818,48 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
             return null;
           })(),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  /// GPS情報バーWidget
+  Widget _buildGpsInfoBar() {
+    if (_gpsPosition == null) {
+      return Container(
+        height: 36,
+        color: Colors.grey[200],
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Text('GPS: 取得中...'),
+            SizedBox(width: 12),
+            Text(
+              '(${_gpsWaitSeconds}秒経過)',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      height: 36,
+      color: Colors.lightBlue[50],
+      alignment: Alignment.centerLeft,
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
+          SizedBox(width: 8),
+          Text(
+            '緯度: ${_gpsPosition!.latitude.toStringAsFixed(6)} 経度: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
+            style: TextStyle(fontSize: 14),
+          ),
+          SizedBox(width: 16),
+          Text('衛星: ${_satelliteCount ?? "-"}'),
+          SizedBox(width: 16),
+          Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
+        ],
+      ),
     );
   }
 }

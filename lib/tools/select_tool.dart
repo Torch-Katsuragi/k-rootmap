@@ -12,7 +12,7 @@ import 'dart:math' as math;
 /// オブジェクト選択ツール
 class SelectTool extends MapTool {
   @override
-  String get name => '選択';
+  String get name => 'Select';
 
   @override
   IconData get icon => Icons.select_all;

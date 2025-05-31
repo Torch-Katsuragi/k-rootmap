@@ -11,7 +11,7 @@ import 'dart:math';
 /// 地図パン（移動）専用ツール
 class PanTool extends MapTool {
   @override
-  String get name => 'てのひら';
+  String get name => 'Pan';
 
   @override
   IconData get icon => Icons.pan_tool_alt;

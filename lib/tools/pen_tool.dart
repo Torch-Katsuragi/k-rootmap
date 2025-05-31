@@ -17,7 +17,7 @@ class PenTool extends MapTool {
   PanTool get panTool => GlobalConfig.instance.panTool;
 
   @override
-  String get name => 'ペン';
+  String get name => 'Pen';
 
   @override
   IconData get icon => Icons.edit;

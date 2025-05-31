@@ -1,5 +1,5 @@
-// K-MAPS: 地図・編集画面
-// 地図表示・レイヤ/フィーチャ編集UI本体
+// K-MAPS: Map and edit screen
+// Main UI for map display and layer/feature editing
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -18,19 +18,19 @@ import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
-import '../tools/gps_utils.dart'; // GPSユーティリティを追加
+import '../tools/gps_utils.dart'; // Added GPS utility
 
-/// 地図・編集画面（最小構成）
+/// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
   const KMapsHomePage({super.key});
   @override
   State<KMapsHomePage> createState() => _KMapsHomePageState();
 }
 
-/// ツール種別
+/// Tool types
 enum ToolType { pen, eraser }
 
-// --- Drawer用: 名前編集状態管理 ---
+// --- Drawer use: Name edit state management ---
 class _EditState {
   String? editingFolderPath;
   String? editingGpkgPath;
@@ -39,7 +39,7 @@ class _EditState {
 }
 
 class _KMapsHomePageState extends State<KMapsHomePage> {
-  final LatLng _center = const LatLng(35.681236, 139.767125); // 東京駅
+  final LatLng _center = const LatLng(35.681236, 139.767125); // Tokyo Station
   LatLng? _currentLocation;
   Stream<Position>? _positionStream;
   StreamSubscription<Position>? _positionSubscription;
@@ -56,14 +56,14 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   double drawerWidth = 320;
   bool drawerOpen = true;
   final double minDrawerWidth = 200;
-  GpsPosition? _gpsPosition; // GPS情報格納用
-  int? _satelliteCount; // 衛星数
+  GpsPosition? _gpsPosition; // GPS information storage
+  int? _satelliteCount; // Satellite count
   double? _hdop; // HDOP
   StreamSubscription? _gpsStreamSub;
-  int _gpsWaitSeconds = 0; // GPS取得待ち秒数
+  int _gpsWaitSeconds = 0; // GPS acquisition wait seconds
   Timer? _gpsWaitTimer;
 
-  // パブリックgetterを追加
+  // Public getter added
   MapController get mapController => _mapController;
 
   @override
@@ -71,10 +71,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     super.initState();
     print('[DEBUG] initState: KMapsHomePage start');
     GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
-    _currentNode = GlobalConfig.instance.folderTree; // ルートノード参照
-    print(
-      '[DEBUG] initState: folderTree=[38;5;246m${GlobalConfig.instance.folderTree}[0m',
-    );
+    _currentNode = GlobalConfig.instance.folderTree; // Reference root node
+    print('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
     GlobalConfig.instance.mapState = this;
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
@@ -88,21 +86,21 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         }
       });
     });
-    // GPS取得待ちタイマー開始
+    // Start GPS acquisition wait timer
     _gpsWaitSeconds = 0;
     _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         _gpsWaitSeconds++;
       });
     });
-    // GPS情報ストリーム購読
+    // Subscribe to GPS information stream
     _gpsStreamSub = GpsUtils.instance.getPositionStream().listen((pos) {
       if (pos is GpsPosition) {
         setState(() {
           _gpsPosition = pos;
           _satelliteCount = pos.satellites;
           _hdop = pos.hdop;
-          _gpsWaitTimer?.cancel(); // 取得できたらタイマー停止
+          _gpsWaitTimer?.cancel(); // Stop timer when acquired
         });
       }
     });
@@ -122,7 +120,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     }
   }
 
-  // --- ポリゴン点列を自動で閉じるユーティリティ ---
+  // --- Utility to automatically close polygon rings ---
   List<LatLng> closeRing(List<LatLng> pts) {
     if (pts.length < 3) return [];
     final first = pts.first;
@@ -136,7 +134,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     return pts;
   }
 
-  // --- 線・ポリゴン確定処理 ---
+  // --- Line/polygon confirmation processing ---
   Future<void> _onConfirmDrawing() async {
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) return;
@@ -147,16 +145,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         builder: (context) {
           String text = '';
           return AlertDialog(
-            title: const Text('属性入力'),
+            title: const Text('Attribute Input'),
             content: TextField(
               autofocus: true,
-              decoration: const InputDecoration(labelText: '属性（テキスト）'),
+              decoration: const InputDecoration(labelText: 'Attribute (Text)'),
               onChanged: (v) => text = v,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, null),
-                child: const Text('キャンセル'),
+                child: const Text('Cancel'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, text),
@@ -181,16 +179,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         builder: (context) {
           String text = '';
           return AlertDialog(
-            title: const Text('属性入力'),
+            title: const Text('Attribute Input'),
             content: TextField(
               autofocus: true,
-              decoration: const InputDecoration(labelText: '属性（テキスト）'),
+              decoration: const InputDecoration(labelText: 'Attribute (Text)'),
               onChanged: (v) => text = v,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, null),
-                child: const Text('キャンセル'),
+                child: const Text('Cancel'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, text),
@@ -226,7 +224,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               children: [
                 Icon(Icons.brush, color: Colors.black),
                 SizedBox(width: 8),
-                Text('ペン'),
+                Text('Pen'),
               ],
             ),
           ),
@@ -236,7 +234,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               children: [
                 Icon(Icons.auto_fix_normal, color: Colors.black),
                 SizedBox(width: 8),
-                Text('消しゴム'),
+                Text('Eraser'),
               ],
             ),
           ),
@@ -248,16 +246,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         });
       }
     } else if (index == 1) {
-      // GPSアイコン: 何か追加したい場合ここに
+      // GPS icon: add something here if needed
     } else if (index == 2) {
       _scaffoldKey.currentState?.openEndDrawer();
     }
   }
 
-  // --- 画面座標→地図座標変換 ---
+  // --- Screen coordinates to map coordinates conversion ---
   LatLng offsetToLatLng(Offset offset) {
-    // FlutterMapのPixel→LatLng変換APIを利用
-    // 参考: https://pub.dev/documentation/flutter_map/latest/flutter_map/MapController/pointToLatLng.html
+    // Use FlutterMap's Pixel to LatLng conversion API
+    // Reference: https://pub.dev/documentation/flutter_map/latest/flutter_map/MapController/pointToLatLng.html
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null) return _center;
     final local = renderBox.globalToLocal(offset);
@@ -266,9 +264,9 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     return latlng ?? _center;
   }
 
-  // --- 地図座標→画面ピクセル変換 ---
+  // --- Map coordinates to screen pixel conversion ---
   Offset latLngToOffset(LatLng latlng) {
-    // MapControllerのlatLngToScreenPointを利用
+    // Use MapController's latLngToScreenPoint
     final point = _mapController.latLngToScreenPoint(latlng);
     return Offset(point.x.toDouble(), point.y.toDouble());
   }
@@ -278,7 +276,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     final folderTree = GlobalConfig.instance.folderTree;
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
-    // Point/Line/Polygonごとに分けてfeaturesを集約
+    // Collect features by type: Point/Line/Polygon
     final pointFeatures = <PointFeatureNode>[];
     final lineFeatures = <LineFeatureNode>[];
     final polygonFeatures = <PolygonFeatureNode>[];
@@ -292,17 +290,17 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       }
     }
     final currentTool = GlobalConfig.instance.currentTool;
-    final isPanTool = currentTool.name == 'てのひら';
+    final isPanTool = currentTool.name == 'Pan';
     final screenWidth = MediaQuery.of(context).size.width;
     final maxDrawerWidth = screenWidth * 2 / 3;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('K-MAPS 最小構成'),
+        title: const Text('K-MAPS GIS'),
         actions: [
           if (!drawerOpen)
             IconButton(
               icon: Icon(Icons.layers),
-              tooltip: 'レイヤDrawerを開く',
+              tooltip: 'Open Layer Drawer',
               onPressed: () {
                 setState(() {
                   drawerOpen = true;
@@ -318,72 +316,117 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       ),
       body: Stack(
         children: [
-          // --- ツールバー（左端縦並び） ---
+          // --- Toolbar (left vertical alignment) ---
           Positioned(
             left: 0,
             top: 0,
             bottom: 0,
             child: Container(
-              width: 44, // ツールバー幅を細く
+              width: 44, // Narrow toolbar width
               color: Colors.transparent,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   const SizedBox(height: 16),
-                  IconButton(
-                    icon: Icon(
-                      Icons.pan_tool_alt,
+                  // Pan tool button with blue circle when selected
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color:
-                          currentTool.name == 'てのひら'
+                          currentTool.name == 'Pan'
                               ? Colors.blue
-                              : Colors.black,
+                              : Colors.transparent,
                     ),
-                    tooltip: 'てのひら',
-                    onPressed: () {
-                      setState(() {
-                        GlobalConfig.instance.currentTool =
-                            GlobalConfig.instance.panTool;
-                      });
-                    },
-                    iconSize: 32, // アイコンサイズは現状維持
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.pan_tool_alt,
+                        color:
+                            currentTool.name == 'Pan'
+                                ? Colors.white
+                                : Colors.black,
+                      ),
+                      tooltip: 'Pan',
+                      onPressed: () {
+                        setState(() {
+                          GlobalConfig.instance.currentTool =
+                              GlobalConfig.instance.panTool;
+                        });
+                      },
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit,
+                  const SizedBox(height: 8),
+                  // Pen tool button with blue circle when selected
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color:
-                          currentTool.name == 'ペン' ? Colors.blue : Colors.black,
+                          currentTool.name == 'Pen'
+                              ? Colors.blue
+                              : Colors.transparent,
                     ),
-                    tooltip: 'ペン',
-                    onPressed: () {
-                      setState(() {
-                        GlobalConfig.instance.currentTool =
-                            GlobalConfig.instance.penTool;
-                      });
-                    },
-                    iconSize: 32,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color:
+                            currentTool.name == 'Pen'
+                                ? Colors.white
+                                : Colors.black,
+                      ),
+                      tooltip: 'Pen',
+                      onPressed: () {
+                        setState(() {
+                          GlobalConfig.instance.currentTool =
+                              GlobalConfig.instance.penTool;
+                        });
+                      },
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.select_all,
+                  const SizedBox(height: 8),
+                  // Select tool button with blue circle when selected
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color:
-                          currentTool.name == '選択' ? Colors.blue : Colors.black,
+                          currentTool.name == 'Select'
+                              ? Colors.blue
+                              : Colors.transparent,
                     ),
-                    tooltip: '選択',
-                    onPressed: () {
-                      setState(() {
-                        GlobalConfig.instance.currentTool =
-                            GlobalConfig.instance.selectTool;
-                      });
-                    },
-                    iconSize: 32,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.select_all,
+                        color:
+                            currentTool.name == 'Select'
+                                ? Colors.white
+                                : Colors.black,
+                      ),
+                      tooltip: 'Select',
+                      onPressed: () {
+                        setState(() {
+                          GlobalConfig.instance.currentTool =
+                              GlobalConfig.instance.selectTool;
+                        });
+                      },
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          // --- 地図本体 ---
+          // --- Main map ---
           Positioned.fill(
-            left: 44, // ツールバー分だけ地図を右にずらす
+            left: 44, // Move map to right of toolbar
             child: Stack(
               children: [
                 FlutterMap(
@@ -404,7 +447,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     ),
                     MarkerLayer(
                       markers: [
-                        // --- 現在位置マーカーを追加 ---
+                        // --- Current location marker ---
                         if (_currentLocation != null)
                           Marker(
                             point: _currentLocation!,
@@ -416,7 +459,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               size: 36,
                             ),
                           ),
-                        // --- 既存のポイントフィーチャマーカー ---
+                        // --- Existing point feature markers ---
                         for (final f in pointFeatures)
                           ...((f.geometry as List<LatLng>).map(
                             (pt) => Marker(
@@ -518,7 +561,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                             borderColor: Colors.orange,
                             isFilled: true,
                           ),
-                        // --- SelectToolの投げ縄プレビュー ---
+                        // --- SelectTool lasso preview ---
                         if (GlobalConfig.instance.currentTool is SelectTool &&
                             (GlobalConfig.instance.currentTool as SelectTool)
                                     .lassoPoints
@@ -582,7 +625,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                     ),
                   ),
                 ),
-                // --- ペンツール描画プレビュー情報 ---
+                // --- Pen tool drawing preview information ---
                 if (GlobalConfig.instance.currentTool is PenTool)
                   Builder(
                     builder: (context) {
@@ -591,15 +634,15 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                           GlobalConfig.instance.currentTool as PenTool;
                       String? previewText;
                       Offset? previewOffset;
-                      // 点レイヤ
+                      // Point layer
                       if (selected is PointLayerNode &&
                           penTool.pointPreview != null) {
                         final pt = penTool.pointPreview!;
                         previewText =
-                            '座標: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
+                            'Coordinates: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
                         previewOffset = latLngToOffset(pt);
                       }
-                      // 線レイヤ
+                      // Line layer
                       else if (selected is LineLayerNode &&
                           penTool.drawingLine.length >= 2) {
                         final len = GeometryCalc.calcLineLength(
@@ -610,13 +653,13 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         );
                         if (len >= 10000) {
                           previewText =
-                              '長さ: ${(len / 1000).toStringAsFixed(1)} km';
+                              'Length: ${(len / 1000).toStringAsFixed(1)} km';
                         } else {
-                          previewText = '長さ: ${len.toStringAsFixed(2)} m';
+                          previewText = 'Length: ${len.toStringAsFixed(2)} m';
                         }
                         previewOffset = latLngToOffset(centroid);
                       }
-                      // ポリゴンレイヤ
+                      // Polygon layer
                       else if (selected is PolygonLayerNode &&
                           penTool.drawingPolygon.length >= 3) {
                         final closed = closeRing(penTool.drawingPolygon);
@@ -631,9 +674,9 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                             );
                         if (areaM2 >= 10000) {
                           previewText =
-                              '面積: ${(areaM2 / 10000).toStringAsFixed(1)} ha';
+                              'Area: ${(areaM2 / 10000).toStringAsFixed(1)} ha';
                         } else {
-                          previewText = '面積: ${areaM2.toStringAsFixed(2)} m²';
+                          previewText = 'Area: ${areaM2.toStringAsFixed(2)} m?';
                         }
                         previewOffset = latLngToOffset(centroid);
                       }
@@ -666,7 +709,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               ],
             ),
           ),
-          // --- カスタムDrawer ---
+          // --- Custom Drawer ---
           if (drawerOpen)
             Positioned(
               right: 0,
@@ -678,7 +721,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 color: Colors.transparent,
                 child: Row(
                   children: [
-                    // 左端ドラッグハンドル（透明）
+                    // Left drag handle (resizable)
                     GestureDetector(
                       behavior: HitTestBehavior.translucent,
                       onHorizontalDragUpdate: (details) {
@@ -695,14 +738,14 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         cursor: SystemMouseCursors.resizeColumn,
                         child: Container(
                           width: 28,
-                          color: Colors.black12, // 高透明度の黒
+                          color: Colors.black12, // Semi-transparent black
                           child: const Center(
                             child: VerticalDivider(width: 2, thickness: 2),
                           ),
                         ),
                       ),
                     ),
-                    // 右側（LayerDrawer本体）は白背景
+                    // Right side: LayerDrawer main body with white background
                     Expanded(
                       child: Container(
                         color: Colors.white,
@@ -715,7 +758,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                           },
                           setStateCallback: (fn) => setState(fn),
                           onJumpTo: (latLng) {
-                            // 現在のズーム値を維持して中心移動
+                            // Maintain current zoom level and move center
                             _mapController.move(latLng, _mapController.zoom);
                           },
                         ),
@@ -725,7 +768,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 ),
               ),
             ),
-          // --- Feature詳細パネル ---
+          // --- Feature detail panel ---
           if (GlobalConfig.instance.selectedFeatures.length == 1)
             Positioned(
               left: 60,
@@ -734,9 +777,9 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                 feature: GlobalConfig.instance.selectedFeatures.first,
               ),
             ),
-          // --- 左下フロートボタン（ツールバーの右隣に配置） ---
+          // --- Left bottom floating button (placed next to toolbar) ---
           Positioned(
-            left: 56, // ツールバー幅(44)+余白(12)
+            left: 56, // Toolbar width(44) + margin(12)
             bottom: 24,
             child: _LeftBottomFab(),
           ),
@@ -761,7 +804,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 1つ取り消しボタン
+                  // Undo button
                   FloatingActionButton(
                     heroTag: 'undo',
                     onPressed: () {
@@ -779,11 +822,11 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         }
                       });
                     },
-                    tooltip: '1つ取り消し',
+                    tooltip: 'Undo',
                     child: const Icon(Icons.undo),
                   ),
                   const SizedBox(width: 12),
-                  // キャンセルボタン
+                  // Cancel button
                   FloatingActionButton(
                     heroTag: 'cancel',
                     onPressed: () {
@@ -801,16 +844,16 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         }
                       });
                     },
-                    tooltip: 'キャンセル',
+                    tooltip: 'Cancel',
                     child: const Icon(Icons.clear),
                   ),
                   const SizedBox(width: 12),
-                  // 確定ボタン
+                  // Confirm button
                   FloatingActionButton.extended(
                     heroTag: 'confirm',
                     onPressed: _onConfirmDrawing,
                     icon: const Icon(Icons.check),
-                    label: const Text('確定'),
+                    label: const Text('Confirm'),
                   ),
                 ],
               );
@@ -821,7 +864,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     );
   }
 
-  /// GPS情報バーWidget
+  /// GPS information bar widget
   Widget _buildGpsInfoBar() {
     if (_gpsPosition == null) {
       return Container(
@@ -831,10 +874,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         padding: EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            Text('GPS: 取得中...'),
+            Text('GPS: Acquiring...'),
             SizedBox(width: 12),
             Text(
-              '(${_gpsWaitSeconds}秒経過)',
+              '(${_gpsWaitSeconds}s elapsed)',
               style: TextStyle(color: Colors.grey),
             ),
           ],
@@ -851,11 +894,11 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
           Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
           SizedBox(width: 8),
           Text(
-            '緯度: ${_gpsPosition!.latitude.toStringAsFixed(6)} 経度: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
+            'Lat: ${_gpsPosition!.latitude.toStringAsFixed(6)} Lon: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
             style: TextStyle(fontSize: 14),
           ),
           SizedBox(width: 16),
-          Text('衛星: ${_satelliteCount ?? "-"}'),
+          Text('Satellites: ${_satelliteCount ?? "-"}'),
           SizedBox(width: 16),
           Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
         ],
@@ -864,7 +907,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   }
 }
 
-/// Feature詳細情報パネル
+/// Feature detail information panel
 class FeatureDetailPanel extends StatelessWidget {
   final dynamic feature;
   const FeatureDetailPanel({super.key, required this.feature});
@@ -928,8 +971,8 @@ class FeatureDetailPanel extends StatelessWidget {
   }
 }
 
-// --- 左下フロートボタン用Widget ---
-/// 左下に表示される白い丸のフロートボタン。押下状態はGlobalConfigで管理。
+// --- Left bottom floating button widget ---
+/// White circular floating button displayed at bottom left. Press state managed by GlobalConfig
 class _LeftBottomFab extends StatefulWidget {
   @override
   State<_LeftBottomFab> createState() => _LeftBottomFabState();
@@ -940,17 +983,17 @@ class _LeftBottomFabState extends State<_LeftBottomFab> {
   Widget build(BuildContext context) {
     final isActive = GlobalConfig.instance.isFabActive;
     final currentTool = GlobalConfig.instance.currentTool;
-    // currentToolに応じて中心アイコンを切り替え
+    // Change center icon based on currentTool
     Widget centerIcon;
     switch (currentTool.runtimeType) {
       case PenTool:
         centerIcon = Icon(
-          Icons.auto_fix_normal, // 最初に使っていた消しゴム風アイコンに戻す
+          Icons.auto_fix_normal, // Back to eraser-style icon used initially
           color: isActive ? Colors.white : Colors.grey,
           size: 32,
         );
         break;
-      // 他ツール追加時はここにcaseを追加
+      // Add more cases when other tools are added
       default:
         centerIcon = Icon(
           Icons.circle,

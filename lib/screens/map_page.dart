@@ -136,7 +136,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
 
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
   Future<void> _updateNodeRecursively(LayerTreeNode node) async {
-    await node.updateChildren();
+    // まず明示的に初期化を実行
+    await node.ensureInitialized();
 
     // 子ノードも再帰的に更新
     for (final child in node.children) {

@@ -43,14 +43,23 @@ abstract class LayerTreeNode {
     List<LayerTreeNode>? children,
     required this.nodeType,
   }) : children = children ?? [] {
-    // 初期化時に非同期でupdateChildrenを呼ぶ（1回のみ）
-    _initializeChildren();
+    // 初期化時に非同期でupdateChildrenを呼ぶ（1回のみ） - コメントアウトして問題を修正
+    // _initializeChildren();
   }
 
   /// 初期化フラグ（重複実行を防ぐ）
   bool _initialized = false;
 
-  /// 非同期で子ノードを初期化（コンストラクタから呼び出す）
+  /// 明示的に子ノードを初期化（遅延初期化パターン）
+  /// 通常はUIから初回アクセス時に呼び出される
+  Future<void> ensureInitialized() async {
+    if (_initialized) return; // 既に初期化済みなら何もしない
+    _initialized = true;
+    await updateChildren();
+  }
+
+  /// 非同期で子ノードを初期化（従来の_initializeChildrenをリネーム）
+  /// @deprecated ensureInitialized()を使用してください
   void _initializeChildren() async {
     if (_initialized) return; // 既に初期化済みなら何もしない
     _initialized = true;

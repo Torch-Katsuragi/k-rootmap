@@ -708,3 +708,46 @@ nmeaパッケージの詳細: https://pub.dev/packages/nmea
 - `lib/screens/map_page.dart`の`FlutterMap`内`MarkerLayer`にて、
   - `_currentLocation`がnullでなければ、青色の`Icons.my_location`アイコンを現在位置に表示。
   - 既存のフィーチャマーカーと重複しないよう、リストの先頭に追加。
+
+### Android実機での無限ループ問題修正（追加）
+Android実機でプロジェクトフォルダ読み込み時にアプリケーションが応答しなくなる問題を解決：
+
+**問題の原因**：
+- `LayerTreeNode`のコンストラクタ内で`_initializeChildren()`が自動実行される設計
+- `_initializeChildren()`が`updateChildren()`を呼び出す
+- `updateChildren()`が新しい子ノードを作成
+- 新しい子ノードのコンストラクタが再び`_initializeChildren()`を呼び出す
+- この循環依存により無限ループが発生し、特にAndroid環境でメモリ不足によりアプリ応答不能となる
+
+**修正内容**：
+- **`lib/models/layer_tree_node.dart`**: コンストラクタからの自動初期化を無効化
+  - コンストラクタ内の`_initializeChildren()`呼び出しをコメントアウト
+  - 新しい`ensureInitialized()`メソッドを追加し、明示的な遅延初期化パターンを実装
+  - `_initialized`フラグによる重複実行防止は保持
+- **`lib/screens/map_page.dart`**: 明示的な初期化呼び出しを追加
+  - `_updateNodeRecursively()`メソッド内で`node.ensureInitialized()`を明示的に呼び出し
+  - 既存の`updateChildren()`直接呼び出しを`ensureInitialized()`に変更
+
+**設計変更のポイント**：
+```dart
+// 修正前（問題のあった設計）
+LayerTreeNode(...) {
+  _initializeChildren(); // コンストラクタで自動実行 → 無限ループ
+}
+
+// 修正後（遅延初期化パターン）
+LayerTreeNode(...) {
+  // 自動初期化なし
+}
+
+// UI側で明示的に初期化
+await node.ensureInitialized(); // 必要な時に1回だけ実行
+```
+
+**動作フロー**：
+1. **ノード作成時**: コンストラクタは基本的なプロパティ設定のみ（初期化なし）
+2. **プロジェクト読み込み時**: `_updateNodeRecursively()`が各ノードの`ensureInitialized()`を順次呼び出し
+3. **初期化実行**: `ensureInitialized()`は各ノードで1回のみ実行され、子ノードの構築を行う
+4. **UIレンダリング**: 全ノードの初期化完了後、正常に地図画面とDrawerが表示される
+
+この修正により、WindowsとAndroidの両プラットフォームで一貫した安定動作が実現されました。

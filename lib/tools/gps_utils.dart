@@ -189,7 +189,33 @@ class GpsUtils {
   /// 権限確認・リクエスト
   Future<bool> checkAndRequestPermission() async {
     if (Platform.isAndroid || Platform.isIOS) {
-      // TODO: geolocatorの権限リクエスト
+      // 位置情報サービスが有効かチェック
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print('[DEBUG] GPS: Location services are disabled.');
+        return false;
+      }
+
+      // 現在の権限状態をチェック
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        // 権限が拒否されている場合、リクエスト
+        permission = await Geolocator.requestPermission();
+        print('[DEBUG] GPS: Permission requested, result: $permission');
+
+        if (permission == LocationPermission.denied) {
+          print('[DEBUG] GPS: Permissions are denied.');
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        print('[DEBUG] GPS: Permissions are permanently denied.');
+        return false;
+      }
+
+      print('[DEBUG] GPS: Permission granted: $permission');
       return true;
     } else if (Platform.isWindows) {
       return true;
@@ -201,8 +227,9 @@ class GpsUtils {
   /// サービス有効化確認
   Future<bool> isLocationServiceEnabled() async {
     if (Platform.isAndroid || Platform.isIOS) {
-      // TODO: geolocatorのサービス有効化確認
-      return true;
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      print('[DEBUG] GPS: Location service enabled: $enabled');
+      return enabled;
     } else if (Platform.isWindows) {
       return true;
     } else {

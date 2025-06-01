@@ -751,3 +751,45 @@ await node.ensureInitialized(); // 必要な時に1回だけ実行
 4. **UIレンダリング**: 全ノードの初期化完了後、正常に地図画面とDrawerが表示される
 
 この修正により、WindowsとAndroidの両プラットフォームで一貫した安定動作が実現されました。
+
+### Android環境でのGPS権限問題修正（追加）
+Android実機でGPS情報が取得できない問題を解決：
+
+**問題の原因**：
+- AndroidManifest.xmlに位置情報権限（`ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`等）が設定されていない
+- GpsUtilsクラスの権限チェック・リクエスト処理が未実装（`TODO`状態）
+- アプリ初期化時に権限リクエストが実行されていない
+
+**修正内容**：
+- **`android/app/src/main/AndroidManifest.xml`**: GPS位置情報権限を追加
+  - `ACCESS_FINE_LOCATION`: 高精度GPS位置情報アクセス権限
+  - `ACCESS_COARSE_LOCATION`: 概算位置情報アクセス権限
+  - `ACCESS_BACKGROUND_LOCATION`: バックグラウンド位置情報アクセス権限（Android 10以降）
+  - `INTERNET`: 地図タイル取得用インターネット権限
+  - `ACCESS_NETWORK_STATE`: ネットワーク状態確認権限
+- **`lib/tools/gps_utils.dart`**: 権限チェック・リクエスト処理を実装
+  - `checkAndRequestPermission()`メソッドで`Geolocator.checkPermission()`と`Geolocator.requestPermission()`を使用
+  - `isLocationServiceEnabled()`メソッドで`Geolocator.isLocationServiceEnabled()`を使用
+  - 権限の状態（denied、deniedForever等）に応じた適切なエラーハンドリング
+  - デバッグログ出力で権限状態を詳細に確認可能
+- **`lib/screens/map_page.dart`**: GPS初期化フローの改善
+  - `_initializeGps()`メソッドを新規追加し、initState時に権限チェックを実行
+  - 権限取得失敗時はGPS機能を無効化し、エラー状況をログ出力
+  - ストリーム購読時のエラーハンドリングを追加
+
+**権限リクエストの流れ**：
+1. **アプリ起動時**: `_initializeGps()`が自動実行される
+2. **サービス確認**: `isLocationServiceEnabled()`で位置情報サービスの有効性をチェック
+3. **権限確認**: `checkPermission()`で現在の権限状態を確認
+4. **権限リクエスト**: 権限が未許可の場合、`requestPermission()`でユーザーに許可を求める
+5. **ストリーム開始**: 権限取得後、GPS位置情報ストリームを開始
+
+**Android実機での動作確認**：
+- アプリ初回起動時に位置情報権限のダイアログが表示される
+- 権限許可後、GPS情報バーに緯度・経度・衛星数・HDOP等が表示される
+- 地図上に青色の現在位置アイコンが表示される
+- 権限拒否時はGPS機能が無効化され、エラーログが出力される
+
+この修正により、Android環境でもWindowsと同様にGPS機能が正常動作するようになりました。
+
+### 移行の背景

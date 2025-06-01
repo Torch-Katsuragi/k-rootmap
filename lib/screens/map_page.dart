@@ -83,36 +83,8 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     // プロジェクトフォルダ内をスキャンして子ノード（サブフォルダ・.gpkgファイル）を更新
     _initializeProjectTree();
 
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    );
-    _positionSubscription = _positionStream!.listen((pos) {
-      setState(() {
-        _currentLocation = LatLng(pos.latitude, pos.longitude);
-        if (!_movedToCurrentLocationOnce && _currentLocation != null) {
-          _mapController.move(_currentLocation!, 16.0);
-          _movedToCurrentLocationOnce = true;
-        }
-      });
-    });
-    // Start GPS acquisition wait timer
-    _gpsWaitSeconds = 0;
-    _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        _gpsWaitSeconds++;
-      });
-    });
-    // Subscribe to GPS information stream
-    _gpsStreamSub = GpsUtils.instance.getPositionStream().listen((pos) {
-      if (pos is GpsPosition) {
-        setState(() {
-          _gpsPosition = pos;
-          _satelliteCount = pos.satellites;
-          _hdop = pos.hdop;
-          _gpsWaitTimer?.cancel(); // Stop timer when acquired
-        });
-      }
-    });
+    // GPS権限チェックと初期化
+    _initializeGps();
 
     // フィーチャデータの初期ロード（非同期）は_initializeProjectTree()内で実行
     // _updateFeatures();
@@ -145,6 +117,71 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         await _updateNodeRecursively(child);
       }
     }
+  }
+
+  /// GPS初期化処理（権限チェック・ストリーム購読）
+  Future<void> _initializeGps() async {
+    print('[DEBUG] GPS: Starting GPS initialization');
+
+    // 権限チェック・リクエスト
+    bool hasPermission = await GpsUtils.instance.checkAndRequestPermission();
+    if (!hasPermission) {
+      print('[DEBUG] GPS: Permission denied, GPS features disabled');
+      return;
+    }
+
+    // 位置情報サービス確認
+    bool serviceEnabled = await GpsUtils.instance.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('[DEBUG] GPS: Location service disabled, GPS features disabled');
+      return;
+    }
+
+    print('[DEBUG] GPS: Permission and service OK, starting streams');
+
+    // 標準のGeolocatorストリーム（現在位置表示用）
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    );
+    _positionSubscription = _positionStream!.listen(
+      (pos) {
+        setState(() {
+          _currentLocation = LatLng(pos.latitude, pos.longitude);
+          if (!_movedToCurrentLocationOnce && _currentLocation != null) {
+            _mapController.move(_currentLocation!, 16.0);
+            _movedToCurrentLocationOnce = true;
+          }
+        });
+      },
+      onError: (error) {
+        print('[DEBUG] GPS: Geolocator stream error: $error');
+      },
+    );
+
+    // Start GPS acquisition wait timer
+    _gpsWaitSeconds = 0;
+    _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        _gpsWaitSeconds++;
+      });
+    });
+
+    // Subscribe to GPS information stream (詳細GPS情報用)
+    _gpsStreamSub = GpsUtils.instance.getPositionStream().listen(
+      (pos) {
+        if (pos is GpsPosition) {
+          setState(() {
+            _gpsPosition = pos;
+            _satelliteCount = pos.satellites;
+            _hdop = pos.hdop;
+            _gpsWaitTimer?.cancel(); // Stop timer when acquired
+          });
+        }
+      },
+      onError: (error) {
+        print('[DEBUG] GPS: GpsUtils stream error: $error');
+      },
+    );
   }
 
   @override

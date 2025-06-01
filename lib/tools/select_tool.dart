@@ -41,11 +41,11 @@ class SelectTool extends MapTool {
   }
 
   /// 指定座標・範囲でfeatureを選択する（PenTool等からも利用可）
-  static void selectFeatureAtLatLng({
+  static Future<void> selectFeatureAtLatLng({
     required LatLng tapLatLng,
     required dynamic mapState,
     double? range,
-  }) {
+  }) async {
     final layer = GlobalConfig.instance.selectedLayerNode;
     if (layer == null) return;
     String featureType;
@@ -58,7 +58,7 @@ class SelectTool extends MapTool {
     } else {
       return;
     }
-    final features = layer.features;
+    final features = await layer.features;
     if (features.isEmpty) return;
     // ズーム率からrange(m)を計算（未指定時は通常の範囲）
     final double selectRange =
@@ -80,7 +80,7 @@ class SelectTool extends MapTool {
 
   /// タップイベント
   @override
-  void onTap(TapUpDetails details, dynamic mapState) {
+  void onTap(TapUpDetails details, dynamic mapState) async {
     if (mapState == null) return;
     LatLng? tapLatLng;
     try {
@@ -90,7 +90,7 @@ class SelectTool extends MapTool {
     }
     if (tapLatLng == null) return;
     // staticメソッドで共通化
-    selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState);
+    await selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState);
   }
 
   /// スケール開始イベント
@@ -127,7 +127,7 @@ class SelectTool extends MapTool {
   /// スケール終了イベント
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+  void onScaleEnd(ScaleEndDetails details, dynamic mapState) async {
     if (mapState == null) return;
     if (_pointerCount == 2) {
       GlobalConfig.instance.panTool.onScaleEnd(details, mapState);
@@ -147,7 +147,7 @@ class SelectTool extends MapTool {
       }
       final layer = GlobalConfig.instance.selectedLayerNode;
       if (layer != null) {
-        final features = layer.features;
+        final features = await layer.features;
         final selected =
             features.where((f) {
               // 点: centroidが投げ縄内

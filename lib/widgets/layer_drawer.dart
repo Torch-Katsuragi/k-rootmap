@@ -305,6 +305,10 @@ class _LayerDrawerState extends State<LayerDrawer> {
       leading: GestureDetector(
         onTap: () {
           node.visible = !node.visible;
+          // フィーチャ表示を更新
+          if (GlobalConfig.instance.mapState != null) {
+            GlobalConfig.instance.mapState.refreshFeatures();
+          }
           widget.setStateCallback(() {});
         },
         child: Stack(
@@ -395,6 +399,10 @@ class _LayerDrawerState extends State<LayerDrawer> {
   Widget _buildIconWithVisibility(LayerTreeNode node) => GestureDetector(
     onTap: () {
       node.visible = !node.visible;
+      // フィーチャ表示を更新
+      if (GlobalConfig.instance.mapState != null) {
+        GlobalConfig.instance.mapState.refreshFeatures();
+      }
       widget.setStateCallback(() {});
     },
     child: Stack(
@@ -483,13 +491,16 @@ class _LayerDrawerState extends State<LayerDrawer> {
         LayerTreeNode? newLayerNode;
         switch (result['geomType']) {
           case 'MULTIPOINT':
-            newLayerNode = PointLayerNode.createIn(node, result['name']!);
+            newLayerNode = await PointLayerNode.createIn(node, result['name']!);
             break;
           case 'MULTILINESTRING':
-            newLayerNode = LineLayerNode.createIn(node, result['name']!);
+            newLayerNode = await LineLayerNode.createIn(node, result['name']!);
             break;
           case 'MULTIPOLYGON':
-            newLayerNode = PolygonLayerNode.createIn(node, result['name']!);
+            newLayerNode = await PolygonLayerNode.createIn(
+              node,
+              result['name']!,
+            );
             break;
         }
         if (newLayerNode != null) {
@@ -645,11 +656,6 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final columns = widget.layerNode.geoPackageFile.getColumnNames(
-      widget.layerNode.layerName,
-      getAll: showAllColumns,
-    );
-    final features = widget.layerNode.features;
     return Column(
       children: [
         Container(
@@ -693,128 +699,175 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-                columns: [
-                  for (final col in columns) DataColumn(label: Text(col)),
-                ],
-                rows: [
-                  for (final feature in features)
-                    DataRow(
-                      cells: [
-                        for (final col in columns)
-                          col == 'geom'
-                              ? DataCell(
-                                SizedBox(
-                                  height: 28,
-                                  child: TextButton(
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 0,
-                                      ),
-                                      minimumSize: const Size(40, 28),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    onPressed: () {
-                                      // geom選択時に地図ジャンプ
-                                      if (widget.onJumpTo != null &&
-                                          feature is FeatureNode) {
-                                        widget.onJumpTo!(feature.centroid);
-                                      }
-                                      // feature選択: selectedFeaturesにセット
-                                      if (feature is FeatureNode) {
-                                        GlobalConfig
-                                            .instance
-                                            .selectedFeatures = [feature];
-                                        setState(() {});
-                                        // 地図本体も即時再描画
-                                        if (GlobalConfig.instance.mapState !=
-                                            null) {
-                                          GlobalConfig.instance.mapState
-                                              .setState(() {});
-                                        }
-                                      }
-                                    },
-                                    child: const Text(
-                                      '選択',
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              : col == 'id'
-                              ? DataCell(
-                                Text('${feature.getAttributeValue(col) ?? ''}'),
-                              )
-                              : (editingRowId == feature.rowId &&
-                                  editingColumn == col)
-                              ? DataCell(
-                                SizedBox(
-                                  width: 120,
-                                  child: TextField(
-                                    autofocus: true,
-                                    controller: TextEditingController(
-                                        text: editingValue,
-                                      )
-                                      ..selection = TextSelection.collapsed(
-                                        offset: editingValue.length,
-                                      ),
-                                    onChanged: (v) {
-                                      setState(() {
-                                        editingValue = v;
-                                      });
-                                    },
-                                    onSubmitted: (v) {
-                                      feature.editAttribute(col, v);
-                                      setState(() {
-                                        editingRowId = null;
-                                        editingColumn = null;
-                                      });
-                                    },
-                                    onEditingComplete: () {
-                                      feature.editAttribute(col, editingValue);
-                                      setState(() {
-                                        editingRowId = null;
-                                        editingColumn = null;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              )
-                              : DataCell(
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    setState(() {
-                                      editingRowId = feature.rowId;
-                                      editingColumn = col;
-                                      editingValue =
-                                          '${feature.getAttributeValue(col) ?? ''}';
-                                    });
-                                  },
-                                  child: Container(
-                                    alignment: Alignment.centerLeft,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 80,
-                                      minHeight: 40,
-                                    ),
-                                    child: Text(
-                                      '${feature.getAttributeValue(col) ?? ''}',
-                                    ),
-                                  ),
-                                ),
-                              ),
-                      ],
-                    ),
-                ],
+          child: FutureBuilder<List<dynamic>>(
+            future: Future.wait([
+              widget.layerNode.geoPackageFile.getColumnNames(
+                widget.layerNode.layerName,
+                getAll: showAllColumns,
               ),
-            ),
+              widget.layerNode.features,
+            ]),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('エラー: ${snapshot.error}'));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: Text('データが見つかりません'));
+              }
+
+              final columns = snapshot.data![0] as List<String>;
+              final features = snapshot.data![1] as List<FeatureNode>;
+
+              return SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    border: TableBorder.all(
+                      color: Colors.grey.shade300,
+                      width: 1,
+                    ),
+                    columns: [
+                      for (final col in columns) DataColumn(label: Text(col)),
+                    ],
+                    rows: [
+                      for (final feature in features)
+                        DataRow(
+                          cells: [
+                            for (final col in columns)
+                              col == 'geom'
+                                  ? DataCell(
+                                    SizedBox(
+                                      height: 28,
+                                      child: TextButton(
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 0,
+                                          ),
+                                          minimumSize: const Size(40, 28),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        onPressed: () {
+                                          // geom選択時に地図ジャンプ
+                                          if (widget.onJumpTo != null &&
+                                              feature is FeatureNode) {
+                                            widget.onJumpTo!(feature.centroid);
+                                          }
+                                          // feature選択: selectedFeaturesにセット
+                                          if (feature is FeatureNode) {
+                                            GlobalConfig
+                                                .instance
+                                                .selectedFeatures = [feature];
+                                            setState(() {});
+                                            // 地図本体も即時再描画
+                                            if (GlobalConfig
+                                                    .instance
+                                                    .mapState !=
+                                                null) {
+                                              GlobalConfig.instance.mapState
+                                                  .setState(() {});
+                                            }
+                                          }
+                                        },
+                                        child: const Text(
+                                          '選択',
+                                          style: TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  : col == 'id'
+                                  ? DataCell(
+                                    FutureBuilder<dynamic>(
+                                      future: feature.getAttributeValue(col),
+                                      builder: (context, attrSnapshot) {
+                                        return Text(
+                                          '${attrSnapshot.data ?? ''}',
+                                        );
+                                      },
+                                    ),
+                                  )
+                                  : (editingRowId == feature.rowId &&
+                                      editingColumn == col)
+                                  ? DataCell(
+                                    SizedBox(
+                                      width: 120,
+                                      child: TextField(
+                                        autofocus: true,
+                                        controller: TextEditingController(
+                                            text: editingValue,
+                                          )
+                                          ..selection = TextSelection.collapsed(
+                                            offset: editingValue.length,
+                                          ),
+                                        onChanged: (v) {
+                                          setState(() {
+                                            editingValue = v;
+                                          });
+                                        },
+                                        onSubmitted: (v) {
+                                          feature.editAttribute(col, v);
+                                          setState(() {
+                                            editingRowId = null;
+                                            editingColumn = null;
+                                          });
+                                        },
+                                        onEditingComplete: () {
+                                          feature.editAttribute(
+                                            col,
+                                            editingValue,
+                                          );
+                                          setState(() {
+                                            editingRowId = null;
+                                            editingColumn = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  )
+                                  : DataCell(
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () async {
+                                        final value = await feature
+                                            .getAttributeValue(col);
+                                        setState(() {
+                                          editingRowId = feature.rowId;
+                                          editingColumn = col;
+                                          editingValue = '${value ?? ''}';
+                                        });
+                                      },
+                                      child: Container(
+                                        alignment: Alignment.centerLeft,
+                                        constraints: const BoxConstraints(
+                                          minWidth: 80,
+                                          minHeight: 40,
+                                        ),
+                                        child: FutureBuilder<dynamic>(
+                                          future: feature.getAttributeValue(
+                                            col,
+                                          ),
+                                          builder: (context, attrSnapshot) {
+                                            return Text(
+                                              '${attrSnapshot.data ?? ''}',
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],

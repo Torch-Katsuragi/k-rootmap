@@ -1,9 +1,22 @@
 // K-MAPS: エントリーポイント
 // 本ファイルはアプリ起動・ルーティングのみを担当
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:io';
 import 'screens/home_screen.dart';
 
-void main() {
+void main() async {
+  // sqflite使用前に必須の初期化処理
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // デスクトップ環境での sqflite_common_ffi 初期化
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // sqflite_common_ffi を初期化
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(const KMapsApp());
 }
 

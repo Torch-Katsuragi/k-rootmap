@@ -12,7 +12,7 @@ import '../models/layer_tree_node.dart';
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
 import '../utils/global_config.dart';
-import 'package:sqlite3/sqlite3.dart' as sql;
+// import 'package:sqlite3/sqlite3.dart' as sql; // sqflite移行により削除
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
@@ -63,6 +63,11 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   int _gpsWaitSeconds = 0; // GPS acquisition wait seconds
   Timer? _gpsWaitTimer;
 
+  // フィーチャデータキャッシュ用変数（非同期データを管理）
+  List<PointFeatureNode> _pointFeatures = [];
+  List<LineFeatureNode> _lineFeatures = [];
+  List<PolygonFeatureNode> _polygonFeatures = [];
+
   // Public getter added
   MapController get mapController => _mapController;
 
@@ -74,6 +79,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     _currentNode = GlobalConfig.instance.folderTree; // Reference root node
     print('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
     GlobalConfig.instance.mapState = this;
+
+    // プロジェクトフォルダ内をスキャンして子ノード（サブフォルダ・.gpkgファイル）を更新
+    _initializeProjectTree();
+
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
@@ -104,6 +113,37 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         });
       }
     });
+
+    // フィーチャデータの初期ロード（非同期）は_initializeProjectTree()内で実行
+    // _updateFeatures();
+  }
+
+  /// プロジェクトツリーの初期化（非同期）
+  Future<void> _initializeProjectTree() async {
+    print('[DEBUG] _initializeProjectTree: start');
+    final rootNode = GlobalConfig.instance.folderTree;
+    if (rootNode != null) {
+      await _updateNodeRecursively(rootNode);
+      // フィーチャデータを更新
+      await _updateFeatures();
+      // UI更新
+      if (mounted) {
+        setState(() {});
+      }
+    }
+    print('[DEBUG] _initializeProjectTree: complete');
+  }
+
+  /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
+  Future<void> _updateNodeRecursively(LayerTreeNode node) async {
+    await node.updateChildren();
+
+    // 子ノードも再帰的に更新
+    for (final child in node.children) {
+      if (child is FolderNode || child is GeoPackageNode) {
+        await _updateNodeRecursively(child);
+      }
+    }
   }
 
   @override
@@ -271,24 +311,78 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     return Offset(point.x.toDouble(), point.y.toDouble());
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// フィーチャデータを非同期で更新（キャッシュに保存）
+  Future<void> _updateFeatures() async {
+    print('[DEBUG] _updateFeatures: start');
     final folderTree = GlobalConfig.instance.folderTree;
+    print('[DEBUG] _updateFeatures: folderTree=$folderTree');
+
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
-    // Collect features by type: Point/Line/Polygon
+    print(
+      '[DEBUG] _updateFeatures: found ${visibleLayers.length} visible layers',
+    );
+
     final pointFeatures = <PointFeatureNode>[];
     final lineFeatures = <LineFeatureNode>[];
     final polygonFeatures = <PolygonFeatureNode>[];
+
     for (final layer in visibleLayers) {
+      print(
+        '[DEBUG] _updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
+      );
       if (layer is PointLayerNode) {
-        pointFeatures.addAll(layer.features.whereType<PointFeatureNode>());
+        final features = await layer.features;
+        print(
+          '[DEBUG] _updateFeatures: found ${features.length} point features in ${layer.name}',
+        );
+        pointFeatures.addAll(features.whereType<PointFeatureNode>());
       } else if (layer is LineLayerNode) {
-        lineFeatures.addAll(layer.features.whereType<LineFeatureNode>());
+        final features = await layer.features;
+        print(
+          '[DEBUG] _updateFeatures: found ${features.length} line features in ${layer.name}',
+        );
+        lineFeatures.addAll(features.whereType<LineFeatureNode>());
       } else if (layer is PolygonLayerNode) {
-        polygonFeatures.addAll(layer.features.whereType<PolygonFeatureNode>());
+        final features = await layer.features;
+        print(
+          '[DEBUG] _updateFeatures: found ${features.length} polygon features in ${layer.name}',
+        );
+        polygonFeatures.addAll(features.whereType<PolygonFeatureNode>());
       }
     }
+
+    print(
+      '[DEBUG] _updateFeatures: total features - points:${pointFeatures.length}, lines:${lineFeatures.length}, polygons:${polygonFeatures.length}',
+    );
+
+    if (mounted) {
+      setState(() {
+        _pointFeatures = pointFeatures;
+        _lineFeatures = lineFeatures;
+        _polygonFeatures = polygonFeatures;
+      });
+      print('[DEBUG] _updateFeatures: state updated successfully');
+    } else {
+      print(
+        '[DEBUG] _updateFeatures: widget not mounted, skipping state update',
+      );
+    }
+  }
+
+  /// フィーチャデータの公開更新メソッド（外部から呼び出し可能）
+  void refreshFeatures() {
+    _updateFeatures();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final folderTree = GlobalConfig.instance.folderTree;
+    // キャッシュされたフィーチャデータを使用（非同期処理は _updateFeatures で実行）
+    final pointFeatures = _pointFeatures;
+    final lineFeatures = _lineFeatures;
+    final polygonFeatures = _polygonFeatures;
+
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
     final screenWidth = MediaQuery.of(context).size.width;

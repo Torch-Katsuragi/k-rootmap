@@ -3,6 +3,189 @@
 ## 概要
 K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 
+## データベース移行について（2025年対応）
+**sqlite3からsqfliteへの段階的移行を実施完了**
+
+### 移行の背景
+- Flutter推奨のsqfliteパッケージを使用し、非同期処理のベストプラクティスに準拠
+- データベーススキーマのバージョン管理機能を活用
+- パフォーマンス向上とFlutterのライフサイクルとの統合
+
+### 移行方針
+1. **段階的移行**: 一度に大規模リファクタリングを避け、安全に移行
+2. **APIの互換性維持**: 戻り値をFutureに変更するが、使用方法は最小限の変更
+3. **遅延初期化**: データベース接続は必要時に自動初期化
+
+### 移行内容（完了済み）
+- `pubspec.yaml`: sqlite3依存関係をsqflite ^2.3.0、path ^1.8.3に変更
+- `lib/models/geopackage_file.dart`: sqlite3→sqfliteに移行完了（503行の完全書き換え）
+  - 全メソッドが`Future<T>`を返すように変更
+  - 遅延データベース初期化と自動接続管理
+  - OGC GeoPackage仕様準拠のスキーマ作成をonCreateコールバックで実装
+  - エラーハンドリング強化（try-catch構文で包囲）
+- `lib/models/layer_tree_node.dart`: 非同期対応完了
+  - LayerTreeNode基底クラスの`loadNodes`、`updateChildren`、`dispose`メソッドを非同期化
+  - GeoPackageNode、LayerNode、FeatureNodeクラスのすべての重要メソッドにawait対応
+  - featuresプロパティを`Future<List<FeatureNode>>`に変更
+- `lib/screens/map_page.dart`: UI層の非同期対応
+  - フィーチャデータキャッシュ機能追加（`_pointFeatures`, `_lineFeatures`, `_polygonFeatures`）
+  - 非同期データ更新メソッド`_updateFeatures()`実装
+  - build メソッドでの同期処理からキャッシュベース表示に変更
+  - sqlite3 import削除
+- 全体的なエラーハンドリングとログ出力の改善
+
+### 技術的な変更点
+1. **データベース接続管理**:
+   ```dart
+   // 旧方式（sqlite3）
+   final db = sql.sqlite3.open(dbPath);
+   
+   // 新方式（sqflite）
+   final db = await openDatabase(
+     dbPath,
+     version: 1,
+     onCreate: _createDatabase,
+     onUpgrade: _upgradeDatabase,
+   );
+   ```
+
+2. **メソッド呼び出し**:
+   ```dart
+   // 旧方式（同期処理）
+   final layerNames = geoPackage.getLayerNames();
+   final points = geoPackage.getPoints(tableName);
+   
+   // 新方式（非同期処理）
+   final layerNames = await geoPackage.getLayerNames();
+   final points = await geoPackage.getPoints(tableName);
+   ```
+
+3. **UI層でのフィーチャ表示**:
+   ```dart
+   // 旧方式（build内で直接非同期処理）
+   Widget build(BuildContext context) {
+     final features = layer.features; // Error: Future型
+   }
+   
+   // 新方式（キャッシュベース）
+   List<FeatureNode> _features = [];
+   Future<void> _updateFeatures() async {
+     final features = await layer.features;
+     setState(() => _features = features);
+   }
+   Widget build(BuildContext context) {
+     // _featuresを使用
+   }
+   ```
+
+### 移行の利点
+- **Flutter生態系との統合**: sqfliteはFlutter公式推奨で長期サポート保証
+- **パフォーマンス向上**: Flutter SDKと最適化された連携
+- **スキーマ管理**: onCreateやonUpgradeコールバックによる自動マイグレーション対応
+- **エラーハンドリング**: Dartのnull安全性とasync/awaitパターンに準拠
+- **将来拡張性**: Firebaseとの統合やクラウド同期への道筋確保
+
+### 移行後の確認手順
+1. **依存関係の確認**: `flutter pub get`
+2. **コード解析**: `flutter analyze`
+3. **ビルドテスト**: `flutter build apk --debug`
+4. **実行テスト**: `flutter run`で動作確認
+5. **機能テスト**: GeoPackageファイル作成・レイヤ追加・フィーチャ描画の一連のフロー確認
+
+### 修正済みのリンターエラー
+以下のリンターエラーを修正しました：
+- **`lib/tools/select_tool.dart`**: `Future<List<FeatureNode>>`の非同期処理対応
+  - `selectFeatureAtLatLng`メソッドを`async/await`対応
+  - `onTap`と`onScaleEnd`メソッドでの`layer.features`呼び出しを非同期化
+- **`lib/widgets/layer_drawer.dart`**: UI層での非同期データ処理対応
+  - レイヤ作成メソッド(`createIn`)の非同期呼び出し対応
+  - `AttributeTablePanel`で`FutureBuilder`を使用してcolumnsとfeaturesを適切に処理
+  - 属性値表示・編集で`getAttributeValue`の非同期処理対応
+
+これらの修正により、sqflite移行に伴うFlutter標準の非同期処理パターンに完全準拠しました。
+
+### sqflite初期化対応（追加）
+デスクトップ環境（Windows/macOS/Linux）での動作を保証するため、以下を実装：
+- **`pubspec.yaml`**: `sqflite_common_ffi: ^2.3.0` パッケージを追加
+- **`lib/main.dart`**: プラットフォーム別初期化処理を追加
+  - `WidgetsFlutterBinding.ensureInitialized()` の呼び出し
+  - デスクトップ環境での `sqfliteFfiInit()` と `databaseFactory = databaseFactoryFfi` の設定
+- **`lib/models/geopackage_file.dart`**: 初期化検証の強化
+  - データベース初期化前の Widget バインディング確認
+  - 初期化成功ログの追加
+
+これにより「Bad state: databaseFactory not initialized」エラーを根本的に解決しました。
+
+### 重複読み込み問題の修正（追加）
+- **基底クラス`LayerTreeNode.loadNodes`**の重複実装問題を解決
+  - 基底クラスのloadNodesメソッドから.gpkgファイルスキャン処理を削除
+  - 各サブクラス（FolderNode、GeoPackageNode、LayerNode）で適切に実装を分離
+- **ファイルシステム同期機能の実装**
+  - `addChildIfNotExists`メソッドを追加し、同名・同型ノードの重複を防止
+  - `updateChildren`メソッドを改良し、既存ノードを再利用しながらファイルシステム変更を反映
+  - 削除されたファイル・レイヤに対応するノードを自動削除
+  - 初期化フラグ（`_initialized`）により、コンストラクタでの自動初期化は1回のみ実行
+  - その後の`updateChildren`呼び出しは何度でも可能で、ファイルシステムとの同期を維持
+
+**設計方針**：
+- `updateChildren`は何度でも呼び出し可能
+- ファイルシステムに新しいファイルが追加された場合：対応する新しいノードを追加
+- ファイルシステムからファイルが削除された場合：対応するノードを削除
+- 既存ファイルが変更されていない場合：既存ノードを再利用（パフォーマンス向上）
+
+これにより、プロジェクト読み込み時にディレクトリ内のGeoPackageファイルが自動的に検出・読み込まれ、Drawerに表示されるようになりました。
+
+### フィーチャ表示問題の修正（追加）
+既存プロジェクトのフィーチャが地図上に表示されない問題を根本解決：
+
+**原因の特定**：
+- プロジェクト初期化時に`_updateFeatures()`メソッドが適切なタイミングで呼ばれていなかった
+- フィーチャ作成後・可視状態変更後に`refreshFeatures()`が呼ばれていなかった
+
+**修正内容**：
+- **`lib/screens/map_page.dart`**: プロジェクト初期化フローの改善
+  - `_initializeProjectTree()`メソッドでプロジェクトツリー構築後に`_updateFeatures()`を呼び出し
+  - initStateでの重複`_updateFeatures()`呼び出しを削除（タイミング問題を解決）
+  - `_updateFeatures()`メソッドに詳細なデバッグログを追加
+- **`lib/tools/pen_tool.dart`**: フィーチャ作成後の表示更新
+  - `onScaleEnd`メソッドでフリーハンド描画完了時に`refreshFeatures()`を呼び出し
+  - `confirm`メソッドで属性入力完了時に`refreshFeatures()`を呼び出し
+- **`lib/widgets/layer_drawer.dart`**: 可視状態変更時の表示更新
+  - レイヤ可視状態変更時に`refreshFeatures()`を呼び出し、即座に地図表示を更新
+
+**動作フロー**：
+1. **プロジェクト読み込み時**: ツリー構築 → フィーチャ取得 → 地図表示
+2. **フィーチャ作成時**: DB保存 → `refreshFeatures()` → 地図更新
+3. **可視状態変更時**: 状態更新 → `refreshFeatures()` → 地図更新
+
+これにより、既存のフィーチャが適切に地図に表示され、新規作成したフィーチャも即座に表示されるようになりました。
+
+### Android NDKバージョン対応（追加）
+AndroidプラットフォームでのビルドエラーとNDKバージョン不整合を解決：
+
+**問題の背景**：
+- プロジェクトはAndroid NDK 26.3.11579264で設定されていた
+- 使用しているプラグイン（file_picker、geolocator_android、sqflite_android等）がAndroid NDK 27.0.12077973を要求
+
+**修正内容**：
+- **`android/app/build.gradle.kts`**: NDKバージョンを27.0.12077973に更新
+  ```kotlin
+  android {
+      ndkVersion = "27.0.12077973"
+      // ...
+  }
+  ```
+- **`pubspec.yaml`**: file_pickerを6.1.1から10.1.9に更新
+  - 古いfile_pickerバージョンの`PluginRegistry.Registrar`クラス未対応エラーを解決
+  - 最新版では新しいFlutter embedding APIに完全対応
+
+**対応手順**：
+1. `flutter clean` でビルドキャッシュをクリア
+2. `flutter pub get` で依存関係を再取得
+3. Android端末での動作確認
+
+これにより、WindowsとAndroidの両プラットフォームで一貫した動作が可能になりました。
+
 ## 主な設計方針（2024-06-10以降）
 - **LayerManagerは廃止**。GeoPackageFile＋ノード（GeoPackageNode/LayerNode）＋グローバル変数で全体管理。
 - UIはGeoPackageNode/LayerNodeのメソッドを直接呼び、DB操作はGeoPackageFileに集約。
@@ -76,7 +259,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリ。
 - `lib/models/geopackage.dart`: Layer, GeoPackageGroup, LayerManager（meta.json連携）
 - `lib/utils/meta_data.dart`: meta.json全体の読み書き・可視状態・設定管理（MetaDataクラス）
 - `lib/utils/folder_tree.dart`: FolderNode（サブフォルダツリー）
-- `lib/widgets/layer_drawer.dart`: レイヤ構造Drawer本体。`LayerDrawer`（StatefulWidget）、`LayerDrawerTitleBar`（タイトルパネルWidget）などを実装。
+- `lib/widgets/layer_drawer.dart`: レイヤツリーUI（ノード参照で操作）
 - `lib/screens/map_page.dart`: KMapsHomePage（画面本体、LayerManager/Drawer連携）
 - `lib/models/folder_node.dart`: FolderNode（サブフォルダツリー）・scanProjectFolder（.gpkgファイルもchildrenにLayerTreeNode(nodeType: "gpkg")として追加する実装）
 - `lib/utils/global_config.dart`: GlobalConfigクラス。プロジェクトのルートディレクトリやmeta.json（MetaDataインスタンス）、**現在のツール（currentTool: MapTool）**、**選択中フィーチャリスト（selectedFeatures）**などのグローバル変数・設定を一元管理。

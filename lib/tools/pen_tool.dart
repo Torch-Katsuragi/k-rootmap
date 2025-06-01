@@ -194,6 +194,7 @@ class PenTool extends MapTool {
           '',
         );
         _pointPreview = null;
+        mapState.refreshFeatures();
         mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
         LineFeatureNode.createIn(
@@ -204,6 +205,7 @@ class PenTool extends MapTool {
         );
         drawingLine.clear();
         _isDrawing = false;
+        mapState.refreshFeatures();
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
@@ -215,6 +217,7 @@ class PenTool extends MapTool {
         );
         drawingPolygon.clear();
         _isDrawing = false;
+        mapState.refreshFeatures();
         mapState.setState(() {});
       }
     }
@@ -281,6 +284,10 @@ class PenTool extends MapTool {
       setState(() {
         drawingLine.clear();
       });
+      // フィーチャ表示を更新（mapStateが利用可能なら）
+      if (GlobalConfig.instance.mapState != null) {
+        GlobalConfig.instance.mapState.refreshFeatures();
+      }
     } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
       final closed = closeRing(drawingPolygon);
       PolygonFeatureNode.createIn(
@@ -292,6 +299,10 @@ class PenTool extends MapTool {
       setState(() {
         drawingPolygon.clear();
       });
+      // フィーチャ表示を更新（mapStateが利用可能なら）
+      if (GlobalConfig.instance.mapState != null) {
+        GlobalConfig.instance.mapState.refreshFeatures();
+      }
     }
   }
 }

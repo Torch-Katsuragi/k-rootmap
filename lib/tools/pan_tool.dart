@@ -7,6 +7,7 @@ import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart' show CustomPoint;
 import 'dart:math';
+import '../utils/global_config.dart'; // SelectToolアクセス用
 
 /// 地図パン（移動）専用ツール
 class PanTool extends MapTool {
@@ -21,10 +22,11 @@ class PanTool extends MapTool {
   double? _startZoom, _startRotation;
   LatLng? _startCenter;
 
-  /// タップイベント
+  /// タップイベント - SelectToolのonTapを呼び出す
   @override
   void onTap(TapUpDetails details, dynamic mapState) {
-    // パンツールでは特に何もしない
+    // パンツールでのシングルタップは選択動作として動作
+    GlobalConfig.instance.selectTool.onTap(details, mapState);
   }
 
   /// スケール開始イベント

@@ -41,10 +41,33 @@ class _LayerDrawerState extends State<LayerDrawer> {
   // 属性テーブル表示中かどうか・どのLayerNodeか
   LayerNode? attributeTableLayerNode;
 
+  /// 初回の自動展開が完了したかを追跡
+  bool _hasPerformedInitialExpansion = false;
+
+  /// ユーザーが明示的に閉じたGeoPackageノードのパスを記録
+  final Set<String> _userClosedGpkgPaths = {};
+
   @override
   void initState() {
     super.initState();
     // デフォルトで全gpkgノードを展開状態に
+    _expandAllGeoPackageNodes();
+    _hasPerformedInitialExpansion = true;
+  }
+
+  @override
+  void didUpdateWidget(LayerDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // currentNodeが変更された場合のみ自動展開（新しいディレクトリに移動した場合）
+    if (oldWidget.currentNode != widget.currentNode) {
+      _userClosedGpkgPaths.clear(); // 新しいディレクトリでは閉じた履歴をリセット
+      _expandAllGeoPackageNodes();
+      _hasPerformedInitialExpansion = true;
+    }
+  }
+
+  /// 現在のノードの全GeoPackage子ノードを展開状態に設定
+  void _expandAllGeoPackageNodes() {
     final node = widget.currentNode;
     if (node != null) {
       for (final child in node.children) {
@@ -56,11 +79,33 @@ class _LayerDrawerState extends State<LayerDrawer> {
     }
   }
 
+  /// 新規追加されたGeoPackageノードのみを自動展開（ユーザーが閉じたものは除く）
+  void _expandNewGeoPackageNodesOnly() {
+    final node = widget.currentNode;
+    if (node != null) {
+      for (final child in node.children) {
+        if (child is GeoPackageNode) {
+          final absPath = child.geoPackageFile.getAbsolutePath();
+          // まだ展開状態の管理対象になっていない かつ ユーザーが閉じていないノードのみ展開
+          if (absPath != null &&
+              !expandedGpkgPaths.contains(absPath) &&
+              !_userClosedGpkgPaths.contains(absPath)) {
+            expandedGpkgPaths.add(absPath);
+          }
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.currentNode == null) {
       return const Center(child: Text('ディレクトリが見つかりません'));
     }
+
+    // 新しいGeoPackageノードが追加されていれば自動展開（ユーザーが閉じたものは除く）
+    _expandNewGeoPackageNodesOnly();
+
     // 属性テーブル表示中ならそちらを表示
     if (attributeTableLayerNode != null) {
       return AttributeTablePanel(
@@ -179,6 +224,13 @@ class _LayerDrawerState extends State<LayerDrawer> {
                         parent: folderNode,
                       );
                       folderNode.addChild(newNode);
+
+                      // 新規作成されたGeoPackageを自動展開
+                      final newAbsPath = gpkgFile.getAbsolutePath();
+                      if (newAbsPath != null) {
+                        expandedGpkgPaths.add(newAbsPath);
+                      }
+
                       widget.setStateCallback(() {});
                     }
                   }
@@ -225,9 +277,17 @@ class _LayerDrawerState extends State<LayerDrawer> {
           onTap: () {
             setState(() {
               if (isExpanded) {
-                if (absPath != null) expandedGpkgPaths.remove(absPath);
+                // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
+                if (absPath != null) {
+                  expandedGpkgPaths.remove(absPath);
+                  _userClosedGpkgPaths.add(absPath);
+                }
               } else {
-                if (absPath != null) expandedGpkgPaths.add(absPath);
+                // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
+                if (absPath != null) {
+                  expandedGpkgPaths.add(absPath);
+                  _userClosedGpkgPaths.remove(absPath);
+                }
               }
             });
           },

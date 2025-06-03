@@ -8,6 +8,18 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- ネットワーク状態確認権限 -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- Bluetooth GNSS関連権限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- Android 12以降のBluetooth権限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- Mock Location Provider権限（テスト・開発用） -->
+    <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
+    
+    <!-- Bluetooth機能要求 -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
         android:label="k_maps"

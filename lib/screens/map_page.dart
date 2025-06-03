@@ -19,6 +19,7 @@ import '../tools/select_tool.dart';
 import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
 import '../tools/gps_utils.dart'; // Added GPS utility
+import '../screens/bluetooth_gnss_screen.dart'; // Bluetooth GNSS screen import
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -429,6 +430,19 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
       appBar: AppBar(
         title: const Text('K-MAPS GIS'),
         actions: [
+          // Bluetooth GNSS接続ボタン
+          IconButton(
+            icon: const Icon(Icons.bluetooth),
+            tooltip: 'Bluetooth GNSS',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BluetoothGnssScreen(),
+                ),
+              );
+            },
+          ),
           if (!drawerOpen)
             IconButton(
               icon: Icon(Icons.layers),

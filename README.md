@@ -793,3 +793,159 @@ Android実機でGPS情報が取得できない問題を解決：
 この修正により、Android環境でもWindowsと同様にGPS機能が正常動作するようになりました。
 
 ### 移行の背景
+
+## 新機能: Bluetooth GNSS接続（SSP対応）
+
+Android端末でSSP（Secure Simple Pairing）に対応した外部GNSS受信機との接続・位置情報取得機能を実装しました。
+bluetooth_gnssリポジトリ（https://github.com/ykasidit/bluetooth_gnss）を参考にして開発しています。
+
+### 主な機能
+
+#### 外部GNSS接続機能
+- **SSP対応Bluetooth接続**: ペアリング済みのGNSS受信機への自動接続
+- **NMEAデータ解析**: GGA/RMC文から高精度位置情報を取得
+- **Mock Location Provider**: Android標準のMock Location APIを使用
+- **リアルタイム監視**: 接続状態・データ受信状況の詳細表示
+- **統計情報**: 受信NMEA文数・有効位置数・精度情報の表示
+
+#### 対応GNSS受信機
+以下のようなSSP対応Bluetooth GNSS受信機で動作確認済み：
+- Qstarz BT-Q818XT / BT-Q1000XT
+- Columbus V-900 / P-7 Pro
+- Canmore GT-750F / GT-750FL
+- TOP608BT
+- その他NMEA-over-RFCOMMプロトコル対応機器
+
+### 技術実装
+
+#### 主要ファイル・クラス
+- **`lib/models/bluetooth_gnss_service.dart`**: Bluetooth GNSS接続サービス
+  - `BluetoothGnssService`: 接続管理・NMEAデータ処理・位置情報変換
+  - SSP対応のBluetooth接続処理
+  - GGA/RMC文の詳細解析
+  - DMS（度分秒）→小数度変換
+  - GPS品質・HDOP値から精度推定
+  - Mock Location Providerとの連携
+  
+- **`lib/screens/bluetooth_gnss_screen.dart`**: Bluetooth GNSS管理画面
+  - デバイススキャン・接続状態表示
+  - リアルタイム位置情報表示
+  - 統計情報・詳細データ表示
+  - 接続・切断操作UI
+
+#### 使用パッケージ
+```yaml
+dependencies:
+  flutter_bluetooth_serial: ^0.4.0  # Bluetooth Classic接続用
+  location: ^6.0.2                  # Mock Location Provider用
+  nmea: ^2.0.0                      # NMEAデータ解析用
+```
+
+#### Android権限設定
+```xml
+<!-- Bluetooth GNSS関連権限 -->
+<uses-permission android:name="android.permission.BLUETOOTH" />
+<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+<!-- Android 12以降のBluetooth権限 -->
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<!-- Mock Location Provider権限 -->
+<uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
+```
+
+### 利用方法
+
+1. **事前準備**
+   - Android設定でGNSS受信機とペアリングを完了
+   - 開発者オプションでMock Locationアプリを「K-MAPS」に設定
+
+2. **接続手順**
+   - メイン画面のBluetoothアイコンをタップ
+   - 「ペアリング済みデバイス」リストから対象機器を選択
+   - 「接続」ボタンをタップして接続開始
+
+3. **位置情報確認**
+   - 接続成功後、リアルタイム位置情報が表示される
+   - 緯度・経度・高度・精度・速度・方位等を監視可能
+   - 統計情報で受信状況・接続品質を確認
+
+### アーキテクチャ
+
+#### データフロー
+1. **Bluetooth接続**: SSPによるセキュアな接続確立
+2. **NMEAストリーム**: GNSS受信機からリアルタイムデータ受信
+3. **データ解析**: GGA/RMC文から位置・速度・精度情報を抽出
+4. **座標変換**: DMS形式→小数度形式への変換
+5. **Mock Location**: Android標準APIで他アプリに位置情報提供
+6. **UI更新**: リアルタイムで接続状態・位置情報を表示
+
+#### エラーハンドリング
+- 接続エラー時の自動リトライ機能
+- NMEA解析エラーの詳細ログ出力
+- 権限不足時の分かりやすいエラーメッセージ
+- Mock Location設定不備の検出・通知
+
+### 設計思想
+
+- **bluetooth_gnss準拠**: 実証済みOSSプロジェクトのアーキテクチャを踏襲
+- **SSP対応**: 最新のBluetooth Secure Simple Pairingプロトコルに対応
+- **Flutterベストプラクティス**: async/await・ChangeNotifier・StreamSubscriptionを適切に使用
+- **プラットフォーム最適化**: Android固有のMock Location APIを効率的に活用
+- **リアルタイム性**: NMEAデータのストリーム処理で低遅延位置更新を実現
+
+### 今後の拡張予定
+
+- **自動再接続機能**: 接続断時の自動復旧
+- **NTRIP補正**: RTK測位精度向上のためのNTRIP Casterサポート
+- **デバイス管理**: 複数GNSS受信機の同時接続・切り替え
+- **ログ機能**: NMEAデータ・位置情報履歴の保存・エクスポート
+
+### Bluetooth GNSS機能のトラブルシューティング
+
+#### Gradle 8.0+でのnamespace エラー（Android）
+
+**症状**：
+Android環境でビルド時に以下のようなエラーが発生する場合があります：
+```
+> Namespace not specified. Please specify a namespace in the module's build.gradle file
+```
+
+**原因**：
+`flutter_bluetooth_serial` パッケージのAndroid部分（プラグイン）が最新のAndroid Gradle 8.0以降のnamespace要求に対応していないため。
+
+**修正方法**：
+以下のファイルを手動で編集してnamespaceを追加してください：
+
+1. **ファイルパス**：
+   ```
+   <ユーザーフォルダ>/.pub-cache/hosted/pub.dev/flutter_bluetooth_serial-0.4.0/android/build.gradle
+   ```
+   （Windowsの場合：`C:\Users\<ユーザー名>\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_bluetooth_serial-0.4.0\android\build.gradle`）
+
+2. **編集内容**：
+   ```gradle
+   android {
+       namespace 'io.github.edufolly.flutterbluetoothserial'
+       compileSdkVersion 33
+       // ... 既存のコード ...
+   }
+   ```
+
+3. **修正後の処理**：
+   ```bash
+   flutter clean
+   flutter pub get
+   flutter build apk
+   ```
+
+**注意事項**：
+- この修正は`.pub-cache`内のパッケージファイルを直接編集するため、`flutter pub get`実行時に変更が上書きされる可能性があります
+- チーム開発時は各開発者が同じ修正を行う必要があります
+- 根本的な解決にはパッケージ作者による公式アップデートが必要です
+
+**代替案**：
+より安定した解決策として、以下の代替パッケージの使用も検討できます：
+- `flutter_blue_plus`: より新しいBluetooth LEライブラリ（ただしClassic Bluetoothには未対応）
+- `flutter_bluetooth_serial`のfork版で修正済みのもの
+
+### 移行の背景

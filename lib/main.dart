@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';
+import 'services/foreground_service.dart';
 
 void main() async {
   // sqflite使用前に必須の初期化処理
@@ -16,6 +17,17 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+
+  // フォアグラウンドサービスの初期化（遅延実行に変更）
+  // アプリ起動後に初期化してメインIsolate競合を回避
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    try {
+      await ForegroundServiceManager.initializeService();
+      debugPrint('[K-MAPS] フォアグラウンドサービス初期化完了');
+    } catch (e) {
+      debugPrint('[K-MAPS] フォアグラウンドサービス初期化エラー: $e');
+    }
+  });
 
   runApp(const KMapsApp());
 }

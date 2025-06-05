@@ -5,21 +5,30 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 
 ## 主要機能
 
-### 地図機能
+### 1. フォアグラウンドサービス機能 **【NEW】**
+- **概要**: バックグラウンドでタスクを継続実行する機能
+- **実装**: `flutter_background_service` パッケージを使用
+- **機能詳細**:
+  - 1秒間隔でのログ出力（デバッグ・テスト用）
+  - Android端末では通知バーでサービス状態を表示
+  - UIからのサービス開始・停止制御
+  - エラーハンドリングとログ出力の最適化
+
+### 2. 地図表示・ナビゲーション
 - OpenStreetMapベースの地図表示
 - レイヤ構造での地理情報管理（点・線・面）
 - フリーハンド描画とタップによる図形作成
 - フィーチャの選択・編集・削除
 - 属性情報の表示・編集
 
-### GPS・GNSS機能  
+### 3. GPS・GNSS機能  
 - 内蔵GPS/GNSS受信機による現在位置取得
 - SSP対応Bluetooth GNSS受信機との連携
 - NMEA-0183フォーマットの位置データ解析
 - リアルタイム位置情報表示
 - 衛星情報・精度情報の詳細表示
 
-### データ管理機能
+### 4. データ管理機能
 - GeoPackage形式でのデータ保存・管理
 - プロジェクト・フォルダ・レイヤの階層構造
 - レイヤの可視性制御
@@ -51,6 +60,8 @@ dependencies:
   flutter_bluetooth_serial: ^0.4.0  # Bluetooth接続
   nmea: ^2.0.0                  # NMEAデータ解析
   file_picker: ^10.1.9          # ファイル選択
+  flutter_background_service: ^5.0.9  # フォアグラウンドサービス
+  permission_handler: ^11.3.1  # Android権限管理
 ```
 
 ## 主要ファイル・クラス構成
@@ -142,37 +153,110 @@ final layerNames = await geoPackage.getLayerNames();
 
 ## トラブルシューティング
 
-### flutter_bluetooth_serialのnamespaceエラー（Android）
+### よくある問題
 
-Android環境でビルド時に「Namespace not specified」エラーが発生した場合：
+#### 1. サービスが開始しない
+   - Android権限の確認
+   - デバッグログの確認
 
+#### 2. 通知が表示されない
+   - 端末の通知設定確認
+   - アプリの通知権限確認
 
+#### 3. ログが出力されない
+   - デバッグコンソールの確認
+   - print文の出力先確認
+
+#### 4. AndroidManifest.xml競合エラー **【重要】**
+**エラー内容**:
+```
+Attribute service#id.flutter.flutter_background_service.BackgroundService@exported value=(false) from (unknown)
+is also present at [:flutter_background_service_android] AndroidManifest.xml:15:13-36 value=(true).
+```
+
+**原因**: flutter_background_serviceプラグインが自動的にサービス定義を追加するため、手動で追加したサービス定義と競合
+
+**解決方法**:
+1. AndroidManifest.xmlから手動で追加したサービス定義を削除
+2. プラグインが自動的に適切な設定を行う
+3. 権限（FOREGROUND_SERVICE等）のみ手動で設定
+
+```xml
+<!-- ❌ 削除が必要（競合原因） -->
+<service
+    android:name="id.flutter.flutter_background_service.BackgroundService"
+    android:exported="false"
+    android:foregroundServiceType="dataSync" />
+
+<!-- ✅ 権限のみ手動設定 -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+```
+
+**参考**: [GitHub Issue #1558](https://github.com/Baseflow/flutter-geolocator/issues/1558)での類似問題
+
+#### 5. フォアグラウンドサービス通知エラー **【クリティカル】**
+**エラー内容**:
+```
+android.app.RemoteServiceException$CannotPostForegroundServiceNotificationException: Bad notification for startForeground
+```
+
+**原因**: 
+- 通知チャンネルが適切に設定されていない
+- メインIsolateでのプラグイン競合
+- Android 8.0以降の通知チャンネル要件に未対応
+
+**解決方法**:
+1. **MainActivityで通知チャンネルを明示的に作成**:
+```kotlin
+// MainActivity.kt
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    val channelId = "k_maps_foreground_channel"
+    val channelName = "K-MAPS フォアグラウンドサービス"
+    val importance = NotificationManager.IMPORTANCE_LOW
+    
+    val channel = NotificationChannel(channelId, channelName, importance)
+    val notificationManager = getSystemService(NotificationManager::class.java)
+    notificationManager?.createNotificationChannel(channel)
 }
 ```
 
-**修正方法- .pub-cache編集**：
-以下のファイルにnamespaceを追加してください：
-```
-<ユーザーフォルダ>/.pub-cache/hosted/pub.dev/flutter_bluetooth_serial-0.4.0/android/build.gradle
-```
-
-編集内容：
-```gradle
-android {
-    namespace 'io.github.edufolly.flutterbluetoothserial'
-    compileSdkVersion 33
-    // ... 既存のコード ...
-}
+2. **サービス初期化の遅延実行**:
+```dart
+// main.dart
+WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await ForegroundServiceManager.initializeService();
+});
 ```
 
-修正後：
+3. **Android 13以降の通知権限追加**:
+```xml
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+```
+
+**参考**: [GitHub Issue #406](https://github.com/ekasetiawans/flutter_background_service/issues/406)でのクラッシュ報告
+
+### デバッグ方法
 ```bash
-flutter clean
-flutter pub get
-flutter build apk
+# Flutterログ確認
+flutter logs
+
+# Androidログ確認
+adb logcat | grep flutter
 ```
 
-**注意**: 代替案の修正は`flutter pub get`実行時に上書きされる可能性があります。
+## 更新履歴
 
-## 開発者向け情報
-詳細な技術仕様・クラス構成・API仕様については、各ソースファイルのドキュメントコメントを参照してください。
+### v1.1.0 (最新)
+- フォアグラウンドサービス機能追加
+- デバッグログ最適化
+- UI改善（サービス制御画面）
+
+### v1.0.0
+- 基本的な地図表示機能
+- GPS位置情報取得
+- Bluetooth GNSS対応
+
+---
+
+**開発者向けメモ**: 本プロジェクトは継続的な機能拡張を想定して設計されており、各機能は独立性と再利用性を重視した実装となっています。

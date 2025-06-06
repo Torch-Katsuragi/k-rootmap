@@ -1,11 +1,15 @@
 // K-MAPS: フォアグラウンドサービス管理クラス
-// 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装（GPS情報付き）
+// 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装（GPS + 外部GNSS対応）
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import '../utils/global_gnss_manager.dart';
 
 /// フォアグラウンドサービス管理クラス
 /// シングルトンパターンで実装し、サービスの開始・停止を管理
@@ -18,6 +22,31 @@ class ForegroundServiceManager {
 
   /// サービス実行フラグ
   bool _isServiceRunning = false;
+
+  /// 外部GNSS設定
+  static String? _gnssDeviceAddress;
+  static String? _gnssDeviceName;
+
+  /// 外部GNSS設定を保存
+  static void setGnssDevice(String deviceAddress, String deviceName) {
+    _gnssDeviceAddress = deviceAddress;
+    _gnssDeviceName = deviceName;
+    debugPrint(
+      '[ForegroundService] GNSS設定保存: $_gnssDeviceName ($_gnssDeviceAddress)',
+    );
+  }
+
+  /// 外部GNSS設定をクリア
+  static void clearGnssDevice() {
+    _gnssDeviceAddress = null;
+    _gnssDeviceName = null;
+    debugPrint('[ForegroundService] GNSS設定をクリア');
+  }
+
+  /// 現在のGNSS設定を取得
+  static Map<String, String?> getGnssDevice() {
+    return {'address': _gnssDeviceAddress, 'name': _gnssDeviceName};
+  }
 
   /// サービスの初期化
   /// アプリ起動時に呼び出される
@@ -37,8 +66,8 @@ class ForegroundServiceManager {
 
         // 通知設定（詳細に設定）
         notificationChannelId: 'k_maps_foreground_channel',
-        initialNotificationTitle: 'K-MAPS GPS追跡実行中',
-        initialNotificationContent: '1秒間隔でGPS情報をログ出力中...',
+        initialNotificationTitle: 'K-MAPS 位置追跡実行中',
+        initialNotificationContent: '1秒間隔でGPS/GNSS情報をログ出力中...',
         foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(
@@ -96,12 +125,27 @@ void onStart(ServiceInstance service) async {
     // Isolate内でのデバッグ出力設定
     DartPluginRegistrant.ensureInitialized();
 
-    debugPrint('[ForegroundService] GPS追跡サービスエントリーポイント開始');
+    debugPrint('[ForegroundService] GPS/GNSS追跡サービスエントリーポイント開始');
 
     // GPS初期設定
     Position? lastKnownPosition;
     bool isLocationServiceEnabled = false;
     LocationPermission permission = LocationPermission.denied;
+
+    // 外部GNSS設定
+    BluetoothConnection? gnssConnection;
+    StreamSubscription<Uint8List>? gnssDataSubscription;
+    String gnssPartialData = '';
+
+    // GNSS位置情報
+    double? gnssLatitude;
+    double? gnssLongitude;
+    double? gnssAltitude;
+    double? gnssAccuracy;
+    double? gnssSpeed;
+    double? gnssBearing;
+    int gnssReceivedCount = 0;
+    bool isGnssConnected = false;
 
     // 位置情報サービスの確認と権限チェック
     try {
@@ -120,71 +164,233 @@ void onStart(ServiceInstance service) async {
       debugPrint('[ForegroundService] GPS初期化エラー: $e');
     }
 
+    // 外部GNSS接続を試行
+    if (ForegroundServiceManager._gnssDeviceAddress != null &&
+        ForegroundServiceManager._gnssDeviceName != null) {
+      try {
+        debugPrint(
+          '[ForegroundService] 外部GNSS接続開始: ${ForegroundServiceManager._gnssDeviceName}',
+        );
+        gnssConnection = await BluetoothConnection.toAddress(
+          ForegroundServiceManager._gnssDeviceAddress!,
+        );
+
+        if (gnssConnection != null && gnssConnection!.isConnected) {
+          isGnssConnected = true;
+          debugPrint(
+            '[ForegroundService] 外部GNSS接続成功: ${ForegroundServiceManager._gnssDeviceName}',
+          );
+
+          // NMEAデータ受信開始
+          gnssDataSubscription = gnssConnection!.input!.listen(
+            (Uint8List data) {
+              try {
+                String dataString = utf8.decode(data);
+                gnssPartialData += dataString;
+
+                // NMEA文を行ごとに処理
+                List<String> lines = gnssPartialData.split('\n');
+                gnssPartialData = lines.last; // 最後の不完全な行を保持
+
+                for (int i = 0; i < lines.length - 1; i++) {
+                  String line = lines[i].trim();
+                  if (line.isNotEmpty &&
+                      (line.startsWith('\$GPGGA') ||
+                          line.startsWith('\$GNGGA'))) {
+                    // 簡易GGA解析
+                    List<String> parts = line.split(',');
+                    if (parts.length >= 15 &&
+                        parts[2].isNotEmpty &&
+                        parts[4].isNotEmpty) {
+                      try {
+                        // 緯度の処理 (DDMM.MMMM形式)
+                        double lat =
+                            double.parse(parts[2].substring(0, 2)) +
+                            double.parse(parts[2].substring(2)) / 60.0;
+                        if (parts[3] == 'S') lat = -lat;
+
+                        // 経度の処理 (DDDMM.MMMM形式)
+                        double lon =
+                            double.parse(parts[4].substring(0, 3)) +
+                            double.parse(parts[4].substring(3)) / 60.0;
+                        if (parts[5] == 'W') lon = -lon;
+
+                        gnssLatitude = lat;
+                        gnssLongitude = lon;
+                        gnssAltitude = double.tryParse(parts[9]) ?? 0.0;
+                        gnssAccuracy =
+                            (double.tryParse(parts[8]) ?? 1.0) *
+                            5.0; // HDOP × 5
+                        gnssReceivedCount++;
+                      } catch (e) {
+                        debugPrint('[ForegroundService] NMEA解析エラー: $e');
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('[ForegroundService] GNSS データ処理エラー: $e');
+              }
+            },
+            onError: (error) {
+              debugPrint('[ForegroundService] GNSS データ受信エラー: $error');
+              isGnssConnected = false;
+            },
+            onDone: () {
+              debugPrint('[ForegroundService] GNSS データストリーム終了');
+              isGnssConnected = false;
+            },
+          );
+        }
+      } catch (e) {
+        debugPrint('[ForegroundService] 外部GNSS接続エラー: $e');
+        isGnssConnected = false;
+      }
+    }
+
     // サービス停止要求の監視を設定
     service.on('stopService').listen((event) {
       debugPrint('[ForegroundService] 停止要求受信');
       service.stopSelf();
     });
 
-    // 1秒間隔のタイマー設定（GPS情報付き）
+    // 1秒間隔のタイマー設定（GPS/GNSS情報付き）
     Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
-        // GPS情報取得を試行
-        String gpsInfo = "GPS: 取得中...";
+        // 位置情報取得を試行（外部GNSS優先）
+        String positionInfo = "位置情報: 取得中...";
+        Position? currentPosition;
 
-        if (isLocationServiceEnabled &&
+        // グローバルマネージャーの接続状態を確認
+        final globalGnssManager = GlobalGnssManager();
+        final isGlobalGnssConnected = globalGnssManager.isConnected;
+        final globalPosition = globalGnssManager.currentPosition;
+        final hasGlobalPosition =
+            globalPosition['latitude'] != null &&
+            globalPosition['longitude'] != null;
+
+        // グローバルGNSSまたはサービス内GNSSが接続済みで位置情報がある場合はGNSSを優先使用
+        if ((isGlobalGnssConnected && hasGlobalPosition) ||
+            (isGnssConnected &&
+                gnssLatitude != null &&
+                gnssLongitude != null)) {
+          // グローバルマネージャーの位置情報を優先使用
+          final useGlobalPosition = isGlobalGnssConnected && hasGlobalPosition;
+          final lat =
+              useGlobalPosition ? globalPosition['latitude']! : gnssLatitude!;
+          final lon =
+              useGlobalPosition ? globalPosition['longitude']! : gnssLongitude!;
+          final alt =
+              useGlobalPosition
+                  ? (globalPosition['altitude'] ?? 0.0)
+                  : (gnssAltitude ?? 0.0);
+          final acc =
+              useGlobalPosition
+                  ? (globalPosition['accuracy'] ?? 5.0)
+                  : (gnssAccuracy ?? 5.0);
+          final spd =
+              useGlobalPosition
+                  ? (globalPosition['speed'] ?? 0.0)
+                  : (gnssSpeed ?? 0.0);
+          final brg =
+              useGlobalPosition
+                  ? (globalPosition['bearing'] ?? 0.0)
+                  : (gnssBearing ?? 0.0);
+          final statsInfo =
+              useGlobalPosition
+                  ? globalGnssManager.statistics
+                  : {'receivedSentenceCount': gnssReceivedCount};
+
+          positionInfo =
+              "GNSS: ${lat.toStringAsFixed(6)}, "
+              "${lon.toStringAsFixed(6)} "
+              "(精度: ${acc.toStringAsFixed(1)}m) "
+              "[外部GNSS: 受信数${statsInfo['receivedSentenceCount'] ?? gnssReceivedCount}]";
+
+          // 通知用に仮想Positionを作成
+          currentPosition = Position(
+            latitude: lat,
+            longitude: lon,
+            timestamp: DateTime.now(),
+            accuracy: acc,
+            altitude: alt,
+            heading: brg,
+            speed: spd,
+            speedAccuracy: 1.0,
+            altitudeAccuracy: 1.0,
+            headingAccuracy: 1.0,
+          );
+        }
+        // 外部GNSSが利用できない場合は内蔵GPSを使用
+        else if (isLocationServiceEnabled &&
             (permission == LocationPermission.always ||
                 permission == LocationPermission.whileInUse)) {
           try {
             // 現在位置を取得（タイムアウト設定）
-            Position currentPosition = await Geolocator.getCurrentPosition(
+            currentPosition = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.high,
               timeLimit: const Duration(seconds: 5),
             );
 
             lastKnownPosition = currentPosition;
-            gpsInfo =
+            positionInfo =
                 "GPS: ${currentPosition.latitude.toStringAsFixed(6)}, "
                 "${currentPosition.longitude.toStringAsFixed(6)} "
-                "(精度: ${currentPosition.accuracy.toStringAsFixed(1)}m)";
+                "(精度: ${currentPosition.accuracy.toStringAsFixed(1)}m) [内蔵GPS]";
           } catch (e) {
             // 取得に失敗した場合は最後の既知位置を使用
             if (lastKnownPosition != null) {
-              gpsInfo =
+              positionInfo =
                   "GPS: ${lastKnownPosition!.latitude.toStringAsFixed(6)}, "
                   "${lastKnownPosition!.longitude.toStringAsFixed(6)} "
-                  "(前回取得値)";
+                  "(前回取得値) [内蔵GPS]";
+              currentPosition = lastKnownPosition;
             } else {
-              gpsInfo = "GPS: 位置情報取得エラー - $e";
+              positionInfo = "GPS: 位置情報取得エラー - $e";
             }
           }
         } else {
-          gpsInfo =
-              "GPS: 無効または権限なし (サービス: $isLocationServiceEnabled, 権限: $permission)";
+          String gnssStatus =
+              (isGlobalGnssConnected || isGnssConnected)
+                  ? " / GNSS接続済み"
+                  : " / GNSS未接続";
+          if (isGlobalGnssConnected) {
+            gnssStatus += " (グローバル管理)";
+          }
+          positionInfo =
+              "GPS: 無効または権限なし (サービス: $isLocationServiceEnabled, 権限: $permission)$gnssStatus";
         }
 
         // サービス停止チェック
         if (service is AndroidServiceInstance) {
           if (await service.isForegroundService()) {
             // フォアグラウンドサービスとして実行中
-            _logCurrentTimeWithGPS('[ForegroundService] フォアグラウンド実行中', gpsInfo);
+            _logCurrentTimeWithGPS(
+              '[ForegroundService] フォアグラウンド実行中',
+              positionInfo,
+            );
 
-            // 通知内容を更新（GPS情報付き）
+            // 通知内容を更新（GPS/GNSS情報付き）
             String notificationContent =
-                "GPS追跡中: ${DateTime.now().toString().substring(11, 19)}";
-            if (lastKnownPosition != null) {
+                "位置追跡中: ${DateTime.now().toString().substring(11, 19)}";
+            if (currentPosition != null) {
+              String sourceType =
+                  (isGlobalGnssConnected || isGnssConnected) ? "GNSS" : "GPS";
               notificationContent +=
-                  "\n位置: ${lastKnownPosition!.latitude.toStringAsFixed(4)}, ${lastKnownPosition!.longitude.toStringAsFixed(4)}";
+                  "\n$sourceType: ${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
             }
 
             service.setForegroundNotificationInfo(
-              title: "K-MAPS GPS追跡実行中",
+              title:
+                  (isGlobalGnssConnected || isGnssConnected)
+                      ? "K-MAPS GNSS追跡実行中"
+                      : "K-MAPS GPS追跡実行中",
               content: notificationContent,
             );
           }
         } else {
           // iOS向けログ出力
-          _logCurrentTimeWithGPS('[ForegroundService] iOS実行中', gpsInfo);
+          _logCurrentTimeWithGPS('[ForegroundService] iOS実行中', positionInfo);
         }
       } catch (e) {
         debugPrint('[ForegroundService] タイマー処理エラー: $e');
@@ -193,7 +399,7 @@ void onStart(ServiceInstance service) async {
       }
     });
 
-    debugPrint('[ForegroundService] GPS追跡定期実行タスク開始（1秒間隔）');
+    debugPrint('[ForegroundService] GPS/GNSS追跡定期実行タスク開始（1秒間隔）');
   } catch (e) {
     debugPrint('[ForegroundService] エントリーポイントエラー: $e');
     service.stopSelf();
@@ -207,16 +413,16 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
-/// GPS情報付き現在時刻ログ出力ヘルパー関数
-/// デバッグ出力の統一化とタイムスタンプ・GPS情報付加
-void _logCurrentTimeWithGPS(String message, String gpsInfo) {
+/// 位置情報付き現在時刻ログ出力ヘルパー関数
+/// デバッグ出力の統一化とタイムスタンプ・GPS/GNSS情報付加
+void _logCurrentTimeWithGPS(String message, String positionInfo) {
   final now = DateTime.now();
   final timeStr =
       '${now.hour.toString().padLeft(2, '0')}:'
       '${now.minute.toString().padLeft(2, '0')}:'
       '${now.second.toString().padLeft(2, '0')}';
 
-  final fullMessage = '$message - $timeStr | $gpsInfo';
+  final fullMessage = '$message - $timeStr | $positionInfo';
 
   debugPrint(fullMessage);
 

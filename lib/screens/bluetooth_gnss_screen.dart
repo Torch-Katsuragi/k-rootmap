@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../models/bluetooth_gnss_service.dart';
+import '../services/foreground_service.dart';
+import '../utils/global_gnss_manager.dart';
 
 /// Bluetooth GNSS接続画面
 ///
@@ -20,7 +22,9 @@ class BluetoothGnssScreen extends StatefulWidget {
 }
 
 class _BluetoothGnssScreenState extends State<BluetoothGnssScreen> {
-  final BluetoothGnssService _gnssService = BluetoothGnssService();
+  // グローバルマネージャーから共有インスタンスを取得
+  final GlobalGnssManager _gnssManager = GlobalGnssManager();
+  late final BluetoothGnssService _gnssService;
   List<BluetoothDevice> _devices = [];
   bool _isScanning = false;
   String? _errorMessage;
@@ -28,14 +32,22 @@ class _BluetoothGnssScreenState extends State<BluetoothGnssScreen> {
   @override
   void initState() {
     super.initState();
+    // グローバルマネージャーから共有サービスを取得
+    _gnssService = _gnssManager.gnssService;
     _gnssService.addListener(_onGnssServiceUpdate);
     _scanDevices();
+
+    // デバッグ情報出力
+    _gnssManager.printDebugInfo();
   }
 
   @override
   void dispose() {
     _gnssService.removeListener(_onGnssServiceUpdate);
-    _gnssService.dispose();
+    // 重要: グローバルマネージャー使用時は接続を維持
+    // dispose()は明示的な切断時のみ呼び出される
+    debugPrint('[BluetoothGnssScreen] 画面終了 - 接続は維持されます');
+    _gnssManager.printDebugInfo();
     super.dispose();
   }
 
@@ -71,6 +83,23 @@ class _BluetoothGnssScreenState extends State<BluetoothGnssScreen> {
   Future<void> _connectToDevice(BluetoothDevice device) async {
     try {
       await _gnssService.connectToDevice(device);
+
+      // 接続成功時にフォアグラウンドサービスにGNSS設定を保存
+      if (_gnssService.isConnected) {
+        ForegroundServiceManager.setGnssDevice(
+          device.address,
+          device.name ?? 'Unknown GNSS Device',
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${device.name ?? 'GNSS'}に接続し、フォアグラウンドサービスに設定しました'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,6 +112,22 @@ class _BluetoothGnssScreenState extends State<BluetoothGnssScreen> {
   /// 接続を切断
   Future<void> _disconnect() async {
     await _gnssService.disconnect();
+
+    // 切断時にフォアグラウンドサービスのGNSS設定をクリア
+    ForegroundServiceManager.clearGnssDevice();
+
+    // 明示的な切断時のみグローバルマネージャーをリセット
+    // （画面遷移での自動dispose()とは区別）
+    debugPrint('[BluetoothGnssScreen] 明示的な切断 - グローバルマネージャーをリセット');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GNSS接続を切断し、フォアグラウンドサービス設定をクリアしました'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override

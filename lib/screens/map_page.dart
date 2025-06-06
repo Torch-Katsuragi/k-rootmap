@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:path/path.dart' as p;
 import '../utils/wkb_utils.dart';
 import '../models/layer_tree_node.dart';
@@ -40,7 +41,8 @@ class _EditState {
   int? editingLayerIndex;
 }
 
-class _KMapsHomePageState extends State<KMapsHomePage> {
+class _KMapsHomePageState extends State<KMapsHomePage>
+    with TickerProviderStateMixin {
   final LatLng _center = const LatLng(35.681236, 139.767125); // Tokyo Station
   LatLng? _currentLocation;
   Stream<Position>? _positionStream;
@@ -71,6 +73,10 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   LatLng? _lastTrackedPosition; // フォアグラウンドサービスからの最新位置
   Timer? _serviceStatusUpdateTimer;
 
+  // GPS追跡アニメーション用変数
+  late AnimationController _trackingAnimationController;
+  late Animation<double> _trackingRotationAnimation;
+
   // フィーチャデータキャッシュ用変数（非同期データを管理）
   List<PointFeatureNode> _pointFeatures = [];
   List<LineFeatureNode> _lineFeatures = [];
@@ -87,6 +93,21 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     _currentNode = GlobalConfig.instance.folderTree; // Reference root node
     print('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
     GlobalConfig.instance.mapState = this;
+
+    // GPS追跡アニメーション初期化
+    _trackingAnimationController = AnimationController(
+      duration: const Duration(seconds: 3), // 3秒で1回転
+      vsync: this,
+    );
+    _trackingRotationAnimation = Tween<double>(
+      begin: 0.0,
+      end: 2 * 3.14159, // 2π（360度）
+    ).animate(
+      CurvedAnimation(
+        parent: _trackingAnimationController,
+        curve: Curves.linear, // 等速回転
+      ),
+    );
 
     // プロジェクトフォルダ内をスキャンして子ノード（サブフォルダ・.gpkgファイル）を更新
     _initializeProjectTree();
@@ -206,6 +227,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     _positionSubscription?.cancel();
     _gpsWaitTimer?.cancel();
     _serviceStatusUpdateTimer?.cancel();
+    _trackingAnimationController.dispose(); // アニメーションコントローラーを破棄
     super.dispose();
   }
 
@@ -233,19 +255,33 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
         _lastTrackedPosition = null;
       }
     });
+
+    // アニメーション制御: サービス開始時に回転開始、停止時に回転停止
+    if (isRunning && !wasRunning) {
+      _trackingAnimationController.repeat(); // 無限回転開始
+    } else if (!isRunning && wasRunning) {
+      _trackingAnimationController.stop(); // 回転停止
+      _trackingAnimationController.reset(); // 位置をリセット
+    }
   }
 
   /// GPS追跡フォアグラウンドサービス開始
   Future<void> _startGpsTrackingService() async {
+    // 外部GNSS設定確認
+    final gnssDevice = ForegroundServiceManager.getGnssDevice();
+    String sourceType = gnssDevice['address'] != null ? '外部GNSS' : '内蔵GPS';
+    String deviceInfo =
+        gnssDevice['name'] != null ? ' (${gnssDevice['name']})' : '';
+
     await _serviceManager.startService();
     _updateGpsTrackingServiceStatus();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('GPS追跡フォアグラウンドサービスを開始しました'),
+        SnackBar(
+          content: Text('${sourceType}追跡フォアグラウンドサービスを開始しました$deviceInfo'),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -259,7 +295,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('GPS追跡フォアグラウンドサービスを停止しました'),
+          content: Text('位置追跡フォアグラウンドサービスを停止しました'),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 2),
         ),
@@ -673,36 +709,7 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               size: 36,
                             ),
                           ),
-                        // --- GPS追跡サービスの位置マーカー ---
-                        if (_isGpsTrackingServiceRunning &&
-                            _lastTrackedPosition != null)
-                          Marker(
-                            point: _lastTrackedPosition!,
-                            width: 56,
-                            height: 56,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.8),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.red.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.track_changes,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                          ),
+
                         // --- Existing point feature markers ---
                         for (final f in pointFeatures)
                           ...((f.geometry as List<LatLng>).map(
@@ -948,6 +955,98 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                         );
                       }
                       return const SizedBox.shrink();
+                    },
+                  ),
+                // --- GPS追跡サービスの回転する光エフェクト ---
+                if (_isGpsTrackingServiceRunning && _currentLocation != null)
+                  AnimatedBuilder(
+                    animation: _trackingRotationAnimation,
+                    builder: (context, child) {
+                      final screenPos = latLngToOffset(_currentLocation!);
+                      return Positioned(
+                        left: screenPos.dx - 40, // 中心を基準に調整
+                        top: screenPos.dy - 40,
+                        child: SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: Stack(
+                            children: [
+                              // 外側の薄い円 (軌跡)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.orange.withOpacity(0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // 回転する光点
+                              Positioned(
+                                left:
+                                    40 +
+                                    30 * cos(_trackingRotationAnimation.value) -
+                                    4, // 中心から30px離れた位置
+                                top:
+                                    40 +
+                                    30 * sin(_trackingRotationAnimation.value) -
+                                    4,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.orange.withOpacity(0.8),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // さらに内側の小さな回転光点（逆回転で複雑な動き）
+                              Positioned(
+                                left:
+                                    40 +
+                                    20 *
+                                        cos(
+                                          -_trackingRotationAnimation.value *
+                                              1.5,
+                                        ) -
+                                    3, // 中心から20px離れた位置
+                                top:
+                                    40 +
+                                    20 *
+                                        sin(
+                                          -_trackingRotationAnimation.value *
+                                              1.5,
+                                        ) -
+                                    3,
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.amber.withOpacity(0.6),
+                                        blurRadius: 3,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
                     },
                   ),
               ],

@@ -1,10 +1,11 @@
 // K-MAPS: フォアグラウンドサービス管理クラス
-// 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装
+// 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装（GPS情報付き）
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 /// フォアグラウンドサービス管理クラス
 /// シングルトンパターンで実装し、サービスの開始・停止を管理
@@ -36,8 +37,8 @@ class ForegroundServiceManager {
 
         // 通知設定（詳細に設定）
         notificationChannelId: 'k_maps_foreground_channel',
-        initialNotificationTitle: 'K-MAPS サービス実行中',
-        initialNotificationContent: '1秒間隔でログ出力を行っています...',
+        initialNotificationTitle: 'K-MAPS GPS追跡実行中',
+        initialNotificationContent: '1秒間隔でGPS情報をログ出力中...',
         foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(
@@ -48,7 +49,7 @@ class ForegroundServiceManager {
       ),
     );
 
-    debugPrint('[ForegroundService] サービス初期化完了');
+    debugPrint('[ForegroundService] サービス初期化完了（GPS対応）');
   }
 
   /// サービス開始
@@ -61,7 +62,7 @@ class ForegroundServiceManager {
     try {
       await FlutterBackgroundService().startService();
       _isServiceRunning = true;
-      debugPrint('[ForegroundService] サービス開始成功');
+      debugPrint('[ForegroundService] GPS追跡サービス開始成功');
     } catch (e) {
       debugPrint('[ForegroundService] サービス開始エラー: $e');
     }
@@ -77,7 +78,7 @@ class ForegroundServiceManager {
     try {
       FlutterBackgroundService().invoke("stopService");
       _isServiceRunning = false;
-      debugPrint('[ForegroundService] サービス停止要求送信');
+      debugPrint('[ForegroundService] GPS追跡サービス停止要求送信');
     } catch (e) {
       debugPrint('[ForegroundService] サービス停止エラー: $e');
     }
@@ -95,7 +96,29 @@ void onStart(ServiceInstance service) async {
     // Isolate内でのデバッグ出力設定
     DartPluginRegistrant.ensureInitialized();
 
-    debugPrint('[ForegroundService] サービスエントリーポイント開始');
+    debugPrint('[ForegroundService] GPS追跡サービスエントリーポイント開始');
+
+    // GPS初期設定
+    Position? lastKnownPosition;
+    bool isLocationServiceEnabled = false;
+    LocationPermission permission = LocationPermission.denied;
+
+    // 位置情報サービスの確認と権限チェック
+    try {
+      isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      permission = await Geolocator.checkPermission();
+
+      debugPrint(
+        '[ForegroundService] GPS設定確認 - サービス: $isLocationServiceEnabled, 権限: $permission',
+      );
+
+      // 権限がない場合は要求（UI側で事前に取得している前提）
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+    } catch (e) {
+      debugPrint('[ForegroundService] GPS初期化エラー: $e');
+    }
 
     // サービス停止要求の監視を設定
     service.on('stopService').listen((event) {
@@ -103,24 +126,65 @@ void onStart(ServiceInstance service) async {
       service.stopSelf();
     });
 
-    // 1秒間隔のタイマー設定
+    // 1秒間隔のタイマー設定（GPS情報付き）
     Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
+        // GPS情報取得を試行
+        String gpsInfo = "GPS: 取得中...";
+
+        if (isLocationServiceEnabled &&
+            (permission == LocationPermission.always ||
+                permission == LocationPermission.whileInUse)) {
+          try {
+            // 現在位置を取得（タイムアウト設定）
+            Position currentPosition = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+              timeLimit: const Duration(seconds: 5),
+            );
+
+            lastKnownPosition = currentPosition;
+            gpsInfo =
+                "GPS: ${currentPosition.latitude.toStringAsFixed(6)}, "
+                "${currentPosition.longitude.toStringAsFixed(6)} "
+                "(精度: ${currentPosition.accuracy.toStringAsFixed(1)}m)";
+          } catch (e) {
+            // 取得に失敗した場合は最後の既知位置を使用
+            if (lastKnownPosition != null) {
+              gpsInfo =
+                  "GPS: ${lastKnownPosition!.latitude.toStringAsFixed(6)}, "
+                  "${lastKnownPosition!.longitude.toStringAsFixed(6)} "
+                  "(前回取得値)";
+            } else {
+              gpsInfo = "GPS: 位置情報取得エラー - $e";
+            }
+          }
+        } else {
+          gpsInfo =
+              "GPS: 無効または権限なし (サービス: $isLocationServiceEnabled, 権限: $permission)";
+        }
+
         // サービス停止チェック
         if (service is AndroidServiceInstance) {
           if (await service.isForegroundService()) {
             // フォアグラウンドサービスとして実行中
-            _logCurrentTime('[ForegroundService] フォアグラウンド実行中');
+            _logCurrentTimeWithGPS('[ForegroundService] フォアグラウンド実行中', gpsInfo);
 
-            // 通知内容を更新（現在時刻を表示）
+            // 通知内容を更新（GPS情報付き）
+            String notificationContent =
+                "GPS追跡中: ${DateTime.now().toString().substring(11, 19)}";
+            if (lastKnownPosition != null) {
+              notificationContent +=
+                  "\n位置: ${lastKnownPosition!.latitude.toStringAsFixed(4)}, ${lastKnownPosition!.longitude.toStringAsFixed(4)}";
+            }
+
             service.setForegroundNotificationInfo(
-              title: "K-MAPS サービス実行中",
-              content: "実行時刻: ${DateTime.now().toString().substring(11, 19)}",
+              title: "K-MAPS GPS追跡実行中",
+              content: notificationContent,
             );
           }
         } else {
           // iOS向けログ出力
-          _logCurrentTime('[ForegroundService] iOS実行中');
+          _logCurrentTimeWithGPS('[ForegroundService] iOS実行中', gpsInfo);
         }
       } catch (e) {
         debugPrint('[ForegroundService] タイマー処理エラー: $e');
@@ -129,7 +193,7 @@ void onStart(ServiceInstance service) async {
       }
     });
 
-    debugPrint('[ForegroundService] 定期実行タスク開始（1秒間隔）');
+    debugPrint('[ForegroundService] GPS追跡定期実行タスク開始（1秒間隔）');
   } catch (e) {
     debugPrint('[ForegroundService] エントリーポイントエラー: $e');
     service.stopSelf();
@@ -143,17 +207,19 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
-/// 現在時刻付きログ出力ヘルパー関数
-/// デバッグ出力の統一化とタイムスタンプ付加
-void _logCurrentTime(String message) {
+/// GPS情報付き現在時刻ログ出力ヘルパー関数
+/// デバッグ出力の統一化とタイムスタンプ・GPS情報付加
+void _logCurrentTimeWithGPS(String message, String gpsInfo) {
   final now = DateTime.now();
   final timeStr =
       '${now.hour.toString().padLeft(2, '0')}:'
       '${now.minute.toString().padLeft(2, '0')}:'
       '${now.second.toString().padLeft(2, '0')}';
 
-  debugPrint('$message - $timeStr');
+  final fullMessage = '$message - $timeStr | $gpsInfo';
+
+  debugPrint(fullMessage);
 
   // 実際のprint文での出力（デバッグコンソール用）
-  print('$message - $timeStr');
+  print(fullMessage);
 }

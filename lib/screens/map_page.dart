@@ -20,6 +20,7 @@ import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
 import '../tools/gps_utils.dart'; // Added GPS utility
 import '../screens/bluetooth_gnss_screen.dart'; // Bluetooth GNSS screen import
+import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -64,6 +65,12 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   int _gpsWaitSeconds = 0; // GPS acquisition wait seconds
   Timer? _gpsWaitTimer;
 
+  // GPS追跡フォアグラウンドサービス管理
+  final ForegroundServiceManager _serviceManager = ForegroundServiceManager();
+  bool _isGpsTrackingServiceRunning = false;
+  LatLng? _lastTrackedPosition; // フォアグラウンドサービスからの最新位置
+  Timer? _serviceStatusUpdateTimer;
+
   // フィーチャデータキャッシュ用変数（非同期データを管理）
   List<PointFeatureNode> _pointFeatures = [];
   List<LineFeatureNode> _lineFeatures = [];
@@ -86,6 +93,14 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
 
     // GPS権限チェックと初期化
     _initializeGps();
+
+    // GPS追跡サービス状態の初期化
+    _updateGpsTrackingServiceStatus();
+
+    // 定期的にサービス状態を更新（1秒間隔）
+    _serviceStatusUpdateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      _updateGpsTrackingServiceStatus();
+    });
 
     // フィーチャデータの初期ロード（非同期）は_initializeProjectTree()内で実行
     // _updateFeatures();
@@ -190,12 +205,65 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
     _gpsStreamSub?.cancel();
     _positionSubscription?.cancel();
     _gpsWaitTimer?.cancel();
+    _serviceStatusUpdateTimer?.cancel();
     super.dispose();
   }
 
   void _moveToCurrentLocation() {
     if (_currentLocation != null) {
       _mapController.move(_currentLocation!, 16.0);
+    }
+  }
+
+  /// GPS追跡サービス状態を更新
+  void _updateGpsTrackingServiceStatus() {
+    final wasRunning = _isGpsTrackingServiceRunning;
+    final isRunning = _serviceManager.isServiceRunning;
+
+    setState(() {
+      _isGpsTrackingServiceRunning = isRunning;
+
+      // サービスが動作中で現在位置がある場合、追跡位置を更新
+      if (isRunning && _currentLocation != null) {
+        _lastTrackedPosition = _currentLocation;
+      }
+
+      // サービスが停止した場合、追跡位置をクリア
+      if (!isRunning && wasRunning) {
+        _lastTrackedPosition = null;
+      }
+    });
+  }
+
+  /// GPS追跡フォアグラウンドサービス開始
+  Future<void> _startGpsTrackingService() async {
+    await _serviceManager.startService();
+    _updateGpsTrackingServiceStatus();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GPS追跡フォアグラウンドサービスを開始しました'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// GPS追跡フォアグラウンドサービス停止
+  Future<void> _stopGpsTrackingService() async {
+    await _serviceManager.stopService();
+    _updateGpsTrackingServiceStatus();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GPS追跡フォアグラウンドサービスを停止しました'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -603,6 +671,36 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
                               Icons.my_location,
                               color: Colors.blue,
                               size: 36,
+                            ),
+                          ),
+                        // --- GPS追跡サービスの位置マーカー ---
+                        if (_isGpsTrackingServiceRunning &&
+                            _lastTrackedPosition != null)
+                          Marker(
+                            point: _lastTrackedPosition!,
+                            width: 56,
+                            height: 56,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.8),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                Icons.track_changes,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
                           ),
                         // --- Existing point feature markers ---
@@ -1014,40 +1112,79 @@ class _KMapsHomePageState extends State<KMapsHomePage> {
   Widget _buildGpsInfoBar() {
     if (_gpsPosition == null) {
       return Container(
-        height: 36,
+        height: 48,
         color: Colors.grey[200],
         alignment: Alignment.centerLeft,
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: [
-            Text('GPS: Acquiring...'),
-            SizedBox(width: 12),
-            Text(
-              '(${_gpsWaitSeconds}s elapsed)',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text('GPS: Acquiring...'),
+              SizedBox(width: 12),
+              Text(
+                '(${_gpsWaitSeconds}s elapsed)',
+                style: TextStyle(color: Colors.grey),
+              ),
+              SizedBox(width: 16),
+              _buildGpsTrackingButton(),
+            ],
+          ),
         ),
       );
     }
     return Container(
-      height: 36,
+      height: 48,
       color: Colors.lightBlue[50],
       alignment: Alignment.centerLeft,
-      padding: EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
-          SizedBox(width: 8),
-          Text(
-            'Lat: ${_gpsPosition!.latitude.toStringAsFixed(6)} Lon: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
-            style: TextStyle(fontSize: 14),
-          ),
-          SizedBox(width: 16),
-          Text('Satellites: ${_satelliteCount ?? "-"}'),
-          SizedBox(width: 16),
-          Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
+            SizedBox(width: 8),
+            Text(
+              'Lat: ${_gpsPosition!.latitude.toStringAsFixed(6)} Lon: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(width: 16),
+            Text('Satellites: ${_satelliteCount ?? "-"}'),
+            SizedBox(width: 16),
+            Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
+            SizedBox(width: 16),
+            _buildGpsTrackingButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// GPS追跡サービスのコントロールボタン
+  Widget _buildGpsTrackingButton() {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 4),
+      child: ElevatedButton.icon(
+        onPressed:
+            _isGpsTrackingServiceRunning
+                ? _stopGpsTrackingService
+                : _startGpsTrackingService,
+        icon: Icon(
+          _isGpsTrackingServiceRunning ? Icons.stop : Icons.track_changes,
+          size: 16,
+        ),
+        label: Text(
+          _isGpsTrackingServiceRunning ? '追跡停止' : '追跡開始',
+          style: TextStyle(fontSize: 12),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              _isGpsTrackingServiceRunning ? Colors.red : Colors.green,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size(80, 32),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
       ),
     );
   }

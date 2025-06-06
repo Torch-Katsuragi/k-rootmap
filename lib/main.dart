@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';
+import 'screens/map_page.dart';
 import 'services/foreground_service.dart';
 
 void main() async {
@@ -44,6 +45,7 @@ class KMapsApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const HomeScreen(),
+      routes: {'/map': (context) => const KMapsHomePage()},
     );
   }
 }

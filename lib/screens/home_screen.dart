@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import '../utils/global_config.dart';
 import '../models/layer_tree_node.dart';
 import 'map_page.dart';
-import '../services/foreground_service.dart';
 
 /// ホーム画面（最小構成）
 class HomeScreen extends StatefulWidget {
@@ -16,13 +15,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String? _projectDir;
-  final ForegroundServiceManager _serviceManager = ForegroundServiceManager();
-  bool _isServiceRunning = false;
 
   @override
   void initState() {
     super.initState();
-    _updateServiceStatus();
   }
 
   Future<void> _pickProjectDir() async {
@@ -45,43 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// サービス実行状態を更新
-  void _updateServiceStatus() {
-    setState(() {
-      _isServiceRunning = _serviceManager.isServiceRunning;
-    });
-  }
-
-  /// フォアグラウンドサービス開始
-  Future<void> _startForegroundService() async {
-    await _serviceManager.startService();
-    _updateServiceStatus();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('フォアグラウンドサービスを開始しました'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  /// フォアグラウンドサービス停止
-  Future<void> _stopForegroundService() async {
-    await _serviceManager.stopService();
-    _updateServiceStatus();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('フォアグラウンドサービスを停止しました'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,126 +49,104 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // フォアグラウンドサービス制御セクション
+            const Icon(Icons.map, size: 100, color: Colors.blue),
+            const SizedBox(height: 32),
+            Text(
+              'K-MAPS',
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'GeoPackageベースの地理情報管理・編集アプリケーション',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 48),
             Card(
+              elevation: 4,
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'フォアグラウンドサービス',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    const Icon(
+                      Icons.folder_open,
+                      size: 48,
+                      color: Colors.orange,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'ステータス: ${_isServiceRunning ? "実行中" : "停止中"}',
+                    const SizedBox(height: 16),
+                    const Text(
+                      'プロジェクトを開始',
                       style: TextStyle(
-                        color: _isServiceRunning ? Colors.green : Colors.red,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      '1秒間隔でログ出力を行うテストサービスです。\n'
-                      'Android端末では通知バーにサービス状態が表示されます。',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                _isServiceRunning
-                                    ? null
-                                    : _startForegroundService,
-                            icon: const Icon(Icons.play_arrow),
-                            label: const Text('開始'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                _isServiceRunning
-                                    ? _stopForegroundService
-                                    : null,
-                            icon: const Icon(Icons.stop),
-                            label: const Text('停止'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // 説明セクション
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '使用方法',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
                     const SizedBox(height: 8),
                     const Text(
-                      '1. 「開始」ボタンでフォアグラウンドサービスを開始\n'
-                      '2. デバッグコンソールで1秒間隔のログ出力を確認\n'
-                      '3. Android端末では通知バーでサービス状態を確認\n'
-                      '4. 「停止」ボタンでサービスを停止',
+                      'プロジェクトフォルダを選択して地図編集を開始してください',
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const Spacer(),
-
-            // デバッグ情報
-            Card(
-              color: Colors.grey[100],
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'デバッグ情報',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'サービス実行状態: $_isServiceRunning\n'
-                      'ログ出力: デバッグコンソールとprint文で確認可能',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _pickProjectDir,
+                      icon: const Icon(Icons.folder),
+                      label: const Text('フォルダを選択'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        textStyle: const TextStyle(fontSize: 16),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+            if (_projectDir != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: Colors.green[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '選択されたフォルダ:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _projectDir!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

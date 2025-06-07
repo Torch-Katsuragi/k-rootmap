@@ -5,6 +5,7 @@ import '../tools/map_tool.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
+import '../tools/gps_tool.dart';
 
 class GlobalConfig {
   // シングルトンインスタンス
@@ -25,6 +26,7 @@ class GlobalConfig {
   final PanTool panTool = PanTool();
   final PenTool penTool = PenTool();
   final SelectTool selectTool = SelectTool();
+  final GpsTool gpsTool = GpsTool();
 
   /// 現在選択中の地図操作ツール
   MapTool currentTool;

@@ -10,6 +10,7 @@ import 'dart:math';
 import 'package:path/path.dart' as p;
 import '../utils/wkb_utils.dart';
 import '../models/layer_tree_node.dart';
+import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
 import '../utils/global_config.dart';
@@ -17,8 +18,11 @@ import '../utils/global_config.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
+import '../tools/gps_tool.dart';
 import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
+import '../models/gps_track.dart';
+import '../widgets/track_save_dialog.dart';
 import '../tools/gps_utils.dart'; // Added GPS utility
 import '../screens/bluetooth_gnss_screen.dart'; // Bluetooth GNSS screen import
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
@@ -31,7 +35,7 @@ class KMapsHomePage extends StatefulWidget {
 }
 
 /// Tool types
-enum ToolType { pen, eraser }
+enum ToolType { pen, eraser, gps }
 
 // --- Drawer use: Name edit state management ---
 class _EditState {
@@ -118,8 +122,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     // GPS追跡サービス状態の初期化
     _updateGpsTrackingServiceStatus();
 
-    // 定期的にサービス状態を更新（1秒間隔）
-    _serviceStatusUpdateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    // 定期的にサービス状態を更新（10秒間隔に変更、かつ変化がある時のみ更新）
+    // LayerDrawerに影響を与えないよう、更新頻度を最小限に抑制
+    _serviceStatusUpdateTimer = Timer.periodic(Duration(seconds: 10), (timer) {
       _updateGpsTrackingServiceStatus();
     });
 
@@ -237,24 +242,52 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
-  /// GPS追跡サービス状態を更新
+  /// GPS追跡サービス状態を更新（画面表示に影響がある変化のみUIを更新）
   void _updateGpsTrackingServiceStatus() {
     final wasRunning = _isGpsTrackingServiceRunning;
     final isRunning = _serviceManager.isServiceRunning;
+    final previousTrackedPosition = _lastTrackedPosition;
 
-    setState(() {
-      _isGpsTrackingServiceRunning = isRunning;
+    // 状態に変化がない場合は何もしない（UIの不必要な再描画を防止）
+    bool hasVisualChanges = false;
 
-      // サービスが動作中で現在位置がある場合、追跡位置を更新
-      if (isRunning && _currentLocation != null) {
-        _lastTrackedPosition = _currentLocation;
+    // サービス開始/停止は地図上のボタン表示に影響するため更新が必要
+    if (wasRunning != isRunning) {
+      hasVisualChanges = true;
+    }
+
+    // サービスが動作中で現在位置がある場合、追跡位置を更新
+    LatLng? newTrackedPosition = _lastTrackedPosition;
+    if (isRunning && _currentLocation != null) {
+      newTrackedPosition = _currentLocation;
+      // 追跡位置の変更は地図上のアニメーション表示に影響する場合のみ更新
+      // （座標の微細な変化は無視して、大きな移動のみ更新）
+      if (previousTrackedPosition == null ||
+          (newTrackedPosition!.latitude - previousTrackedPosition.latitude)
+                  .abs() >
+              0.0001 ||
+          (newTrackedPosition.longitude - previousTrackedPosition.longitude)
+                  .abs() >
+              0.0001) {
+        // 座標の大きな変化（約10m以上）のみ更新
+        hasVisualChanges = true;
       }
+    }
 
-      // サービスが停止した場合、追跡位置をクリア
-      if (!isRunning && wasRunning) {
-        _lastTrackedPosition = null;
-      }
-    });
+    // サービスが停止した場合、追跡位置をクリア
+    if (!isRunning && wasRunning) {
+      newTrackedPosition = null;
+      hasVisualChanges = true;
+    }
+
+    // 実際の状態は常に更新（setStateは視覚的変化がある場合のみ）
+    _isGpsTrackingServiceRunning = isRunning;
+    _lastTrackedPosition = newTrackedPosition;
+
+    // 視覚的変化がある場合のみsetState()を呼ぶ
+    if (hasVisualChanges && mounted) {
+      setState(() {}); // 状態は既に更新済みなので空のsetState
+    }
 
     // アニメーション制御: サービス開始時に回転開始、停止時に回転停止
     if (isRunning && !wasRunning) {
@@ -289,17 +322,128 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS追跡フォアグラウンドサービス停止
   Future<void> _stopGpsTrackingService() async {
+    // 軌跡データを取得
+    final track = _serviceManager.stopTrackingAndGetTrack();
+
     await _serviceManager.stopService();
     _updateGpsTrackingServiceStatus();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('位置追跡フォアグラウンドサービスを停止しました'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
+    // 軌跡保存ダイアログを表示
+    if (track != null && track.pointCount > 0) {
+      _showTrackSaveDialog(track);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('位置追跡フォアグラウンドサービスを停止しました（軌跡データなし）'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 軌跡保存ダイアログを表示
+  Future<void> _showTrackSaveDialog(GpsTrack track) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder:
+          (context) => TrackSaveDialog(
+            track: track,
+            rootNode: GlobalConfig.instance.folderTree,
+          ),
+    );
+
+    if (result != null) {
+      final savedTrack = result['track'] as GpsTrack;
+      final geoPackage = result['geoPackage'] as GeoPackageNode;
+      await _saveTrackToGeoPackage(savedTrack, geoPackage);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('位置追跡フォアグラウンドサービスを停止しました（軌跡は保存されませんでした）'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 軌跡をGeoPackageに保存
+  Future<void> _saveTrackToGeoPackage(
+    GpsTrack track,
+    GeoPackageNode geoPackage,
+  ) async {
+    try {
+      print('[DEBUG] GPS軌跡保存開始: ${track.trackName} -> ${geoPackage.name}');
+      print('[DEBUG] 軌跡ポイント数: ${track.pointCount}');
+      print('[DEBUG] 軌跡座標リスト長: ${track.toLatLngList().length}');
+
+      // GPS軌跡レイヤー名を生成（通常の線レイヤーとして保存）
+      const layerName = 'gps_tracks';
+
+      // GeoPackageファイルを取得
+      final gpkgFile = geoPackage.geoPackageFile;
+      print('[DEBUG] GeoPackageファイル取得成功: ${gpkgFile.pathList}');
+
+      // GPS軌跡レイヤーを作成（通常の線レイヤーとして）
+      print('[DEBUG] GPS軌跡レイヤー作成開始: $layerName');
+      await gpkgFile.addLayer(layerName, GeometryType.linestring);
+      print('[DEBUG] GPS軌跡レイヤー作成完了: $layerName');
+
+      // 軌跡の統計情報を取得
+      final stats = track.getStatistics();
+      print('[DEBUG] 軌跡統計: $stats');
+
+      // 軌跡をLineStringとして保存（pen_toolと同じ方式）
+      print('[DEBUG] LineString保存開始: $layerName');
+      final coordinates = track.toLatLngList();
+      if (coordinates.isEmpty) {
+        throw Exception('軌跡座標が空です');
+      }
+
+      await gpkgFile.addLine(
+        layerName,
+        coordinates,
+        name: track.trackName,
+        description:
+            '${stats['pointCount']}ポイント、${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
       );
+      print('[DEBUG] LineString保存完了');
+
+      // UI更新
+      print('[DEBUG] UI更新開始');
+      await _updateFeatures();
+      print('[DEBUG] UI更新完了');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'GPS軌跡「${track.trackName}」を${geoPackage.name}に保存しました',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('[DEBUG] GPS軌跡保存完了: ${track.trackName} -> ${geoPackage.name}');
+    } catch (e, stackTrace) {
+      print('[ERROR] GPS軌跡保存エラー: $e');
+      print('[ERROR] スタックトレース: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('GPS軌跡の保存に失敗しました: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -421,11 +565,33 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               ],
             ),
           ),
+          PopupMenuItem(
+            value: ToolType.gps,
+            child: Row(
+              children: [
+                Icon(Icons.gps_fixed, color: Colors.black),
+                SizedBox(width: 8),
+                Text('GPS Tool'),
+              ],
+            ),
+          ),
         ],
       );
       if (selected != null) {
         setState(() {
           _selectedTool = selected;
+          // 選択されたツールに基づいてGlobalConfigのcurrentToolを更新
+          switch (selected) {
+            case ToolType.pen:
+              GlobalConfig.instance.currentTool = GlobalConfig.instance.penTool;
+              break;
+            case ToolType.eraser:
+              // エラーザーは将来実装予定
+              break;
+            case ToolType.gps:
+              GlobalConfig.instance.currentTool = GlobalConfig.instance.gpsTool;
+              break;
+          }
         });
       }
     } else if (index == 1) {
@@ -664,6 +830,37 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         setState(() {
                           GlobalConfig.instance.currentTool =
                               GlobalConfig.instance.selectTool;
+                        });
+                      },
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // GPS tool button with blue circle when selected
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color:
+                          currentTool.name == 'GPS'
+                              ? Colors.blue
+                              : Colors.transparent,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.gps_fixed,
+                        color:
+                            currentTool.name == 'GPS'
+                                ? Colors.white
+                                : Colors.black,
+                      ),
+                      tooltip: 'GPS Tool',
+                      onPressed: () {
+                        setState(() {
+                          GlobalConfig.instance.currentTool =
+                              GlobalConfig.instance.gpsTool;
                         });
                       },
                       iconSize: 24,
@@ -1120,29 +1317,61 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 feature: GlobalConfig.instance.selectedFeatures.first,
               ),
             ),
-          // --- Left bottom floating button (placed next to toolbar) ---
+          // --- Left bottom floating buttons (placed next to toolbar) ---
           Positioned(
             left: 56, // Toolbar width(44) + margin(12)
             bottom: 24,
-            child: _LeftBottomFab(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // GPS追跡ボタン（GPSツール選択時かつWindows以外の環境でのみ表示）
+                if (GlobalConfig.instance.currentTool.name == 'GPS' &&
+                    !Platform.isWindows)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: FloatingActionButton(
+                      heroTag: 'gps_tracking_left',
+                      onPressed:
+                          _isGpsTrackingServiceRunning
+                              ? _stopGpsTrackingService
+                              : _startGpsTrackingService,
+                      backgroundColor:
+                          _isGpsTrackingServiceRunning
+                              ? Colors.red
+                              : Colors.green,
+                      foregroundColor: Colors.white,
+                      tooltip:
+                          _isGpsTrackingServiceRunning ? 'GPS追跡停止' : 'GPS追跡開始',
+                      child: Icon(
+                        _isGpsTrackingServiceRunning
+                            ? Icons.stop
+                            : Icons.pets, // 足跡アイコン（paw print）
+                        // 他の選択肢: Icons.hiking, Icons.nordic_walking, Icons.accessibility_new
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                // 既存の左下フローティングボタン
+                _LeftBottomFab(),
+              ],
+            ),
           ),
         ],
       ),
       floatingActionButton:
           (() {
             final selected = GlobalConfig.instance.selectedLayerNode;
+            final currentTool = GlobalConfig.instance.currentTool;
             final isLineDrawing =
                 selected is LineLayerNode &&
-                GlobalConfig.instance.currentTool is PenTool &&
-                (GlobalConfig.instance.currentTool as PenTool)
-                    .drawingLine
-                    .isNotEmpty;
+                currentTool is PenTool &&
+                (currentTool as PenTool).drawingLine.isNotEmpty;
             final isPolygonDrawing =
                 selected is PolygonLayerNode &&
-                GlobalConfig.instance.currentTool is PenTool &&
-                (GlobalConfig.instance.currentTool as PenTool)
-                    .drawingPolygon
-                    .isNotEmpty;
+                currentTool is PenTool &&
+                (currentTool as PenTool).drawingPolygon.isNotEmpty;
+
+            // ペンツールでの描画中は従来のボタンを表示
             if (isLineDrawing || isPolygonDrawing) {
               return Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1152,16 +1381,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     heroTag: 'undo',
                     onPressed: () {
                       setState(() {
-                        if (isLineDrawing &&
-                            GlobalConfig.instance.currentTool is PenTool) {
-                          (GlobalConfig.instance.currentTool as PenTool)
-                              .drawingLine
-                              .removeLast();
-                        } else if (isPolygonDrawing &&
-                            GlobalConfig.instance.currentTool is PenTool) {
-                          (GlobalConfig.instance.currentTool as PenTool)
-                              .drawingPolygon
-                              .removeLast();
+                        if (isLineDrawing && currentTool is PenTool) {
+                          (currentTool as PenTool).drawingLine.removeLast();
+                        } else if (isPolygonDrawing && currentTool is PenTool) {
+                          (currentTool as PenTool).drawingPolygon.removeLast();
                         }
                       });
                     },
@@ -1174,16 +1397,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     heroTag: 'cancel',
                     onPressed: () {
                       setState(() {
-                        if (isLineDrawing &&
-                            GlobalConfig.instance.currentTool is PenTool) {
-                          (GlobalConfig.instance.currentTool as PenTool)
-                              .drawingLine
-                              .clear();
-                        } else if (isPolygonDrawing &&
-                            GlobalConfig.instance.currentTool is PenTool) {
-                          (GlobalConfig.instance.currentTool as PenTool)
-                              .drawingPolygon
-                              .clear();
+                        if (isLineDrawing && currentTool is PenTool) {
+                          (currentTool as PenTool).drawingLine.clear();
+                        } else if (isPolygonDrawing && currentTool is PenTool) {
+                          (currentTool as PenTool).drawingPolygon.clear();
                         }
                       });
                     },
@@ -1225,8 +1442,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 '(${_gpsWaitSeconds}s elapsed)',
                 style: TextStyle(color: Colors.grey),
               ),
-              SizedBox(width: 16),
-              _buildGpsTrackingButton(),
             ],
           ),
         ),
@@ -1251,38 +1466,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             Text('Satellites: ${_satelliteCount ?? "-"}'),
             SizedBox(width: 16),
             Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
-            SizedBox(width: 16),
-            _buildGpsTrackingButton(),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// GPS追跡サービスのコントロールボタン
-  Widget _buildGpsTrackingButton() {
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 4),
-      child: ElevatedButton.icon(
-        onPressed:
-            _isGpsTrackingServiceRunning
-                ? _stopGpsTrackingService
-                : _startGpsTrackingService,
-        icon: Icon(
-          _isGpsTrackingServiceRunning ? Icons.stop : Icons.track_changes,
-          size: 16,
-        ),
-        label: Text(
-          _isGpsTrackingServiceRunning ? '追跡停止' : '追跡開始',
-          style: TextStyle(fontSize: 12),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor:
-              _isGpsTrackingServiceRunning ? Colors.red : Colors.green,
-          foregroundColor: Colors.white,
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          minimumSize: Size(80, 32),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
     );

@@ -33,6 +33,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 - NMEA-0183フォーマットの位置データ解析
 - リアルタイム位置情報表示
 - 衛星情報・精度情報の詳細表示
+- **GPS軌跡記録・保存機能**: 追跡開始から停止までの軌跡をLINESTRINGレイヤーとして任意のGeoPackageに保存 **【NEW】**
 
 ### 4. データ管理機能
 - GeoPackage形式でのデータ保存・管理
@@ -44,6 +45,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 - **てのひらツール**: 地図のパン操作
 - **ペンツール**: フリーハンド描画
 - **選択ツール**: フィーチャの選択・編集
+- **GPSツール**: GPS関連機能（パン操作と同じ挙動 + 専用GPS追跡ボタン表示 + 軌跡保存機能） **【NEW】**
 
 ## 技術構成
 
@@ -91,6 +93,7 @@ dependencies:
 - `lib/tools/pan_tool.dart`: 地図パン操作ツール
 - `lib/tools/pen_tool.dart`: フリーハンド描画ツール  
 - `lib/tools/select_tool.dart`: フィーチャ選択ツール
+- `lib/tools/gps_tool.dart`: GPS関連機能ツール（プロキシパターンによるパンツール機能継承） **【NEW】**
 - `lib/tools/gps_utils.dart`: GPS・GNSS情報取得ユーティリティ
 - `lib/utils/feature_calc_utils.dart`: 地理計算ユーティリティ（距離・面積・重心計算）
 
@@ -98,6 +101,7 @@ dependencies:
 - **非同期処理**: 全てのDB操作・ファイルアクセスはFuture/async-awaitで実装
 - **ツリー構造管理**: プロジェクト→フォルダ→GeoPackage→レイヤの階層管理
 - **グローバル状態管理**: 選択状態・現在ツール・設定をGlobalConfigで一元管理
+- **プロキシパターン**: GPSツールによるパンツール機能の継承・委譲（将来拡張対応） **【NEW】**
 - **プラットフォーム対応**: Windows/Android両対応、デスクトップ向けsqflite初期化
 
 ## 使用方法
@@ -128,12 +132,14 @@ dependencies:
    - マップ画面上部のBluetoothアイコンをタップ **【NEW】**
    - ペアリング済みGNSSデバイスを選択・接続 **【NEW】**
    - 接続成功すると自動でフォアグラウンドサービスに設定 **【NEW】**
-5. **位置追跡サービス制御**:
-   - 地図画面のGPS情報バーから開始・停止 
+5. **位置追跡サービス制御** **【UI改善】**:
+   - ツールバーでGPSツールを選択 **【NEW】**
+   - 右下に表示される足跡アイコンのフローティングボタンで追跡開始・停止 **【NEW】**
    - 外部GNSS接続時は「外部GNSS追跡」、未接続時は「内蔵GPS追跡」として動作 **【NEW】**
 6. **リアルタイム確認**:
    - デバッグコンソールで1秒間隔のGPS/GNSS情報ログ確認
    - Android端末では通知バーでリアルタイム座標・情報源表示 **【NEW】**
+   - GPS情報バーでリアルタイム座標・衛星数・精度確認（追跡ボタンは削除済み） **【NEW】**
 
 ## インストール・セットアップ
 
@@ -305,7 +311,20 @@ adb logcat | grep flutter
 
 ## 更新履歴
 
-### v1.1.0 (最新)
+### v1.2.0 (最新) **【NEW】**
+- GPS軌跡記録・保存機能を追加
+- フォアグラウンドサービスによるバックグラウンド追跡対応
+- 軌跡統計情報表示（距離・ポイント数・GNSS/GPS比率）
+- **ジオメトリタイプの表記を単一系（POINT, LINESTRING, POLYGON）に統一**
+- **型安全性向上のためGeometryTypeエナムを導入**
+- MULTI系表記（MULTIPOINT, MULTILINESTRING, MULTIPOLYGON）を削除し、単一系で統一
+- 文字列リテラルによるジオメトリタイプ指定を廃止し、enum使用で型安全性を向上
+- **属性テーブルの自動再読み込み問題を修正**
+- GPS追跡サービス状態更新の最適化（1秒→5秒間隔、変化時のみ更新）
+- 属性テーブルのスクロール位置保持機能を追加
+- データキャッシュ機能により不必要な再読み込みを防止
+
+### v1.1.0
 - フォアグラウンドサービス機能追加
 - デバッグログ最適化
 - UI改善（サービス制御画面）
@@ -329,3 +348,71 @@ adb logcat | grep flutter
 ---
 
 **開発者向けメモ**: 本プロジェクトは継続的な機能拡張を想定して設計されており、各機能は独立性と再利用性を重視した実装となっています。
+
+## 📍 GPS軌跡記録システム（バックグラウンド対応）
+
+### 📊 主要コンポーネント
+
+#### 🔧 修正内容：Isolate間通信の実装（2025-06-06）
+
+**問題：** フォアグラウンドサービスが別Isolateで実行されるため、GPS位置情報を取得してもメインアプリの`GpsTrackManager`に記録されない（0ポイント問題）
+
+**解決方法：** `flutter_background_service`のIsolate間通信機能を使用
+- フォアグラウンドサービス → メインアプリへのポイントデータ送信
+- `service.invoke('addTrackPoint', pointData)` でデータ送信
+- メインアプリ側で `FlutterBackgroundService().on('addTrackPoint')` でデータ受信
+
+#### 🐛 追加修正：GPS軌跡保存デバッグログ強化（2025-06-06）
+
+**問題：** 軌跡ポイント数は正しく表示されるが、GeoPackageファイルへの保存でレイヤが追加されない
+
+**対応：** 詳細なデバッグログを追加
+- 地図画面の`_saveTrackToGeoPackage`メソッドにステップ毎のログ追加
+- `GeoPackageFile.createGpsTrackLayer`メソッドの詳細ログ
+- `GeoPackageFile.addLine`メソッドの詳細ログ
+- `createWkbLineString`WKB作成処理の詳細ログ
+- エラー発生時のスタックトレース出力
+
+**デバッグログ例:**
+```
+[DEBUG] GPS軌跡保存開始: 軌跡名 -> GeoPackage名
+[GeoPackage] GPS軌跡レイヤー作成開始: gps_tracks
+[GeoPackage] LineString追加開始: gps_tracks
+[WKB] LineString作成開始: 1ライン
+```
+
+#### 🔧 追加修正：GPS軌跡保存方式をpen_toolと同じ形式に変更（2025-06-06）
+
+**問題：** 保存したフィーチャの座標がおかしくなっている
+
+**原因：** GPS軌跡はMULTILINESTRING形式で保存していたが、pen_toolはLINESTRING形式で保存していた
+
+**解決：** GPS軌跡保存方式をpen_toolと同じLINESTRING形式に変更
+- `gpkgFile.createGpsTrackLayer()` → `gpkgFile.addLayer(layerName, GeometryType.linestring)`
+- `gpkgFile.addMultiLineString()` → `gpkgFile.addLine()`
+- MULTILINESTRING形式 → LINESTRING形式
+
+**変更前（MULTILINESTRING）:**
+```dart
+await gpkgFile.createGpsTrackLayer(layerName);
+await gpkgFile.addLine(layerName, coordinates, ...);
+```
+
+**変更後（LINESTRING - pen_toolと同じ）:**
+```dart
+await gpkgFile.addLayer(layerName, GeometryType.linestring);
+await gpkgFile.addLine(layerName, coordinates, ...);
+```
+
+## バージョン履歴
+
+### v1.2.0 (2024-12-19)
+- **属性テーブル自動再読み込み問題の修正**
+  - GPS追跡サービス状態更新の最適化（10秒間隔に変更）
+  - 視覚的変化がある場合のみsetState()を実行
+  - 座標の微細な変化（10m未満）は更新対象外
+  - LayerDrawerの不要な再構築を防止
+- **Windows環境での追跡ボタン非表示対応**
+  - GPS追跡ボタンをWindows環境では表示しないように修正
+  - `Platform.isWindows`条件チェックを追加
+  - モバイル/GPSデバイス環境でのみ追跡機能を有効化

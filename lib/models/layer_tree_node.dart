@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 // import 'package:sqlite3/sqlite3.dart' as sql; // sqfliteに移行のため削除
 import 'geopackage_file.dart';
+import 'geometry_type.dart'; // ジオメトリタイプenumをインポート
 import 'package:flutter/material.dart';
 import 'package:meta/meta.dart';
 import 'package:latlong2/latlong.dart';
@@ -337,8 +338,7 @@ abstract class LayerNode extends LayerTreeNode {
     final tableNames = await gpkgNode.geoPackageFile.getLayerNames();
     for (final tableName in tableNames) {
       final type = await gpkgNode.geoPackageFile.getGeometryType(tableName);
-      final typeUpper = type?.toUpperCase();
-      if (typeUpper == "MULTIPOINT") {
+      if (type == GeometryType.point) {
         nodes.add(
           PointLayerNode(
             gpkgNode.geoPackageFile,
@@ -347,7 +347,7 @@ abstract class LayerNode extends LayerTreeNode {
             parent: parent,
           ),
         );
-      } else if (typeUpper == "MULTILINESTRING") {
+      } else if (type == GeometryType.linestring) {
         nodes.add(
           LineLayerNode(
             gpkgNode.geoPackageFile,
@@ -356,7 +356,7 @@ abstract class LayerNode extends LayerTreeNode {
             parent: parent,
           ),
         );
-      } else if (typeUpper == "MULTIPOLYGON") {
+      } else if (type == GeometryType.polygon) {
         nodes.add(
           PolygonLayerNode(
             gpkgNode.geoPackageFile,
@@ -435,7 +435,7 @@ class PointLayerNode extends LayerNode {
     final existingLayers = await gpkgFile.getLayerNames();
     final exists = existingLayers.contains(name);
     if (exists) return null;
-    await gpkgFile.addLayer(name, "MULTIPOINT");
+    await gpkgFile.addLayer(name, GeometryType.point);
     final node = PointLayerNode(gpkgFile, name, parent: parent);
     parent.addChild(node);
     return node;
@@ -489,7 +489,7 @@ class LineLayerNode extends LayerNode {
     final existingLayers = await gpkgFile.getLayerNames();
     final exists = existingLayers.contains(name);
     if (exists) return null;
-    await gpkgFile.addLayer(name, "MULTILINESTRING");
+    await gpkgFile.addLayer(name, GeometryType.linestring);
     final node = LineLayerNode(gpkgFile, name, parent: parent);
     parent.addChild(node);
     return node;
@@ -543,7 +543,7 @@ class PolygonLayerNode extends LayerNode {
     final existingLayers = await gpkgFile.getLayerNames();
     final exists = existingLayers.contains(name);
     if (exists) return null;
-    await gpkgFile.addLayer(name, "MULTIPOLYGON");
+    await gpkgFile.addLayer(name, GeometryType.polygon);
     final node = PolygonLayerNode(gpkgFile, name, parent: parent);
     parent.addChild(node);
     return node;

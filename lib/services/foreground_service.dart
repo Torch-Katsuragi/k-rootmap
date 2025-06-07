@@ -10,6 +10,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../utils/global_gnss_manager.dart';
+import '../models/gps_track.dart';
 
 /// フォアグラウンドサービス管理クラス
 /// シングルトンパターンで実装し、サービスの開始・停止を管理
@@ -89,9 +90,37 @@ class ForegroundServiceManager {
     }
 
     try {
+      // GPS軌跡追跡開始
+      GpsTrackManager().startTracking();
+
+      // バックグラウンドサービスからのメッセージ受信設定
+      FlutterBackgroundService().on('addTrackPoint').listen((event) {
+        if (event != null) {
+          try {
+            final pointData = Map<String, dynamic>.from(event);
+            final point = GpsTrackPoint(
+              latitude: pointData['latitude'].toDouble(),
+              longitude: pointData['longitude'].toDouble(),
+              altitude: pointData['altitude']?.toDouble(),
+              accuracy: pointData['accuracy']?.toDouble(),
+              speed: pointData['speed']?.toDouble(),
+              bearing: pointData['bearing']?.toDouble(),
+              timestamp: DateTime.parse(pointData['timestamp']),
+              sourceType: pointData['sourceType'] ?? 'GPS',
+            );
+            GpsTrackManager().addPoint(point);
+            debugPrint(
+              '[ForegroundService] 軌跡ポイント追加: ${point.sourceType} (${point.latitude.toStringAsFixed(6)}, ${point.longitude.toStringAsFixed(6)})',
+            );
+          } catch (e) {
+            debugPrint('[ForegroundService] 軌跡ポイント追加エラー: $e');
+          }
+        }
+      });
+
       await FlutterBackgroundService().startService();
       _isServiceRunning = true;
-      debugPrint('[ForegroundService] GPS追跡サービス開始成功');
+      debugPrint('[ForegroundService] GPS追跡サービス開始成功（軌跡記録開始）');
     } catch (e) {
       debugPrint('[ForegroundService] サービス開始エラー: $e');
     }
@@ -107,10 +136,22 @@ class ForegroundServiceManager {
     try {
       FlutterBackgroundService().invoke("stopService");
       _isServiceRunning = false;
-      debugPrint('[ForegroundService] GPS追跡サービス停止要求送信');
+      debugPrint('[ForegroundService] GPS追跡サービス停止要求送信（軌跡記録継続中）');
     } catch (e) {
       debugPrint('[ForegroundService] サービス停止エラー: $e');
     }
+  }
+
+  /// 軌跡追跡を停止して軌跡データを取得
+  GpsTrack? stopTrackingAndGetTrack() {
+    final track = GpsTrackManager().stopTracking();
+    if (track != null) {
+      final stats = track.getStatistics();
+      debugPrint(
+        '[ForegroundService] 軌跡記録完了: ${stats['pointCount']}ポイント、距離: ${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
+      );
+    }
+    return track;
   }
 
   /// サービス実行状態取得
@@ -320,6 +361,19 @@ void onStart(ServiceInstance service) async {
             altitudeAccuracy: 1.0,
             headingAccuracy: 1.0,
           );
+
+          // 軌跡に位置情報を追加（メインIsolateに送信）
+          final pointData = {
+            'latitude': lat,
+            'longitude': lon,
+            'altitude': alt,
+            'accuracy': acc,
+            'speed': spd,
+            'bearing': brg,
+            'timestamp': DateTime.now().toIso8601String(),
+            'sourceType': 'GNSS',
+          };
+          service.invoke('addTrackPoint', pointData);
         }
         // 外部GNSSが利用できない場合は内蔵GPSを使用
         else if (isLocationServiceEnabled &&
@@ -337,6 +391,19 @@ void onStart(ServiceInstance service) async {
                 "GPS: ${currentPosition.latitude.toStringAsFixed(6)}, "
                 "${currentPosition.longitude.toStringAsFixed(6)} "
                 "(精度: ${currentPosition.accuracy.toStringAsFixed(1)}m) [内蔵GPS]";
+
+            // 軌跡に位置情報を追加（メインIsolateに送信）
+            final pointData = {
+              'latitude': currentPosition.latitude,
+              'longitude': currentPosition.longitude,
+              'altitude': currentPosition.altitude,
+              'accuracy': currentPosition.accuracy,
+              'speed': currentPosition.speed,
+              'bearing': currentPosition.heading,
+              'timestamp': currentPosition.timestamp.toIso8601String(),
+              'sourceType': 'GPS',
+            };
+            service.invoke('addTrackPoint', pointData);
           } catch (e) {
             // 取得に失敗した場合は最後の既知位置を使用
             if (lastKnownPosition != null) {

@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:collection/collection.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geopackage_file.dart';
+import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -491,7 +492,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
         context: context,
         builder: (context) {
           String input = '';
-          String geomType = 'MULTIPOINT';
+          GeometryType geomType = GeometryType.point;
           return AlertDialog(
             title: const Text('新規レイヤ'),
             content: Column(
@@ -503,21 +504,21 @@ class _LayerDrawerState extends State<LayerDrawer> {
                   onChanged: (v) => input = v,
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
+                DropdownButtonFormField<GeometryType>(
                   value: geomType,
                   decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
-                  items: const [
+                  items: [
                     DropdownMenuItem(
-                      value: 'MULTIPOINT',
-                      child: Text('MULTIPOINT'),
+                      value: GeometryType.point,
+                      child: Text(GeometryType.point.displayName),
                     ),
                     DropdownMenuItem(
-                      value: 'MULTILINESTRING',
-                      child: Text('MULTILINESTRING'),
+                      value: GeometryType.linestring,
+                      child: Text(GeometryType.linestring.displayName),
                     ),
                     DropdownMenuItem(
-                      value: 'MULTIPOLYGON',
-                      child: Text('MULTIPOLYGON'),
+                      value: GeometryType.polygon,
+                      child: Text(GeometryType.polygon.displayName),
                     ),
                   ],
                   onChanged: (v) {
@@ -535,7 +536,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
                 onPressed:
                     () => Navigator.pop(context, {
                       'name': input,
-                      'geomType': geomType,
+                      'geomType': geomType.value,
                     }),
                 child: const Text('作成'),
               ),
@@ -549,18 +550,22 @@ class _LayerDrawerState extends State<LayerDrawer> {
         // node.geoPackageFile.addLayer(result['name']!, result['geomType']!);
         // ジオメトリタイプに応じて適切なLayerNodeサブクラスを生成
         LayerTreeNode? newLayerNode;
-        switch (result['geomType']) {
-          case 'MULTIPOINT':
+        final geomTypeString = result['geomType']!;
+        final geomType = GeometryType.fromString(geomTypeString);
+        switch (geomType) {
+          case GeometryType.point:
             newLayerNode = await PointLayerNode.createIn(node, result['name']!);
             break;
-          case 'MULTILINESTRING':
+          case GeometryType.linestring:
             newLayerNode = await LineLayerNode.createIn(node, result['name']!);
             break;
-          case 'MULTIPOLYGON':
+          case GeometryType.polygon:
             newLayerNode = await PolygonLayerNode.createIn(
               node,
               result['name']!,
             );
+            break;
+          case null:
             break;
         }
         if (newLayerNode != null) {
@@ -714,6 +719,39 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
   String editingValue = '';
   bool showAllColumns = false;
 
+  // スクロール位置保持用のコントローラー
+  final ScrollController _verticalScrollController = ScrollController();
+  final ScrollController _horizontalScrollController = ScrollController();
+
+  // データキャッシュ用変数（不必要な再読み込みを防ぐ）
+  List<String>? _cachedColumns;
+  List<FeatureNode>? _cachedFeatures;
+  bool _lastShowAllColumns = false;
+  Future<List<dynamic>>? _dataFuture;
+
+  @override
+  void dispose() {
+    _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
+    super.dispose();
+  }
+
+  /// データを取得または再利用（キャッシュ機能付き）
+  Future<List<dynamic>> _getTableData() {
+    // showAllColumnsが変更された場合は再読み込み
+    if (_dataFuture == null || _lastShowAllColumns != showAllColumns) {
+      _lastShowAllColumns = showAllColumns;
+      _dataFuture = Future.wait([
+        widget.layerNode.geoPackageFile.getColumnNames(
+          widget.layerNode.layerName,
+          getAll: showAllColumns,
+        ),
+        widget.layerNode.features,
+      ]);
+    }
+    return _dataFuture!;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -760,13 +798,7 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
         ),
         Expanded(
           child: FutureBuilder<List<dynamic>>(
-            future: Future.wait([
-              widget.layerNode.geoPackageFile.getColumnNames(
-                widget.layerNode.layerName,
-                getAll: showAllColumns,
-              ),
-              widget.layerNode.features,
-            ]),
+            future: _getTableData(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -782,8 +814,10 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
               final features = snapshot.data![1] as List<FeatureNode>;
 
               return SingleChildScrollView(
+                controller: _verticalScrollController,
                 scrollDirection: Axis.vertical,
                 child: SingleChildScrollView(
+                  controller: _horizontalScrollController,
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     border: TableBorder.all(
@@ -820,17 +854,22 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                           }
                                           // feature選択: selectedFeaturesにセット
                                           if (feature is FeatureNode) {
-                                            GlobalConfig
+                                            final wasSelected = GlobalConfig
                                                 .instance
-                                                .selectedFeatures = [feature];
-                                            setState(() {});
-                                            // 地図本体も即時再描画
-                                            if (GlobalConfig
-                                                    .instance
-                                                    .mapState !=
-                                                null) {
-                                              GlobalConfig.instance.mapState
-                                                  .setState(() {});
+                                                .selectedFeatures
+                                                .contains(feature);
+                                            if (!wasSelected) {
+                                              GlobalConfig
+                                                  .instance
+                                                  .selectedFeatures = [feature];
+                                              // 地図本体のみ再描画（属性テーブルは再描画しない）
+                                              if (GlobalConfig
+                                                      .instance
+                                                      .mapState !=
+                                                  null) {
+                                                GlobalConfig.instance.mapState
+                                                    .setState(() {});
+                                              }
                                             }
                                           }
                                         },

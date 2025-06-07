@@ -8,6 +8,7 @@ import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
 import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 import 'package:flutter/widgets.dart';
+import 'geometry_type.dart'; // ジオメトリタイプenumをインポート
 
 /// GeoPackageファイルを管理するクラス（sqflite版）
 /// 段階的移行のため、すべてのメソッドをFutureを返すように変更
@@ -248,8 +249,8 @@ class GeoPackageFile {
     }
   }
 
-  /// 指定レイヤのジオメトリタイプ（POINT/LINESTRING/POLYGON等）を取得
-  Future<String?> getGeometryType(String tableName) async {
+  /// 指定レイヤのジオメトリタイプを取得
+  Future<GeometryType?> getGeometryType(String tableName) async {
     try {
       final db = await _getDatabase();
       final rows = await db.query(
@@ -258,7 +259,8 @@ class GeoPackageFile {
         whereArgs: [tableName],
       );
       if (rows.isEmpty) return null;
-      return rows.first['geometry_type_name'] as String?;
+      final typeString = rows.first['geometry_type_name'] as String?;
+      return typeString != null ? GeometryType.fromString(typeString) : null;
     } catch (e) {
       print('getGeometryType: エラー発生 - $e');
       return null;
@@ -273,7 +275,6 @@ class GeoPackageFile {
 
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
-      final geomTypeUpper = geomType?.toUpperCase() ?? '';
 
       final rows = await db.query(tableName);
       final features = <Map<String, dynamic>>[];
@@ -284,7 +285,7 @@ class GeoPackageFile {
         final name = row['name'] as String? ?? '';
         final description = row['description'] as String? ?? '';
 
-        if (geomTypeUpper == 'MULTIPOINT' || geomTypeUpper == 'POINT') {
+        if (geomType == GeometryType.point) {
           if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
             final lon = ByteData.sublistView(
               geom,
@@ -303,8 +304,7 @@ class GeoPackageFile {
               'description': description,
             });
           }
-        } else if (geomTypeUpper == 'MULTILINESTRING' ||
-            geomTypeUpper == 'LINESTRING') {
+        } else if (geomType == GeometryType.linestring) {
           final lines = parseWkbLineString(geom);
           if (lines.isNotEmpty) {
             features.add({
@@ -314,8 +314,7 @@ class GeoPackageFile {
               'description': description,
             });
           }
-        } else if (geomTypeUpper == 'MULTIPOLYGON' ||
-            geomTypeUpper == 'POLYGON') {
+        } else if (geomType == GeometryType.polygon) {
           final polygons = parseWkbPolygon(geom);
           if (polygons.isNotEmpty) {
             features.add({
@@ -335,7 +334,7 @@ class GeoPackageFile {
   }
 
   /// レイヤ追加（DBにテーブル作成）
-  Future<void> addLayer(String name, String geomType) async {
+  Future<void> addLayer(String name, GeometryType geomType) async {
     try {
       final db = await _getDatabase();
 
@@ -362,7 +361,7 @@ class GeoPackageFile {
       await db.insert('gpkg_geometry_columns', {
         'table_name': name,
         'column_name': 'geom',
-        'geometry_type_name': geomType,
+        'geometry_type_name': geomType.value,
         'srs_id': 4326,
         'z': 0,
         'm': 0,

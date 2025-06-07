@@ -9,8 +9,7 @@ class TrackSaveDialog extends StatefulWidget {
   final GpsTrack track;
   final LayerTreeNode? rootNode;
 
-  const TrackSaveDialog({Key? key, required this.track, this.rootNode})
-    : super(key: key);
+  const TrackSaveDialog({super.key, required this.track, this.rootNode});
 
   @override
   State<TrackSaveDialog> createState() => _TrackSaveDialogState();
@@ -70,7 +69,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
           Text('GPS軌跡を保存'),
         ],
       ),
-      content: Container(
+      content: SizedBox(
         width: double.maxFinite,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -246,11 +245,11 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
     final seconds = duration.inSeconds % 60;
 
     if (hours > 0) {
-      return '${hours}時間${minutes}分';
+      return '$hours時間$minutes分';
     } else if (minutes > 0) {
-      return '${minutes}分${seconds}秒';
+      return '$minutes分$seconds秒';
     } else {
-      return '${seconds}秒';
+      return '$seconds秒';
     }
   }
 }

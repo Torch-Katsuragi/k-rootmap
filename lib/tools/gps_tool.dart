@@ -1,8 +1,6 @@
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（現在はパンツールの挙動を代行）
-import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
 import '../utils/global_config.dart';

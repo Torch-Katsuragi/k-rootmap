@@ -8,6 +8,8 @@
 /// - 画面ライフサイクルから独立した接続維持
 /// - フォアグラウンドサービスとの連携
 /// - 接続状態の集約管理
+library;
+
 import 'package:flutter/foundation.dart';
 import '../models/bluetooth_gnss_service.dart';
 

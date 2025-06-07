@@ -109,6 +109,26 @@ abstract class LayerTreeNode {
     return children.where((c) => c.nodeType == type).toList();
   }
 
+  /// 可視状態のLayerNodeリストを再帰的に取得（高速化用）
+  List<LayerNode> getVisibleLayerNodes() {
+    final result = <LayerNode>[];
+    _collectVisibleLayerNodes(result);
+    return result;
+  }
+
+  /// 可視状態のLayerNodeを再帰的に収集（内部メソッド）
+  void _collectVisibleLayerNodes(List<LayerNode> result) {
+    if (!isVisibleRecursive()) return;
+
+    if (this is LayerNode) {
+      result.add(this as LayerNode);
+    } else {
+      for (final child in children) {
+        child._collectVisibleLayerNodes(result);
+      }
+    }
+  }
+
   /// 展開状態（デフォルトはtrue）
   bool get expanded => true;
 
@@ -136,12 +156,12 @@ abstract class LayerTreeNode {
   }
 
   bool isVisibleRecursive() {
-    if (!visible)
+    if (!visible) {
       return false;
-    else {
-      if (parent == null)
+    } else {
+      if (parent == null) {
         return true;
-      else {
+      } else {
         return parent!.isVisibleRecursive();
       }
     }
@@ -187,6 +207,7 @@ abstract class LayerTreeNode {
       }
       return null;
     }
+    return null;
   }
 
   /// ノードの絶対パス（ファイルシステム上のパス）を取得
@@ -334,7 +355,7 @@ abstract class LayerNode extends LayerTreeNode {
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     final nodes = <LayerTreeNode>[];
     if (parent is! GeoPackageNode) return nodes;
-    final gpkgNode = parent as GeoPackageNode;
+    final gpkgNode = parent;
     final tableNames = await gpkgNode.geoPackageFile.getLayerNames();
     for (final tableName in tableNames) {
       final type = await gpkgNode.geoPackageFile.getGeometryType(tableName);
@@ -389,35 +410,23 @@ abstract class LayerNode extends LayerTreeNode {
 }
 
 class PointLayerNode extends LayerNode {
-  PointLayerNode(
-    GeoPackageFile file,
-    String name, {
-    bool visible = true,
-    LayerTreeNode? parent,
-  }) : super(file, name, visible: visible, parent: parent);
+  PointLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
   Future<List<FeatureNode>> get features async {
     final feats = await geoPackageFile.getFeatures(layerName);
-    if (feats == null) return [];
-    return feats
-        .where(
-          (f) =>
-              f != null &&
-              (f as Map<String, dynamic>)["points"] != null &&
-              (f as Map<String, dynamic>)["name"] != null,
-        )
-        .map((f) {
-          final map = f as Map<String, dynamic>;
-          return PointFeatureNode(
-            map["points"] as List<LatLng>,
-            map["name"] as String,
-            parent: this,
-            rowId: map["id"] ?? 0,
-            description: map["description"] as String?,
-          );
-        })
-        .toList();
+    return feats.where((f) => (f)["points"] != null && (f)["name"] != null).map(
+      (f) {
+        final map = f;
+        return PointFeatureNode(
+          map["points"] as List<LatLng>,
+          map["name"] as String,
+          parent: this,
+          rowId: map["id"] ?? 0,
+          description: map["description"] as String?,
+        );
+      },
+    ).toList();
   }
 
   @override
@@ -443,35 +452,23 @@ class PointLayerNode extends LayerNode {
 }
 
 class LineLayerNode extends LayerNode {
-  LineLayerNode(
-    GeoPackageFile file,
-    String name, {
-    bool visible = true,
-    LayerTreeNode? parent,
-  }) : super(file, name, visible: visible, parent: parent);
+  LineLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
   Future<List<FeatureNode>> get features async {
     final feats = await geoPackageFile.getFeatures(layerName);
-    if (feats == null) return [];
-    return feats
-        .where(
-          (f) =>
-              f != null &&
-              (f as Map<String, dynamic>)["lines"] != null &&
-              (f as Map<String, dynamic>)["name"] != null,
-        )
-        .map((f) {
-          final map = f as Map<String, dynamic>;
-          return LineFeatureNode(
-            map["lines"] as List<LatLng>,
-            map["name"] as String,
-            parent: this,
-            rowId: map["id"] ?? 0,
-            description: map["description"] as String?,
-          );
-        })
-        .toList();
+    return feats.where((f) => (f)["lines"] != null && (f)["name"] != null).map((
+      f,
+    ) {
+      final map = f;
+      return LineFeatureNode(
+        map["lines"] as List<LatLng>,
+        map["name"] as String,
+        parent: this,
+        rowId: map["id"] ?? 0,
+        description: map["description"] as String?,
+      );
+    }).toList();
   }
 
   @override
@@ -497,26 +494,15 @@ class LineLayerNode extends LayerNode {
 }
 
 class PolygonLayerNode extends LayerNode {
-  PolygonLayerNode(
-    GeoPackageFile file,
-    String name, {
-    bool visible = true,
-    LayerTreeNode? parent,
-  }) : super(file, name, visible: visible, parent: parent);
+  PolygonLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
   Future<List<FeatureNode>> get features async {
     final feats = await geoPackageFile.getFeatures(layerName);
-    if (feats == null) return [];
     return feats
-        .where(
-          (f) =>
-              f != null &&
-              (f as Map<String, dynamic>)["polygons"] != null &&
-              (f as Map<String, dynamic>)["name"] != null,
-        )
+        .where((f) => (f)["polygons"] != null && (f)["name"] != null)
         .map((f) {
-          final map = f as Map<String, dynamic>;
+          final map = f;
           return PolygonFeatureNode(
             map["polygons"] as List<List<LatLng>>,
             map["name"] as String,
@@ -551,18 +537,8 @@ class PolygonLayerNode extends LayerNode {
 }
 
 class FolderNode extends LayerTreeNode {
-  FolderNode(
-    String name, {
-    bool visible = true,
-    LayerTreeNode? parent,
-    List<LayerTreeNode>? children,
-  }) : super(
-         name,
-         visible: visible,
-         parent: parent,
-         children: children,
-         nodeType: "folder",
-       );
+  FolderNode(super.name, {super.visible, super.parent, super.children})
+    : super(nodeType: "folder");
 
   @override
   IconData get baseIcon => Icons.folder;
@@ -658,6 +634,7 @@ class FolderNode extends LayerTreeNode {
 /// LayerNodeの子としてfeature単位で生成される
 abstract class FeatureNode extends LayerTreeNode {
   /// 属性値
+  @override
   String name;
   String? description;
 
@@ -687,16 +664,32 @@ abstract class FeatureNode extends LayerTreeNode {
     );
   }
 
-  /// フィーチャ削除（DBからも削除）
+  /// フィーチャ削除（親子関係切断・UI更新の最適化）
+  /// DBからの削除は各サブクラスで実装（ジオメトリ型に応じた適切な削除処理）
   @override
   Future<void> dispose() async {
-    // DBから該当線を削除
-    if (parent is LineLayerNode) {
-      final gpkgFile = (parent as LineLayerNode).geoPackageFile;
-      final layerName = (parent as LineLayerNode).layerName;
-      await gpkgFile.removeLine(layerName, rowId);
+    print('[DEBUG] FeatureNode.dispose: disposing ${name} (${runtimeType})');
+
+    // 即座に親子関係を切断（UI更新を優先）
+    if (parent != null) {
+      parent!.children.remove(this);
+      print('[DEBUG] FeatureNode.dispose: removed from parent children');
     }
-    await super.dispose();
+
+    // 選択状態からも除去
+    final globalConfig = GlobalConfig.instance;
+    if (globalConfig.selectedFeatures.contains(this)) {
+      globalConfig.selectedFeatures.remove(this);
+      print('[DEBUG] FeatureNode.dispose: removed from selected features');
+    }
+
+    // parentを切断
+    parent = null;
+
+    // 子ノードはFeatureNodeにはないが、安全のためクリア
+    children.clear();
+
+    print('[DEBUG] FeatureNode.dispose: base dispose completed for ${name}');
   }
 
   /// ジオメトリ型ごとのデータ参照（点・線・面）
@@ -755,16 +748,10 @@ class PointFeatureNode extends FeatureNode {
   PointFeatureNode(
     this.points,
     String name, {
-    required LayerNode parent,
-    required int rowId,
-    String? description,
-  }) : super(
-         name: name,
-         parent: parent,
-         rowId: rowId,
-         description: description,
-         centroid: GeometryCalc.calcPointsCentroid(points),
-       );
+    required super.parent,
+    required super.rowId,
+    super.description,
+  }) : super(name: name, centroid: GeometryCalc.calcPointsCentroid(points));
 
   @override
   List<MapEntry<String, String>> get detailEntries {
@@ -776,10 +763,28 @@ class PointFeatureNode extends FeatureNode {
 
   @override
   Future<void> dispose() async {
-    if (points.isNotEmpty) {
-      await geoPackageFile.removePoint(layerName, points.first);
-    }
+    print('[DEBUG] PointFeatureNode.dispose: disposing point feature ${name}');
+
+    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
     await super.dispose();
+
+    // DBからの削除を非同期で実行（UIには影響させない）
+    if (points.isNotEmpty) {
+      geoPackageFile
+          .removePoint(layerName, points.first)
+          .then((_) {
+            print(
+              '[DEBUG] PointFeatureNode.dispose: DB deletion completed for ${name}',
+            );
+          })
+          .catchError((e) {
+            print(
+              '[ERROR] PointFeatureNode.dispose: DB deletion failed for ${name}: $e',
+            );
+          });
+    }
+
+    print('[DEBUG] PointFeatureNode.dispose: point feature dispose completed');
   }
 
   @override
@@ -792,6 +797,7 @@ class PointFeatureNode extends FeatureNode {
   }
 
   /// 指定したPointLayerNodeの下に新しい点フィーチャを作成し、PointFeatureNodeインスタンスを返す
+  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
   static Future<PointFeatureNode?> createIn(
     LayerNode parent,
     LatLng point,
@@ -801,22 +807,35 @@ class PointFeatureNode extends FeatureNode {
     if (parent is! PointLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
-    await gpkgFile.addPoint(
-      layerName,
-      point,
-      name: name ?? '',
-      description: description ?? '',
-    );
-    final features = await gpkgFile.getFeatures(layerName);
-    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+
+    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
+    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+
+    // FeatureNodeを即座に作成（地図表示用）
     final node = PointFeatureNode(
       [point],
       name,
       parent: parent,
-      rowId: rowId,
+      rowId: tempRowId,
       description: description,
     );
     parent.addChild(node);
+
+    // DBへの保存を非同期で実行（UIには影響しない）
+    gpkgFile
+        .addPoint(
+          layerName,
+          point,
+          name: name ?? '',
+          description: description ?? '',
+        )
+        .then((_) {
+          print('[DEBUG] PointFeatureNode: DB保存完了 - $name');
+        })
+        .catchError((e) {
+          print('[ERROR] PointFeatureNode: DB保存エラー - $e');
+        });
+
     return node;
   }
 }
@@ -828,14 +847,11 @@ class LineFeatureNode extends FeatureNode {
   LineFeatureNode(
     this.line,
     String name, {
-    required LayerNode parent,
-    required int rowId,
-    String? description,
+    required super.parent,
+    required super.rowId,
+    super.description,
   }) : super(
          name: name,
-         parent: parent,
-         rowId: rowId,
-         description: description,
          centroid:
              line.isNotEmpty
                  ? GeometryCalc.calcLineCentroid(line)
@@ -863,13 +879,26 @@ class LineFeatureNode extends FeatureNode {
 
   @override
   Future<void> dispose() async {
-    // DBから該当線を削除
-    if (parent is LineLayerNode) {
-      final gpkgFile = (parent as LineLayerNode).geoPackageFile;
-      final layerName = (parent as LineLayerNode).layerName;
-      await gpkgFile.removeLine(layerName, rowId);
-    }
+    print('[DEBUG] LineFeatureNode.dispose: disposing line feature ${name}');
+
+    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
     await super.dispose();
+
+    // DBから該当線を削除（非同期で実行、UIには影響させない）
+    geoPackageFile
+        .removeLine(layerName, rowId)
+        .then((_) {
+          print(
+            '[DEBUG] LineFeatureNode.dispose: DB deletion completed for ${name}',
+          );
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] LineFeatureNode.dispose: DB deletion failed for ${name}: $e',
+          );
+        });
+
+    print('[DEBUG] LineFeatureNode.dispose: line feature dispose completed');
   }
 
   @override
@@ -882,6 +911,7 @@ class LineFeatureNode extends FeatureNode {
   }
 
   /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
+  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
   static Future<LineFeatureNode?> createIn(
     LayerNode parent,
     List<LatLng> line,
@@ -891,22 +921,35 @@ class LineFeatureNode extends FeatureNode {
     if (parent is! LineLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
-    await gpkgFile.addLine(
-      layerName,
-      line,
-      name: name ?? '',
-      description: description ?? '',
-    );
-    final features = await gpkgFile.getFeatures(layerName);
-    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+
+    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
+    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+
+    // FeatureNodeを即座に作成（地図表示用）
     final node = LineFeatureNode(
       line,
       name,
       parent: parent,
-      rowId: rowId,
+      rowId: tempRowId,
       description: description,
     );
     parent.addChild(node);
+
+    // DBへの保存を非同期で実行（UIには影響しない）
+    gpkgFile
+        .addLine(
+          layerName,
+          line,
+          name: name ?? '',
+          description: description ?? '',
+        )
+        .then((_) {
+          print('[DEBUG] LineFeatureNode: DB保存完了 - $name');
+        })
+        .catchError((e) {
+          print('[ERROR] LineFeatureNode: DB保存エラー - $e');
+        });
+
     return node;
   }
 }
@@ -918,14 +961,11 @@ class PolygonFeatureNode extends FeatureNode {
   PolygonFeatureNode(
     this.polygon,
     String name, {
-    required LayerNode parent,
-    required int rowId,
-    String? description,
+    required super.parent,
+    required super.rowId,
+    super.description,
   }) : super(
          name: name,
-         parent: parent,
-         rowId: rowId,
-         description: description,
          centroid:
              (polygon.isNotEmpty && polygon[0].isNotEmpty)
                  ? GeometryCalc.calcPolygonCentroid(polygon)
@@ -954,13 +994,30 @@ class PolygonFeatureNode extends FeatureNode {
 
   @override
   Future<void> dispose() async {
-    // DBから該当ポリゴンを削除
-    if (parent is PolygonLayerNode) {
-      final gpkgFile = (parent as PolygonLayerNode).geoPackageFile;
-      final layerName = (parent as PolygonLayerNode).layerName;
-      await gpkgFile.removePolygon(layerName, rowId);
-    }
+    print(
+      '[DEBUG] PolygonFeatureNode.dispose: disposing polygon feature ${name}',
+    );
+
+    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
     await super.dispose();
+
+    // DBから該当ポリゴンを削除（非同期で実行、UIには影響させない）
+    geoPackageFile
+        .removePolygon(layerName, rowId)
+        .then((_) {
+          print(
+            '[DEBUG] PolygonFeatureNode.dispose: DB deletion completed for ${name}',
+          );
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] PolygonFeatureNode.dispose: DB deletion failed for ${name}: $e',
+          );
+        });
+
+    print(
+      '[DEBUG] PolygonFeatureNode.dispose: polygon feature dispose completed',
+    );
   }
 
   @override
@@ -973,6 +1030,7 @@ class PolygonFeatureNode extends FeatureNode {
   }
 
   /// 指定したPolygonLayerNodeの下に新しい面フィーチャを作成し、PolygonFeatureNodeインスタンスを返す
+  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
   static Future<PolygonFeatureNode?> createIn(
     LayerNode parent,
     List<List<LatLng>> polygon,
@@ -983,22 +1041,35 @@ class PolygonFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
-    await gpkgFile.addPolygon(
-      layerName,
-      polygon,
-      name: name ?? '',
-      description: description ?? '',
-    );
-    final features = await gpkgFile.getFeatures(layerName);
-    final rowId = features.isNotEmpty ? features.last['id'] ?? 0 : 0;
+
+    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
+    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+
+    // FeatureNodeを即座に作成（地図表示用）
     final node = PolygonFeatureNode(
       polygon,
       name,
       parent: parent,
-      rowId: rowId,
+      rowId: tempRowId,
       description: description,
     );
     parent.addChild(node);
+
+    // DBへの保存を非同期で実行（UIには影響しない）
+    gpkgFile
+        .addPolygon(
+          layerName,
+          polygon,
+          name: name ?? '',
+          description: description ?? '',
+        )
+        .then((_) {
+          print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name');
+        })
+        .catchError((e) {
+          print('[ERROR] PolygonFeatureNode: DB保存エラー - $e');
+        });
+
     return node;
   }
 }

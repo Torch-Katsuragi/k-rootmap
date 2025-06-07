@@ -2,7 +2,6 @@
 // 地図操作ツールの抽象基底クラス
 // 各ツール（てのひら・ペン・選択等）はこのクラスを継承
 import 'package:flutter/widgets.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// 地図操作ツールの抽象基底クラス

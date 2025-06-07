@@ -22,7 +22,7 @@ class PenTool extends MapTool {
   @override
   IconData get icon => Icons.edit;
 
-  List<Offset> _currentPath = [];
+  final List<Offset> _currentPath = [];
 
   /// 線の描画点列
   final List<LatLng> drawingLine = [];
@@ -44,13 +44,22 @@ class PenTool extends MapTool {
     // フロートボタン押下時は消しゴム動作
     if (GlobalConfig.instance.isFabActive) {
       final latlng = mapState.offsetToLatLng(details.localPosition);
+      print(
+        '[DEBUG] PenTool.onTap: eraser mode - selecting feature at $latlng',
+      );
+
+      // フィーチャーを選択
       SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
-      // 選択されたfeatureを消去
-      for (final f in List.from(GlobalConfig.instance.selectedFeatures)) {
-        f.dispose();
+      print(
+        '[DEBUG] PenTool.onTap: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
+      );
+
+      // 選択されたフィーチャーがある場合のみ削除
+      if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
+        _disposeSelectedFeatures(mapState);
+      } else {
+        print('[DEBUG] PenTool.onTap: no features selected for deletion');
       }
-      GlobalConfig.instance.selectedFeatures = [];
-      mapState.setState(() {});
       return;
     }
     // 通常は描画
@@ -66,7 +75,10 @@ class PenTool extends MapTool {
     }
     final latlng = mapState.offsetToLatLng(details.localPosition);
     if (selected is PointLayerNode) {
-      PointFeatureNode.createIn(selected, latlng, '', '');
+      PointFeatureNode.createIn(selected, latlng, '', '').then((_) {
+        // フィーチャー作成完了後にUI更新
+        mapState.refreshFeatures();
+      });
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       addDrawingLinePoint(latlng, mapState.setState);
@@ -154,12 +166,24 @@ class PenTool extends MapTool {
       // フロートボタン押下時は消しゴム動作
       if (GlobalConfig.instance.isFabActive) {
         final latlng = mapState.offsetToLatLng(details.localFocalPoint);
+        print(
+          '[DEBUG] PenTool.onScaleUpdate: eraser mode - selecting feature at $latlng',
+        );
+
+        // フィーチャーを選択
         SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
-        for (final f in List.from(GlobalConfig.instance.selectedFeatures)) {
-          f.dispose();
+        print(
+          '[DEBUG] PenTool.onScaleUpdate: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
+        );
+
+        // 選択されたフィーチャーがある場合のみ削除
+        if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
+          _disposeSelectedFeatures(mapState);
+        } else {
+          print(
+            '[DEBUG] PenTool.onScaleUpdate: no features selected for deletion',
+          );
         }
-        GlobalConfig.instance.selectedFeatures = [];
-        mapState.setState(() {});
         return;
       }
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
@@ -192,9 +216,11 @@ class PenTool extends MapTool {
           _pointPreview!,
           'FreeHandPoint',
           '',
-        );
+        ).then((_) {
+          // フィーチャー作成完了後にUI更新
+          mapState.refreshFeatures();
+        });
         _pointPreview = null;
-        mapState.refreshFeatures();
         mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
         LineFeatureNode.createIn(
@@ -202,10 +228,12 @@ class PenTool extends MapTool {
           List<LatLng>.from(drawingLine),
           'FreeHandLine',
           '',
-        );
+        ).then((_) {
+          // フィーチャー作成完了後にUI更新
+          mapState.refreshFeatures();
+        });
         drawingLine.clear();
         _isDrawing = false;
-        mapState.refreshFeatures();
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
@@ -214,10 +242,12 @@ class PenTool extends MapTool {
           List<List<LatLng>>.from([closed]),
           'FreeHandPolygon',
           '',
-        );
+        ).then((_) {
+          // フィーチャー作成完了後にUI更新
+          mapState.refreshFeatures();
+        });
         drawingPolygon.clear();
         _isDrawing = false;
-        mapState.refreshFeatures();
         mapState.setState(() {});
       }
     }
@@ -280,14 +310,15 @@ class PenTool extends MapTool {
         List<LatLng>.from(drawingLine),
         name,
         description,
-      );
+      ).then((_) {
+        // フィーチャ表示を更新（mapStateが利用可能なら）
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+        }
+      });
       setState(() {
         drawingLine.clear();
       });
-      // フィーチャ表示を更新（mapStateが利用可能なら）
-      if (GlobalConfig.instance.mapState != null) {
-        GlobalConfig.instance.mapState.refreshFeatures();
-      }
     } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
       final closed = closeRing(drawingPolygon);
       PolygonFeatureNode.createIn(
@@ -295,14 +326,72 @@ class PenTool extends MapTool {
         List<List<LatLng>>.from([closed]),
         name,
         description,
-      );
+      ).then((_) {
+        // フィーチャ表示を更新（mapStateが利用可能なら）
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+        }
+      });
       setState(() {
         drawingPolygon.clear();
       });
-      // フィーチャ表示を更新（mapStateが利用可能なら）
-      if (GlobalConfig.instance.mapState != null) {
-        GlobalConfig.instance.mapState.refreshFeatures();
-      }
     }
+  }
+
+  /// 選択されたフィーチャーを効率的に削除（最適化・UI更新修正）
+  void _disposeSelectedFeatures(dynamic mapState) async {
+    final selectedFeatures = List.from(GlobalConfig.instance.selectedFeatures);
+    print(
+      '[DEBUG] PenTool._disposeSelectedFeatures: disposing ${selectedFeatures.length} features',
+    );
+
+    if (selectedFeatures.isEmpty) {
+      print('[DEBUG] PenTool._disposeSelectedFeatures: no features to dispose');
+      return;
+    }
+
+    // 即座に選択状態をクリア（UI更新優先）
+    GlobalConfig.instance.selectedFeatures.clear();
+    print(
+      '[DEBUG] PenTool._disposeSelectedFeatures: cleared selected features',
+    );
+
+    // 即座にUI更新（選択表示を確実にクリア）
+    mapState.setState(() {});
+    mapState.refreshFeatures();
+    print('[DEBUG] PenTool._disposeSelectedFeatures: triggered UI update');
+
+    // 各フィーチャーを非同期で削除（並行処理）
+    final disposeFutures =
+        selectedFeatures.map((feature) async {
+          try {
+            print(
+              '[DEBUG] PenTool._disposeSelectedFeatures: disposing feature ${feature.name}',
+            );
+            await feature.dispose();
+            print(
+              '[DEBUG] PenTool._disposeSelectedFeatures: disposed feature ${feature.name}',
+            );
+          } catch (e) {
+            print(
+              '[ERROR] PenTool._disposeSelectedFeatures: failed to dispose ${feature.name}: $e',
+            );
+          }
+        }).toList();
+
+    // バックグラウンドで削除処理完了を待機（UIには影響しない）
+    Future.wait(disposeFutures)
+        .then((_) {
+          print(
+            '[DEBUG] PenTool._disposeSelectedFeatures: all ${selectedFeatures.length} features disposed',
+          );
+          // 削除完了後に最終的なUI更新
+          mapState.refreshFeatures();
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] PenTool._disposeSelectedFeatures: error during batch disposal: $e',
+          );
+        });
   }
 }

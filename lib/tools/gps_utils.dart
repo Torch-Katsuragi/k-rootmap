@@ -7,7 +7,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart';
 import 'package:nmea/nmea.dart'; // NMEA0183パーサ
 import 'package:geolocator/geolocator.dart';
 // geolocator, permission_handler等はpubspec.yamlに追加済み

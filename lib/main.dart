@@ -1,7 +1,6 @@
 // K-MAPS: エントリーポイント
 // 本ファイルはアプリ起動・ルーティングのみを担当
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';

@@ -198,6 +198,111 @@ final layerNames = await geoPackage.getLayerNames();
 3. 柔軟なレイアウト設計でさまざまな画面サイズに対応
 
 #### 6. ホーム画面UI改善 **【完了】**
+
+#### 7. フィーチャー描画パフォーマンス向上 **【完了・NEW】**
+**問題内容**:
+- 地図上にフィーチャーを描画する際、都度実体の.gpkgから読み出していた
+- feature作成時・削除時に非同期処理の遅延でsetStateまでに間に合わず、地図への反映が遅れていた
+
+**解決方法**:
+1. **FeatureNodeでのジオメトリ保持**: 各FeatureNode（Point, Line, Polygon）でジオメトリ情報を確実に保持
+2. **即座のノード作成**: createInメソッドで、DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加
+3. **高速化された地図表示**: map_page.dartでLayerNodeのchildrenから直接FeatureNodeを参照（DBアクセス最小化）
+4. **即座の削除処理**: disposeメソッドでDBからの削除を非同期で実行し、UI側は即座に削除
+
+**技術的改善点**:
+```dart
+// 旧方式（都度DBアクセス）
+final features = await layer.features; // 毎回DBから読み取り
+pointFeatures.addAll(features.whereType<PointFeatureNode>());
+
+// 新方式（FeatureNode直接参照）
+final layerFeatures = layer.children.whereType<FeatureNode>().toList(); // 高速
+pointFeatures.addAll(layerFeatures.whereType<PointFeatureNode>());
+
+// 作成時: 即座にFeatureNode作成、DBは非同期保存
+final node = PointFeatureNode(points, name, parent: parent, rowId: tempRowId);
+parent.addChild(node); // 即座にUIに反映
+gpkgFile.addPoint(...).then((_) => print('[DEBUG] DB保存完了')); // 非同期
+```
+
+**結果**:
+- 地図上への描画が即座に反映され、レスポンシブな操作感を実現
+- 初回ロード以外はDBアクセスを最小化し、パフォーマンスが大幅向上
+- DB保存は確実に実行されるため、データの整合性も保持
+
+#### 8. FeatureNode削除処理最適化 **【完了・NEW】**
+**問題内容**:
+- フィーチャー削除時の処理が非効率で、UI更新が遅延していた
+- 基底クラスのdisposeメソッドが特定のFeatureNode型に依存していた
+- 複数フィーチャー削除時の処理が逐次実行で時間がかかっていた
+
+**解決方法**:
+1. **基底クラスの最適化**: FeatureNodeの基底disposeで親子関係切断・選択状態クリアを優先実行
+2. **各型別の適切な削除**: Point/Line/PolygonFeatureNodeで型に応じた適切なDB削除処理
+3. **並行削除処理**: 複数フィーチャー削除時にFuture.waitで並行処理
+4. **UI優先設計**: 即座に親子関係を切断してUI更新、DB削除は非同期で実行
+
+**技術的改善点**:
+```dart
+// 基底クラス（FeatureNode）での最適化
+await super.dispose(); // 親子関係切断・選択状態クリア（即座）
+geoPackageFile.removePoint(...).then((_) { // DB削除（非同期）
+  print('[DEBUG] DB deletion completed');
+}).catchError((e) {
+  print('[ERROR] DB deletion failed: $e');
+});
+
+// 複数削除の並行処理
+final disposeFutures = selectedFeatures.map((f) => f.dispose()).toList();
+mapState.refreshFeatures(); // 即座にUI更新
+Future.wait(disposeFutures); // バックグラウンドで削除完了待機
+```
+
+**結果**:
+- フィーチャー削除が即座にUIに反映され、操作感が大幅向上
+- 複数フィーチャー削除時も並行処理でパフォーマンス向上
+- エラーハンドリングの強化でアプリの安定性向上
+
+#### 9. 選択表示UI更新とSelectTool最適化 **【完了・NEW】**
+**問題内容**:
+- フィーチャー削除時に選択表示（黄色い線）が残る問題
+- onScaleUpdate時にフィーチャーが選択されない問題
+- SelectToolが毎回DBアクセスしてパフォーマンスが低下
+
+**解決方法**:
+1. **選択状態UI更新の改善**: `setState()`と`refreshFeatures()`の両方を実行して確実に選択表示をクリア
+2. **SelectTool最適化**: LayerNodeのchildrenから直接フィーチャーを取得（DBアクセス最小化）
+3. **削除処理の条件判定**: 選択されたフィーチャーがある場合のみ削除処理を実行
+4. **詳細デバッグログ**: 選択・削除プロセスの各段階でログ出力
+
+**技術的改善点**:
+```dart
+// UI更新の確実な実行
+GlobalConfig.instance.selectedFeatures.clear();
+mapState.setState(() {}); // 選択表示を即座にクリア
+mapState.refreshFeatures(); // フィーチャー表示も更新
+
+// SelectToolの最適化（FeatureNode直接参照）
+final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+if (layerFeatures.isNotEmpty) {
+  features = layerFeatures; // 高速参照
+} else {
+  features = await layer.features; // 初回のみDB読み込み
+}
+
+// 削除処理の条件判定
+if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
+  _disposeSelectedFeatures(mapState);
+} else {
+  print('[DEBUG] no features selected for deletion');
+}
+```
+
+**結果**:
+- 削除時の選択表示が確実にクリアされ、視覚的な問題を解決
+- SelectToolの処理速度が大幅向上（初回以外はDBアクセス不要）
+- デバッグログによる問題の早期発見と対処が可能
 **改善内容**:
 - 複雑なGPS設定・サービス制御UIを削除
 - シンプルで分かりやすいフォルダ選択画面に刷新

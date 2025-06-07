@@ -1,6 +1,8 @@
 /// K-MAPS: レイヤ構造Drawerウィジェット
 /// プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示し、
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
+library;
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:k_maps/utils/global_config.dart';
@@ -279,10 +281,8 @@ class _LayerDrawerState extends State<LayerDrawer> {
             setState(() {
               if (isExpanded) {
                 // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
-                if (absPath != null) {
-                  expandedGpkgPaths.remove(absPath);
-                  _userClosedGpkgPaths.add(absPath);
-                }
+                expandedGpkgPaths.remove(absPath);
+                _userClosedGpkgPaths.add(absPath);
               } else {
                 // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
                 if (absPath != null) {
@@ -848,28 +848,25 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                         ),
                                         onPressed: () {
                                           // geom選択時に地図ジャンプ
-                                          if (widget.onJumpTo != null &&
-                                              feature is FeatureNode) {
+                                          if (widget.onJumpTo != null) {
                                             widget.onJumpTo!(feature.centroid);
                                           }
                                           // feature選択: selectedFeaturesにセット
-                                          if (feature is FeatureNode) {
-                                            final wasSelected = GlobalConfig
+                                          final wasSelected = GlobalConfig
+                                              .instance
+                                              .selectedFeatures
+                                              .contains(feature);
+                                          if (!wasSelected) {
+                                            GlobalConfig
                                                 .instance
-                                                .selectedFeatures
-                                                .contains(feature);
-                                            if (!wasSelected) {
-                                              GlobalConfig
-                                                  .instance
-                                                  .selectedFeatures = [feature];
-                                              // 地図本体のみ再描画（属性テーブルは再描画しない）
-                                              if (GlobalConfig
-                                                      .instance
-                                                      .mapState !=
-                                                  null) {
-                                                GlobalConfig.instance.mapState
-                                                    .setState(() {});
-                                              }
+                                                .selectedFeatures = [feature];
+                                            // 地図本体のみ再描画（属性テーブルは再描画しない）
+                                            if (GlobalConfig
+                                                    .instance
+                                                    .mapState !=
+                                                null) {
+                                              GlobalConfig.instance.mapState
+                                                  .setState(() {});
                                             }
                                           }
                                         },

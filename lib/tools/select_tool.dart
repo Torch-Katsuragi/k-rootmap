@@ -1,6 +1,5 @@
 // lib/tools/select_tool.dart
 // オブジェクト選択ツール
-import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
@@ -40,14 +39,20 @@ class SelectTool extends MapTool {
     }
   }
 
-  /// 指定座標・範囲でfeatureを選択する（PenTool等からも利用可）
+  /// 指定座標・範囲でfeatureを選択する（PenTool等からも利用可・最適化）
   static Future<void> selectFeatureAtLatLng({
     required LatLng tapLatLng,
     required dynamic mapState,
     double? range,
   }) async {
+    print('[DEBUG] SelectTool.selectFeatureAtLatLng: selecting at $tapLatLng');
+
     final layer = GlobalConfig.instance.selectedLayerNode;
-    if (layer == null) return;
+    if (layer == null) {
+      print('[DEBUG] SelectTool.selectFeatureAtLatLng: no layer selected');
+      return;
+    }
+
     String featureType;
     if (layer is PointLayerNode) {
       featureType = 'point';
@@ -56,24 +61,66 @@ class SelectTool extends MapTool {
     } else if (layer is PolygonLayerNode) {
       featureType = 'polygon';
     } else {
+      print('[DEBUG] SelectTool.selectFeatureAtLatLng: unsupported layer type');
       return;
     }
-    final features = await layer.features;
-    if (features.isEmpty) return;
+
+    // 最適化: LayerNodeのchildrenから直接FeatureNodeを取得（高速化）
+    final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+    List<FeatureNode> features;
+
+    if (layerFeatures.isNotEmpty) {
+      // childrenにFeatureNodeがある場合は直接使用（高速）
+      features = layerFeatures;
+      print(
+        '[DEBUG] SelectTool.selectFeatureAtLatLng: using ${features.length} features from children',
+      );
+    } else {
+      // childrenが空の場合のみDBから読み込み（初回読み込み時）
+      final dbFeatures = await layer.features;
+      features = dbFeatures.whereType<FeatureNode>().toList();
+      print(
+        '[DEBUG] SelectTool.selectFeatureAtLatLng: loaded ${features.length} features from DB',
+      );
+      // DBから読み込んだFeatureNodeをlayerのchildrenに追加
+      for (final feature in features) {
+        layer.addChild(feature);
+      }
+    }
+
+    if (features.isEmpty) {
+      print('[DEBUG] SelectTool.selectFeatureAtLatLng: no features found');
+      GlobalConfig.instance.selectedFeatures = [];
+      mapState.setState(() {});
+      return;
+    }
+
     // ズーム率からrange(m)を計算（未指定時は通常の範囲）
     final double selectRange =
         range ?? SelectTool()._calcSelectRange(mapState) * 3;
+    print(
+      '[DEBUG] SelectTool.selectFeatureAtLatLng: search range = ${selectRange}m',
+    );
+
     final result = FeatureSearch.findNearestFeature(
       tapLatLng,
       features,
       featureType,
       selectRange,
     );
+
     if (result == null) {
+      print(
+        '[DEBUG] SelectTool.selectFeatureAtLatLng: no feature found in range',
+      );
       GlobalConfig.instance.selectedFeatures = [];
       mapState.setState(() {});
       return;
     }
+
+    print(
+      '[DEBUG] SelectTool.selectFeatureAtLatLng: selected feature ${result.key.name}',
+    );
     GlobalConfig.instance.selectedFeatures = [result.key];
     mapState.setState(() {});
   }
@@ -147,7 +194,26 @@ class SelectTool extends MapTool {
       }
       final layer = GlobalConfig.instance.selectedLayerNode;
       if (layer != null) {
-        final features = await layer.features;
+        // 最適化: LayerNodeのchildrenから直接FeatureNodeを取得
+        final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+        List<FeatureNode> features;
+
+        if (layerFeatures.isNotEmpty) {
+          features = layerFeatures;
+          print(
+            '[DEBUG] SelectTool.onScaleEnd: using ${features.length} features from children',
+          );
+        } else {
+          final dbFeatures = await layer.features;
+          features = dbFeatures.whereType<FeatureNode>().toList();
+          print(
+            '[DEBUG] SelectTool.onScaleEnd: loaded ${features.length} features from DB',
+          );
+          for (final feature in features) {
+            layer.addChild(feature);
+          }
+        }
+
         final selected =
             features.where((f) {
               // 点: centroidが投げ縄内

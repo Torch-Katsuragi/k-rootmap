@@ -1,5 +1,7 @@
 /// プロジェクト全体のグローバル変数・設定を管理する最小クラス
 /// 例: プロジェクトのルートディレクトリパスなど
+library;
+
 import '../models/layer_tree_node.dart';
 import '../tools/map_tool.dart';
 import '../tools/pan_tool.dart';

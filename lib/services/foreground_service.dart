@@ -216,14 +216,14 @@ void onStart(ServiceInstance service) async {
           ForegroundServiceManager._gnssDeviceAddress!,
         );
 
-        if (gnssConnection != null && gnssConnection!.isConnected) {
+        if (gnssConnection.isConnected) {
           isGnssConnected = true;
           debugPrint(
             '[ForegroundService] 外部GNSS接続成功: ${ForegroundServiceManager._gnssDeviceName}',
           );
 
           // NMEAデータ受信開始
-          gnssDataSubscription = gnssConnection!.input!.listen(
+          gnssDataSubscription = gnssConnection.input!.listen(
             (Uint8List data) {
               try {
                 String dataString = utf8.decode(data);

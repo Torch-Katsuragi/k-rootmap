@@ -312,7 +312,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${sourceType}追跡フォアグラウンドサービスを開始しました$deviceInfo'),
+          content: Text('$sourceType追跡フォアグラウンドサービスを開始しました$deviceInfo'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
@@ -621,6 +621,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   /// フィーチャデータを非同期で更新（キャッシュに保存）
+  /// LayerNodeが管理するFeatureNodeを直接参照し、DBアクセスを最小限に抑制
   Future<void> _updateFeatures() async {
     print('[DEBUG] _updateFeatures: start');
     final folderTree = GlobalConfig.instance.folderTree;
@@ -640,24 +641,76 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       print(
         '[DEBUG] _updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
       );
+
+      // LayerNodeのchildrenから直接FeatureNodeを取得（高速化）
+      final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+
       if (layer is PointLayerNode) {
-        final features = await layer.features;
+        final layerPointFeatures =
+            layerFeatures.whereType<PointFeatureNode>().toList();
         print(
-          '[DEBUG] _updateFeatures: found ${features.length} point features in ${layer.name}',
+          '[DEBUG] _updateFeatures: found ${layerPointFeatures.length} point features in ${layer.name} (from children)',
         );
-        pointFeatures.addAll(features.whereType<PointFeatureNode>());
+        pointFeatures.addAll(layerPointFeatures);
+
+        // childrenが空の場合のみDBから読み込み（初回読み込み時）
+        if (layerFeatures.isEmpty) {
+          final dbFeatures = await layer.features;
+          final dbPointFeatures =
+              dbFeatures.whereType<PointFeatureNode>().toList();
+          print(
+            '[DEBUG] _updateFeatures: loaded ${dbPointFeatures.length} point features from DB for ${layer.name}',
+          );
+          pointFeatures.addAll(dbPointFeatures);
+          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
+          for (final feature in dbPointFeatures) {
+            layer.addChild(feature);
+          }
+        }
       } else if (layer is LineLayerNode) {
-        final features = await layer.features;
+        final layerLineFeatures =
+            layerFeatures.whereType<LineFeatureNode>().toList();
         print(
-          '[DEBUG] _updateFeatures: found ${features.length} line features in ${layer.name}',
+          '[DEBUG] _updateFeatures: found ${layerLineFeatures.length} line features in ${layer.name} (from children)',
         );
-        lineFeatures.addAll(features.whereType<LineFeatureNode>());
+        lineFeatures.addAll(layerLineFeatures);
+
+        // childrenが空の場合のみDBから読み込み（初回読み込み時）
+        if (layerFeatures.isEmpty) {
+          final dbFeatures = await layer.features;
+          final dbLineFeatures =
+              dbFeatures.whereType<LineFeatureNode>().toList();
+          print(
+            '[DEBUG] _updateFeatures: loaded ${dbLineFeatures.length} line features from DB for ${layer.name}',
+          );
+          lineFeatures.addAll(dbLineFeatures);
+          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
+          for (final feature in dbLineFeatures) {
+            layer.addChild(feature);
+          }
+        }
       } else if (layer is PolygonLayerNode) {
-        final features = await layer.features;
+        final layerPolygonFeatures =
+            layerFeatures.whereType<PolygonFeatureNode>().toList();
         print(
-          '[DEBUG] _updateFeatures: found ${features.length} polygon features in ${layer.name}',
+          '[DEBUG] _updateFeatures: found ${layerPolygonFeatures.length} polygon features in ${layer.name} (from children)',
         );
-        polygonFeatures.addAll(features.whereType<PolygonFeatureNode>());
+        polygonFeatures.addAll(layerPolygonFeatures);
+
+        // childrenが空の場合のみDBから読み込み（初回読み込み時）
+        if (layerFeatures.isEmpty) {
+          final dbFeatures = await layer.features;
+          final dbPolygonFeatures =
+              dbFeatures.whereType<PolygonFeatureNode>().toList();
+          print(
+            '[DEBUG] _updateFeatures: loaded ${dbPolygonFeatures.length} polygon features from DB for ${layer.name}',
+          );
+          polygonFeatures.addAll(dbPolygonFeatures);
+          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
+          for (final feature in dbPolygonFeatures) {
+            layer.addChild(feature);
+          }
+        }
       }
     }
 
@@ -1365,11 +1418,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             final isLineDrawing =
                 selected is LineLayerNode &&
                 currentTool is PenTool &&
-                (currentTool as PenTool).drawingLine.isNotEmpty;
+                (currentTool).drawingLine.isNotEmpty;
             final isPolygonDrawing =
                 selected is PolygonLayerNode &&
                 currentTool is PenTool &&
-                (currentTool as PenTool).drawingPolygon.isNotEmpty;
+                (currentTool).drawingPolygon.isNotEmpty;
 
             // ペンツールでの描画中は従来のボタンを表示
             if (isLineDrawing || isPolygonDrawing) {
@@ -1381,10 +1434,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     heroTag: 'undo',
                     onPressed: () {
                       setState(() {
-                        if (isLineDrawing && currentTool is PenTool) {
-                          (currentTool as PenTool).drawingLine.removeLast();
-                        } else if (isPolygonDrawing && currentTool is PenTool) {
-                          (currentTool as PenTool).drawingPolygon.removeLast();
+                        if (isLineDrawing) {
+                          (currentTool).drawingLine.removeLast();
+                        } else if (isPolygonDrawing) {
+                          (currentTool).drawingPolygon.removeLast();
                         }
                       });
                     },
@@ -1397,10 +1450,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     heroTag: 'cancel',
                     onPressed: () {
                       setState(() {
-                        if (isLineDrawing && currentTool is PenTool) {
-                          (currentTool as PenTool).drawingLine.clear();
-                        } else if (isPolygonDrawing && currentTool is PenTool) {
-                          (currentTool as PenTool).drawingPolygon.clear();
+                        if (isLineDrawing) {
+                          (currentTool).drawingLine.clear();
+                        } else if (isPolygonDrawing) {
+                          (currentTool).drawingPolygon.clear();
                         }
                       });
                     },

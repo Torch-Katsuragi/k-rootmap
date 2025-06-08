@@ -143,6 +143,12 @@ abstract class LayerTreeNode {
     child.parent = this;
   }
 
+  /// 子ノードを削除
+  void removeChild(LayerTreeNode child) {
+    children.remove(child);
+    child.parent = null;
+  }
+
   /// 同名・同型の子ノードが存在しない場合のみ追加
   /// 既存ノードがある場合はそのノードを返し、ない場合は新規追加して返す
   LayerTreeNode addChildIfNotExists(LayerTreeNode newChild) {

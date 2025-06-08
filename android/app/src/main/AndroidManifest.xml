@@ -26,13 +26,20 @@
     <!-- Android 13以降の通知権限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
+    <!-- ストレージ権限 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Android 11以降で全ファイルアクセスが必要な場合 -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    
     <!-- Bluetooth機能要求 -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
         android:label="k_maps"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -205,17 +205,26 @@ class _LayerDrawerState extends State<LayerDrawer> {
                       },
                     );
                     if (result != null && result.isNotEmpty) {
+                      print('[LayerDrawer] GeoPackage作成開始: $result');
+
                       final folderNode = widget.currentNode as FolderNode;
                       final dir = folderNode.getAbsoluteFilePath();
                       final fileName =
                           result.endsWith('.gpkg') ? result : '$result.gpkg';
                       final path = p.join(dir ?? '', fileName);
+
+                      print('[LayerDrawer] 作成予定パス: $path');
+                      print('[LayerDrawer] 親ディレクトリ: $dir');
+
                       if (File(path).existsSync()) {
+                        print('[LayerDrawer] 同名ファイルが既に存在します');
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('同名のGeoPackageファイルが既に存在します')),
                         );
                         return;
                       }
+
+                      print('[LayerDrawer] GeoPackageNodeを作成中...');
                       final parentNode = widget.currentNode as FolderNode;
                       final parentPath = parentNode.getAbsolutePathSegments();
                       final fileNameList = [fileName];
@@ -223,6 +232,11 @@ class _LayerDrawerState extends State<LayerDrawer> {
                         ...parentPath,
                         ...fileNameList,
                       ]);
+
+                      print(
+                        '[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}',
+                      );
+
                       final newNode = GeoPackageNode(
                         gpkgFile,
                         visible: true,
@@ -230,13 +244,30 @@ class _LayerDrawerState extends State<LayerDrawer> {
                       );
                       folderNode.addChild(newNode);
 
+                      // 空のGeoPackageファイルを即座に作成
+                      print('[LayerDrawer] 空のGeoPackageファイル作成中...');
+                      final createSuccess =
+                          await gpkgFile.createEmptyDatabase();
+                      if (!createSuccess) {
+                        print('[LayerDrawer] 空のGeoPackageファイル作成失敗');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
+                        );
+                        // 作成失敗時はノードを削除
+                        folderNode.removeChild(newNode);
+                        return;
+                      }
+
                       // 新規作成されたGeoPackageを自動展開
                       final newAbsPath = gpkgFile.getAbsolutePath();
+                      print('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
                       if (newAbsPath != null) {
                         expandedGpkgPaths.add(newAbsPath);
                       }
 
+                      print('[LayerDrawer] UI更新中...');
                       widget.setStateCallback(() {});
+                      print('[LayerDrawer] GeoPackage作成完了');
                     }
                   }
                   : null,
@@ -549,34 +580,60 @@ class _LayerDrawerState extends State<LayerDrawer> {
       if (result != null &&
           result['name'] != null &&
           result['name']!.isNotEmpty) {
-        // node.geoPackageFile.addLayer(result['name']!, result['geomType']!);
+        print(
+          '[LayerDrawer] レイヤ作成開始: ${result['name']}, タイプ: ${result['geomType']}',
+        );
+
         // ジオメトリタイプに応じて適切なLayerNodeサブクラスを生成
         LayerTreeNode? newLayerNode;
         final geomTypeString = result['geomType']!;
         final geomType = GeometryType.fromString(geomTypeString);
-        switch (geomType) {
-          case GeometryType.point:
-            newLayerNode = await PointLayerNode.createIn(node, result['name']!);
-            break;
-          case GeometryType.linestring:
-            newLayerNode = await LineLayerNode.createIn(node, result['name']!);
-            break;
-          case GeometryType.polygon:
-            newLayerNode = await PolygonLayerNode.createIn(
-              node,
-              result['name']!,
-            );
-            break;
-          case null:
-            break;
-        }
-        if (newLayerNode != null) {
-          // 追加成功時のみUI更新
-          widget.setStateCallback(() {});
-          // 地図本体も即時再描画
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.setState(() {});
+
+        print('[LayerDrawer] ジオメトリタイプ解析: $geomTypeString -> $geomType');
+
+        try {
+          switch (geomType) {
+            case GeometryType.point:
+              print('[LayerDrawer] PointLayerNode作成中...');
+              newLayerNode = await PointLayerNode.createIn(
+                node,
+                result['name']!,
+              );
+              break;
+            case GeometryType.linestring:
+              print('[LayerDrawer] LineLayerNode作成中...');
+              newLayerNode = await LineLayerNode.createIn(
+                node,
+                result['name']!,
+              );
+              break;
+            case GeometryType.polygon:
+              print('[LayerDrawer] PolygonLayerNode作成中...');
+              newLayerNode = await PolygonLayerNode.createIn(
+                node,
+                result['name']!,
+              );
+              break;
+            case null:
+              print('[LayerDrawer] 不明なジオメトリタイプです');
+              break;
           }
+
+          if (newLayerNode != null) {
+            print('[LayerDrawer] レイヤ作成成功、UI更新中...');
+            // 追加成功時のみUI更新
+            widget.setStateCallback(() {});
+            // 地図本体も即時再描画
+            if (GlobalConfig.instance.mapState != null) {
+              GlobalConfig.instance.mapState.setState(() {});
+            }
+            print('[LayerDrawer] レイヤ作成完了');
+          } else {
+            print('[LayerDrawer] レイヤ作成失敗: newLayerNodeがnull');
+          }
+        } catch (e, stack) {
+          print('[LayerDrawer] レイヤ作成エラー: $e');
+          print('[LayerDrawer] スタックトレース: $stack');
         }
       }
     },

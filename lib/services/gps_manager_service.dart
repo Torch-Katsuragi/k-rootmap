@@ -248,7 +248,7 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// GPS測量専用開始（フォアグラウンドサービス経由で位置取得）
+  /// GPS測量専用開始（軌跡記録とは独立した位置取得）
   Future<Map<String, dynamic>?> startGpsSurveyWithWait({
     Duration timeout = const Duration(seconds: 10),
   }) async {
@@ -257,34 +257,53 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     try {
-      debugPrint('$_logTag: GPS測量開始 - フォアグラウンドサービス経由で位置取得...');
+      debugPrint('$_logTag: GPS測量開始 - 測量専用GPS位置取得...');
       _isSurveyMode = true;
 
-      // フォアグラウンドサービスが実行中でない場合は開始
       final serviceManager = ForegroundServiceManager();
-      if (!serviceManager.isServiceRunning) {
-        debugPrint('$_logTag: フォアグラウンドサービス開始');
-        await serviceManager.startService();
-        // サービス開始後少し待機
-        await Future.delayed(const Duration(milliseconds: 1000));
-      }
 
-      // フォアグラウンドサービスから位置情報を要求
-      final response = await serviceManager.requestGpsPosition(
-        timeout: timeout,
-      );
+      // フォアグラウンドサービスが既に動作中の場合のみ、そこから位置情報を取得
+      if (serviceManager.isServiceRunning) {
+        debugPrint('$_logTag: フォアグラウンドサービス経由で位置取得（軌跡記録継続中）');
 
-      if (response != null && response['success'] == true) {
-        final gpsInfo = response['gpsInfo'] as Map<String, dynamic>;
-        debugPrint('$_logTag: GPS測量用位置取得成功（フォアグラウンドサービス経由）');
-        notifyListeners();
-        return gpsInfo;
-      } else {
-        debugPrint(
-          '$_logTag: GPS測量用位置取得失敗: ${response?['error'] ?? 'Unknown error'}',
+        final response = await serviceManager.requestGpsPosition(
+          timeout: timeout,
         );
-        return null;
+
+        if (response != null && response['success'] == true) {
+          final gpsInfo = response['gpsInfo'] as Map<String, dynamic>;
+          debugPrint('$_logTag: GPS測量用位置取得成功（フォアグラウンドサービス経由）');
+          notifyListeners();
+          return gpsInfo;
+        }
       }
+
+      // フォアグラウンドサービス未動作時は、測量専用GPS開始
+      debugPrint('$_logTag: 測量専用GPS開始（軌跡記録は開始しません）');
+
+      if (!_isGpsActive) {
+        await startGps();
+      }
+
+      // 位置情報取得まで待機（ポーリング方式）
+      final stopwatch = Stopwatch()..start();
+      while (stopwatch.elapsed < timeout) {
+        final gpsInfo = getCurrentGpsInfo();
+
+        if (gpsInfo['isActive'] == true &&
+            gpsInfo['latitude'] != null &&
+            gpsInfo['longitude'] != null) {
+          debugPrint('$_logTag: GPS測量用位置取得成功（測量専用GPS）');
+          notifyListeners();
+          return gpsInfo;
+        }
+
+        // 500ms間隔でポーリング
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      debugPrint('$_logTag: GPS測量用位置取得タイムアウト');
+      return null;
     } catch (e) {
       debugPrint('$_logTag: GPS測量開始エラー: $e');
       _isSurveyMode = false;
@@ -298,28 +317,26 @@ class GpsManagerService extends ChangeNotifier {
       debugPrint('$_logTag: GPS測量停止中...');
       _isSurveyMode = false;
 
-      // 記録中でなく、追跡中でもない場合はGPS自体を停止
-      if (!_isRecording && !_isTrackingForService()) {
+      final serviceManager = ForegroundServiceManager();
+
+      // フォアグラウンドサービス（軌跡記録）が動作中の場合は何もしない
+      if (serviceManager.isServiceRunning) {
+        debugPrint('$_logTag: GPS測量停止 - フォアグラウンドサービス（軌跡記録）継続中のためGPS継続');
+        notifyListeners();
+        return;
+      }
+
+      // 記録中でもなく、フォアグラウンドサービスも動作していない場合のみGPS停止
+      if (!_isRecording) {
         await stopGps();
-        debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得も停止');
+        debugPrint('$_logTag: GPS測量停止 - 測量専用GPS位置情報取得も停止');
       } else {
-        debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録・追跡中）');
+        debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
       }
 
       notifyListeners();
     } catch (e) {
       debugPrint('$_logTag: GPS測量停止エラー: $e');
-    }
-  }
-
-  /// フォアグラウンドサービスでの追跡中かチェック
-  bool _isTrackingForService() {
-    // フォアグラウンドサービスでの追跡状態を確認
-    try {
-      // ForegroundServiceManagerの状態をチェック
-      return _foregroundServiceTracking;
-    } catch (e) {
-      return false;
     }
   }
 
@@ -396,6 +413,56 @@ class GpsManagerService extends ChangeNotifier {
       debugPrint('$_logTag: GPSソース切り替えエラー: $e');
       rethrow;
     }
+  }
+
+  /// 統合アーキテクチャでの推奨参照GPS（基準GPS）切り替えメソッド
+  ///
+  /// **重要：参照GPS切り替えの推奨実装箇所**
+  ///
+  /// **使用方法：**
+  /// ```dart
+  /// // 統合GPS管理サービスインスタンス取得
+  /// final gpsManager = GpsManagerService();
+  ///
+  /// // 内蔵GPSに切り替え（基準GPSとして使用）
+  /// await gpsManager.switchReferenceGps(GpsSourceType.internal);
+  ///
+  /// // 外部GNSS機器に切り替え（基準GPSとして使用）
+  /// await gpsManager.switchReferenceGps(GpsSourceType.external, gnssDevice);
+  /// ```
+  ///
+  /// **実装詳細：**
+  /// - フォアグラウンドサービス動作中は一時停止して切り替え
+  /// - GPS測量・GPS追跡の両方で統一的に動作
+  /// - リソース競合を回避して安全に切り替え
+  Future<void> switchReferenceGps(
+    GpsSourceType sourceType, [
+    BluetoothDevice? device,
+  ]) async {
+    debugPrint('$_logTag: 参照GPS（基準GPS）を${sourceType.displayName}に切り替え...');
+
+    final serviceManager = ForegroundServiceManager();
+
+    if (serviceManager.isServiceRunning) {
+      // フォアグラウンドサービスが動作中の場合は、まず停止
+      debugPrint('$_logTag: フォアグラウンドサービス動作中のため一時停止して切り替え');
+      await serviceManager.stopService();
+
+      // 少し待機してリソース解放を確保
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      // GPSソース切り替え
+      await switchGpsSource(sourceType, device);
+
+      // フォアグラウンドサービス再開
+      await serviceManager.startService();
+      debugPrint('$_logTag: 参照GPS切り替え後、フォアグラウンドサービス再開');
+    } else {
+      // フォアグラウンドサービス未動作時は直接切り替え
+      await switchGpsSource(sourceType, device);
+    }
+
+    debugPrint('$_logTag: 参照GPS（基準GPS）切り替え完了: ${sourceType.displayName}');
   }
 
   /// 内蔵GPS開始

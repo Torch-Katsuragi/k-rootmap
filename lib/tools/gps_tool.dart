@@ -1,5 +1,6 @@
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
@@ -39,15 +40,27 @@ class GpsTool extends MapTool {
   final List<LatLng> _surveyPolygon = [];
   final List<Map<String, dynamic>> _surveyGpsData = [];
 
-  /// プレビュー用の点座標
-  LatLng? _pointPreview;
+  /// 各測量ポイントのGPS点数を追跡
+  final List<int> _surveyLineGpsCount = [];
+  final List<int> _surveyPolygonGpsCount = [];
+
+  /// 長押しGPS測量用データ
+  Timer? _longPressTimer;
+  Timer? _gpsCollectionTimer;
+  bool _isLongPressing = false;
+  final List<Map<String, dynamic>> _longPressGpsData = [];
+  DateTime? _longPressStartTime;
 
   /// GPS測量機能のgetters
   List<LatLng> get surveyLine => List.unmodifiable(_surveyLine);
   List<LatLng> get surveyPolygon => List.unmodifiable(_surveyPolygon);
   List<Map<String, dynamic>> get surveyGpsData =>
       List.unmodifiable(_surveyGpsData);
-  LatLng? get pointPreview => _pointPreview;
+  List<int> get surveyLineGpsCount => List.unmodifiable(_surveyLineGpsCount);
+  List<int> get surveyPolygonGpsCount =>
+      List.unmodifiable(_surveyPolygonGpsCount);
+  bool get isLongPressing => _isLongPressing;
+  int get longPressGpsCount => _longPressGpsData.length;
 
   /// ツール有効化時の初期化処理
   /// パンツールの初期化を呼び出し、GPS関連の初期化も行う
@@ -129,8 +142,102 @@ class GpsTool extends MapTool {
     debugPrint('[GpsTool] GPS測量機能をクリーンアップしました');
   }
 
-  /// 現在のGPS位置を記録
+  /// 長押しGPS測量開始
+  void startLongPressGpsSurvey() {
+    debugPrint('[GpsTool] 長押しGPS測量開始');
+
+    _isLongPressing = true;
+    _longPressStartTime = DateTime.now();
+    _longPressGpsData.clear();
+
+    // GPS測量専用開始
+    _gpsManager.startGpsSurveyWithWait().then((_) {
+      // 1秒間隔でGPS情報を収集
+      _gpsCollectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        _collectGpsDataForLongPress();
+      });
+    });
+  }
+
+  /// 長押しGPS測量停止と平均化処理
+  Future<bool> stopLongPressGpsSurvey() async {
+    debugPrint('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始');
+
+    _isLongPressing = false;
+    _gpsCollectionTimer?.cancel();
+
+    if (_longPressGpsData.isEmpty) {
+      debugPrint('[GpsTool] 長押し中にGPSデータが取得できませんでした');
+      return false;
+    }
+
+    try {
+      // GPS平均化計算
+      final averagedResult = _calculateAveragedGpsPosition(_longPressGpsData);
+      final position = LatLng(
+        averagedResult['latitude'],
+        averagedResult['longitude'],
+      );
+
+      // 最適化されたdescription辞書構造を作成
+      final optimizedGpsData = _createOptimizedGpsDescription(
+        averagedResult,
+        _longPressGpsData,
+      );
+
+      // 現在選択中のレイヤーに応じてデータを追加
+      final selected = GlobalConfig.instance.selectedLayerNode;
+      if (selected is PointLayerNode) {
+        // GPS測量時は即座にPointフィーチャを作成（pen_toolと同様）
+        final gpsDataDescription = optimizedGpsData.toString();
+        await PointFeatureNode.createIn(
+          selected,
+          position,
+          'GPS測量ポイント',
+          gpsDataDescription,
+        );
+
+        // UI更新（pen_toolと同様）
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+          GlobalConfig.instance.mapState.setState(() {});
+        }
+
+        // Point測量完了後はGPS測量を停止（リソース効率化）
+        await _gpsManager.stopGpsSurvey();
+
+        debugPrint(
+          '[GpsTool] 長押しGPS測量ポイントフィーチャを作成しました（${_longPressGpsData.length}サンプル平均・GPS停止済み）',
+        );
+      } else if (selected is LineLayerNode) {
+        _surveyLine.add(position);
+        _surveyGpsData.add(optimizedGpsData);
+        _surveyLineGpsCount.add(_longPressGpsData.length); // GPS点数を記録
+      } else if (selected is PolygonLayerNode) {
+        _surveyPolygon.add(position);
+        _surveyGpsData.add(optimizedGpsData);
+        _surveyPolygonGpsCount.add(_longPressGpsData.length); // GPS点数を記録
+      }
+
+      // クリーンアップ
+      _longPressGpsData.clear();
+      _longPressStartTime = null;
+
+      return true;
+    } catch (e) {
+      debugPrint('[GpsTool] 長押しGPS測量エラー: $e');
+      return false;
+    }
+  }
+
+  /// 現在のGPS位置を記録（単発版・互換性維持）
   Future<bool> recordCurrentGpsPosition() async {
+    // 長押し中の場合は何もしない
+    if (_isLongPressing) {
+      debugPrint('[GpsTool] 長押し中のため単発GPS記録をスキップ');
+      return false;
+    }
+
     try {
       // GPS測量専用開始（位置取得まで待機）
       final gpsInfo = await _gpsManager.startGpsSurveyWithWait();
@@ -144,8 +251,8 @@ class GpsTool extends MapTool {
       final longitude = gpsInfo['longitude'] as double;
       final position = LatLng(latitude, longitude);
 
-      // GPS詳細データを記録
-      final gpsDetailData = {
+      // 通常測量も1つの点の平均として扱う（長押し測量と形式統一）
+      final singleGpsData = {
         'latitude': latitude,
         'longitude': longitude,
         'altitude': gpsInfo['altitude'],
@@ -156,21 +263,49 @@ class GpsTool extends MapTool {
         'sourceType': gpsInfo['sourceType'],
         'sourceName': gpsInfo['sourceName'],
         'selectedDevice': gpsInfo['selectedDevice'],
-        'recordedAt': DateTime.now().toIso8601String(),
+        'collectedAt': DateTime.now().toIso8601String(),
       };
+
+      // 1つの点から平均を計算（実質的には同じ値）
+      final averagedResult = _calculateAveragedGpsPosition([singleGpsData]);
+
+      // 長押し測量と同じ最適化された辞書構造を作成
+      final optimizedGpsData = _createOptimizedGpsDescription(
+        averagedResult,
+        [singleGpsData],
+        isSingleTap: true, // 通常測量フラグ
+      );
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected is PointLayerNode) {
-        _pointPreview = position;
-        _surveyGpsData.clear();
-        _surveyGpsData.add(gpsDetailData);
+        // GPS測量時は即座にPointフィーチャを作成（pen_toolと同様）
+        final gpsDataDescription = optimizedGpsData.toString();
+        await PointFeatureNode.createIn(
+          selected,
+          position,
+          'GPS測量ポイント',
+          gpsDataDescription,
+        );
+
+        // UI更新（pen_toolと同様）
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+          GlobalConfig.instance.mapState.setState(() {});
+        }
+
+        // Point測量完了後はGPS測量を停止（リソース効率化）
+        await _gpsManager.stopGpsSurvey();
+
+        debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み）');
       } else if (selected is LineLayerNode) {
         _surveyLine.add(position);
-        _surveyGpsData.add(gpsDetailData);
+        _surveyGpsData.add(optimizedGpsData);
+        _surveyLineGpsCount.add(1); // 通常測量は1点
       } else if (selected is PolygonLayerNode) {
         _surveyPolygon.add(position);
-        _surveyGpsData.add(gpsDetailData);
+        _surveyGpsData.add(optimizedGpsData);
+        _surveyPolygonGpsCount.add(1); // 通常測量は1点
       }
 
       debugPrint(
@@ -186,12 +321,132 @@ class GpsTool extends MapTool {
     }
   }
 
+  /// 長押し中のGPSデータ収集
+  Future<void> _collectGpsDataForLongPress() async {
+    try {
+      final gpsInfo = await _gpsManager.startGpsSurveyWithWait(
+        timeout: const Duration(seconds: 2),
+      );
+
+      if (gpsInfo != null && gpsInfo['isActive'] == true) {
+        final gpsData = {
+          'latitude': gpsInfo['latitude'],
+          'longitude': gpsInfo['longitude'],
+          'altitude': gpsInfo['altitude'],
+          'accuracy': gpsInfo['accuracy'],
+          'speed': gpsInfo['speed'],
+          'bearing': gpsInfo['bearing'],
+          'timestamp': gpsInfo['timestamp'],
+          'sourceType': gpsInfo['sourceType'],
+          'sourceName': gpsInfo['sourceName'],
+          'selectedDevice': gpsInfo['selectedDevice'],
+          'collectedAt': DateTime.now().toIso8601String(),
+        };
+
+        _longPressGpsData.add(gpsData);
+        debugPrint('[GpsTool] 長押しGPSデータ収集: ${_longPressGpsData.length}個目');
+      }
+    } catch (e) {
+      debugPrint('[GpsTool] 長押しGPSデータ収集エラー: $e');
+    }
+  }
+
+  /// GPS平均化計算
+  Map<String, dynamic> _calculateAveragedGpsPosition(
+    List<Map<String, dynamic>> gpsDataList,
+  ) {
+    if (gpsDataList.isEmpty) {
+      throw Exception('GPS データが空です');
+    }
+
+    double totalLatitude = 0.0;
+    double totalLongitude = 0.0;
+    double totalAltitude = 0.0;
+    double totalAccuracy = 0.0;
+    int validAltitudeCount = 0;
+    int validAccuracyCount = 0;
+
+    for (final data in gpsDataList) {
+      totalLatitude += (data['latitude'] as double);
+      totalLongitude += (data['longitude'] as double);
+
+      if (data['altitude'] != null) {
+        totalAltitude += (data['altitude'] as double);
+        validAltitudeCount++;
+      }
+
+      if (data['accuracy'] != null) {
+        totalAccuracy += (data['accuracy'] as double);
+        validAccuracyCount++;
+      }
+    }
+
+    final count = gpsDataList.length;
+    return {
+      'latitude': totalLatitude / count,
+      'longitude': totalLongitude / count,
+      'altitude':
+          validAltitudeCount > 0 ? totalAltitude / validAltitudeCount : null,
+      'accuracy':
+          validAccuracyCount > 0 ? totalAccuracy / validAccuracyCount : null,
+      'sampleCount': count,
+    };
+  }
+
+  /// 最適化されたGPS description辞書構造を作成
+  Map<String, dynamic> _createOptimizedGpsDescription(
+    Map<String, dynamic> averagedResult,
+    List<Map<String, dynamic>> rawGpsDataList, {
+    bool isSingleTap = false,
+  }) {
+    final duration =
+        _longPressStartTime != null && !isSingleTap
+            ? DateTime.now().difference(_longPressStartTime!).inMilliseconds /
+                1000.0
+            : 0.0;
+
+    return {
+      'pointNumber': _getNextPointNumber(),
+      'calculatedPosition': {
+        'latitude': averagedResult['latitude'],
+        'longitude': averagedResult['longitude'],
+        'altitude': averagedResult['altitude'],
+        'averagedAccuracy': averagedResult['accuracy'],
+      },
+      'usedGpsData': List<Map<String, dynamic>>.from(rawGpsDataList),
+      'sampleCount': rawGpsDataList.length,
+      'averagingDuration':
+          isSingleTap ? '瞬時測量' : '${duration.toStringAsFixed(1)}秒',
+      'recordedAt': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// 次のポイント番号を取得
+  int _getNextPointNumber() {
+    final selected = GlobalConfig.instance.selectedLayerNode;
+    if (selected is LineLayerNode) {
+      return _surveyLine.length + 1;
+    } else if (selected is PolygonLayerNode) {
+      return _surveyPolygon.length + 1;
+    }
+    return 1; // PointLayerNode
+  }
+
   /// GPS測量データをクリア
   void clearSurveyData() {
     _surveyLine.clear();
     _surveyPolygon.clear();
     _surveyGpsData.clear();
-    _pointPreview = null;
+    _surveyLineGpsCount.clear();
+    _surveyPolygonGpsCount.clear();
+
+    // 長押し関連もクリア
+    _gpsCollectionTimer?.cancel();
+    _longPressTimer?.cancel();
+    _isLongPressing = false;
+    _longPressGpsData.clear();
+    _longPressStartTime = null;
+
     debugPrint('[GpsTool] GPS測量データをクリアしました');
   }
 
@@ -207,9 +462,11 @@ class GpsTool extends MapTool {
     if (_surveyLine.isNotEmpty) {
       _surveyLine.removeLast();
       _surveyGpsData.removeLast();
+      _surveyLineGpsCount.removeLast();
     } else if (_surveyPolygon.isNotEmpty) {
       _surveyPolygon.removeLast();
       _surveyGpsData.removeLast();
+      _surveyPolygonGpsCount.removeLast();
     }
     debugPrint('[GpsTool] 最後のGPS測量ポイントを取り消しました');
   }
@@ -230,20 +487,15 @@ class GpsTool extends MapTool {
       final fullDescription =
           description.isNotEmpty
               ? '$description\n\n--- GPS測量データ ---\n$gpsDataDescription'
-              : '--- GPS測量データ ---\n$gpsDataDescription';
+              : '$gpsDataDescription';
 
-      if (selected is PointLayerNode && _pointPreview != null) {
-        await PointFeatureNode.createIn(
-          selected,
-          _pointPreview!,
-          name.isNotEmpty ? name : 'GPS測量ポイント',
-          fullDescription,
-        );
+      if (selected is PointLayerNode) {
+        // PointLayerNodeの場合は既に即座に作成済みなので、GPS停止のみ実行
         setState(() {
           clearSurveyData();
         });
         await _gpsManager.stopGpsSurvey();
-        debugPrint('[GpsTool] GPS測量ポイントフィーチャを作成してGPS停止しました');
+        debugPrint('[GpsTool] GPS測量ポイント完了（既に作成済み）- GPS停止しました');
         return true;
       } else if (selected is LineLayerNode && _surveyLine.length >= 2) {
         await LineFeatureNode.createIn(
@@ -281,50 +533,12 @@ class GpsTool extends MapTool {
     }
   }
 
-  /// GPS測量データを文字列形式でフォーマット
+  /// GPS測量データを文字列形式でフォーマット（最適化された辞書構造対応）
   String _formatGpsDataForDescription() {
     if (_surveyGpsData.isEmpty) return 'GPS測量データなし';
 
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < _surveyGpsData.length; i++) {
-      final data = _surveyGpsData[i];
-      buffer.writeln('ポイント ${i + 1}:');
-      buffer.writeln(
-        '  位置: ${(data['latitude'] as double).toStringAsFixed(8)}, ${(data['longitude'] as double).toStringAsFixed(8)}',
-      );
-      if (data['altitude'] != null) {
-        buffer.writeln(
-          '  高度: ${(data['altitude'] as double).toStringAsFixed(2)}m',
-        );
-      }
-      if (data['accuracy'] != null) {
-        buffer.writeln(
-          '  精度: ${(data['accuracy'] as double).toStringAsFixed(2)}m',
-        );
-      }
-      if (data['speed'] != null) {
-        buffer.writeln(
-          '  速度: ${(data['speed'] as double).toStringAsFixed(2)}m/s',
-        );
-      }
-      if (data['bearing'] != null) {
-        buffer.writeln(
-          '  方位: ${(data['bearing'] as double).toStringAsFixed(1)}°',
-        );
-      }
-      buffer.writeln('  データソース: ${data['sourceName']} (${data['sourceType']})');
-      if (data['selectedDevice'] != null) {
-        buffer.writeln('  接続機器: ${data['selectedDevice']}');
-      }
-      buffer.writeln('  記録時刻: ${data['recordedAt']}');
-
-      if (i < _surveyGpsData.length - 1) {
-        buffer.writeln();
-      }
-    }
-
-    return buffer.toString();
+    // 最適化された辞書のlistをそのまま文字列に変換
+    return _surveyGpsData.toString();
   }
 
   /// GPSタップイベント処理

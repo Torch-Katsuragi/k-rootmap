@@ -57,6 +57,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late LayerTreeNode? _currentNode;
   bool _movedToCurrentLocationOnce = false;
+
+  // GPS長押し測量用状態変数
+  bool _isLongPressing = false;
+  int _longPressGpsCount = 0;
+  Timer? _longPressCountUpdateTimer;
   int? _editingLayerIndex;
   String? _editingFolderPath;
   String? _editingGpkgPath;
@@ -232,6 +237,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _positionSubscription?.cancel();
     _gpsWaitTimer?.cancel();
     _serviceStatusUpdateTimer?.cancel();
+    _longPressCountUpdateTimer?.cancel(); // 長押しカウンタータイマーも破棄
     _trackingAnimationController.dispose(); // アニメーションコントローラーを破棄
     super.dispose();
   }
@@ -397,6 +403,121 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('GPS測量エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// GPS長押し測量開始
+  Future<void> _startLongPressGpsSurvey() async {
+    try {
+      final currentTool = GlobalConfig.instance.currentTool;
+      if (currentTool is! GpsTool) {
+        debugPrint('[MapPage] GPS長押し測量: 現在のツールがGpsToolではありません');
+        return;
+      }
+
+      setState(() {
+        _isLongPressing = true;
+        _longPressGpsCount = 0;
+      });
+
+      debugPrint('[MapPage] GPS長押し測量開始');
+      currentTool.startLongPressGpsSurvey();
+
+      // 長押し中の個数更新タイマーを開始（0.5秒間隔で更新）
+      _longPressCountUpdateTimer = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (timer) {
+          if (currentTool is GpsTool) {
+            final newCount = currentTool.longPressGpsCount;
+            if (_longPressGpsCount != newCount) {
+              setState(() {
+                _longPressGpsCount = newCount;
+              });
+            }
+          }
+        },
+      );
+
+      // 長押し中のフィードバック用のスナックバーを表示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS長押し測量中... 離すと平均位置を記録します'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[MapPage] GPS長押し測量開始エラー: $e');
+      _longPressCountUpdateTimer?.cancel();
+      _longPressCountUpdateTimer = null;
+      setState(() {
+        _isLongPressing = false;
+        _longPressGpsCount = 0;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('GPS長押し測量開始エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// GPS長押し測量停止と平均化処理
+  Future<void> _stopLongPressGpsSurvey() async {
+    try {
+      final currentTool = GlobalConfig.instance.currentTool;
+      if (currentTool is! GpsTool) {
+        debugPrint('[MapPage] GPS長押し測量停止: 現在のツールがGpsToolではありません');
+        return;
+      }
+
+      debugPrint('[MapPage] GPS長押し測量停止 - 平均化処理開始');
+      final success = await currentTool.stopLongPressGpsSurvey();
+
+      if (!success) {
+        throw Exception('GPS長押し測量データが不十分です');
+      }
+
+      setState(() {
+        _isLongPressing = false;
+        _longPressGpsCount = 0;
+      });
+
+      // 長押しカウンタータイマーを停止
+      _longPressCountUpdateTimer?.cancel();
+      _longPressCountUpdateTimer = null;
+
+      if (mounted) {
+        // 成功のフィードバック
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS長押し測量完了 - 平均位置でポイントを作成しました'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[MapPage] GPS長押し測量停止エラー: $e');
+      _longPressCountUpdateTimer?.cancel();
+      _longPressCountUpdateTimer = null;
+      setState(() {
+        _isLongPressing = false;
+        _longPressGpsCount = 0;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('GPS長押し測量エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -1128,142 +1249,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.example.k_maps',
                     ),
-                    MarkerLayer(
-                      markers: [
-                        // --- Current location marker ---
-                        if (_currentLocation != null)
-                          Marker(
-                            point: _currentLocation!,
-                            width: 44,
-                            height: 44,
-                            child: Icon(
-                              Icons.my_location,
-                              color: Colors.blue,
-                              size: 36,
-                            ),
-                          ),
-
-                        // --- GPS survey point preview ---
-                        if (GlobalConfig.instance.currentTool is GpsTool &&
-                            (GlobalConfig.instance.currentTool as GpsTool)
-                                    .pointPreview !=
-                                null)
-                          Marker(
-                            point:
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .pointPreview!,
-                            width: 44,
-                            height: 44,
-                            child: Icon(
-                              Icons.gps_fixed,
-                              color: Colors.purple,
-                              size: 36,
-                            ),
-                          ),
-
-                        // --- GPS survey line/polygon point markers ---
-                        if (GlobalConfig.instance.currentTool is GpsTool) ...[
-                          // Line survey points
-                          for (
-                            int i = 0;
-                            i <
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyLine
-                                    .length;
-                            i++
-                          )
-                            Marker(
-                              point:
-                                  (GlobalConfig.instance.currentTool as GpsTool)
-                                      .surveyLine[i],
-                              width: 32,
-                              height: 32,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.purple,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${i + 1}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Polygon survey points
-                          for (
-                            int i = 0;
-                            i <
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyPolygon
-                                    .length;
-                            i++
-                          )
-                            Marker(
-                              point:
-                                  (GlobalConfig.instance.currentTool as GpsTool)
-                                      .surveyPolygon[i],
-                              width: 32,
-                              height: 32,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.purple,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${i + 1}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-
-                        // --- Existing point feature markers ---
-                        for (final f in pointFeatures)
-                          ...((f.geometry as List<LatLng>).map(
-                            (pt) => Marker(
-                              point: pt,
-                              width: 40,
-                              height: 40,
-                              child: Tooltip(
-                                message: f.name,
-                                child: Icon(
-                                  Icons.location_on,
-                                  color:
-                                      GlobalConfig.instance.selectedFeatures
-                                              .contains(f)
-                                          ? Colors.yellow
-                                          : Colors.red,
-                                  size:
-                                      GlobalConfig.instance.selectedFeatures
-                                              .contains(f)
-                                          ? 44
-                                          : 36,
-                                ),
-                              ),
-                            ),
-                          )),
-                      ],
-                    ),
                     PolylineLayer(
                       polylines: [
                         for (final f in lineFeatures)
@@ -1387,6 +1372,125 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             borderColor: Colors.black,
                             isFilled: true,
                           ),
+                      ],
+                    ),
+                    // MarkerLayerを最後に移動（線・ポリゴンの上に点を表示）
+                    MarkerLayer(
+                      markers: [
+                        // --- Current location marker ---
+                        if (_currentLocation != null)
+                          Marker(
+                            point: _currentLocation!,
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.my_location,
+                              color: Colors.blue,
+                              size: 36,
+                            ),
+                          ),
+
+                        // --- GPS survey line/polygon point markers ---
+                        if (GlobalConfig.instance.currentTool is GpsTool) ...[
+                          // Line survey points
+                          for (
+                            int i = 0;
+                            i <
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyLine
+                                    .length;
+                            i++
+                          )
+                            Marker(
+                              point:
+                                  (GlobalConfig.instance.currentTool as GpsTool)
+                                      .surveyLine[i],
+                              width: 32,
+                              height: 32,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.purple,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${(GlobalConfig.instance.currentTool as GpsTool).surveyLineGpsCount.length > i ? (GlobalConfig.instance.currentTool as GpsTool).surveyLineGpsCount[i] : 1}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Polygon survey points
+                          for (
+                            int i = 0;
+                            i <
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyPolygon
+                                    .length;
+                            i++
+                          )
+                            Marker(
+                              point:
+                                  (GlobalConfig.instance.currentTool as GpsTool)
+                                      .surveyPolygon[i],
+                              width: 32,
+                              height: 32,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.purple,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${(GlobalConfig.instance.currentTool as GpsTool).surveyPolygonGpsCount.length > i ? (GlobalConfig.instance.currentTool as GpsTool).surveyPolygonGpsCount[i] : 1}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+
+                        // --- Existing point feature markers ---
+                        for (final f in pointFeatures)
+                          ...((f.geometry as List<LatLng>).map(
+                            (pt) => Marker(
+                              point: pt,
+                              width: 40,
+                              height: 40,
+                              child: Tooltip(
+                                message: f.name,
+                                child: Icon(
+                                  Icons.location_on,
+                                  color:
+                                      GlobalConfig.instance.selectedFeatures
+                                              .contains(f)
+                                          ? Colors.yellow
+                                          : Colors.red,
+                                  size:
+                                      GlobalConfig.instance.selectedFeatures
+                                              .contains(f)
+                                          ? 44
+                                          : 36,
+                                ),
+                              ),
+                            ),
+                          )),
                       ],
                     ),
                   ],
@@ -1686,16 +1790,88 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               children: [
                 // GPS関連ボタン群（GPSツール選択時のみ表示）
                 if (GlobalConfig.instance.currentTool.name == 'GPS') ...[
-                  // GPS測量ボタン
+                  // GPS測量ボタン（長押し対応）
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: FloatingActionButton(
-                      heroTag: 'gps_survey',
-                      onPressed: _recordGpsPosition,
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      tooltip: 'GPS測量（現在位置を記録）',
-                      child: const Icon(Icons.add_location, size: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 長押し中のデータ個数表示
+                        if (_isLongPressing)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4.0,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '$_longPressGpsCount点',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        // GPS測量ボタン
+                        GestureDetector(
+                          onTap: _recordGpsPosition,
+                          onLongPress: _startLongPressGpsSurvey,
+                          onLongPressEnd: (_) => _stopLongPressGpsSurvey(),
+                          child: Container(
+                            width: 56.0,
+                            height: 56.0,
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 8.0,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // 長押し進行状況を示すプログレスインジケーター
+                                if (_isLongPressing)
+                                  Container(
+                                    width: 56.0,
+                                    height: 56.0,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3.0,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                      backgroundColor: Colors.white.withOpacity(
+                                        0.3,
+                                      ),
+                                    ),
+                                  ),
+                                // メインアイコン
+                                Icon(
+                                  Icons.add_location,
+                                  size: 28,
+                                  color: Colors.white,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   // GPS追跡ボタン（Windows以外の環境でのみ表示）

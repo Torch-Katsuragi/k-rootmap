@@ -2,6 +2,7 @@
 // DB操作ラッパー。段階的移行により非同期処理へ対応。点・線・面レイヤ対応。
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert'; // JSON処理のため追加
 import 'package:sqflite/sqflite.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
@@ -28,6 +29,7 @@ class GeoPackageFile {
     "geom",
     "name",
     "description",
+    "kmaps_metadata",
   ];
 
   /// コンストラクタ
@@ -224,15 +226,21 @@ class GeoPackageFile {
     LatLng pt, {
     String name = '',
     String description = '',
+    Map<String, dynamic>? metadata,
   }) async {
     try {
+      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPoint(pt.longitude, pt.latitude);
-      await db.insert(tableName, {
-        'geom': wkb,
-        'name': name,
-        'description': description,
-      });
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] addPoint メタデータ保存:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      await db.insert(tableName, data);
     } catch (e) {
       print('addPoint: エラー発生 - $e');
     }
@@ -270,8 +278,9 @@ class GeoPackageFile {
   /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
   Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
     try {
-      // name/descriptionカラムがなければ自動追加
+      // name/description/metadataカラムがなければ自動追加
       await ensureNameDescriptionColumns(tableName);
+      await ensureMetadataColumn(tableName);
 
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
@@ -284,6 +293,21 @@ class GeoPackageFile {
         final geom = row['geom'] as Uint8List;
         final name = row['name'] as String? ?? '';
         final description = row['description'] as String? ?? '';
+
+        // メタデータをパース（JSONから辞書へ）
+        Map<String, dynamic>? metadata;
+        final metadataStr = row['kmaps_metadata'] as String?;
+        // print('[GeoPackageFile] getFeatures メタデータ読み込み:');
+        // print('  row id: $id');
+        // print('  metadataStr: $metadataStr');
+        if (metadataStr != null && metadataStr.isNotEmpty) {
+          try {
+            metadata = jsonDecode(metadataStr) as Map<String, dynamic>;
+            // print('  parsed metadata: $metadata');
+          } catch (e) {
+            print('getFeatures: メタデータのJSONパースエラー - $e');
+          }
+        }
 
         if (geomType == GeometryType.point) {
           if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
@@ -302,6 +326,7 @@ class GeoPackageFile {
               'points': [LatLng(lat, lon)],
               'name': name,
               'description': description,
+              'metadata': metadata,
             });
           }
         } else if (geomType == GeometryType.linestring) {
@@ -312,6 +337,7 @@ class GeoPackageFile {
               'lines': lines,
               'name': name,
               'description': description,
+              'metadata': metadata,
             });
           }
         } else if (geomType == GeometryType.polygon) {
@@ -322,6 +348,7 @@ class GeoPackageFile {
               'polygons': polygons,
               'name': name,
               'description': description,
+              'metadata': metadata,
             });
           }
         }
@@ -344,7 +371,8 @@ class GeoPackageFile {
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					geom BLOB NOT NULL,
 					name TEXT,
-					description TEXT
+					description TEXT,
+					kmaps_metadata TEXT
 				);
 			''');
 
@@ -401,15 +429,21 @@ class GeoPackageFile {
     List<LatLng> line, {
     String name = '',
     String description = '',
+    Map<String, dynamic>? metadata,
   }) async {
     try {
+      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbLineString(line);
-      await db.insert(tableName, {
-        'geom': wkb,
-        'name': name,
-        'description': description,
-      });
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] addLine メタデータ保存:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      await db.insert(tableName, data);
     } catch (e) {
       print('addLine: エラー発生 - $e');
     }
@@ -421,15 +455,21 @@ class GeoPackageFile {
     List<List<LatLng>> rings, {
     String name = '',
     String description = '',
+    Map<String, dynamic>? metadata,
   }) async {
     try {
+      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPolygon(rings);
-      await db.insert(tableName, {
-        'geom': wkb,
-        'name': name,
-        'description': description,
-      });
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] addPolygon メタデータ保存:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      await db.insert(tableName, data);
     } catch (e) {
       print('addPolygon: エラー発生 - $e');
     }
@@ -514,6 +554,23 @@ class GeoPackageFile {
       }
     } catch (e) {
       print('ensureNameDescriptionColumns: エラー発生 - $e');
+    }
+  }
+
+  /// レイヤのkmaps_metadataカラム追加（なければ追加）
+  Future<void> ensureMetadataColumn(String tableName) async {
+    try {
+      final db = await _getDatabase();
+      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columns = result.map((row) => row['name'] as String).toList();
+
+      if (!columns.contains('kmaps_metadata')) {
+        await db.execute(
+          'ALTER TABLE "$tableName" ADD COLUMN kmaps_metadata TEXT;',
+        );
+      }
+    } catch (e) {
+      print('ensureMetadataColumn: エラー発生 - $e');
     }
   }
 

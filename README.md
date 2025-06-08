@@ -51,6 +51,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 - プロジェクト・フォルダ・レイヤの階層構造
 - レイヤの可視性制御
 - データのインポート・エクスポート
+- **構造化メタデータ管理**: `kmaps_metadata`カラムによる測量データの構造化保存 **【NEW】**
 
 ### 操作ツール
 - **てのひらツール**: 地図のパン操作
@@ -86,8 +87,8 @@ dependencies:
 ## 主要ファイル・クラス構成
 
 ### モデル層
-- `lib/models/geopackage_file.dart`: GeoPackageファイル管理・DB操作
-- `lib/models/layer_tree_node.dart`: レイヤツリー構造・ノード管理
+- `lib/models/geopackage_file.dart`: GeoPackageファイル管理・DB操作（メタデータ対応） **【更新】**
+- `lib/models/layer_tree_node.dart`: レイヤツリー構造・ノード管理（メタデータ対応） **【更新】**
 - `lib/models/bluetooth_gnss_service.dart`: Bluetooth GNSS接続・NMEAデータ解析
 - `lib/models/gps_track.dart`: GPS軌跡データ・ポイント管理
 - `lib/utils/global_config.dart`: アプリケーション全体の設定管理（GPS設定含む） **【NEW】**
@@ -106,7 +107,7 @@ dependencies:
 - `lib/tools/pan_tool.dart`: 地図パン操作ツール
 - `lib/tools/pen_tool.dart`: フリーハンド描画ツール  
 - `lib/tools/select_tool.dart`: フィーチャ選択ツール
-- `lib/tools/gps_tool.dart`: GPS関連機能ツール（プロキシパターンによるパンツール機能継承）
+- `lib/tools/gps_tool.dart`: GPS関連機能ツール（プロキシパターンによるパンツール機能継承・メタデータ対応） **【更新】**
 - `lib/tools/gps_utils.dart`: GPS・GNSS情報取得ユーティリティ
 - `lib/utils/feature_calc_utils.dart`: 地理計算ユーティリティ（距離・面積・重心計算）
 - `lib/examples/gps_manager_example.dart`: **GPS管理サービス使用例・テストサンプル** **【NEW】**
@@ -176,7 +177,48 @@ flutter build apk --release
 - `BLUETOOTH_CONNECT`: Bluetooth接続
 - `INTERNET`: 地図タイル取得
 
-## GPS測量機能 **【NEW】**
+## GPS測量機能 **【NEW・メタデータ対応】**
+
+### GPS測量データのメタデータ管理 **【NEW】**
+
+GPS測量で取得したデータは、`description`ではなく構造化された`metadata`として保存されます。
+
+#### メタデータ構造
+```json
+{
+  "type": "measurement_log",
+  "contents": {
+    "pointNumber": 1,
+    "calculatedPosition": {
+      "latitude": 35.123456,
+      "longitude": 139.123456,
+      "altitude": 10.5,
+      "averagedAccuracy": 3.2
+    },
+    "usedGpsData": [
+      {
+        "latitude": 35.123456,
+        "longitude": 139.123456,
+        "altitude": 10.5,
+        "accuracy": 3.2,
+        "timestamp": "2024-01-01T12:00:00.000Z",
+        "sourceType": "GPS",
+        "sourceName": "内蔵GPS",
+        "collectedAt": "2024-01-01T12:00:00.000Z"
+      }
+    ],
+    "sampleCount": 10,
+    "averagingDuration": "瞬時測量" or "5.2秒",
+    "recordedAt": "2024-01-01T12:00:00.000Z"
+  }
+}
+```
+
+#### メタデータの利点
+- **構造化データ**: 後の解析・処理に活用可能
+- **詳細情報保持**: GPS精度、取得時刻、データソース等を完全保存
+- **統一形式**: 単発測量・長押し測量共に同じ構造で管理
+- **拡張性**: 将来的な機能追加に対応可能
 
 ### GPS測量の使用方法
 

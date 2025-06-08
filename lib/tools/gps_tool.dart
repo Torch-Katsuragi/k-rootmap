@@ -185,16 +185,25 @@ class GpsTool extends MapTool {
         _longPressGpsData,
       );
 
+      debugPrint('[GpsTool] 長押し測量 optimizedGpsData: $optimizedGpsData');
+
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（pen_toolと同様）
-        final gpsDataDescription = optimizedGpsData.toString();
+        // GPS測量時は即座にPointフィーチャを作成（メタデータ活用）
+        // optimizedGpsDataを辞書のまま保存
+        final metadata = {
+          'type': 'measurement_log',
+          'contents': optimizedGpsData,
+        };
+
+        debugPrint('[GpsTool] 長押し測量 metadata: $metadata');
         await PointFeatureNode.createIn(
           selected,
           position,
           'GPS測量ポイント',
-          gpsDataDescription,
+          '', // description は空にしてメタデータを使用
+          metadata: metadata,
         );
 
         // UI更新（pen_toolと同様）
@@ -241,6 +250,7 @@ class GpsTool extends MapTool {
     try {
       // GPS測量専用開始（位置取得まで待機）
       final gpsInfo = await _gpsManager.startGpsSurveyWithWait();
+      debugPrint('[GpsTool] 単発測量 gpsInfo: $gpsInfo');
 
       if (gpsInfo == null || !gpsInfo['isActive']) {
         debugPrint('[GpsTool] GPS位置情報が利用できません。位置情報の許可が必要です。');
@@ -265,9 +275,11 @@ class GpsTool extends MapTool {
         'selectedDevice': gpsInfo['selectedDevice'],
         'collectedAt': DateTime.now().toIso8601String(),
       };
+      debugPrint('[GpsTool] 単発測量 singleGpsData: $singleGpsData');
 
       // 1つの点から平均を計算（実質的には同じ値）
       final averagedResult = _calculateAveragedGpsPosition([singleGpsData]);
+      debugPrint('[GpsTool] 単発測量 averagedResult: $averagedResult');
 
       // 長押し測量と同じ最適化された辞書構造を作成
       final optimizedGpsData = _createOptimizedGpsDescription(
@@ -276,16 +288,25 @@ class GpsTool extends MapTool {
         isSingleTap: true, // 通常測量フラグ
       );
 
+      debugPrint('[GpsTool] 単発測量 optimizedGpsData: $optimizedGpsData');
+
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（pen_toolと同様）
-        final gpsDataDescription = optimizedGpsData.toString();
+        // GPS測量時は即座にPointフィーチャを作成（メタデータ活用）
+        // optimizedGpsDataを辞書のまま保存
+        final metadata = {
+          'type': 'measurement_log',
+          'contents': optimizedGpsData,
+        };
+
+        debugPrint('[GpsTool] 単発測量 metadata: $metadata');
         await PointFeatureNode.createIn(
           selected,
           position,
           'GPS測量ポイント',
-          gpsDataDescription,
+          '', // description は空にしてメタデータを使用
+          metadata: metadata,
         );
 
         // UI更新（pen_toolと同様）
@@ -399,13 +420,19 @@ class GpsTool extends MapTool {
     List<Map<String, dynamic>> rawGpsDataList, {
     bool isSingleTap = false,
   }) {
+    // デバッグ出力
+    // debugPrint('[GpsTool] _createOptimizedGpsDescription 入力データ:');
+    // debugPrint('  averagedResult: $averagedResult');
+    // debugPrint('  rawGpsDataList.length: ${rawGpsDataList.length}');
+    // debugPrint('  rawGpsDataList: $rawGpsDataList');
+
     final duration =
         _longPressStartTime != null && !isSingleTap
             ? DateTime.now().difference(_longPressStartTime!).inMilliseconds /
                 1000.0
             : 0.0;
 
-    return {
+    final result = {
       'pointNumber': _getNextPointNumber(),
       'calculatedPosition': {
         'latitude': averagedResult['latitude'],
@@ -419,6 +446,9 @@ class GpsTool extends MapTool {
           isSingleTap ? '瞬時測量' : '${duration.toStringAsFixed(1)}秒',
       'recordedAt': DateTime.now().toIso8601String(),
     };
+
+    // debugPrint('[GpsTool] _createOptimizedGpsDescription 結果: $result');
+    return result;
   }
 
   /// 次のポイント番号を取得
@@ -482,12 +512,15 @@ class GpsTool extends MapTool {
     if (selected == null) return false;
 
     try {
-      // GPS詳細データを文字列として記述に追加
-      final gpsDataDescription = _formatGpsDataForDescription();
-      final fullDescription =
-          description.isNotEmpty
-              ? '$description\n\n--- GPS測量データ ---\n$gpsDataDescription'
-              : '$gpsDataDescription';
+      // GPS測量データをメタデータとして構造化（リスト形式で保存）
+      debugPrint('[GpsTool] 線・面測量確定 _surveyGpsData: $_surveyGpsData');
+      final metadata = {
+        'type': 'measurement_log',
+        'contents': List<Map<String, dynamic>>.from(
+          _surveyGpsData.map((e) => Map<String, dynamic>.from(e)),
+        ),
+      };
+      debugPrint('[GpsTool] 線・面測量確定 metadata: $metadata');
 
       if (selected is PointLayerNode) {
         // PointLayerNodeの場合は既に即座に作成済みなので、GPS停止のみ実行
@@ -502,12 +535,13 @@ class GpsTool extends MapTool {
           selected,
           List<LatLng>.from(_surveyLine),
           name.isNotEmpty ? name : 'GPS測量ライン',
-          fullDescription,
+          description,
+          metadata: metadata,
         );
+        await _gpsManager.stopGpsSurvey();
         setState(() {
           clearSurveyData();
         });
-        await _gpsManager.stopGpsSurvey();
         debugPrint('[GpsTool] GPS測量ラインフィーチャを作成してGPS停止しました');
         return true;
       } else if (selected is PolygonLayerNode && _surveyPolygon.length >= 3) {
@@ -516,12 +550,13 @@ class GpsTool extends MapTool {
           selected,
           List<List<LatLng>>.from([closed]),
           name.isNotEmpty ? name : 'GPS測量ポリゴン',
-          fullDescription,
+          description,
+          metadata: metadata,
         );
+        await _gpsManager.stopGpsSurvey();
         setState(() {
           clearSurveyData();
         });
-        await _gpsManager.stopGpsSurvey();
         debugPrint('[GpsTool] GPS測量ポリゴンフィーチャを作成してGPS停止しました');
         return true;
       }

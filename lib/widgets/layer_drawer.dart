@@ -4,6 +4,7 @@
 library;
 
 import 'dart:io';
+import 'dart:convert'; // JSON処理のため追加
 import 'package:flutter/material.dart';
 import 'package:k_maps/utils/global_config.dart';
 import 'package:path/path.dart' as p;
@@ -13,6 +14,7 @@ import 'package:collection/collection.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geopackage_file.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
+import '../utils/metadata_parser.dart'; // メタデータパーサーをインポート
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -684,6 +686,61 @@ class LayerDrawerTitleBar extends StatelessWidget {
   }
 }
 
+/// メタデータ表示ダイアログ
+class MetadataTableDialog extends StatelessWidget {
+  final MetadataTableData tableData;
+
+  const MetadataTableDialog({super.key, required this.tableData});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tableData.title),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+              columns:
+                  tableData.headers
+                      .map((header) => DataColumn(label: Text(header)))
+                      .toList(),
+              rows:
+                  tableData.rows
+                      .map(
+                        (row) => DataRow(
+                          cells:
+                              row
+                                  .map(
+                                    (cell) => DataCell(
+                                      SelectableText(
+                                        cell,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                        ),
+                      )
+                      .toList(),
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('閉じる'),
+        ),
+      ],
+    );
+  }
+}
+
 // GeoPackageFileの絶対パス取得用メソッドを追加
 extension GeoPackageFilePathExt on GeoPackageFile {
   /// projectRootDir + pathList で絶対パスを返す
@@ -734,6 +791,51 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     super.dispose();
+  }
+
+  /// メタデータダイアログを表示
+  void _showMetadataDialog(BuildContext context, String metadataStr) {
+    try {
+      // デバッグ出力
+      // print('[AttributeTable] メタデータ文字列: $metadataStr');
+
+      // JSONパースを試行
+      final metadataJson = jsonDecode(metadataStr) as Map<String, dynamic>;
+      // print('[AttributeTable] JSONパース成功: $metadataJson');
+
+      final tableData = MetadataParser.parseMetadata(metadataJson);
+      // print('[AttributeTable] パース結果: $tableData');
+
+      if (tableData != null) {
+        showDialog(
+          context: context,
+          builder: (context) => MetadataTableDialog(tableData: tableData),
+        );
+      } else {
+        _showRawMetadataDialog(context, metadataStr);
+      }
+    } catch (e) {
+      print('[AttributeTable] メタデータJSONパースエラー: $e');
+      _showRawMetadataDialog(context, metadataStr);
+    }
+  }
+
+  /// 生のメタデータ文字列をダイアログで表示
+  void _showRawMetadataDialog(BuildContext context, String metadataStr) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('メタデータ（生データ）'),
+            content: SingleChildScrollView(child: Text(metadataStr)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+    );
   }
 
   /// データを取得または再利用（キャッシュ機能付き）
@@ -884,6 +986,47 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                       builder: (context, attrSnapshot) {
                                         return Text(
                                           '${attrSnapshot.data ?? ''}',
+                                        );
+                                      },
+                                    ),
+                                  )
+                                  : col == 'kmaps_metadata'
+                                  ? DataCell(
+                                    FutureBuilder<dynamic>(
+                                      future: feature.getAttributeValue(col),
+                                      builder: (context, attrSnapshot) {
+                                        final metadataStr =
+                                            attrSnapshot.data as String?;
+                                        if (metadataStr == null ||
+                                            metadataStr.isEmpty) {
+                                          return const Text('');
+                                        }
+
+                                        return SizedBox(
+                                          height: 28,
+                                          child: TextButton(
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 0,
+                                                  ),
+                                              minimumSize: const Size(40, 28),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                            onPressed: () {
+                                              _showMetadataDialog(
+                                                context,
+                                                metadataStr,
+                                              );
+                                            },
+                                            child: const Text(
+                                              '表示',
+                                              style: TextStyle(fontSize: 13),
+                                            ),
+                                          ),
                                         );
                                       },
                                     ),

@@ -2,6 +2,7 @@
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
 import 'dart:io';
+import 'dart:convert'; // JSON処理のため追加
 import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 // import 'package:sqlite3/sqlite3.dart' as sql; // sqfliteに移行のため削除
@@ -424,6 +425,7 @@ class PointLayerNode extends LayerNode {
           parent: this,
           rowId: map["id"] ?? 0,
           description: map["description"] as String?,
+          metadata: map["metadata"] as Map<String, dynamic>?,
         );
       },
     ).toList();
@@ -467,6 +469,7 @@ class LineLayerNode extends LayerNode {
         parent: this,
         rowId: map["id"] ?? 0,
         description: map["description"] as String?,
+        metadata: map["metadata"] as Map<String, dynamic>?,
       );
     }).toList();
   }
@@ -509,6 +512,7 @@ class PolygonLayerNode extends LayerNode {
             parent: this,
             rowId: map["id"] ?? 0,
             description: map["description"] as String?,
+            metadata: map["metadata"] as Map<String, dynamic>?,
           );
         })
         .toList();
@@ -638,6 +642,9 @@ abstract class FeatureNode extends LayerTreeNode {
   String name;
   String? description;
 
+  /// メタデータ（構造化されたデータ）
+  Map<String, dynamic>? metadata;
+
   /// DB上のrowId（主キー）
   final int rowId;
 
@@ -649,6 +656,10 @@ abstract class FeatureNode extends LayerTreeNode {
     MapEntry('name', name),
     if (description != null && description!.isNotEmpty)
       MapEntry('description', description!),
+    if (metadata != null && metadata!.isNotEmpty)
+      ...metadata!.entries.map(
+        (e) => MapEntry('metadata.${e.key}', e.value.toString()),
+      ),
     MapEntry('id', rowId.toString()),
     MapEntry('latitude', centroid.latitude.toStringAsFixed(6)),
     MapEntry('longitude', centroid.longitude.toStringAsFixed(6)),
@@ -702,6 +713,7 @@ abstract class FeatureNode extends LayerTreeNode {
   FeatureNode({
     required this.name,
     this.description,
+    this.metadata,
     required this.parent,
     required this.rowId,
     required this.centroid,
@@ -751,6 +763,7 @@ class PointFeatureNode extends FeatureNode {
     required super.parent,
     required super.rowId,
     super.description,
+    super.metadata,
   }) : super(name: name, centroid: GeometryCalc.calcPointsCentroid(points));
 
   @override
@@ -802,8 +815,9 @@ class PointFeatureNode extends FeatureNode {
     LayerNode parent,
     LatLng point,
     String name,
-    String? description,
-  ) async {
+    String? description, {
+    Map<String, dynamic>? metadata,
+  }) async {
     if (parent is! PointLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
@@ -818,6 +832,7 @@ class PointFeatureNode extends FeatureNode {
       parent: parent,
       rowId: tempRowId,
       description: description,
+      metadata: metadata,
     );
     parent.addChild(node);
 
@@ -828,6 +843,7 @@ class PointFeatureNode extends FeatureNode {
           point,
           name: name ?? '',
           description: description ?? '',
+          metadata: metadata,
         )
         .then((_) {
           print('[DEBUG] PointFeatureNode: DB保存完了 - $name');
@@ -850,6 +866,7 @@ class LineFeatureNode extends FeatureNode {
     required super.parent,
     required super.rowId,
     super.description,
+    super.metadata,
   }) : super(
          name: name,
          centroid:
@@ -916,8 +933,9 @@ class LineFeatureNode extends FeatureNode {
     LayerNode parent,
     List<LatLng> line,
     String name,
-    String? description,
-  ) async {
+    String? description, {
+    Map<String, dynamic>? metadata,
+  }) async {
     if (parent is! LineLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
@@ -932,6 +950,7 @@ class LineFeatureNode extends FeatureNode {
       parent: parent,
       rowId: tempRowId,
       description: description,
+      metadata: metadata,
     );
     parent.addChild(node);
 
@@ -942,6 +961,7 @@ class LineFeatureNode extends FeatureNode {
           line,
           name: name ?? '',
           description: description ?? '',
+          metadata: metadata,
         )
         .then((_) {
           print('[DEBUG] LineFeatureNode: DB保存完了 - $name');
@@ -964,6 +984,7 @@ class PolygonFeatureNode extends FeatureNode {
     required super.parent,
     required super.rowId,
     super.description,
+    super.metadata,
   }) : super(
          name: name,
          centroid:
@@ -1035,8 +1056,9 @@ class PolygonFeatureNode extends FeatureNode {
     LayerNode parent,
     List<List<LatLng>> polygon,
     String name,
-    String? description,
-  ) async {
+    String? description, {
+    Map<String, dynamic>? metadata,
+  }) async {
     if (parent is! PolygonLayerNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
@@ -1052,6 +1074,7 @@ class PolygonFeatureNode extends FeatureNode {
       parent: parent,
       rowId: tempRowId,
       description: description,
+      metadata: metadata,
     );
     parent.addChild(node);
 
@@ -1062,6 +1085,7 @@ class PolygonFeatureNode extends FeatureNode {
           polygon,
           name: name ?? '',
           description: description ?? '',
+          metadata: metadata,
         )
         .then((_) {
           print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name');

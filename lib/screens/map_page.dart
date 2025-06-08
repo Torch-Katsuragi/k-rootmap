@@ -320,6 +320,88 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
+  /// GPS測量（現在位置を記録）
+  Future<void> _recordGpsPosition() async {
+    try {
+      final currentTool = GlobalConfig.instance.currentTool;
+      if (currentTool is! GpsTool) {
+        debugPrint('[MapPage] GPS測量: 現在のツールがGpsToolではありません');
+        return;
+      }
+
+      final selected = GlobalConfig.instance.selectedLayerNode;
+      if (selected == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('レイヤーが選択されていません'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!selected.isVisibleRecursive()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('このレイヤは不可視のため編集できません'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // GPS位置情報取得開始のスナックバーを表示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS位置情報を取得中...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      // GPS位置を記録
+      final success = await currentTool.recordCurrentGpsPosition();
+      if (success) {
+        setState(() {}); // プレビュー更新
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'GPS位置を記録しました (${currentTool.surveyGpsData.length}ポイント目)',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('GPS位置情報が取得できません。位置情報の許可と設定を確認してください。'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapPage] GPS測量エラー: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('GPS測量エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   /// GPS追跡フォアグラウンドサービス停止
   Future<void> _stopGpsTrackingService() async {
     // 軌跡データを取得
@@ -459,6 +541,107 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       return List<LatLng>.from(pts)..add(first);
     }
     return pts;
+  }
+
+  /// GPS測量確定処理
+  Future<void> _onConfirmGpsSurvey() async {
+    try {
+      final currentTool = GlobalConfig.instance.currentTool;
+      if (currentTool is! GpsTool) return;
+
+      final selected = GlobalConfig.instance.selectedLayerNode;
+      if (selected == null) return;
+
+      // 属性入力ダイアログを表示
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (context) {
+          String name = '';
+          String description = '';
+          return AlertDialog(
+            title: const Text('GPS測量フィーチャの属性入力'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: '名前'),
+                  onChanged: (v) => name = v,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(labelText: '説明（任意）'),
+                  maxLines: 3,
+                  onChanged: (v) => description = v,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'GPS測量データ（${currentTool.surveyGpsData.length}ポイント）が自動的に記録されます',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed:
+                    () => Navigator.pop(context, {
+                      'name': name,
+                      'description': description,
+                    }),
+                child: const Text('作成'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (result == null) return;
+
+      // GPS測量フィーチャを作成
+      final success = await currentTool.confirmSurveyFeature(
+        name: result['name'] ?? '',
+        description: result['description'] ?? '',
+        setState: setState,
+        closeRing: closeRing,
+      );
+
+      if (success) {
+        // フィーチャ表示を更新
+        await _updateFeatures();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('GPS測量フィーチャを作成しました'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('GPS測量フィーチャの作成に失敗しました'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapPage] GPS測量確定エラー: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('GPS測量確定エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // --- Line/polygon confirmation processing ---
@@ -960,6 +1143,100 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             ),
                           ),
 
+                        // --- GPS survey point preview ---
+                        if (GlobalConfig.instance.currentTool is GpsTool &&
+                            (GlobalConfig.instance.currentTool as GpsTool)
+                                    .pointPreview !=
+                                null)
+                          Marker(
+                            point:
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .pointPreview!,
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.gps_fixed,
+                              color: Colors.purple,
+                              size: 36,
+                            ),
+                          ),
+
+                        // --- GPS survey line/polygon point markers ---
+                        if (GlobalConfig.instance.currentTool is GpsTool) ...[
+                          // Line survey points
+                          for (
+                            int i = 0;
+                            i <
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyLine
+                                    .length;
+                            i++
+                          )
+                            Marker(
+                              point:
+                                  (GlobalConfig.instance.currentTool as GpsTool)
+                                      .surveyLine[i],
+                              width: 32,
+                              height: 32,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.purple,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${i + 1}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Polygon survey points
+                          for (
+                            int i = 0;
+                            i <
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyPolygon
+                                    .length;
+                            i++
+                          )
+                            Marker(
+                              point:
+                                  (GlobalConfig.instance.currentTool as GpsTool)
+                                      .surveyPolygon[i],
+                              width: 32,
+                              height: 32,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.purple,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${i + 1}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+
                         // --- Existing point feature markers ---
                         for (final f in pointFeatures)
                           ...((f.geometry as List<LatLng>).map(
@@ -1005,6 +1282,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     ? 5.0
                                     : 3.0,
                           ),
+                        // --- GPS survey line preview ---
+                        if (GlobalConfig.instance.currentTool is GpsTool &&
+                            (GlobalConfig.instance.currentTool as GpsTool)
+                                .surveyLine
+                                .isNotEmpty)
+                          Polyline(
+                            points:
+                                (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyLine,
+                            color: Colors.purple,
+                            strokeWidth: 4.0,
+                          ),
+                        // --- Pen tool line preview ---
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
                                 .drawingLine
@@ -1047,6 +1337,23 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     : Colors.green,
                             isFilled: true,
                           ),
+                        // --- GPS survey polygon preview ---
+                        if (GlobalConfig.instance.currentTool is GpsTool &&
+                            (GlobalConfig.instance.currentTool as GpsTool)
+                                    .surveyPolygon
+                                    .length >=
+                                2)
+                          Polygon(
+                            points: closeRing(
+                              (GlobalConfig.instance.currentTool as GpsTool)
+                                  .surveyPolygon,
+                            ),
+                            color: Colors.purple.withOpacity(0.4),
+                            borderStrokeWidth: 4.0,
+                            borderColor: Colors.purple,
+                            isFilled: true,
+                          ),
+                        // --- Pen tool polygon preview ---
                         if (GlobalConfig.instance.currentTool is PenTool &&
                             (GlobalConfig.instance.currentTool as PenTool)
                                     .drawingPolygon
@@ -1377,33 +1684,49 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // GPS追跡ボタン（GPSツール選択時かつWindows以外の環境でのみ表示）
-                if (GlobalConfig.instance.currentTool.name == 'GPS' &&
-                    !Platform.isWindows)
+                // GPS関連ボタン群（GPSツール選択時のみ表示）
+                if (GlobalConfig.instance.currentTool.name == 'GPS') ...[
+                  // GPS測量ボタン
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: FloatingActionButton(
-                      heroTag: 'gps_tracking_left',
-                      onPressed:
-                          _isGpsTrackingServiceRunning
-                              ? _stopGpsTrackingService
-                              : _startGpsTrackingService,
-                      backgroundColor:
-                          _isGpsTrackingServiceRunning
-                              ? Colors.red
-                              : Colors.green,
+                      heroTag: 'gps_survey',
+                      onPressed: _recordGpsPosition,
+                      backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
-                      tooltip:
-                          _isGpsTrackingServiceRunning ? 'GPS追跡停止' : 'GPS追跡開始',
-                      child: Icon(
-                        _isGpsTrackingServiceRunning
-                            ? Icons.stop
-                            : Icons.pets, // 足跡アイコン（paw print）
-                        // 他の選択肢: Icons.hiking, Icons.nordic_walking, Icons.accessibility_new
-                        size: 28,
-                      ),
+                      tooltip: 'GPS測量（現在位置を記録）',
+                      child: const Icon(Icons.add_location, size: 28),
                     ),
                   ),
+                  // GPS追跡ボタン（Windows以外の環境でのみ表示）
+                  if (!Platform.isWindows)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: FloatingActionButton(
+                        heroTag: 'gps_tracking_left',
+                        onPressed:
+                            _isGpsTrackingServiceRunning
+                                ? _stopGpsTrackingService
+                                : _startGpsTrackingService,
+                        backgroundColor:
+                            _isGpsTrackingServiceRunning
+                                ? Colors.red
+                                : Colors.green,
+                        foregroundColor: Colors.white,
+                        tooltip:
+                            _isGpsTrackingServiceRunning
+                                ? 'GPS追跡停止'
+                                : 'GPS追跡開始',
+                        child: Icon(
+                          _isGpsTrackingServiceRunning
+                              ? Icons.stop
+                              : Icons.pets, // 足跡アイコン（paw print）
+                          // 他の選択肢: Icons.hiking, Icons.nordic_walking, Icons.accessibility_new
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                ],
                 // 既存の左下フローティングボタン
                 _LeftBottomFab(),
               ],
@@ -1415,6 +1738,18 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           (() {
             final selected = GlobalConfig.instance.selectedLayerNode;
             final currentTool = GlobalConfig.instance.currentTool;
+
+            // GPS測量中のボタン表示
+            final isGpsSurveyLine =
+                selected is LineLayerNode &&
+                currentTool is GpsTool &&
+                (currentTool as GpsTool).surveyLine.isNotEmpty;
+            final isGpsSurveyPolygon =
+                selected is PolygonLayerNode &&
+                currentTool is GpsTool &&
+                (currentTool as GpsTool).surveyPolygon.isNotEmpty;
+
+            // ペンツールでの描画中のボタン表示
             final isLineDrawing =
                 selected is LineLayerNode &&
                 currentTool is PenTool &&
@@ -1424,8 +1759,60 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 currentTool is PenTool &&
                 (currentTool).drawingPolygon.isNotEmpty;
 
+            // GPS測量中は専用のボタンを表示
+            if (isGpsSurveyLine || isGpsSurveyPolygon) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Undo button
+                  FloatingActionButton(
+                    heroTag: 'gps_undo',
+                    onPressed: () {
+                      setState(() {
+                        (currentTool as GpsTool).undoLastPoint();
+                      });
+                    },
+                    tooltip: 'GPS測量の最後のポイントを取り消し',
+                    child: const Icon(Icons.undo),
+                  ),
+                  const SizedBox(width: 12),
+                  // Cancel button
+                  FloatingActionButton(
+                    heroTag: 'gps_cancel',
+                    onPressed: () async {
+                      try {
+                        await (currentTool as GpsTool)
+                            .cancelSurveyWithGpsStop();
+                        setState(() {});
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('GPS測量をキャンセルしました'),
+                              backgroundColor: Colors.orange,
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        debugPrint('[MapPage] GPS測量キャンセルエラー: $e');
+                      }
+                    },
+                    tooltip: 'GPS測量をキャンセル',
+                    child: const Icon(Icons.clear),
+                  ),
+                  const SizedBox(width: 12),
+                  // Confirm button
+                  FloatingActionButton.extended(
+                    heroTag: 'gps_confirm',
+                    onPressed: _onConfirmGpsSurvey,
+                    icon: const Icon(Icons.check),
+                    label: const Text('GPS測量確定'),
+                  ),
+                ],
+              );
+            }
             // ペンツールでの描画中は従来のボタンを表示
-            if (isLineDrawing || isPolygonDrawing) {
+            else if (isLineDrawing || isPolygonDrawing) {
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

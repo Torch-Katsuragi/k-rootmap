@@ -6,6 +6,7 @@ import 'dart:io';
 import 'screens/home_screen.dart';
 import 'screens/map_page.dart';
 import 'services/foreground_service.dart';
+import 'services/gps_manager_service.dart';
 
 void main() async {
   // sqflite使用前に必須の初期化処理
@@ -17,6 +18,16 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+
+  // GPS管理サービスの初期化（待機状態）
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    try {
+      await GpsManagerService().initialize();
+      debugPrint('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
+    } catch (e) {
+      debugPrint('[K-MAPS] GPS管理サービス初期化エラー: $e');
+    }
+  });
 
   // フォアグラウンドサービスの初期化（遅延実行に変更）
   // アプリ起動後に初期化してメインIsolate競合を回避

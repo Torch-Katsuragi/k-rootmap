@@ -43,6 +43,11 @@ class GlobalConfig {
   /// 左下フロートボタンの押下状態（true: 押下中, false: 通常）
   bool isFabActive = false;
 
+  /// GPS関連の設定
+  String? preferredGpsSourceType; // 'internal' または 'external'
+  String? selectedGnssDeviceAddress; // 外部GNSS機器のBluetoothアドレス
+  String? selectedGnssDeviceName; // 外部GNSS機器の名前
+
   // 必要に応じて他のグローバル設定も追加
   // String? userName;
   // int? someGlobalFlag;

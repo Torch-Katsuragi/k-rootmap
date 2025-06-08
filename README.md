@@ -27,13 +27,23 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 - フィーチャの選択・編集・削除
 - 属性情報の表示・編集
 
-### 3. GPS・GNSS機能  
-- 内蔵GPS/GNSS受信機による現在位置取得
+### 3. GPS・GNSS機能 **【統合GPS管理プロセス完成・GPS測量機能追加・効率化】**
+- **統一GPS管理サービス**: 内蔵GPSと外部GNSS機器を統一的に管理するプロセス
+- **動的ソース切り替え**: 内蔵GPSと外部GNSS間でのリアルタイム切り替え
+- **高精度記録機能**: オプション設定対応（取得インターバル・最短移動距離・精度フィルタ）
+- **GPS履歴管理**: 記録開始から現在までの履歴を辞書リスト形式で提供
+- **GPS測量機能**: 現在位置を記録してPoint/Line/Polygonフィーチャを作成 **【NEW】**
+- **GPS測量データ記録**: 位置・精度・時刻・データソース等の詳細情報を自動記録 **【NEW】**
+- **リアルタイムプレビュー**: GPS測量中の描画状況をリアルタイム表示 **【NEW】**
+- **オンデマンドGPS開始**: 必要時にのみGPS位置情報取得を開始（省電力化）**【効率化】**
+- **GPS測量専用制御**: 位置取得完了待機・測量完了時自動停止（リソース効率化）**【NEW】**
+- **GPS追跡処理統合**: フォアグラウンドサービスでも統合GPS管理サービスを使用（処理一元化）**【統合】**
+- **GPS処理プロセス統一**: 測量・追跡共にフォアグラウンドサービスで処理（リソース競合完全回避）**【アーキテクチャ改善】**
 - SSP対応Bluetooth GNSS受信機との連携
 - NMEA-0183フォーマットの位置データ解析
-- リアルタイム位置情報表示
+- リアルタイム位置情報表示・監視
 - 衛星情報・精度情報の詳細表示
-- **GPS軌跡記録・保存機能**: 追跡開始から停止までの軌跡をLINESTRINGレイヤーとして任意のGeoPackageに保存 **【NEW】**
+- **GPS軌跡記録・保存機能**: 追跡開始から停止までの軌跡をLINESTRINGレイヤーとして任意のGeoPackageに保存
 
 ### 4. データ管理機能
 - GeoPackage形式でのデータ保存・管理
@@ -45,7 +55,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 - **てのひらツール**: 地図のパン操作
 - **ペンツール**: フリーハンド描画
 - **選択ツール**: フィーチャの選択・編集
-- **GPSツール**: GPS関連機能（パン操作と同じ挙動 + 専用GPS追跡ボタン表示 + 軌跡保存機能） **【NEW】**
+- **GPSツール**: GPS関連機能（GPS測量・追跡・軌跡保存） **【GPS測量機能強化】**
 
 ## 技術構成
 
@@ -77,9 +87,10 @@ dependencies:
 ### モデル層
 - `lib/models/geopackage_file.dart`: GeoPackageファイル管理・DB操作
 - `lib/models/layer_tree_node.dart`: レイヤツリー構造・ノード管理
-- `lib/models/bluetooth_gnss_service.dart`: Bluetooth GNSS接続・NMEAデータ解析 **【NEW】**
-- `lib/utils/global_config.dart`: アプリケーション全体の設定管理
-- `lib/utils/global_gnss_manager.dart`: GNSS接続のグローバル管理・永続化 **【NEW】**
+- `lib/models/bluetooth_gnss_service.dart`: Bluetooth GNSS接続・NMEAデータ解析
+- `lib/models/gps_track.dart`: GPS軌跡データ・ポイント管理
+- `lib/utils/global_config.dart`: アプリケーション全体の設定管理（GPS設定含む） **【NEW】**
+- `lib/utils/global_gnss_manager.dart`: GNSS接続のグローバル管理・永続化
 
 ### 画面・UI層
 - `lib/screens/map_page.dart`: 地図表示・編集のメイン画面
@@ -87,15 +98,17 @@ dependencies:
 - `lib/widgets/layer_drawer.dart`: レイヤ管理ドロワーUI
 
 ### サービス層
-- `lib/services/foreground_service.dart`: GPS/GNSS追跡フォアグラウンドサービス **【NEW】**
+- `lib/services/foreground_service.dart`: GPS/GNSS追跡フォアグラウンドサービス
+- `lib/services/gps_manager_service.dart`: **統合GPS管理サービス（本格実装）** **【NEW】**
 
 ### ツール・ユーティリティ
 - `lib/tools/pan_tool.dart`: 地図パン操作ツール
 - `lib/tools/pen_tool.dart`: フリーハンド描画ツール  
 - `lib/tools/select_tool.dart`: フィーチャ選択ツール
-- `lib/tools/gps_tool.dart`: GPS関連機能ツール（プロキシパターンによるパンツール機能継承） **【NEW】**
+- `lib/tools/gps_tool.dart`: GPS関連機能ツール（プロキシパターンによるパンツール機能継承）
 - `lib/tools/gps_utils.dart`: GPS・GNSS情報取得ユーティリティ
 - `lib/utils/feature_calc_utils.dart`: 地理計算ユーティリティ（距離・面積・重心計算）
+- `lib/examples/gps_manager_example.dart`: **GPS管理サービス使用例・テストサンプル** **【NEW】**
 
 ### 設計方針
 - **非同期処理**: 全てのDB操作・ファイルアクセスはFuture/async-awaitで実装
@@ -113,7 +126,7 @@ dependencies:
 4. **編集**: 選択ツールでフィーチャを選択し、属性編集・位置調整
 
 ### GPS・GNSS接続 **【外部GNSS強化】**
-1. **内蔵GPS**: アプリ起動時に自動で位置情報取得を開始
+1. **内蔵GPS**: アプリ起動時は待機状態で初期化、GPS測量・追跡開始時に位置情報取得を開始 **【効率化】**
 2. **外部GNSS**: 
    - マップ画面のBluetoothアイコンから接続画面にアクセス
    - ペアリング済みBluetoothデバイスの一覧表示・接続
@@ -161,6 +174,209 @@ flutter build apk --release
 - `ACCESS_COARSE_LOCATION`: 概算位置情報  
 - `BLUETOOTH_CONNECT`: Bluetooth接続
 - `INTERNET`: 地図タイル取得
+
+## GPS測量機能 **【NEW】**
+
+### GPS測量の使用方法
+
+GPS測量機能により、現在のGPS位置を記録してPoint/Line/Polygonフィーチャを作成できます。
+
+#### 基本操作手順
+
+1. **GPSツールを選択**: ツールバーでGPSツール（GPS固定アイコン）を選択
+2. **レイヤーを選択**: 作成したいフィーチャタイプのレイヤーを選択
+   - PointLayerNode: GPS測量ポイント作成
+   - LineLayerNode: GPS測量ライン作成  
+   - PolygonLayerNode: GPS測量ポリゴン作成
+3. **GPS測量実行**: 左下の青いフロートボタン（📍アイコン）を押して現在位置を記録
+   - 初回実行時は「GPS位置情報を取得中...」メッセージが表示され、GPS機能が自動開始されます
+   - GPS位置情報が確実に取得できるまで待機（最大10秒タイムアウト）
+4. **測量継続**: 移動しながら測量ボタンを繰り返し押してポイントを追加
+5. **フィーチャ確定**: 右下の「GPS測量確定」ボタンで属性入力してフィーチャ作成
+   - 確定・キャンセル時にGPS位置情報取得を自動停止（省電力化）
+
+#### GPS測量中の操作
+
+- **📍 GPS測量ボタン**: 現在のGPS位置を記録（左下フロートボタン）
+- **↶ 取り消し**: 最後に記録したポイントを削除（右下）
+- **✕ キャンセル**: 測量データを全てクリアして最初からやり直し（右下）
+- **✓ GPS測量確定**: 属性入力ダイアログを表示してフィーチャを作成（右下）
+- **❌ GPS測量キャンセル**: 測量データをクリアしてGPS機能を停止（右下）
+
+#### プレビュー表示
+
+GPS測量中は地図上にリアルタイムプレビューが表示されます：
+
+- **紫色のライン/ポリゴン**: 測量中の図形プレビュー
+- **番号付きマーカー**: 各測量ポイントの順序表示
+- **GPS固定アイコン**: Point測量時の現在位置プレビュー
+
+#### 記録されるGPS測量データ
+
+各測量ポイントで以下の詳細情報が自動記録されます：
+
+```
+ポイント 1:
+  位置: 35.12345678, 139.12345678
+  高度: 10.50m
+  精度: 3.20m
+  速度: 1.50m/s
+  方位: 90.0°
+  データソース: 内蔵GPS (GPS)
+  接続機器: （外部GNSS使用時のみ）
+  記録時刻: 2025-01-XX...
+```
+
+この詳細データはフィーチャの説明欄に自動的に記録され、後から測量条件を確認できます。
+
+## GPS管理プロセス API仕様
+
+### 統合GPS管理サービス (`GpsManagerService`)
+
+シングルトンパターンで実装された統合GPS管理サービスです。内蔵GPSと外部GNSS機器を統一的に管理し、GPS記録・追跡・測量機能を提供します。
+
+**主な改善点**:
+- **処理統一**: GPS測量とGPS追跡で同じAPIを使用
+- **リソース効率**: GPS機能の重複・競合を回避
+- **一元管理**: 単一のGPS管理システムで全機能をカバー
+- **プロセス統一**: 全GPS処理をフォアグラウンドサービス（isolate）で実行**【NEW】**
+
+**新アーキテクチャ**:
+```
+メインプロセス(UI) ←→ フォアグラウンドサービス(isolate)
+     ↓                        ↓
+GPS測量要求 ──────────→ 統合GPS管理サービス
+                              ↓
+                        GPS/GNSS位置取得
+```
+
+#### 主要API
+
+##### GPS ソース管理
+```dart
+// GPS管理サービスインスタンス取得
+final gpsManager = GpsManagerService();
+
+// 利用可能なGPSソースの取得
+List<Map<String, dynamic>> sources = gpsManager.getAvailableGpsSources();
+
+// 外部GNSS機器のスキャン
+await gpsManager.scanExternalGnssDevices();
+
+// GPSソースの切り替え
+await gpsManager.switchGpsSource(GpsSourceType.internal);  // 内蔵GPS
+await gpsManager.switchGpsSource(GpsSourceType.external, device);  // 外部GNSS
+```
+
+##### 現在位置情報の取得
+```dart
+// 現在のGPS情報を一括取得
+Map<String, dynamic> gpsInfo = gpsManager.getCurrentGpsInfo();
+/*
+返却データ例:
+{
+  'sourceType': 'GPS',          // 'GPS' or 'GNSS'
+  'sourceName': '内蔵GPS',       // 表示名
+  'selectedDevice': null,       // 外部GNSS機器名
+  'latitude': 35.123456,        // 緯度
+  'longitude': 139.123456,      // 経度
+  'altitude': 10.5,             // 高度（メートル）
+  'accuracy': 3.2,              // 精度（メートル）
+  'speed': 1.5,                 // 速度（m/s）
+  'bearing': 90.0,              // 方位角（度）
+  'timestamp': '2025-01-XX...',  // ISO8601タイムスタンプ
+  'isActive': true              // 位置情報が有効かどうか
+}
+*/
+
+// 個別プロパティでのアクセス
+double? lat = gpsManager.latitude;
+double? lon = gpsManager.longitude;
+double? accuracy = gpsManager.accuracy;
+```
+
+##### GPS記録機能
+```dart
+// 記録オプションの設定
+const options = GpsRecordingOptions(
+  intervalSeconds: 1,        // 取得インターバル（秒）
+  minDistanceMeters: 1.0,    // 最短記録移動距離（メートル）
+  requiredAccuracy: 5.0,     // 要求精度（メートル以下）
+  maxRecordCount: 1000,      // 最大記録ポイント数（0=無制限）
+);
+
+// GPS記録開始
+await gpsManager.startRecording(options);
+
+// 記録中の確認
+bool isRecording = gpsManager.isRecording;
+
+// GPS記録停止
+Map<String, dynamic>? summary = gpsManager.stopRecording();
+/*
+停止時の返却データ例:
+{
+  'startTime': '2025-01-XX...',     // 記録開始時刻
+  'endTime': '2025-01-XX...',       // 記録終了時刻
+  'totalPoints': 150,               // 総記録ポイント数
+  'totalDistance': 1234.5,          // 総移動距離（メートル）
+  'duration': 300,                  // 記録時間（秒）
+  'sourceType': 'GPS',              // データソース
+  'sourceName': '内蔵GPS'            // ソース表示名
+}
+*/
+```
+
+##### GPS履歴データの取得
+```dart
+// 記録履歴の取得（辞書リスト形式）
+List<Map<String, dynamic>> history = gpsManager.gpsHistory;
+/*
+履歴データ例:
+[
+  {
+    'latitude': 35.123456,
+    'longitude': 139.123456,
+    'altitude': 10.5,
+    'accuracy': 3.2,
+    'speed': 1.5,
+    'bearing': 90.0,
+    'timestamp': '2025-01-XX...',
+    'sourceType': 'GPS',
+    'sourceDisplayName': '内蔵GPS'
+  },
+  // ... 追加のポイント
+]
+*/
+
+// 履歴統計情報の取得
+Map<String, dynamic> stats = gpsManager.getRecordingStatistics();
+
+// 履歴のクリア
+gpsManager.clearHistory();
+```
+
+#### 定義済み記録オプション
+
+```dart
+// デフォルト設定（1秒間隔、1m移動）
+GpsRecordingOptions.defaultOptions
+
+// 高精度設定（1秒間隔、0.5m移動、精度5m以下）
+GpsRecordingOptions.highAccuracy
+
+// 省電力設定（10秒間隔、5m移動、精度20m以下）
+GpsRecordingOptions.powerSaver
+```
+
+#### 設定の永続化
+
+GPS ソース設定は `GlobalConfig` に自動保存され、アプリ再起動時に復元されます：
+
+```dart
+// アプリ起動時の設定復元
+await gpsManager.loadSourceFromGlobalConfig();
+```
 
 ## 対応プラットフォーム
 - ✅ Android（実機テスト済み）

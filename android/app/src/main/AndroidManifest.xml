@@ -10,11 +10,17 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <!-- Bluetooth GNSS関連権限 -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <!-- Android 12以降のBluetooth権限 -->
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11以下のBluetooth権限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    
+    <!-- Android 12以降のBluetooth権限（細分化された権限） -->
+    <!-- Bluetoothデバイスのスキャン -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- ペアリング済みデバイスとの通信 -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- デバイスを検出可能にする（必要に応じて） -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <!-- Mock Location Provider権限（テスト・開発用） -->
     <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
     

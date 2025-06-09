@@ -355,13 +355,39 @@ class BluetoothGnssService extends ChangeNotifier {
     if (dms.length < 4) return 0.0;
 
     try {
-      // 緯度: ddmm.mmmm 経度: dddmm.mmmm
-      int degreeLength = dms.length >= 10 ? 3 : 2; // 経度は3桁、緯度は2桁
+      // NMEAフォーマット: 緯度: ddmm.mmmm 経度: dddmm.mmmm
+      // 小数点の位置を見つけて正確に分割
+      int dotIndex = dms.indexOf('.');
+      if (dotIndex == -1) {
+        debugPrint('$_logTag: DMS変換エラー - 小数点が見つかりません: $dms');
+        return 0.0;
+      }
 
-      double degrees = double.parse(dms.substring(0, degreeLength));
-      double minutes = double.parse(dms.substring(degreeLength));
+      // 小数点前の桁数から度の桁数を判定
+      int degreeLength;
+      if (dotIndex == 4) {
+        degreeLength = 2; // 緯度: ddmm.mmmm
+      } else if (dotIndex == 5) {
+        degreeLength = 3; // 経度: dddmm.mmmm
+      } else {
+        debugPrint('$_logTag: DMS変換エラー - 無効なフォーマット: $dms');
+        return 0.0;
+      }
 
-      return degrees + (minutes / 60.0);
+      // 度と分を分離
+      String degreesPart = dms.substring(0, degreeLength);
+      String minutesPart = dms.substring(degreeLength);
+
+      double degrees = double.parse(degreesPart);
+      double minutes = double.parse(minutesPart);
+
+      double result = degrees + (minutes / 60.0);
+
+      debugPrint(
+        '$_logTag: DMS変換 - 入力: $dms, 度: $degrees, 分: $minutes, 結果: $result',
+      );
+
+      return result;
     } catch (e) {
       debugPrint('$_logTag: DMS変換エラー: $dms - $e');
       return 0.0;

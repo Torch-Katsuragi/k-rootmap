@@ -281,8 +281,19 @@ class GpsManagerService extends ChangeNotifier {
       // フォアグラウンドサービス未動作時は、測量専用GPS開始
       debugPrint('$_logTag: 測量専用GPS開始（軌跡記録は開始しません）');
 
+      // 外部GNSS接続が既にある場合は再利用
       if (!_isGpsActive) {
-        await startGps();
+        if (_currentSource == GpsSourceType.external &&
+            _externalGnssService != null &&
+            _externalGnssService!.isConnected) {
+          // 既に外部GNSS接続があるので、位置監視のみ再開
+          debugPrint('$_logTag: 外部GNSS接続済み、位置監視のみ再開');
+          _isGpsActive = true;
+          notifyListeners();
+        } else {
+          // GPS開始が必要
+          await startGps();
+        }
       }
 
       // 位置情報取得まで待機（ポーリング方式）
@@ -326,10 +337,11 @@ class GpsManagerService extends ChangeNotifier {
         return;
       }
 
-      // 記録中でもなく、フォアグラウンドサービスも動作していない場合のみGPS停止
+      // 記録中でもなく、フォアグラウンドサービスも動作していない場合の処理
       if (!_isRecording) {
-        await stopGps();
-        debugPrint('$_logTag: GPS測量停止 - 測量専用GPS位置情報取得も停止');
+        // 外部GNSS接続は維持し、内部GPSのみ停止
+        await _stopGpsKeepingBluetoothConnection();
+        debugPrint('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持');
       } else {
         debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
       }
@@ -522,6 +534,19 @@ class GpsManagerService extends ChangeNotifier {
 
     // 位置情報クリア
     _clearCurrentPosition();
+  }
+
+  /// GPS測量停止時に外部GNSS接続を維持したまま内部GPSのみ停止
+  Future<void> _stopGpsKeepingBluetoothConnection() async {
+    if (_currentSource == GpsSourceType.internal) {
+      // 内蔵GPSの場合は通常のGPS停止
+      await stopGps();
+    } else if (_currentSource == GpsSourceType.external) {
+      // 外部GNSSの場合は接続を維持したまま位置監視のみ停止
+      _isGpsActive = false;
+      debugPrint('$_logTag: 外部GNSS接続は維持、位置監視のみ停止');
+      notifyListeners();
+    }
   }
 
   /// 内蔵GPS位置更新コールバック

@@ -1291,6 +1291,16 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             color: Colors.orange,
                             strokeWidth: 3.0,
                           ),
+                        // --- GPS追跡中の軌跡プレビュー ---
+                        if (_isGpsTrackingServiceRunning &&
+                            GpsTrackManager().currentTrack != null &&
+                            GpsTrackManager().currentTrack!.points.length >= 2)
+                          Polyline(
+                            points:
+                                GpsTrackManager().currentTrack!.toLatLngList(),
+                            color: Colors.cyan,
+                            strokeWidth: 4.0,
+                          ),
                       ],
                     ),
                     PolygonLayer(

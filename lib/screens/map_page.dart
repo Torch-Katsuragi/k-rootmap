@@ -588,36 +588,47 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       // GPS軌跡レイヤー名を生成（通常の線レイヤーとして保存）
       const layerName = 'gps_tracks';
 
-      // GeoPackageファイルを取得
-      final gpkgFile = geoPackage.geoPackageFile;
-      print('[DEBUG] GeoPackageファイル取得成功: ${gpkgFile.pathList}');
-
-      // GPS軌跡レイヤーを作成（通常の線レイヤーとして）
-      print('[DEBUG] GPS軌跡レイヤー作成開始: $layerName');
-      await gpkgFile.addLayer(layerName, GeometryType.linestring);
-      print('[DEBUG] GPS軌跡レイヤー作成完了: $layerName');
-
       // 軌跡の統計情報を取得
       final stats = track.getStatistics();
       print('[DEBUG] 軌跡統計: $stats');
 
-      // 軌跡をLineStringとして保存（pen_toolと同じ方式）
-      print('[DEBUG] LineString保存開始: $layerName');
+      // 軌跡座標を取得
       final coordinates = track.toLatLngList();
       if (coordinates.isEmpty) {
         throw Exception('軌跡座標が空です');
       }
 
-      await gpkgFile.addLine(
-        layerName,
-        coordinates,
-        name: track.trackName,
-        description:
-            '${stats['pointCount']}ポイント、${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
-      );
-      print('[DEBUG] LineString保存完了');
+      // GPS軌跡レイヤーを取得または作成
+      LineLayerNode? lineLayer =
+          geoPackage.children
+              .whereType<LineLayerNode>()
+              .where((layer) => layer.layerName == layerName)
+              .firstOrNull;
 
-      // UI更新
+      if (lineLayer == null) {
+        print('[DEBUG] GPS軌跡レイヤー作成開始: $layerName');
+        lineLayer = await LineLayerNode.createIn(geoPackage, layerName);
+        if (lineLayer == null) {
+          throw Exception('GPS軌跡レイヤーの作成に失敗しました');
+        }
+        print('[DEBUG] GPS軌跡レイヤー作成完了: $layerName');
+      }
+
+      // LineFeatureNode.createInを使用してフィーチャを作成（設計統一）
+      print('[DEBUG] LineFeatureNode作成開始: ${track.trackName}');
+      final lineFeature = await LineFeatureNode.createIn(
+        lineLayer,
+        coordinates,
+        track.trackName,
+        '${stats['pointCount']}ポイント、${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
+      );
+
+      if (lineFeature == null) {
+        throw Exception('GPS軌跡フィーチャの作成に失敗しました');
+      }
+      print('[DEBUG] LineFeatureNode作成完了: ${track.trackName}');
+
+      // UI更新（フィーチャキャッシュの更新）
       print('[DEBUG] UI更新開始');
       await _updateFeatures();
       print('[DEBUG] UI更新完了');

@@ -38,6 +38,11 @@ class BluetoothGnssService extends ChangeNotifier {
   double? _bearing;
   DateTime? _timestamp;
 
+  // 衛星情報とHDOP
+  int? _satelliteCount;
+  double? _hdop;
+  int? _gpsQuality;
+
   // 統計情報
   int _receivedSentenceCount = 0;
   int _validPositionCount = 0;
@@ -61,6 +66,11 @@ class BluetoothGnssService extends ChangeNotifier {
   int get receivedSentenceCount => _receivedSentenceCount;
   int get validPositionCount => _validPositionCount;
   DateTime? get lastPositionUpdate => _lastPositionUpdate;
+
+  // 衛星情報・HDOP用のgetters
+  int? get satelliteCount => _satelliteCount;
+  double? get hdop => _hdop;
+  int? get gpsQuality => _gpsQuality;
 
   /// 利用可能なBluetoothデバイスをスキャン
   ///
@@ -271,7 +281,14 @@ class BluetoothGnssService extends ChangeNotifier {
         // 品質インジケータ
         int quality = int.tryParse(parts[6]) ?? 0;
         double hdop = double.tryParse(parts[8]) ?? 1.0;
+        _gpsQuality = quality;
+        _hdop = hdop;
         _accuracy = _calculateAccuracy(quality, hdop);
+
+        // 衛星数の取得（GGA文の7番目のフィールド）
+        if (parts.length > 7 && parts[7].isNotEmpty) {
+          _satelliteCount = int.tryParse(parts[7]);
+        }
 
         if (_latitude != null && _longitude != null) {
           _timestamp = DateTime.now();
@@ -450,6 +467,9 @@ class BluetoothGnssService extends ChangeNotifier {
         'accuracy': _accuracy,
         'speed': _speed,
         'bearing': _bearing,
+        'satelliteCount': _satelliteCount,
+        'hdop': _hdop,
+        'gpsQuality': _gpsQuality,
       },
     };
   }

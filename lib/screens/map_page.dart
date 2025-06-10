@@ -24,8 +24,9 @@ import '../utils/feature_calc_utils.dart';
 import '../models/gps_track.dart';
 import '../widgets/track_save_dialog.dart';
 import '../tools/gps_utils.dart'; // Added GPS utility
-import '../screens/bluetooth_gnss_screen.dart'; // Bluetooth GNSS screen import
+import '../screens/gps_settings_screen.dart'; // GPS設定画面
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
+import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -69,10 +70,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   double drawerWidth = 320;
   bool drawerOpen = true;
   final double minDrawerWidth = 200;
-  GpsPosition? _gpsPosition; // GPS information storage
-  int? _satelliteCount; // Satellite count
-  double? _hdop; // HDOP
-  StreamSubscription? _gpsStreamSub;
+
+  // 統合GPS管理サービス
+  final GpsManagerService _gpsManager = GpsManagerService();
+  Map<String, dynamic>? _currentGpsInfo;
   int _gpsWaitSeconds = 0; // GPS acquisition wait seconds
   Timer? _gpsWaitTimer;
 
@@ -121,8 +122,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     // プロジェクトフォルダ内をスキャンして子ノード（サブフォルダ・.gpkgファイル）を更新
     _initializeProjectTree();
 
-    // GPS権限チェックと初期化
-    _initializeGps();
+    // GPS管理サービス初期化と権限チェック
+    _initializeGpsManager();
 
     // GPS追跡サービス状態の初期化
     _updateGpsTrackingServiceStatus();
@@ -166,74 +167,102 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
-  /// GPS初期化処理（権限チェック・ストリーム購読）
-  Future<void> _initializeGps() async {
-    print('[DEBUG] GPS: Starting GPS initialization');
+  /// GPS管理サービス初期化
+  Future<void> _initializeGpsManager() async {
+    print('[DEBUG] GPS: GPS管理サービス初期化開始');
 
-    // 権限チェック・リクエスト
-    bool hasPermission = await GpsUtils.instance.checkAndRequestPermission();
-    if (!hasPermission) {
-      print('[DEBUG] GPS: Permission denied, GPS features disabled');
-      return;
-    }
+    try {
+      // GPS管理サービスを初期化
+      if (!_gpsManager.isInitialized) {
+        await _gpsManager.initialize();
+      }
 
-    // 位置情報サービス確認
-    bool serviceEnabled = await GpsUtils.instance.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      print('[DEBUG] GPS: Location service disabled, GPS features disabled');
-      return;
-    }
+      // GPS管理サービスの更新を監視
+      _gpsManager.addListener(_onGpsManagerUpdate);
 
-    print('[DEBUG] GPS: Permission and service OK, starting streams');
+      // 外部GNSS機器をスキャン（バックグラウンドで実行）
+      _scanGnssDevicesBackground();
 
-    // 標準のGeolocatorストリーム（現在位置表示用）
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    );
-    _positionSubscription = _positionStream!.listen(
-      (pos) {
-        setState(() {
-          _currentLocation = LatLng(pos.latitude, pos.longitude);
-          if (!_movedToCurrentLocationOnce && _currentLocation != null) {
-            _mapController.move(_currentLocation!, 16.0);
-            _movedToCurrentLocationOnce = true;
-          }
-        });
-      },
-      onError: (error) {
-        print('[DEBUG] GPS: Geolocator stream error: $error');
-      },
-    );
+      // GPS位置情報取得を開始
+      await _gpsManager.startGps();
 
-    // Start GPS acquisition wait timer
-    _gpsWaitSeconds = 0;
-    _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        _gpsWaitSeconds++;
-      });
-    });
+      // 初期GPS情報を取得
+      _updateCurrentGpsInfo();
 
-    // Subscribe to GPS information stream (詳細GPS情報用)
-    _gpsStreamSub = GpsUtils.instance.getPositionStream().listen(
-      (pos) {
-        if (pos is GpsPosition) {
+      // 標準のGeolocatorストリーム（マップ中心移動用）
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      _positionSubscription = _positionStream!.listen(
+        (pos) {
           setState(() {
-            _gpsPosition = pos;
-            _satelliteCount = pos.satellites;
-            _hdop = pos.hdop;
-            _gpsWaitTimer?.cancel(); // Stop timer when acquired
+            _currentLocation = LatLng(pos.latitude, pos.longitude);
+            if (!_movedToCurrentLocationOnce && _currentLocation != null) {
+              _mapController.move(_currentLocation!, 16.0);
+              _movedToCurrentLocationOnce = true;
+            }
           });
-        }
-      },
-      onError: (error) {
-        print('[DEBUG] GPS: GpsUtils stream error: $error');
-      },
-    );
+        },
+        onError: (error) {
+          print('[DEBUG] GPS: Geolocator stream error: $error');
+        },
+      );
+
+      // GPS待機タイマー開始
+      _gpsWaitSeconds = 0;
+      _gpsWaitTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+        setState(() {
+          _gpsWaitSeconds++;
+        });
+      });
+
+      print('[DEBUG] GPS: GPS管理サービス初期化完了');
+    } catch (e) {
+      print('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
+    }
+  }
+
+  /// 外部GNSS機器をバックグラウンドでスキャン
+  Future<void> _scanGnssDevicesBackground() async {
+    try {
+      print('[DEBUG] GPS: 外部GNSS機器バックグラウンドスキャン開始');
+      await _gpsManager.scanExternalGnssDevices();
+      print(
+        '[DEBUG] GPS: 外部GNSS機器スキャン完了: ${_gpsManager.availableGnssDevices.length}件',
+      );
+    } catch (e) {
+      print('[DEBUG] GPS: 外部GNSS機器スキャンエラー: $e');
+      // エラーでもマップ画面の表示は継続
+    }
+  }
+
+  /// GPS管理サービス更新コールバック
+  void _onGpsManagerUpdate() {
+    if (mounted) {
+      _updateCurrentGpsInfo();
+    }
+  }
+
+  /// 現在のGPS情報を更新
+  void _updateCurrentGpsInfo() {
+    setState(() {
+      _currentGpsInfo = _gpsManager.getCurrentGpsInfo();
+      // GPS情報が取得できた場合はタイマーを停止
+      if (_currentGpsInfo != null && _currentGpsInfo!['isActive'] == true) {
+        _gpsWaitTimer?.cancel();
+      }
+    });
   }
 
   @override
   void dispose() {
-    _gpsStreamSub?.cancel();
+    _gpsManager.removeListener(_onGpsManagerUpdate);
+    // GPS取得を停止（測量モードでない場合のみ）
+    if (_gpsManager.isGpsActive && !_gpsManager.isSurveyMode) {
+      _gpsManager.stopGps();
+    }
     _positionSubscription?.cancel();
     _gpsWaitTimer?.cancel();
     _serviceStatusUpdateTimer?.cancel();
@@ -1068,15 +1097,15 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       appBar: AppBar(
         title: const Text('K-MAPS GIS'),
         actions: [
-          // Bluetooth GNSS接続ボタン
+          // GPS設定ボタン
           IconButton(
-            icon: const Icon(Icons.bluetooth),
-            tooltip: 'Bluetooth GNSS',
+            icon: const Icon(Icons.gps_fixed),
+            tooltip: 'GPS設定',
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const BluetoothGnssScreen(),
+                  builder: (context) => const GpsSettingsScreen(),
                 ),
               );
             },
@@ -2063,7 +2092,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS information bar widget
   Widget _buildGpsInfoBar() {
-    if (_gpsPosition == null) {
+    if (_currentGpsInfo == null || _currentGpsInfo!['isActive'] != true) {
       return Container(
         height: 48,
         color: Colors.grey[200],
@@ -2073,17 +2102,31 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Text('GPS: Acquiring...'),
+              Icon(Icons.gps_off, size: 18, color: Colors.grey),
+              SizedBox(width: 8),
+              Text('GPS: 取得中...'),
               SizedBox(width: 12),
               Text(
-                '(${_gpsWaitSeconds}s elapsed)',
+                '(${_gpsWaitSeconds}秒経過)',
                 style: TextStyle(color: Colors.grey),
               ),
+              SizedBox(width: 16),
+              Text('ソース: ${_currentGpsInfo?['sourceName'] ?? '不明'}'),
             ],
           ),
         ),
       );
     }
+
+    final latitude = _currentGpsInfo!['latitude'];
+    final longitude = _currentGpsInfo!['longitude'];
+    final accuracy = _currentGpsInfo!['accuracy'];
+    final satelliteCount = _currentGpsInfo!['satelliteCount'];
+    final hdop = _currentGpsInfo!['hdop'];
+    final sourceName = _currentGpsInfo!['sourceName'] ?? 'GPS';
+    final sourceType = _currentGpsInfo!['sourceType'];
+    final isExternalGnss = sourceType == 'GNSS';
+
     return Container(
       height: 48,
       color: Colors.lightBlue[50],
@@ -2093,16 +2136,33 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         padding: EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
+            Icon(
+              isExternalGnss ? Icons.bluetooth : Icons.gps_fixed,
+              size: 18,
+              color: Colors.blue,
+            ),
             SizedBox(width: 8),
             Text(
-              'Lat: ${_gpsPosition!.latitude.toStringAsFixed(6)} Lon: ${_gpsPosition!.longitude.toStringAsFixed(6)}',
+              'Lat: ${latitude?.toStringAsFixed(6) ?? "取得中"} Lon: ${longitude?.toStringAsFixed(6) ?? "取得中"}',
               style: TextStyle(fontSize: 14),
             ),
+            if (accuracy != null) ...[
+              SizedBox(width: 16),
+              Text('精度: ±${accuracy.toStringAsFixed(1)}m'),
+            ],
+            // 外部GNSS機器の場合のみ衛星情報とHDOPを表示
+            if (isExternalGnss) ...[
+              if (satelliteCount != null) ...[
+                SizedBox(width: 16),
+                Text('衛星数: ${satelliteCount}基'),
+              ],
+              if (hdop != null) ...[
+                SizedBox(width: 16),
+                Text('HDOP: ${hdop.toStringAsFixed(2)}'),
+              ],
+            ],
             SizedBox(width: 16),
-            Text('Satellites: ${_satelliteCount ?? "-"}'),
-            SizedBox(width: 16),
-            Text('HDOP: ${_hdop?.toStringAsFixed(2) ?? "-"}'),
+            Text('ソース: $sourceName'),
           ],
         ),
       ),

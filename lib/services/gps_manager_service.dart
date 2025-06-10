@@ -113,6 +113,11 @@ class GpsManagerService extends ChangeNotifier {
   double? _bearing;
   DateTime? _timestamp;
 
+  // 衛星情報・HDOP情報（外部GNSS用）
+  int? _satelliteCount;
+  double? _hdop;
+  int? _gpsQuality;
+
   // Getters
   bool get isInitialized => _isInitialized;
   bool get isGpsActive => _isGpsActive;
@@ -341,11 +346,12 @@ class GpsManagerService extends ChangeNotifier {
       if (!_isRecording) {
         // 外部GNSS接続は維持し、内部GPSのみ停止
         await _stopGpsKeepingBluetoothConnection();
-        debugPrint('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持');
+        debugPrint('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持（データ蓄積なし）');
       } else {
         debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
       }
 
+      debugPrint('$_logTag: GPS測量停止完了 - 測量モード: $_isSurveyMode');
       notifyListeners();
     } catch (e) {
       debugPrint('$_logTag: GPS測量停止エラー: $e');
@@ -583,6 +589,9 @@ class GpsManagerService extends ChangeNotifier {
           bearing: service.bearing,
           timestamp: service.timestamp ?? DateTime.now(),
           sourceType: GpsSourceType.external.sourceCode,
+          satelliteCount: service.satelliteCount,
+          hdop: service.hdop,
+          gpsQuality: service.gpsQuality,
         );
       }
     }
@@ -598,6 +607,9 @@ class GpsManagerService extends ChangeNotifier {
     double? bearing,
     required DateTime timestamp,
     required String sourceType,
+    int? satelliteCount,
+    double? hdop,
+    int? gpsQuality,
   }) {
     _latitude = latitude;
     _longitude = longitude;
@@ -606,6 +618,9 @@ class GpsManagerService extends ChangeNotifier {
     _speed = speed;
     _bearing = bearing;
     _timestamp = timestamp;
+    _satelliteCount = satelliteCount;
+    _hdop = hdop;
+    _gpsQuality = gpsQuality;
 
     debugPrint(
       '$_logTag: 位置更新 - Lat: ${latitude.toStringAsFixed(6)}, '
@@ -625,6 +640,9 @@ class GpsManagerService extends ChangeNotifier {
     _speed = null;
     _bearing = null;
     _timestamp = null;
+    _satelliteCount = null;
+    _hdop = null;
+    _gpsQuality = null;
     notifyListeners();
   }
 
@@ -671,6 +689,12 @@ class GpsManagerService extends ChangeNotifier {
       'isInitialized': _isInitialized,
       'isSurveyMode': _isSurveyMode,
       'usesForegroundService': false,
+      // 外部GNSS機器の場合のみ衛星情報を追加
+      'satelliteCount':
+          _currentSource == GpsSourceType.external ? _satelliteCount : null,
+      'hdop': _currentSource == GpsSourceType.external ? _hdop : null,
+      'gpsQuality':
+          _currentSource == GpsSourceType.external ? _gpsQuality : null,
     };
   }
 

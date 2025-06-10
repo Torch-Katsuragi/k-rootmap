@@ -165,6 +165,9 @@ class GpsTool extends MapTool {
 
     _isLongPressing = false;
     _gpsCollectionTimer?.cancel();
+    _gpsCollectionTimer = null;
+
+    debugPrint('[GpsTool] データ収集タイマーを停止しました');
 
     if (_longPressGpsData.isEmpty) {
       debugPrint('[GpsTool] 長押し中にGPSデータが取得できませんでした');
@@ -215,8 +218,12 @@ class GpsTool extends MapTool {
         // Point測量完了後はGPS測量を停止（リソース効率化）
         await _gpsManager.stopGpsSurvey();
 
+        // データ収集タイマーも確実に停止
+        _gpsCollectionTimer?.cancel();
+        _gpsCollectionTimer = null;
+
         debugPrint(
-          '[GpsTool] 長押しGPS測量ポイントフィーチャを作成しました（${_longPressGpsData.length}サンプル平均・GPS停止済み）',
+          '[GpsTool] 長押しGPS測量ポイントフィーチャを作成しました（${_longPressGpsData.length}サンプル平均・GPS停止済み・タイマー停止済み）',
         );
       } else if (selected is LineLayerNode) {
         _surveyLine.add(position);
@@ -318,7 +325,11 @@ class GpsTool extends MapTool {
         // Point測量完了後はGPS測量を停止（リソース効率化）
         await _gpsManager.stopGpsSurvey();
 
-        debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み）');
+        // データ収集タイマーも確実に停止（念のため）
+        _gpsCollectionTimer?.cancel();
+        _gpsCollectionTimer = null;
+
+        debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
       } else if (selected is LineLayerNode) {
         _surveyLine.add(position);
         _surveyGpsData.add(optimizedGpsData);
@@ -344,6 +355,21 @@ class GpsTool extends MapTool {
 
   /// 長押し中のGPSデータ収集
   Future<void> _collectGpsDataForLongPress() async {
+    // 長押し状態でない場合は即座に終了（データ収集停止）
+    if (!_isLongPressing) {
+      debugPrint('[GpsTool] 長押し状態でないためデータ収集を停止');
+      return;
+    }
+
+    // GPS管理サービスの測量モード確認
+    if (!_gpsManager.isSurveyMode) {
+      debugPrint('[GpsTool] GPS測量モードでないためデータ収集を停止');
+      _isLongPressing = false;
+      _gpsCollectionTimer?.cancel();
+      _gpsCollectionTimer = null;
+      return;
+    }
+
     try {
       final gpsInfo = await _gpsManager.startGpsSurveyWithWait(
         timeout: const Duration(seconds: 2),
@@ -472,12 +498,14 @@ class GpsTool extends MapTool {
 
     // 長押し関連もクリア
     _gpsCollectionTimer?.cancel();
+    _gpsCollectionTimer = null;
     _longPressTimer?.cancel();
+    _longPressTimer = null;
     _isLongPressing = false;
     _longPressGpsData.clear();
     _longPressStartTime = null;
 
-    debugPrint('[GpsTool] GPS測量データをクリアしました');
+    debugPrint('[GpsTool] GPS測量データとタイマーをクリアしました');
   }
 
   /// GPS測量をキャンセル（GPS停止付き）

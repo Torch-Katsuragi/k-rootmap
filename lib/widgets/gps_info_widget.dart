@@ -208,6 +208,11 @@ class GpsInfoWidget extends StatelessWidget {
     final accuracy = gpsInfo['accuracy'];
     final speed = gpsInfo['speed'];
     final bearing = gpsInfo['bearing'];
+    final satelliteCount = gpsInfo['satelliteCount'];
+    final hdop = gpsInfo['hdop'];
+    final gpsQuality = gpsInfo['gpsQuality'];
+    final sourceType = gpsInfo['sourceType'];
+    final isExternalGnss = sourceType == 'GNSS';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,6 +227,12 @@ class GpsInfoWidget extends StatelessWidget {
           _buildAccuracyIndicator(accuracy),
         ] else
           _buildInfoRow('位置精度', '取得中...'),
+
+        // 外部GNSS機器の場合のみ衛星情報を表示
+        if (isExternalGnss) ...[
+          const SizedBox(height: 8),
+          _buildGnssSatelliteSection(satelliteCount, hdop, gpsQuality),
+        ],
 
         if (speed != null && speed > 0)
           _buildInfoRow('移動速度', '${(speed * 3.6).toStringAsFixed(1)} km/h'),
@@ -357,6 +368,141 @@ class GpsInfoWidget extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// GNSS衛星情報セクション（外部GNSS機器専用）
+  Widget _buildGnssSatelliteSection(
+    int? satelliteCount,
+    double? hdop,
+    int? gpsQuality,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.satellite_alt, size: 16, color: Colors.blue.shade700),
+              const SizedBox(width: 4),
+              Text(
+                'GNSS衛星情報',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _buildSatelliteInfo('衛星数', satelliteCount)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildSatelliteInfo('HDOP', hdop)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _buildGpsQualityIndicator(gpsQuality),
+        ],
+      ),
+    );
+  }
+
+  /// 衛星情報項目表示
+  Widget _buildSatelliteInfo(String label, dynamic value) {
+    String displayValue;
+
+    if (value == null) {
+      displayValue = '未取得';
+    } else if (value is int) {
+      displayValue = '$value基';
+    } else if (value is double) {
+      displayValue = value.toStringAsFixed(2);
+    } else {
+      displayValue = value.toString();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(
+          displayValue,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// GPS品質インジケーター
+  Widget _buildGpsQualityIndicator(int? quality) {
+    if (quality == null) return const SizedBox.shrink();
+
+    String qualityText;
+    Color qualityColor;
+
+    switch (quality) {
+      case 0:
+        qualityText = '無効';
+        qualityColor = Colors.red;
+        break;
+      case 1:
+        qualityText = '標準GPS';
+        qualityColor = Colors.orange;
+        break;
+      case 2:
+        qualityText = 'DGPS';
+        qualityColor = Colors.blue;
+        break;
+      case 3:
+        qualityText = 'RTK固定解';
+        qualityColor = Colors.green;
+        break;
+      case 4:
+        qualityText = 'RTK浮動解';
+        qualityColor = Colors.lightGreen;
+        break;
+      case 5:
+        qualityText = '推測航法';
+        qualityColor = Colors.purple;
+        break;
+      default:
+        qualityText = '品質$quality';
+        qualityColor = Colors.grey;
+    }
+
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: qualityColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          qualityText,
+          style: TextStyle(
+            fontSize: 10,
+            color: qualityColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 

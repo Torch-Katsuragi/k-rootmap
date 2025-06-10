@@ -118,6 +118,12 @@ class GpsManagerService extends ChangeNotifier {
   double? _hdop;
   int? _gpsQuality;
 
+  // 連続測量（長押し測量）関連
+  bool _isContinuousSurvey = false;
+  Function? _onContinuousSurveyUpdate;
+  List<Map<String, dynamic>> _continuousSurveyData = [];
+  DateTime? _continuousSurveyStartTime;
+
   // Getters
   bool get isInitialized => _isInitialized;
   bool get isGpsActive => _isGpsActive;
@@ -140,6 +146,13 @@ class GpsManagerService extends ChangeNotifier {
   double? get speed => _speed;
   double? get bearing => _bearing;
   DateTime? get timestamp => _timestamp;
+
+  // 連続測量関連
+  bool get isContinuousSurvey => _isContinuousSurvey;
+  List<Map<String, dynamic>> get continuousSurveyData =>
+      List.unmodifiable(_continuousSurveyData);
+  int get continuousSurveyPointCount => _continuousSurveyData.length;
+  DateTime? get continuousSurveyStartTime => _continuousSurveyStartTime;
 
   /// 利用可能なGPSソースリストを取得
   List<Map<String, dynamic>> getAvailableGpsSources() {
@@ -628,7 +641,69 @@ class GpsManagerService extends ChangeNotifier {
       'Source: $sourceType',
     );
 
+    // 連続測量中の場合はデータを収集
+    if (_isContinuousSurvey) {
+      _collectContinuousSurveyData(
+        latitude: latitude,
+        longitude: longitude,
+        altitude: altitude,
+        accuracy: accuracy,
+        speed: speed,
+        bearing: bearing,
+        timestamp: timestamp,
+        sourceType: sourceType,
+        satelliteCount: satelliteCount,
+        hdop: hdop,
+        gpsQuality: gpsQuality,
+      );
+    }
+
     notifyListeners();
+  }
+
+  /// 連続測量データを収集（位置更新時に呼び出される）
+  void _collectContinuousSurveyData({
+    required double latitude,
+    required double longitude,
+    double? altitude,
+    double? accuracy,
+    double? speed,
+    double? bearing,
+    required DateTime timestamp,
+    required String sourceType,
+    int? satelliteCount,
+    double? hdop,
+    int? gpsQuality,
+  }) {
+    final gpsData = {
+      'latitude': latitude,
+      'longitude': longitude,
+      'altitude': altitude,
+      'accuracy': accuracy,
+      'speed': speed,
+      'bearing': bearing,
+      'timestamp': timestamp.toIso8601String(),
+      'sourceType': sourceType,
+      'sourceName': _currentSource.displayName,
+      'selectedDevice': _selectedGnssDevice?.name,
+      'collectedAt': DateTime.now().toIso8601String(),
+      // 外部GNSS機器の場合のみ衛星情報を追加
+      if (satelliteCount != null) 'satelliteCount': satelliteCount,
+      if (hdop != null) 'hdop': hdop,
+      if (gpsQuality != null) 'gpsQuality': gpsQuality,
+    };
+
+    _continuousSurveyData.add(gpsData);
+
+    debugPrint(
+      '$_logTag: 連続測量データ収集 - ${_continuousSurveyData.length}ポイント目 '
+      '(Lat: ${latitude.toStringAsFixed(6)}, Lon: ${longitude.toStringAsFixed(6)})',
+    );
+
+    // 外部コールバック呼び出し（UI更新用）
+    if (_onContinuousSurveyUpdate != null) {
+      _onContinuousSurveyUpdate!();
+    }
   }
 
   /// 現在位置情報をクリア
@@ -982,12 +1057,48 @@ class GpsManagerService extends ChangeNotifier {
     };
   }
 
+  /// 連続測量開始（位置更新ベース）
+  void startContinuousSurvey({Function? onPositionUpdate}) {
+    debugPrint('$_logTag: 連続測量開始（位置更新ベース）');
+    _isContinuousSurvey = true;
+    _onContinuousSurveyUpdate = onPositionUpdate;
+    _continuousSurveyData.clear();
+    _continuousSurveyStartTime = DateTime.now();
+    notifyListeners();
+  }
+
+  /// 連続測量停止
+  void stopContinuousSurvey() {
+    debugPrint('$_logTag: 連続測量停止 - ${_continuousSurveyData.length}ポイント収集');
+    _isContinuousSurvey = false;
+    _onContinuousSurveyUpdate = null;
+    notifyListeners();
+  }
+
+  /// 連続測量データをクリア
+  void clearContinuousSurveyData() {
+    _continuousSurveyData.clear();
+    _continuousSurveyStartTime = null;
+    debugPrint('$_logTag: 連続測量データをクリア');
+    notifyListeners();
+  }
+
+  /// 連続測量の収集データを取得
+  List<Map<String, dynamic>> getContinuousSurveyData() {
+    return List.unmodifiable(_continuousSurveyData);
+  }
+
   @override
   void dispose() {
     debugPrint('$_logTag: GPS管理サービスを停止中...');
 
     _recordingTimer?.cancel();
     _stopCurrentSource();
+
+    // 連続測量もクリーンアップ
+    _isContinuousSurvey = false;
+    _onContinuousSurveyUpdate = null;
+    _continuousSurveyData.clear();
 
     super.dispose();
   }

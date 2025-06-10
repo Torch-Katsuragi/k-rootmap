@@ -142,9 +142,9 @@ class GpsTool extends MapTool {
     debugPrint('[GpsTool] GPS測量機能をクリーンアップしました');
   }
 
-  /// 長押しGPS測量開始
+  /// 長押しGPS測量開始（位置更新ベース）
   void startLongPressGpsSurvey() {
-    debugPrint('[GpsTool] 長押しGPS測量開始');
+    debugPrint('[GpsTool] 長押しGPS測量開始（位置更新ベース）');
 
     _isLongPressing = true;
     _longPressStartTime = DateTime.now();
@@ -152,22 +152,28 @@ class GpsTool extends MapTool {
 
     // GPS測量専用開始
     _gpsManager.startGpsSurveyWithWait().then((_) {
-      // 1秒間隔でGPS情報を収集
-      _gpsCollectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        _collectGpsDataForLongPress();
-      });
+      // GPS Manager Service の連続測量機能を使用（位置更新ベース）
+      _gpsManager.startContinuousSurvey(
+        onPositionUpdate: _onContinuousSurveyUpdate,
+      );
     });
   }
 
-  /// 長押しGPS測量停止と平均化処理
+  /// 長押しGPS測量停止と平均化処理（位置更新ベース）
   Future<bool> stopLongPressGpsSurvey() async {
-    debugPrint('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始');
+    debugPrint('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始（位置更新ベース）');
 
     _isLongPressing = false;
-    _gpsCollectionTimer?.cancel();
-    _gpsCollectionTimer = null;
 
-    debugPrint('[GpsTool] データ収集タイマーを停止しました');
+    // GPS Manager Service の連続測量を停止
+    _gpsManager.stopContinuousSurvey();
+
+    // 最終的なデータを取得
+    final finalData = _gpsManager.getContinuousSurveyData();
+    _longPressGpsData.clear();
+    _longPressGpsData.addAll(finalData);
+
+    debugPrint('[GpsTool] 位置更新ベース連続測量を停止しました');
 
     if (_longPressGpsData.isEmpty) {
       debugPrint('[GpsTool] 長押し中にGPSデータが取得できませんでした');
@@ -218,9 +224,8 @@ class GpsTool extends MapTool {
         // Point測量完了後はGPS測量を停止（リソース効率化）
         await _gpsManager.stopGpsSurvey();
 
-        // データ収集タイマーも確実に停止
-        _gpsCollectionTimer?.cancel();
-        _gpsCollectionTimer = null;
+        // 連続測量データもクリア
+        _gpsManager.clearContinuousSurveyData();
 
         debugPrint(
           '[GpsTool] 長押しGPS測量ポイントフィーチャを作成しました（${_longPressGpsData.length}サンプル平均・GPS停止済み・タイマー停止済み）',
@@ -238,6 +243,7 @@ class GpsTool extends MapTool {
       // クリーンアップ
       _longPressGpsData.clear();
       _longPressStartTime = null;
+      _gpsManager.clearContinuousSurveyData();
 
       return true;
     } catch (e) {
@@ -353,49 +359,15 @@ class GpsTool extends MapTool {
     }
   }
 
-  /// 長押し中のGPSデータ収集
+  /// 長押し中のGPSデータ収集（位置更新ベースのため廃止）
+  ///
+  /// 注意: このメソッドは位置更新ベースの連続測量への移行により廃止されました。
+  /// 現在は _onContinuousSurveyUpdate() を使用して位置更新のタイミングで
+  /// GPS Manager Service から自動的にデータを収集します。
+  @Deprecated('位置更新ベース連続測量への移行により廃止')
   Future<void> _collectGpsDataForLongPress() async {
-    // 長押し状態でない場合は即座に終了（データ収集停止）
-    if (!_isLongPressing) {
-      debugPrint('[GpsTool] 長押し状態でないためデータ収集を停止');
-      return;
-    }
-
-    // GPS管理サービスの測量モード確認
-    if (!_gpsManager.isSurveyMode) {
-      debugPrint('[GpsTool] GPS測量モードでないためデータ収集を停止');
-      _isLongPressing = false;
-      _gpsCollectionTimer?.cancel();
-      _gpsCollectionTimer = null;
-      return;
-    }
-
-    try {
-      final gpsInfo = await _gpsManager.startGpsSurveyWithWait(
-        timeout: const Duration(seconds: 2),
-      );
-
-      if (gpsInfo != null && gpsInfo['isActive'] == true) {
-        final gpsData = {
-          'latitude': gpsInfo['latitude'],
-          'longitude': gpsInfo['longitude'],
-          'altitude': gpsInfo['altitude'],
-          'accuracy': gpsInfo['accuracy'],
-          'speed': gpsInfo['speed'],
-          'bearing': gpsInfo['bearing'],
-          'timestamp': gpsInfo['timestamp'],
-          'sourceType': gpsInfo['sourceType'],
-          'sourceName': gpsInfo['sourceName'],
-          'selectedDevice': gpsInfo['selectedDevice'],
-          'collectedAt': DateTime.now().toIso8601String(),
-        };
-
-        _longPressGpsData.add(gpsData);
-        debugPrint('[GpsTool] 長押しGPSデータ収集: ${_longPressGpsData.length}個目');
-      }
-    } catch (e) {
-      debugPrint('[GpsTool] 長押しGPSデータ収集エラー: $e');
-    }
+    // 互換性維持のため空実装
+    debugPrint('[GpsTool] _collectGpsDataForLongPress は廃止されました（位置更新ベース移行）');
   }
 
   /// GPS平均化計算
@@ -505,7 +477,11 @@ class GpsTool extends MapTool {
     _longPressGpsData.clear();
     _longPressStartTime = null;
 
-    debugPrint('[GpsTool] GPS測量データとタイマーをクリアしました');
+    // GPS Manager Service の連続測量もクリア
+    _gpsManager.stopContinuousSurvey();
+    _gpsManager.clearContinuousSurveyData();
+
+    debugPrint('[GpsTool] GPS測量データと連続測量をクリアしました');
   }
 
   /// GPS測量をキャンセル（GPS停止付き）
@@ -658,5 +634,15 @@ class GpsTool extends MapTool {
   void centerOnCurrentLocation() {
     // TODO: 将来実装
     debugPrint('[GpsTool] 現在位置中心移動（将来実装予定）');
+  }
+
+  /// 連続測量位置更新コールバック
+  void _onContinuousSurveyUpdate() {
+    // GPS Manager Service から収集されたデータを取得してローカルデータと同期
+    final continuousData = _gpsManager.getContinuousSurveyData();
+    _longPressGpsData.clear();
+    _longPressGpsData.addAll(continuousData);
+
+    debugPrint('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
   }
 }

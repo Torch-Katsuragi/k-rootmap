@@ -354,9 +354,12 @@ class _LayerDrawerState extends State<LayerDrawer> {
                     );
                     if (confirm == true) {
                       try {
-                        // geopakcageノード削除
-                        node.dispose();
+                        // geopackageノード削除（ファイルも含めて削除）
+                        await node.dispose();
                         setState(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('${node.name} を削除しました')),
+                        );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('削除に失敗しました: $e')),

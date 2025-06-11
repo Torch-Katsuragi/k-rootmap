@@ -654,4 +654,34 @@ class GeoPackageFile {
       _isInitialized = false;
     }
   }
+
+  /// ファイル自体を削除（物理削除）
+  Future<bool> deleteFile() async {
+    try {
+      // まずデータベース接続を閉じる
+      await dispose();
+
+      final baseDir = GlobalConfig.instance.projectRootDir;
+      if (baseDir == null) {
+        print('[GeoPackageFile] deleteFile: projectRootDirが未設定');
+        return false;
+      }
+
+      final absPath = p.joinAll([baseDir, ...pathList]);
+      final file = File(absPath);
+
+      if (!file.existsSync()) {
+        print('[GeoPackageFile] deleteFile: ファイルが存在しません - $absPath');
+        return true; // 既に存在しないので成功とみなす
+      }
+
+      await file.delete();
+      print('[GeoPackageFile] deleteFile: ファイル削除完了 - $absPath');
+      return true;
+    } catch (e, stack) {
+      print('[GeoPackageFile] deleteFile: ファイル削除エラー - $e');
+      print('スタックトレース: $stack');
+      return false;
+    }
+  }
 }

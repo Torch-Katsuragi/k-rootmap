@@ -335,6 +335,29 @@ class GeoPackageNode extends LayerTreeNode {
     );
     return nodes;
   }
+
+  /// GeoPackageファイルを含む削除処理（ファイル自体も削除）
+  @override
+  Future<void> dispose() async {
+    print('[DEBUG] GeoPackageNode.dispose: disposing ${name}');
+
+    try {
+      // ファイル自体を削除
+      final success = await geoPackageFile.deleteFile();
+      if (success) {
+        print('[DEBUG] GeoPackageNode.dispose: ファイル削除成功 - ${name}');
+      } else {
+        print('[DEBUG] GeoPackageNode.dispose: ファイル削除失敗 - ${name}');
+      }
+    } catch (e) {
+      print('[ERROR] GeoPackageNode.dispose: ファイル削除エラー - $e');
+    }
+
+    // 基底クラスの処理（親子関係切断）
+    await super.dispose();
+
+    print('[DEBUG] GeoPackageNode.dispose: dispose完了 - ${name}');
+  }
 }
 
 /// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション

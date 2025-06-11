@@ -92,6 +92,21 @@ class PenTool extends MapTool {
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
     final selected = GlobalConfig.instance.selectedLayerNode;
+
+    if (_pointerCount == 2) {
+      //2本指を離すとき高確率で残った方の指でdetails.pointerCount=1としてonscalestartが呼ばれるので、その場合は一回スキップ(0にするとupdateとendで何もしなくなる)
+      _pointerCount = 0;
+      return;
+    }
+    _pointerCount = details.pointerCount ?? 1;
+
+    // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
+    if (_pointerCount == 2) {
+      panTool.onScaleStart(details, mapState);
+      return;
+    }
+
+    // 1本指の場合のみレイヤー選択チェック
     if (selected == null || !selected.isVisibleRecursive()) {
       if (selected != null && !selected.isVisibleRecursive()) {
         final context = mapState.context;
@@ -99,16 +114,6 @@ class PenTool extends MapTool {
           context,
         ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
       }
-      return;
-    }
-    if (_pointerCount == 2) {
-      //2本指を離すとき高確率で残った方の指でdetails.pointerCount=1としてonscalestartが呼ばれるので、その場合は一回スキップ(0にするとupdateとendで何もしなくなる)
-      _pointerCount = 0;
-      return;
-    }
-    _pointerCount = details.pointerCount ?? 1;
-    if (_pointerCount == 2) {
-      panTool.onScaleStart(details, mapState);
       return;
     }
     if (_pointerCount == 1) {
@@ -154,14 +159,17 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
-    // 通常は従来通り
     final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null || !selected.isVisibleRecursive()) return;
+
+    // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
       panTool.onScaleUpdate(details, mapState);
       // 2本指終了時に1本指状態で呼ばれるので、_pointercount=2のままにしておく(スキップフラグとして利用)
       return;
     }
+
+    // 1本指の場合のみレイヤー選択チェック
+    if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 1) {
       // フロートボタン押下時は消しゴム動作
       if (GlobalConfig.instance.isFabActive) {
@@ -203,12 +211,16 @@ class PenTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
     final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null || !selected.isVisibleRecursive()) return;
+
+    // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
       panTool.onScaleEnd(details, mapState);
       // _pointerCount = 0;
       return;
     }
+
+    // 1本指の場合のみレイヤー選択チェック
+    if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 1) {
       if (selected is PointLayerNode && _pointPreview != null) {
         PointFeatureNode.createIn(

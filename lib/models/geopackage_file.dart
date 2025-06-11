@@ -251,14 +251,20 @@ class GeoPackageFile {
 
       for (final row in rows) {
         final geom = row['geom'] as Uint8List;
-        if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
+        // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
+        Uint8List pureWkb = geom;
+        if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
+          pureWkb = geom.sublist(8);
+        }
+
+        if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
           final lon = ByteData.sublistView(
-            geom,
+            pureWkb,
             5,
             13,
           ).getFloat64(0, Endian.little);
           final lat = ByteData.sublistView(
-            geom,
+            pureWkb,
             13,
             21,
           ).getFloat64(0, Endian.little);
@@ -284,6 +290,13 @@ class GeoPackageFile {
       await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPoint(pt.longitude, pt.latitude);
+
+      // WKBデータの妥当性チェック（デバッグ）
+      if (!validateWkbData(wkb)) {
+        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
+        debugWkbData(wkb, 'addPoint - ${pt.latitude}, ${pt.longitude}');
+      }
+
       final data = {'geom': wkb, 'name': name, 'description': description};
       if (metadata != null) {
         final encodedMetadata = jsonEncode(metadata);
@@ -362,14 +375,20 @@ class GeoPackageFile {
         }
 
         if (geomType == GeometryType.point) {
-          if (geom.length >= 21 && geom[0] == 1 && geom[1] == 1) {
+          // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
+          Uint8List pureWkb = geom;
+          if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
+            pureWkb = geom.sublist(8);
+          }
+
+          if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
             final lon = ByteData.sublistView(
-              geom,
+              pureWkb,
               5,
               13,
             ).getFloat64(0, Endian.little);
             final lat = ByteData.sublistView(
-              geom,
+              pureWkb,
               13,
               21,
             ).getFloat64(0, Endian.little);
@@ -446,8 +465,29 @@ class GeoPackageFile {
         'z': 0,
         'm': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+      // 空間インデックスを作成（QGISでの認識を改善）
+      await _createSpatialIndex(name);
     } catch (e) {
       print('addLayer: エラー発生 - $e');
+    }
+  }
+
+  /// 空間インデックス作成（GeoPackageの空間インデックス機能を利用）
+  Future<void> _createSpatialIndex(String tableName) async {
+    try {
+      final db = await _getDatabase();
+
+      // SpatiaLiteスタイルの空間インデックス作成
+      // GeoPackageでは必須ではないが、QGISでの認識を改善
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_${tableName}_geom 
+        ON "$tableName" (geom)
+      ''');
+
+      print('[GeoPackageFile] 空間インデックス作成完了: $tableName');
+    } catch (e) {
+      print('[GeoPackageFile] 空間インデックス作成エラー: $e');
     }
   }
 

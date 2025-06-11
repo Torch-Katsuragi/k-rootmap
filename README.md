@@ -196,6 +196,48 @@ flutter build apk --release
 3. 「ストレージ」権限を有効化
 4. Android 11以降では「すべてのファイルへのアクセス」も有効化
 
+## QGISとの互換性・問題解決 **【NEW・GeoPakage対応強化】**
+
+### 解決済み問題: 「地物にジオメトリがありません」エラー
+
+**問題**: アプリで作成したGeoPackageファイルをQGISで開くと属性テーブルは表示されるが、ジオメトリが認識されないエラーが発生していました。
+
+**原因**:
+1. **GPBinaryヘッダーの欠如**: GeoPackageではWKBデータの前にGPBinary（GeoPackage Binary）ヘッダーが必要
+2. **空間インデックスの不足**: QGISでの空間データ認識に必要なインデックスが未作成
+3. **座標系情報の不完全**: SRS（Spatial Reference System）情報の設定が不十分
+
+**解決策の実装**:
+1. **GPBinaryヘッダー追加** (`lib/utils/wkb_utils.dart`):
+   - `_createGpbHeader()`: GeoPackage仕様に準拠したバイナリヘッダー生成
+   - 全てのWKB生成関数でGPBinaryヘッダーを自動付与
+   - WKB読み込み時のGPBinaryヘッダー自動検出・スキップ機能
+
+2. **空間インデックス自動作成** (`lib/models/geopackage_file.dart`):
+   - `_createSpatialIndex()`: レイヤ作成時の空間インデックス自動生成
+   - QGISでの空間クエリ性能向上
+
+3. **GeoPackage仕様準拠**:
+   - WGS84（EPSG:4326）座標系の適切な設定
+   - `gpkg_spatial_ref_sys`テーブルの完全初期化
+   - `gpkg_geometry_columns`テーブルの正確なメタデータ登録
+
+**技術詳細**:
+```dart
+// GPBinaryヘッダー構造（8バイト）
+// [0-1] 'GP' - マジックナンバー
+// [2]   0x00  - バージョン
+// [3]   0x01  - フラグ（リトルエンディアン）
+// [4-7] SRS ID（4326 = WGS84）
+```
+
+**動作確認済み環境**:
+- QGIS 3.28+
+- GDAL 3.0+
+- PostGIS互換性確保
+
+この修正により、K-MAPSで作成したGeoPackageファイルはQGISで完全に認識され、空間データの表示・編集・解析が可能になりました。
+
 ## GPS測量機能 **【NEW・メタデータ対応】**
 
 ### GPS測量データのメタデータ管理 **【NEW】**

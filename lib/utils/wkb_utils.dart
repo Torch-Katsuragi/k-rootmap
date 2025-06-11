@@ -3,10 +3,35 @@
 import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 
-/// WKB(Point)生成ユーティリティ
+/// GeoPackage GPBinaryヘッダーを生成
+Uint8List _createGpbHeader({
+  required int wkbType,
+  double? minX,
+  double? maxX,
+  double? minY,
+  double? maxY,
+}) {
+  final header = BytesBuilder();
+
+  // GPBHeader
+  header.addByte(0x47); // G
+  header.addByte(0x50); // P
+  header.addByte(0x00); // Version (0)
+  header.addByte(0x01); // Flags (little endian, no envelope)
+
+  // SRS ID (4326 for WGS84)
+  final srsBytes = ByteData(4)..setUint32(0, 4326, Endian.little);
+  header.add(srsBytes.buffer.asUint8List());
+
+  return header.toBytes();
+}
+
+/// WKB(Point)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbPoint(double lon, double lat) {
-  // リトルエンディアン: 0x01
-  // ジオメトリタイプ: 1 (POINT)
+  // GPBinaryヘッダー
+  final gpbHeader = _createGpbHeader(wkbType: 1);
+
+  // 標準WKBデータ
   final bytes = BytesBuilder();
   bytes.addByte(0x01); // little endian
   bytes.add([0x01, 0x00, 0x00, 0x00]); // type=1 (POINT)
@@ -14,11 +39,19 @@ Uint8List createWkbPoint(double lon, double lat) {
   bdata.setFloat64(0, lon, Endian.little); // X=lon
   bdata.setFloat64(8, lat, Endian.little); // Y=lat
   bytes.add(bdata.buffer.asUint8List());
-  return bytes.toBytes();
+
+  // GPBヘッダー + WKBデータを結合
+  final result = BytesBuilder();
+  result.add(gpbHeader);
+  result.add(bytes.toBytes());
+  return result.toBytes();
 }
 
-/// WKB(LineString)生成ユーティリティ
+/// WKB(LineString)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbLineString(List<LatLng> line) {
+  // GPBinaryヘッダー
+  final gpbHeader = _createGpbHeader(wkbType: 2);
+
   final bytes = BytesBuilder();
   bytes.addByte(0x01); // little endian
   bytes.add([0x02, 0x00, 0x00, 0x00]); // type=2 (LINESTRING)
@@ -31,11 +64,19 @@ Uint8List createWkbLineString(List<LatLng> line) {
     bdata.setFloat64(8, pt.latitude, Endian.little);
     bytes.add(bdata.buffer.asUint8List());
   }
-  return bytes.toBytes();
+
+  // GPBヘッダー + WKBデータを結合
+  final result = BytesBuilder();
+  result.add(gpbHeader);
+  result.add(bytes.toBytes());
+  return result.toBytes();
 }
 
-/// WKB(Polygon)生成ユーティリティ
+/// WKB(Polygon)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbPolygon(List<List<LatLng>> rings) {
+  // GPBinaryヘッダー
+  final gpbHeader = _createGpbHeader(wkbType: 3);
+
   final bytes = BytesBuilder();
   bytes.addByte(0x01); // little endian
   bytes.add([0x03, 0x00, 0x00, 0x00]); // type=3 (POLYGON)
@@ -53,24 +94,39 @@ Uint8List createWkbPolygon(List<List<LatLng>> rings) {
       bytes.add(bdata.buffer.asUint8List());
     }
   }
-  return bytes.toBytes();
+
+  // GPBヘッダー + WKBデータを結合
+  final result = BytesBuilder();
+  result.add(gpbHeader);
+  result.add(bytes.toBytes());
+  return result.toBytes();
 }
 
-/// WKB(LineString)デコードユーティリティ
+/// GPBinaryヘッダーをスキップしてWKBデータを取得
+Uint8List _skipGpbHeader(Uint8List data) {
+  // GPBinaryヘッダーは8バイト（GP + Version + Flags + SRS ID）
+  if (data.length > 8 && data[0] == 0x47 && data[1] == 0x50) {
+    return data.sublist(8);
+  }
+  return data; // 既に純粋なWKBの場合
+}
+
+/// WKB(LineString)デコードユーティリティ - GeoPackage対応
 List<LatLng> parseWkbLineString(Uint8List wkb) {
-  if (wkb.length < 9) return [];
-  final n = ByteData.sublistView(wkb, 5, 9).getUint32(0, Endian.little);
+  final pureWkb = _skipGpbHeader(wkb);
+  if (pureWkb.length < 9) return [];
+  final n = ByteData.sublistView(pureWkb, 5, 9).getUint32(0, Endian.little);
   final pts = <LatLng>[];
   for (int i = 0; i < n; i++) {
     final offset = 9 + i * 16;
-    if (offset + 16 > wkb.length) break;
+    if (offset + 16 > pureWkb.length) break;
     final lon = ByteData.sublistView(
-      wkb,
+      pureWkb,
       offset,
       offset + 8,
     ).getFloat64(0, Endian.little);
     final lat = ByteData.sublistView(
-      wkb,
+      pureWkb,
       offset + 8,
       offset + 16,
     ).getFloat64(0, Endian.little);
@@ -79,30 +135,35 @@ List<LatLng> parseWkbLineString(Uint8List wkb) {
   return pts;
 }
 
-/// WKB(Polygon)デコードユーティリティ
+/// WKB(Polygon)デコードユーティリティ - GeoPackage対応
 List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
-  if (wkb.length < 9) return [];
-  final nRings = ByteData.sublistView(wkb, 5, 9).getUint32(0, Endian.little);
+  final pureWkb = _skipGpbHeader(wkb);
+  if (pureWkb.length < 9) return [];
+  final nRings = ByteData.sublistView(
+    pureWkb,
+    5,
+    9,
+  ).getUint32(0, Endian.little);
   int offset = 9;
   final rings = <List<LatLng>>[];
   for (int r = 0; r < nRings; r++) {
-    if (offset + 4 > wkb.length) break;
+    if (offset + 4 > pureWkb.length) break;
     final nPts = ByteData.sublistView(
-      wkb,
+      pureWkb,
       offset,
       offset + 4,
     ).getUint32(0, Endian.little);
     offset += 4;
     final ring = <LatLng>[];
     for (int i = 0; i < nPts; i++) {
-      if (offset + 16 > wkb.length) break;
+      if (offset + 16 > pureWkb.length) break;
       final lon = ByteData.sublistView(
-        wkb,
+        pureWkb,
         offset,
         offset + 8,
       ).getFloat64(0, Endian.little);
       final lat = ByteData.sublistView(
-        wkb,
+        pureWkb,
         offset + 8,
         offset + 16,
       ).getFloat64(0, Endian.little);
@@ -112,4 +173,75 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
     rings.add(ring);
   }
   return rings;
+}
+
+/// WKBデータの妥当性を検証
+bool validateWkbData(Uint8List wkb) {
+  try {
+    // 最小サイズチェック
+    if (wkb.length < 8) {
+      print('[WKB検証] データサイズ不足: ${wkb.length}バイト');
+      return false;
+    }
+
+    // GPBinaryヘッダーチェック
+    if (wkb[0] == 0x47 && wkb[1] == 0x50) {
+      print('[WKB検証] GPBinaryヘッダー検出済み');
+      if (wkb.length < 29) {
+        // GPB(8) + WKB最小(21)
+        print('[WKB検証] GPBinary + WKBデータサイズ不足');
+        return false;
+      }
+
+      // SRS IDチェック
+      final srsId = ByteData.sublistView(wkb, 4, 8).getUint32(0, Endian.little);
+      print('[WKB検証] SRS ID: $srsId');
+
+      return true;
+    } else {
+      print('[WKB検証] 純粋WKBデータ（GPBinaryヘッダーなし）');
+      return wkb.length >= 21; // WKB最小サイズ
+    }
+  } catch (e) {
+    print('[WKB検証] エラー: $e');
+    return false;
+  }
+}
+
+/// WKBデータの詳細情報を出力（デバッグ用）
+void debugWkbData(Uint8List wkb, String context) {
+  print('=== WKBデバッグ情報 [$context] ===');
+  print('データサイズ: ${wkb.length}バイト');
+  print(
+    '先頭16バイト: ${wkb.take(16).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+  );
+
+  if (wkb.length >= 8 && wkb[0] == 0x47 && wkb[1] == 0x50) {
+    final srsId = ByteData.sublistView(wkb, 4, 8).getUint32(0, Endian.little);
+    print('GPBinaryヘッダー: あり（SRS ID: $srsId）');
+
+    if (wkb.length > 8) {
+      final wkbPart = wkb.sublist(8);
+      if (wkbPart.length >= 5) {
+        final geomType = ByteData.sublistView(
+          wkbPart,
+          1,
+          5,
+        ).getUint32(0, Endian.little);
+        print('ジオメトリタイプ: $geomType');
+      }
+    }
+  } else {
+    print('GPBinaryヘッダー: なし');
+    if (wkb.length >= 5) {
+      final geomType = ByteData.sublistView(
+        wkb,
+        1,
+        5,
+      ).getUint32(0, Endian.little);
+      print('ジオメトリタイプ: $geomType');
+    }
+  }
+  print('妥当性: ${validateWkbData(wkb) ? "OK" : "NG"}');
+  print('==============================');
 }

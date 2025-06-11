@@ -20,8 +20,11 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
   - GPS権限・サービス状態の事前確認
   - エラーハンドリングとログ出力の最適化
 
-### 2. 地図表示・ナビゲーション **【フィーチャ表示改善】**
-- OpenStreetMapベースの地図表示
+### 2. 地図表示・ナビゲーション **【背景地図機能追加・フィーチャ表示改善】**
+- **複数背景地図対応**: OpenStreetMap、国土地理院地図（標準、淡色、写真、標高、白地図）の選択可能 **【NEW】**
+- **オフライン機能**: 一度表示した地図タイルを自動キャッシュ、オフライン時も利用可能 **【NEW】**
+- **キャッシュ管理**: プロバイダー別キャッシュサイズ表示・個別/全体クリア機能 **【NEW】**
+- **背景地図設定画面**: プロバイダー選択、オフラインモード切り替え、キャッシュ統計表示 **【NEW】**
 - レイヤ構造での地理情報管理（点・線・面）
 - フリーハンド描画とタップによる図形作成
 - フィーチャの選択・編集・削除
@@ -83,15 +86,20 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 ### 主要パッケージ
 ```yaml
 dependencies:
-  flutter_map: ^7.0.2           # 地図表示
-  latlong2: ^0.9.1              # 緯度経度計算
+  flutter_map: ^6.1.0           # 地図表示
+  latlong2: ^0.9.0              # 緯度経度計算
   sqflite: ^2.3.0               # データベース
-  geolocator: ^12.0.0           # GPS位置情報
+  geolocator: ^10.1.0           # GPS位置情報
   flutter_bluetooth_serial: ^0.4.0  # Bluetooth接続
   nmea: ^2.0.0                  # NMEAデータ解析
   file_picker: ^10.1.9          # ファイル選択
   flutter_background_service: ^5.0.9  # フォアグラウンドサービス
   permission_handler: ^11.3.1  # Android権限管理
+  # オフライン機能・キャッシュ用パッケージ **【NEW】**
+  path_provider: ^2.1.4         # アプリディレクトリ取得
+  shared_preferences: ^2.3.2    # 設定保存
+  crypto: ^3.0.5                # ハッシュ化
+  http: ^1.2.2                  # HTTP通信（背景地図ダウンロード）
 ```
 
 ## 主要ファイル・クラス構成
@@ -99,17 +107,21 @@ dependencies:
 ### モデル層
 - `lib/models/geopackage_file.dart`: GeoPackageファイル管理・DB操作（メタデータ対応） **【更新】**
 - `lib/models/layer_tree_node.dart`: レイヤツリー構造・ノード管理（メタデータ対応） **【更新】**
+- `lib/models/basemap_provider.dart`: 背景地図プロバイダー定義・管理 **【NEW】**
 - `lib/models/bluetooth_gnss_service.dart`: Bluetooth GNSS接続・NMEAデータ解析
 - `lib/models/gps_track.dart`: GPS軌跡データ・ポイント管理
-- `lib/utils/global_config.dart`: アプリケーション全体の設定管理（GPS設定含む） **【NEW】**
+- `lib/utils/global_config.dart`: アプリケーション全体の設定管理（GPS・背景地図設定含む） **【更新】**
 - `lib/utils/global_gnss_manager.dart`: GNSS接続のグローバル管理・永続化
 
 ### 画面・UI層
 - `lib/screens/map_page.dart`: 地図表示・編集のメイン画面
+- `lib/screens/basemap_settings_screen.dart`: 背景地図設定画面（プロバイダー選択・オフライン・キャッシュ管理） **【NEW】**
 - `lib/screens/gps_settings_screen.dart`: GPS設定画面
 - `lib/widgets/layer_drawer.dart`: レイヤ管理ドロワーUI
+- `lib/widgets/cached_tile_layer.dart`: キャッシュ機能付きカスタムタイルレイヤー **【NEW】**
 
 ### サービス層
+- `lib/services/basemap_service.dart`: 背景地図管理・オフラインキャッシュサービス **【NEW】**
 - `lib/services/foreground_service.dart`: GPS/GNSS追跡フォアグラウンドサービス
 - `lib/services/gps_manager_service.dart`: **統合GPS管理サービス（本格実装・連続測量機能対応）** **【NEW・更新】**
 
@@ -133,13 +145,27 @@ dependencies:
 
 ### 基本操作
 1. **プロジェクト作成**: ホーム画面でプロジェクトフォルダを選択
-2. **GeoPackage作成**: ドロワーの「+」ボタン（ストレージアイコン）で空のGeoPackageファイルを即座に作成 **【即座作成】**
-3. **レイヤ作成**: 作成したGeoPackageを展開し、「Add Layer」でレイヤを追加
-4. **描画**: ツールバーでペンツールを選択し、地図上で描画
-5. **編集**: 選択ツールでフィーチャを選択し、属性編集・位置調整
-6. **属性テーブル表示**: レイヤドロワーでレイヤの「...」メニューから「属性テーブル」を選択
-7. **TSVエクスポート**: 属性テーブル画面のダウンロードアイコンをクリックしてTSV出力 **【NEW】**
-8. **メタデータTSVエクスポート**: メタデータ表示ダイアログのダウンロードアイコンをクリックして(gpkg名)_(レイヤ名)_(フィーチャ名)_metadata_table.tsv形式でTSV出力（フィーチャ名はFeatureNode.nameを使用） **【NEW】**
+2. **背景地図設定**: マップ画面右上の地図アイコンから背景地図設定画面にアクセス、プロバイダー選択・オフラインモード設定 **【NEW】**
+3. **GeoPackage作成**: ドロワーの「+」ボタン（ストレージアイコン）で空のGeoPackageファイルを即座に作成 **【即座作成】**
+4. **レイヤ作成**: 作成したGeoPackageを展開し、「Add Layer」でレイヤを追加
+5. **描画**: ツールバーでペンツールを選択し、地図上で描画
+6. **編集**: 選択ツールでフィーチャを選択し、属性編集・位置調整
+7. **属性テーブル表示**: レイヤドロワーでレイヤの「...」メニューから「属性テーブル」を選択
+8. **TSVエクスポート**: 属性テーブル画面のダウンロードアイコンをクリックしてTSV出力 **【NEW】**
+9. **メタデータTSVエクスポート**: メタデータ表示ダイアログのダウンロードアイコンをクリックして(gpkg名)_(レイヤ名)_(フィーチャ名)_metadata_table.tsv形式でTSV出力（フィーチャ名はFeatureNode.nameを使用） **【NEW】**
+
+### 背景地図・オフライン機能 **【NEW】**
+1. **背景地図選択**: マップ画面右上の地図アイコン→背景地図設定→希望のプロバイダーを選択
+2. **オフラインモード**: 背景地図設定画面でオフラインモードを有効化（ネットワーク使用停止）
+3. **自動キャッシュ**: 表示した地図タイルは自動的にローカルストレージにキャッシュ保存
+4. **キャッシュ管理**: 背景地図設定画面でプロバイダー別キャッシュサイズ確認・個別/全体クリア
+5. **利用可能プロバイダー**:
+   - OpenStreetMap（世界地図）
+   - 国土地理院標準地図（日本の詳細地図）
+   - 国土地理院淡色地図（背景用）
+   - 国土地理院航空写真
+   - 国土地理院色別標高図
+   - 国土地理院白地図
 
 ### GPS・GNSS接続 **【外部GNSS強化】**
 1. **内蔵GPS**: アプリ起動時は待機状態で初期化、GPS測量・追跡開始時に位置情報取得を開始 **【効率化】**
@@ -864,14 +890,30 @@ adb logcat | grep flutter
 
 ## 更新履歴
 
-### v1.2.0 (最新) **【NEW】**
+### v1.3.0 (最新) **【Flutter Map v8対応】**
+- **🎉 Flutter Map v8.1.1への完全移行**
+  - MapOptionsの新API対応（`initialCenter`, `initialZoom`, `interactionOptions`）
+  - MapCameraの座標変換API対応（`offsetToCrs`, `latLngToScreenOffset`）
+  - MapControllerのAPI変更対応（`camera.zoom`, `camera.center`等）
+  - Polygonの`isFilled`プロパティ削除対応
+- **🗺️ 背景地図プロバイダーシステムの実装**
+  - OpenStreetMap、GSI地理院地図（標準・淡色・写真・色別標高図・白地図）
+  - 背景地図設定画面の実装、プロバイダー切り替え機能
+- **💾 高性能タイルキャッシュ機能**
+  - オフライン表示対応、プロバイダー別管理、キャッシュ統計表示
+  - フォールバック機能（親タイルからの切り出し・スケーリング）
+  - 高ズームレベルでの安定表示
+- **🔧 map_tool系の完全修復**
+  - パンツール、ペンツール、選択ツール等の座標変換問題を解決
+  - Flutter Map v8の新しい座標変換APIに完全対応
+  - 描画プレビュー表示の復旧
+
+### v1.2.0 **【GPS軌跡記録】**
 - GPS軌跡記録・保存機能を追加
 - フォアグラウンドサービスによるバックグラウンド追跡対応
 - 軌跡統計情報表示（距離・ポイント数・GNSS/GPS比率）
 - **ジオメトリタイプの表記を単一系（POINT, LINESTRING, POLYGON）に統一**
 - **型安全性向上のためGeometryTypeエナムを導入**
-- MULTI系表記（MULTIPOINT, MULTILINESTRING, MULTIPOLYGON）を削除し、単一系で統一
-- 文字列リテラルによるジオメトリタイプ指定を廃止し、enum使用で型安全性を向上
 - **属性テーブルの自動再読み込み問題を修正**
 - GPS追跡サービス状態更新の最適化（1秒→5秒間隔、変化時のみ更新）
 - 属性テーブルのスクロール位置保持機能を追加

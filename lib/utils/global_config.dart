@@ -8,6 +8,7 @@ import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
+import '../services/basemap_service.dart';
 
 class GlobalConfig {
   // シングルトンインスタンス
@@ -42,6 +43,9 @@ class GlobalConfig {
 
   /// 左下フロートボタンの押下状態（true: 押下中, false: 通常）
   bool isFabActive = false;
+
+  /// 背景地図管理サービス
+  final BaseMapService baseMapService = BaseMapService();
 
   /// GPS関連の設定
   String? preferredGpsSourceType; // 'internal' または 'external'

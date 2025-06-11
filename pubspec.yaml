@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_map: ^6.1.0 # 地図表示用
+  flutter_map: ^8.1.1 # 地図表示用（最新版にアップデート）
   latlong2: ^0.9.0 # 緯度経度座標型
   geolocator: ^10.1.0 # GPS位置情報取得
   file_picker: ^10.1.9 # ファイル・ディレクトリ選択用（最新版に更新）
@@ -38,6 +38,13 @@ dependencies:
   sqflite_common_ffi: ^2.3.0 # デスクトップ環境用sqfliteサポート
   path: ^1.8.3 # パス操作用
   nmea: ^2.0.0
+  
+  # オフライン機能・キャッシュ用パッケージ
+  path_provider: ^2.1.4              # アプリディレクトリ取得用
+  shared_preferences: ^2.3.2         # 設定保存用
+  crypto: ^3.0.5                     # ハッシュ化用
+  http: ^1.2.2                       # HTTP通信用（背景地図ダウンロード）
+  image: ^4.2.0                      # 画像処理用（タイル切り出し・スケーリング）
   
   # Bluetooth GNSS接続用パッケージ
   flutter_bluetooth_serial: ^0.4.0  # Bluetooth Classic接続用

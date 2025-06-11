@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 // pointerEvents用
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map/flutter_map.dart' show CustomPoint;
+import 'package:flutter_map/flutter_map.dart';
 import 'dart:math';
 import '../utils/global_config.dart'; // SelectToolアクセス用
 
@@ -32,9 +32,9 @@ class PanTool extends MapTool {
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
     _lastFocalPoint = details.localFocalPoint;
-    _startZoom = mapState.mapController.zoom;
-    _startRotation = mapState.mapController.rotation;
-    _startCenter = mapState.mapController.center;
+    _startZoom = mapState.mapController.camera.zoom;
+    _startRotation = mapState.mapController.camera.rotation;
+    _startCenter = mapState.mapController.camera.center;
   }
 
   /// スケール更新イベント
@@ -44,18 +44,17 @@ class PanTool extends MapTool {
     final delta = details.localFocalPoint - _lastFocalPoint!;
     _lastFocalPoint = details.localFocalPoint;
     final mapController = mapState.mapController;
-    final center = mapController.center;
+    final center = mapController.camera.center;
     final zoom = _startZoom! + log(details.scale) / ln2;
     // mapcontrollerはdegreeであるが、details.rotationはラジアンなので変換する必要がある
     final rotation = _startRotation! + details.rotation * 180 / pi;
+
+    // Flutter Map v8の正しい座標変換を使用
     final centerPx = mapState.latLngToOffset(center);
     final newCenterPx = centerPx - delta;
-    final newCenter = mapController.pointToLatLng(
-      CustomPoint(newCenterPx.dx, newCenterPx.dy),
-    );
-    if (newCenter != null) {
-      mapController.moveAndRotate(newCenter, zoom, rotation);
-    }
+    final newCenter = mapState.offsetToLatLng(newCenterPx);
+
+    mapController.moveAndRotate(newCenter, zoom, rotation);
   }
 
   /// スケール終了イベント

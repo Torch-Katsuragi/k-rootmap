@@ -13,7 +13,10 @@ import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
+import '../widgets/cached_tile_layer.dart';
 import '../utils/global_config.dart';
+import '../models/basemap_provider.dart';
+import '../screens/basemap_settings_screen.dart';
 // import 'package:sqlite3/sqlite3.dart' as sql; // sqflite移行により削除
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
@@ -128,6 +131,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     // GPS追跡サービス状態の初期化
     _updateGpsTrackingServiceStatus();
 
+    // 背景地図サービス初期化
+    _initializeBaseMapService();
+
     // 定期的にサービス状態を更新（10秒間隔に変更、かつ変化がある時のみ更新）
     // LayerDrawerに影響を与えないよう、更新頻度を最小限に抑制
     _serviceStatusUpdateTimer = Timer.periodic(Duration(seconds: 10), (timer) {
@@ -164,6 +170,28 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       if (child is FolderNode || child is GeoPackageNode) {
         await _updateNodeRecursively(child);
       }
+    }
+  }
+
+  /// 背景地図サービス初期化
+  Future<void> _initializeBaseMapService() async {
+    try {
+      print('[DEBUG] BaseMapService: 初期化開始');
+      await GlobalConfig.instance.baseMapService.initialize();
+
+      // 背景地図サービスの変更を監視
+      GlobalConfig.instance.baseMapService.addListener(_onBaseMapServiceUpdate);
+
+      print('[DEBUG] BaseMapService: 初期化完了');
+    } catch (e) {
+      print('[ERROR] BaseMapService: 初期化エラー: $e');
+    }
+  }
+
+  /// 背景地図サービス更新コールバック
+  void _onBaseMapServiceUpdate() {
+    if (mounted) {
+      setState(() {}); // 背景地図が変更された時にUIを更新
     }
   }
 
@@ -259,6 +287,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   @override
   void dispose() {
     _gpsManager.removeListener(_onGpsManagerUpdate);
+    GlobalConfig.instance.baseMapService.removeListener(
+      _onBaseMapServiceUpdate,
+    );
     // GPS取得を停止（測量モードでない場合のみ）
     if (_gpsManager.isGpsActive && !_gpsManager.isSurveyMode) {
       _gpsManager.stopGps();
@@ -947,21 +978,27 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   // --- Screen coordinates to map coordinates conversion ---
   LatLng offsetToLatLng(Offset offset) {
-    // Use FlutterMap's Pixel to LatLng conversion API
-    // Reference: https://pub.dev/documentation/flutter_map/latest/flutter_map/MapController/pointToLatLng.html
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return _center;
-    final local = renderBox.globalToLocal(offset);
-    final point = CustomPoint(local.dx, local.dy);
-    final latlng = _mapController.pointToLatLng(point);
-    return latlng ?? _center;
+    // Flutter Map v8での正しい座標変換API
+    try {
+      final camera = _mapController.camera;
+      return camera.offsetToCrs(offset);
+    } catch (e) {
+      print('[ERROR] offsetToLatLng failed: $e');
+      return _mapController.camera.center;
+    }
   }
 
   // --- Map coordinates to screen pixel conversion ---
   Offset latLngToOffset(LatLng latlng) {
-    // Use MapController's latLngToScreenPoint
-    final point = _mapController.latLngToScreenPoint(latlng);
-    return Offset(point.x.toDouble(), point.y.toDouble());
+    // Flutter Map v8での正しい座標変換API
+    try {
+      final camera = _mapController.camera;
+      return camera.latLngToScreenOffset(latlng);
+    } catch (e) {
+      print('[ERROR] latLngToOffset failed: $e');
+      final size = MediaQuery.of(context).size;
+      return Offset(size.width / 2, size.height / 2);
+    }
   }
 
   /// フィーチャデータを非同期で更新（キャッシュに保存）
@@ -1097,6 +1134,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       appBar: AppBar(
         title: const Text('K-MAPS GIS'),
         actions: [
+          // 背景地図設定ボタン
+          IconButton(
+            icon: const Icon(Icons.map_outlined),
+            tooltip: '背景地図設定',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BaseMapSettingsScreen(),
+                ),
+              );
+            },
+          ),
           // GPS設定ボタン
           IconButton(
             icon: const Icon(Icons.gps_fixed),
@@ -1276,18 +1326,21 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    center: _center,
-                    zoom: 16.0,
-                    interactiveFlags:
-                        isPanTool
-                            ? InteractiveFlag.all
-                            : InteractiveFlag.pinchZoom,
+                    initialCenter: _center,
+                    initialZoom: 16.0,
+                    interactionOptions: InteractionOptions(
+                      flags:
+                          isPanTool
+                              ? InteractiveFlag.all
+                              : InteractiveFlag.pinchZoom,
+                    ),
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.k_maps',
+                    // キャッシュ機能付き背景地図タイルレイヤー
+                    CachedTileLayer(
+                      provider:
+                          GlobalConfig.instance.baseMapService.currentProvider,
+                      baseMapService: GlobalConfig.instance.baseMapService,
                     ),
                     PolylineLayer(
                       polylines: [
@@ -1370,7 +1423,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     )
                                     ? Colors.yellow
                                     : Colors.green,
-                            isFilled: true,
                           ),
                         // --- GPS survey polygon preview ---
                         if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1386,7 +1438,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             color: Colors.purple.withOpacity(0.4),
                             borderStrokeWidth: 4.0,
                             borderColor: Colors.purple,
-                            isFilled: true,
                           ),
                         // --- Pen tool polygon preview ---
                         if (GlobalConfig.instance.currentTool is PenTool &&
@@ -1402,7 +1453,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             color: Colors.orange.withOpacity(0.4),
                             borderStrokeWidth: 3.0,
                             borderColor: Colors.orange,
-                            isFilled: true,
                           ),
                         // --- SelectTool lasso preview ---
                         if (GlobalConfig.instance.currentTool is SelectTool &&
@@ -1420,7 +1470,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             color: Colors.white.withOpacity(0.2),
                             borderStrokeWidth: 2.0,
                             borderColor: Colors.black,
-                            isFilled: true,
                           ),
                       ],
                     ),
@@ -1813,7 +1862,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           setStateCallback: (fn) => setState(fn),
                           onJumpTo: (latLng) {
                             // Maintain current zoom level and move center
-                            _mapController.move(latLng, _mapController.zoom);
+                            _mapController.move(
+                              latLng,
+                              _mapController.camera.zoom,
+                            );
                           },
                         ),
                       ),

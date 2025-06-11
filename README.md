@@ -86,7 +86,7 @@ K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーショ�
 ### 主要パッケージ
 ```yaml
 dependencies:
-  flutter_map: ^6.1.0           # 地図表示
+  flutter_map: ^8.1.1           # 地図表示（最新版にアップデート）
   latlong2: ^0.9.0              # 緯度経度計算
   sqflite: ^2.3.0               # データベース
   geolocator: ^10.1.0           # GPS位置情報
@@ -1052,3 +1052,66 @@ GPS測量完了後のデータ収集継続問題を解決し、Bluetooth接続�
 - 外部GNSS接続は`_stopGpsKeepingBluetoothConnection()`で維持
 
 これにより、測量効率とリソース効率を両立した安定動作が実現されます。
+
+## プラットフォーム固有の問題と解決策 **【重要・Windows環境対応】**
+
+### Windows環境でのflutter_map 8.x フリーズ問題
+
+**問題**: flutter_mapをv8.xにアップデート後、Windows環境でマップ表示直後にアプリケーションがフリーズする現象が発生
+
+**原因**:
+1. **カスタムタイルプロバイダーの問題**: flutter_map 8.xで導入されたカスタムタイルプロバイダー（`CachedTileProvider`）がWindows環境でのメモリ管理・スレッド処理に問題
+2. **画像デコーディングAPI変更**: Flutter SDKのImageDecoderCallback APIの変更による非互換性
+3. **Windows固有のレンダリング問題**: DPIスケーリングとハードウェアアクセラレーションの競合
+
+**解決策の実装**:
+
+1. **標準TileLayerへの回帰** (`lib/screens/map_page.dart`):
+```dart
+// Windows環境での安定性を優先して標準TileLayerを使用
+TileLayer(
+  urlTemplate: provider.urlTemplate,
+  userAgentPackageName: 'k-maps',
+  maxZoom: 22.0,
+  minZoom: provider.minZoom.toDouble(),
+  // Windows環境でのパフォーマンス向上設定
+  evictErrorTileStrategy: EvictErrorTileStrategy.dispose,
+  retinaMode: false, // Windows環境での安定性を優先
+  tileSize: 256,
+),
+```
+
+2. **Windows環境でのビルド設定最適化**:
+```cpp
+// 基本的なCOM初期化のみ実行（追加ライブラリ依存を回避）
+::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+```
+
+3. **MapOptions設定の最適化**:
+```dart
+MapOptions(
+  // Windows環境での安定性向上設定
+  keepAlive: true,
+  // その他の設定...
+)
+```
+
+**現在の状況**:
+- **Android/iOS環境**: 全機能（キャッシュ機能含む）が正常動作
+- **Windows環境**: 安定性優先で標準TileLayerを使用、背景地図選択は利用可能、オフラインキャッシュ機能は一時無効化
+- **将来の改善**: flutter_map v8.x のWindows対応が改善され次第、全機能を再有効化予定
+
+### プラットフォーム別動作確認状況
+
+| 機能 | Android | iOS | Windows | 備考 |
+|------|---------|-----|---------|------|
+| 基本地図表示 | ✅ | ✅ | ✅ | 全プラットフォーム対応 |
+| 背景地図選択 | ✅ | ✅ | ✅ | Windows環境では標準TileLayer使用 |
+| オフラインキャッシュ | ✅ | ✅ | ⚠️ | Windows環境では一時無効化 |
+| GPS測量 | ✅ | ✅ | ✅ | 全プラットフォーム対応 |
+| Bluetooth GNSS | ✅ | ⚠️ | ❌ | iOS制限・Windows未対応 |
+| フォアグラウンドサービス | ✅ | ⚠️ | ❌ | モバイル専用機能 |
+
+---
+
+**開発者向けメモ**: 本プロジェクトは継続的な機能拡張を想定して設計されており、各機能は独立性と再利用性を重視した実装となっています。Windows環境でのflutter_map v8.x 対応は今後のアップデートで改善予定です。

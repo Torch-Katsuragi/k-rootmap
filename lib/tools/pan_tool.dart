@@ -54,7 +54,7 @@ class PanTool extends MapTool {
     final newCenterPx = centerPx - delta;
     final newCenter = mapState.offsetToLatLng(newCenterPx);
 
-    mapController.moveAndRotate(newCenter, zoom, rotation);
+      mapController.moveAndRotate(newCenter, zoom, rotation);
   }
 
   /// スケール終了イベント

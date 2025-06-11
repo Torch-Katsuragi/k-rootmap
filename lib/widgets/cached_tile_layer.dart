@@ -213,3 +213,4 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
   @override
   int get hashCode => Object.hash(coordinates, provider.id);
 }
+ 

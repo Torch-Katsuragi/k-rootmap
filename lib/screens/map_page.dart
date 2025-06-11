@@ -2180,11 +2180,17 @@ class FeatureDetailPanel extends StatelessWidget {
     if (feature == null) return const SizedBox.shrink();
     if (feature is FeatureNode) {
       final entries = feature.detailEntries;
+      // metadataを含む属性名の項目を除外
+      final filteredEntries =
+          entries
+              .where((entry) => !entry.key.toLowerCase().contains('metadata'))
+              .toList();
+
       return _buildPanel(
         context,
         title: feature.runtimeType.toString(),
         children: [
-          for (final e in entries)
+          for (final e in filteredEntries)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2212,6 +2218,9 @@ class FeatureDetailPanel extends StatelessWidget {
       color: Colors.white,
       child: Container(
         width: 220,
+        constraints: const BoxConstraints(
+          maxHeight: 300, // 最大高さを300pxに制限
+        ),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
@@ -2226,7 +2235,15 @@ class FeatureDetailPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
-            ...children,
+            // スクロール可能にしつつ、内容に応じて縮小
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: children,
+                ),
+              ),
+            ),
           ],
         ),
       ),

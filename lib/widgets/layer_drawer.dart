@@ -749,13 +749,99 @@ class LayerDrawerTitleBar extends StatelessWidget {
 /// メタデータ表示ダイアログ
 class MetadataTableDialog extends StatelessWidget {
   final MetadataTableData tableData;
+  final String gpkgName;
+  final String layerName;
+  final String featureName;
 
-  const MetadataTableDialog({super.key, required this.tableData});
+  const MetadataTableDialog({
+    super.key,
+    required this.tableData,
+    required this.gpkgName,
+    required this.layerName,
+    required this.featureName,
+  });
+
+  /// メタデータテーブルのTSVエクスポート処理
+  Future<void> _exportMetadataToTSV(BuildContext context) async {
+    try {
+      // プロジェクトルートディレクトリを取得
+      final projectRoot = GlobalConfig.instance.projectRootDir;
+      if (projectRoot == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('プロジェクトルートディレクトリが見つかりません')),
+        );
+        return;
+      }
+
+      // ファイル名を生成（指定された形式に変更）
+      final safeGpkgName = gpkgName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+      final safeLayerName = layerName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+      final safeFeatureName = featureName.replaceAll(
+        RegExp(r'[<>:"/\\|?*]'),
+        '_',
+      );
+      final tsvFileName =
+          '${safeGpkgName}_${safeLayerName}_${safeFeatureName}_metadata_table.tsv';
+      final tsvPath = p.join(projectRoot, tsvFileName);
+
+      print('[MetadataTable] TSVエクスポート開始: $tsvPath');
+
+      // TSVファイルを作成
+      final tsvFile = File(tsvPath);
+      final sink = tsvFile.openWrite();
+
+      // ヘッダー行を書き込み
+      final headerLine = tableData.headers.map(_escapeTsvField).join('\t');
+      sink.writeln(headerLine);
+
+      // データ行を書き込み
+      for (final row in tableData.rows) {
+        final escapedRow = row.map(_escapeTsvField).join('\t');
+        sink.writeln(escapedRow);
+      }
+
+      await sink.close();
+
+      print('[MetadataTable] TSVエクスポート完了: $tsvPath');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('メタデータTSVファイルを出力しました:\n$tsvFileName'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e, stackTrace) {
+      print('[MetadataTable] TSVエクスポートエラー: $e');
+      print('[MetadataTable] スタックトレース: $stackTrace');
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('メタデータTSVエクスポートに失敗しました: $e')));
+    }
+  }
+
+  /// TSV用フィールドエスケープ処理
+  String _escapeTsvField(String field) {
+    // タブ、改行、復帰文字を置換してエスケープ
+    return field
+        .replaceAll('\t', ' ') // タブをスペースに置換
+        .replaceAll('\n', ' ') // 改行をスペースに置換
+        .replaceAll('\r', ' '); // 復帰文字をスペースに置換
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(tableData.title),
+      title: Row(
+        children: [
+          Expanded(child: Text(tableData.title)),
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            tooltip: 'TSVエクスポート',
+            onPressed: () => _exportMetadataToTSV(context),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: double.maxFinite,
         height: 400,
@@ -854,7 +940,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
   }
 
   /// メタデータダイアログを表示
-  void _showMetadataDialog(BuildContext context, String metadataStr) {
+  void _showMetadataDialog(
+    BuildContext context,
+    String metadataStr,
+    FeatureNode featureNode,
+  ) {
     try {
       // デバッグ出力
       // print('[AttributeTable] メタデータ文字列: $metadataStr');
@@ -867,9 +957,27 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
       // print('[AttributeTable] パース結果: $tableData');
 
       if (tableData != null) {
+        // GeoPackage名とレイヤ名を取得
+        final gpkgPath = widget.layerNode.geoPackageFile.getAbsolutePath();
+        final gpkgName =
+            gpkgPath != null ? p.basenameWithoutExtension(gpkgPath) : 'unknown';
+        final layerName = widget.layerNode.layerName;
+
+        // フィーチャ名を取得（FeatureNodeのnameを使用、利用できない場合はID）
+        final featureName =
+            featureNode.name.isNotEmpty
+                ? featureNode.name
+                : 'feature_${featureNode.rowId}';
+
         showDialog(
           context: context,
-          builder: (context) => MetadataTableDialog(tableData: tableData),
+          builder:
+              (context) => MetadataTableDialog(
+                tableData: tableData,
+                gpkgName: gpkgName,
+                layerName: layerName,
+                featureName: featureName,
+              ),
         );
       } else {
         _showRawMetadataDialog(context, metadataStr);
@@ -914,6 +1022,91 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
     return _dataFuture!;
   }
 
+  /// TSVエクスポート処理
+  Future<void> _exportToTSV(BuildContext context) async {
+    try {
+      // データを取得
+      final tableData = await _getTableData();
+      final columns = tableData[0] as List<String>;
+      final features = tableData[1] as List<FeatureNode>;
+
+      // エクスポート先パスを構築
+      final gpkgPath = widget.layerNode.geoPackageFile.getAbsolutePath();
+      if (gpkgPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GeoPackageファイルのパスが見つかりません')),
+        );
+        return;
+      }
+
+      final gpkgDir = p.dirname(gpkgPath);
+      final gpkgName = p.basenameWithoutExtension(gpkgPath);
+      final layerName = widget.layerNode.layerName;
+      final tsvFileName = '${gpkgName}_${layerName}_propety_table.tsv';
+      final tsvPath = p.join(gpkgDir, tsvFileName);
+
+      print('[AttributeTable] TSVエクスポート開始: $tsvPath');
+
+      // TSVファイルを作成
+      final tsvFile = File(tsvPath);
+      final sink = tsvFile.openWrite();
+
+      // ヘッダー行を書き込み（TSVエスケープ付き）
+      final headerLine = columns.map(_escapeTsvField).join('\t');
+      sink.writeln(headerLine);
+
+      // データ行を書き込み
+      for (final feature in features) {
+        final rowValues = <String>[];
+
+        for (final col in columns) {
+          if (col == 'geom') {
+            // geomカラムは'GEOMETRY'として出力
+            rowValues.add(_escapeTsvField('GEOMETRY'));
+          } else {
+            try {
+              final value = await feature.getAttributeValue(col);
+              rowValues.add(_escapeTsvField(value?.toString() ?? ''));
+            } catch (e) {
+              print('[AttributeTable] 属性値取得エラー (col: $col): $e');
+              rowValues.add(_escapeTsvField(''));
+            }
+          }
+        }
+
+        final rowLine = rowValues.join('\t');
+        sink.writeln(rowLine);
+      }
+
+      await sink.close();
+
+      print('[AttributeTable] TSVエクスポート完了: $tsvPath');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('TSVファイルを出力しました:\n$tsvFileName'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e, stackTrace) {
+      print('[AttributeTable] TSVエクスポートエラー: $e');
+      print('[AttributeTable] スタックトレース: $stackTrace');
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('TSVエクスポートに失敗しました: $e')));
+    }
+  }
+
+  /// TSV用フィールドエスケープ処理
+  String _escapeTsvField(String field) {
+    // タブ、改行、復帰文字を置換してエスケープ
+    return field
+        .replaceAll('\t', ' ') // タブをスペースに置換
+        .replaceAll('\n', ' ') // 改行をスペースに置換
+        .replaceAll('\r', ' '); // 復帰文字をスペースに置換
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -954,6 +1147,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                     showAllColumns = !showAllColumns;
                   });
                 },
+              ),
+              IconButton(
+                icon: const Icon(Icons.file_download, color: Colors.white),
+                tooltip: 'TSVエクスポート',
+                onPressed: () => _exportToTSV(context),
               ),
             ],
           ),
@@ -1080,6 +1278,7 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                               _showMetadataDialog(
                                                 context,
                                                 metadataStr,
+                                                feature,
                                               );
                                             },
                                             child: const Text(

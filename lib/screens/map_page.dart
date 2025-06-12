@@ -94,6 +94,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   List<PointFeatureNode> _pointFeatures = [];
   List<LineFeatureNode> _lineFeatures = [];
   List<PolygonFeatureNode> _polygonFeatures = [];
+  List<PhotoNode> _photoNodes = []; // PhotoNode用キャッシュ追加
 
   // Public getter added
   MapController get mapController => _mapController;
@@ -1017,6 +1018,15 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     final pointFeatures = <PointFeatureNode>[];
     final lineFeatures = <LineFeatureNode>[];
     final polygonFeatures = <PolygonFeatureNode>[];
+    final photoNodes = <PhotoNode>[]; // PhotoNode収集用リスト追加
+
+    // PhotoNodeを収集（FolderNode配下を再帰的に検索）
+    if (folderTree != null) {
+      _collectPhotoNodesRecursive(folderTree, photoNodes);
+    }
+    print(
+      '[DEBUG] _updateFeatures: collected ${photoNodes.length} photo nodes',
+    );
 
     for (final layer in visibleLayers) {
       print(
@@ -1096,7 +1106,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
 
     print(
-      '[DEBUG] _updateFeatures: total features - points:${pointFeatures.length}, lines:${lineFeatures.length}, polygons:${polygonFeatures.length}',
+      '[DEBUG] _updateFeatures: total features - points:${pointFeatures.length}, lines:${lineFeatures.length}, polygons:${polygonFeatures.length}, photos:${photoNodes.length}',
     );
 
     if (mounted) {
@@ -1104,12 +1114,29 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         _pointFeatures = pointFeatures;
         _lineFeatures = lineFeatures;
         _polygonFeatures = polygonFeatures;
+        _photoNodes = photoNodes; // PhotoNodeキャッシュを更新
       });
       print('[DEBUG] _updateFeatures: state updated successfully');
     } else {
       print(
         '[DEBUG] _updateFeatures: widget not mounted, skipping state update',
       );
+    }
+  }
+
+  /// PhotoNodeを再帰的に収集する補助メソッド
+  void _collectPhotoNodesRecursive(
+    LayerTreeNode node,
+    List<PhotoNode> photoNodes,
+  ) {
+    // 現在のノードがPhotoNodeなら追加
+    if (node is PhotoNode && node.visible && node.isVisibleRecursive()) {
+      photoNodes.add(node);
+    }
+
+    // 子ノードを再帰的に処理
+    for (final child in node.children) {
+      _collectPhotoNodesRecursive(child, photoNodes);
     }
   }
 
@@ -1125,6 +1152,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     final pointFeatures = _pointFeatures;
     final lineFeatures = _lineFeatures;
     final polygonFeatures = _polygonFeatures;
+    final photoNodes = _photoNodes; // PhotoNodeキャッシュを取得
 
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
@@ -1608,6 +1636,68 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                               ),
                             ),
                           )),
+
+                        // --- PhotoNode markers (写真アイコン) ---
+                        for (final photo in photoNodes)
+                          Marker(
+                            point: photo.location,
+                            width: 40,
+                            height: 40,
+                            child: GestureDetector(
+                              onTap: () {
+                                // PhotoNode選択処理
+                                setState(() {
+                                  GlobalConfig.instance.selectedFeatures
+                                      .clear();
+                                  GlobalConfig.instance.selectedFeatures.add(
+                                    photo,
+                                  );
+                                });
+                              },
+                              child: Tooltip(
+                                message:
+                                    '📸 ${photo.name}\n撮影位置: ${photo.location.latitude.toStringAsFixed(6)}, ${photo.location.longitude.toStringAsFixed(6)}',
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color:
+                                        GlobalConfig.instance.selectedFeatures
+                                                .contains(photo)
+                                            ? Colors.yellow[100]
+                                            : Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color:
+                                          GlobalConfig.instance.selectedFeatures
+                                                  .contains(photo)
+                                              ? Colors.orange
+                                              : Colors.purple,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 3,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.photo_camera,
+                                    color:
+                                        GlobalConfig.instance.selectedFeatures
+                                                .contains(photo)
+                                            ? Colors.orange
+                                            : Colors.purple,
+                                    size:
+                                        GlobalConfig.instance.selectedFeatures
+                                                .contains(photo)
+                                            ? 28
+                                            : 24,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -2248,6 +2338,130 @@ class FeatureDetailPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (feature == null) return const SizedBox.shrink();
+
+    // PhotoNode用の詳細パネル
+    if (feature is PhotoNode) {
+      final photo = feature as PhotoNode;
+
+      // プロジェクトルートからの相対パスを計算
+      final projectRoot = GlobalConfig.instance.projectRootDir;
+      String displayPath = photo.filePath;
+      if (projectRoot != null && photo.filePath.startsWith(projectRoot)) {
+        displayPath = photo.filePath.substring(projectRoot.length);
+        if (displayPath.startsWith('\\') || displayPath.startsWith('/')) {
+          displayPath = displayPath.substring(1);
+        }
+      }
+
+      return _buildPanel(
+        context,
+        title: "📸 写真ファイル",
+        children: [
+          // 画像プレビューを追加
+          Container(
+            width: double.infinity,
+            height: 120,
+            margin: EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                File(photo.filePath),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey.shade100,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.broken_image, color: Colors.grey, size: 24),
+                        SizedBox(height: 4),
+                        Text(
+                          '画像エラー',
+                          style: TextStyle(color: Colors.grey, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          // 詳細情報
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('名前: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(child: Text(photo.name)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('パス: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text(displayPath, style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('座標: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text(
+                  '${photo.location.latitude.toStringAsFixed(6)}, ${photo.location.longitude.toStringAsFixed(6)}',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          if (photo.takenAt != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '撮影日時: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Expanded(
+                  child: Text(
+                    '${photo.takenAt}',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (photo.metadata.fileSize != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'サイズ: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Expanded(
+                  child: Text(
+                    '${(photo.metadata.fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
+    }
+
+    // 既存のFeatureNode用の処理
     if (feature is FeatureNode) {
       final entries = feature.detailEntries;
       // metadataを含む属性名の項目を除外

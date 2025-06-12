@@ -284,6 +284,8 @@ class _LayerDrawerState extends State<LayerDrawer> {
                   return _buildFolderTile(context, node);
                 } else if (node is GeoPackageNode) {
                   return _buildGeoPackageTile(context, node);
+                } else if (node is PhotoNode) {
+                  return _buildPhotoTile(context, node);
                 }
                 // LayerNodeはここで描画しない
                 return const SizedBox.shrink();
@@ -299,6 +301,59 @@ class _LayerDrawerState extends State<LayerDrawer> {
     leading: _buildIconWithVisibility(node),
     title: Text(node.name),
     onTap: () => widget.onDirChanged(node),
+  );
+
+  /// PhotoNodeのタイル（位置情報付き画像ファイル）
+  Widget _buildPhotoTile(BuildContext context, PhotoNode node) => ListTile(
+    leading: _buildIconWithVisibility(node),
+    title: Text(node.name),
+    onTap: () {
+      // PhotoNode選択処理（地図上でハイライト表示）
+      GlobalConfig.instance.selectedFeatures.clear();
+      GlobalConfig.instance.selectedFeatures.add(node);
+
+      // 地図の中心を写真の位置に移動
+      if (widget.onJumpTo != null) {
+        widget.onJumpTo!(node.location);
+      }
+
+      widget.setStateCallback(() {});
+    },
+    trailing: PopupMenuButton<String>(
+      onSelected: (value) async {
+        if (value == 'delete') {
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('写真削除'),
+                  content: Text('${node.name} をリストから削除しますか？\n（ファイル自体は削除されません）'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('キャンセル'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('削除'),
+                    ),
+                  ],
+                ),
+          );
+          if (confirm == true) {
+            await node.dispose();
+            widget.setStateCallback(() {});
+          }
+        } else if (value == 'details') {
+          _showPhotoDetails(context, node);
+        }
+      },
+      itemBuilder:
+          (context) => [
+            const PopupMenuItem(value: 'details', child: Text('詳細情報')),
+            const PopupMenuItem(value: 'delete', child: Text('削除')),
+          ],
+    ),
   );
 
   /// GeoPackageノードのタイル。タップでレイヤリストをトグル展開
@@ -652,6 +707,122 @@ class _LayerDrawerState extends State<LayerDrawer> {
       ],
     ),
   );
+
+  /// 写真の詳細情報を表示するダイアログ
+  void _showPhotoDetails(BuildContext context, PhotoNode node) {
+    // プロジェクトルートからの相対パスを計算
+    final projectRoot = GlobalConfig.instance.projectRootDir;
+    String displayPath = node.filePath;
+    if (projectRoot != null && node.filePath.startsWith(projectRoot)) {
+      displayPath = node.filePath.substring(projectRoot.length);
+      if (displayPath.startsWith('\\') || displayPath.startsWith('/')) {
+        displayPath = displayPath.substring(1);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.photo_camera, color: Colors.purple),
+                SizedBox(width: 8),
+                Text('写真ファイル'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 画像プレビューを追加
+                  Container(
+                    width: double.infinity,
+                    height: 200,
+                    margin: EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(node.filePath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Colors.grey.shade100,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                  size: 48,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  '画像を読み込めません',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  _buildDetailRow('ファイルパス', displayPath),
+                  _buildDetailRow('緯度', '${node.location.latitude}'),
+                  _buildDetailRow('経度', '${node.location.longitude}'),
+                  if (node.takenAt != null)
+                    _buildDetailRow('撮影日時', '${node.takenAt}'),
+                  if (node.metadata.fileSize != null)
+                    _buildDetailRow(
+                      'ファイルサイズ',
+                      '${(node.metadata.fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB',
+                    ),
+                  if (node.metadata.width != null &&
+                      node.metadata.height != null)
+                    _buildDetailRow(
+                      '解像度',
+                      '${node.metadata.width} × ${node.metadata.height}',
+                    ),
+                  if (node.metadata.camera != null)
+                    _buildDetailRow('カメラ', '${node.metadata.camera}'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  /// 詳細情報の行を構築
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
 }
 
 /// 青いタイトルパネル（currentNodeの名前を表示＋右側に追加ボタン）

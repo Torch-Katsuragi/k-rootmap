@@ -47,6 +47,7 @@ class BluetoothGnssService extends ChangeNotifier {
   int _receivedSentenceCount = 0;
   int _validPositionCount = 0;
   DateTime? _lastPositionUpdate;
+  DateTime? _lastNotificationTime;
 
   // Location service for mock location
   final Location _location = Location();
@@ -300,11 +301,21 @@ class BluetoothGnssService extends ChangeNotifier {
             _sendToMockLocation();
           }
 
-          notifyListeners();
+          // 重複通知を防ぐため、最小間隔（500ms）でnotifyListenersを制限
+          final now = DateTime.now();
+          if (_lastNotificationTime == null ||
+              now.difference(_lastNotificationTime!).inMilliseconds >= 500) {
+            _lastNotificationTime = now;
+            notifyListeners();
 
-          debugPrint(
-            '$_logTag: GGA位置更新 - Lat: $_latitude, Lon: $_longitude, Alt: $_altitude, Acc: $_accuracy',
-          );
+            debugPrint(
+              '$_logTag: GGA位置更新（通知実行） - Lat: $_latitude, Lon: $_longitude, Alt: $_altitude, Acc: $_accuracy',
+            );
+          } else {
+            debugPrint(
+              '$_logTag: GGA位置更新（通知スキップ） - Lat: $_latitude, Lon: $_longitude, Alt: $_altitude, Acc: $_accuracy',
+            );
+          }
         }
       }
     } catch (e) {
@@ -355,11 +366,21 @@ class BluetoothGnssService extends ChangeNotifier {
             _sendToMockLocation();
           }
 
-          notifyListeners();
+          // 重複通知を防ぐため、最小間隔（500ms）でnotifyListenersを制限
+          final now = DateTime.now();
+          if (_lastNotificationTime == null ||
+              now.difference(_lastNotificationTime!).inMilliseconds >= 500) {
+            _lastNotificationTime = now;
+            notifyListeners();
 
-          debugPrint(
-            '$_logTag: RMC位置更新 - Lat: $_latitude, Lon: $_longitude, Speed: $_speed, Bearing: $_bearing',
-          );
+            debugPrint(
+              '$_logTag: RMC位置更新（通知実行） - Lat: $_latitude, Lon: $_longitude, Speed: $_speed, Bearing: $_bearing',
+            );
+          } else {
+            debugPrint(
+              '$_logTag: RMC位置更新（通知スキップ） - Lat: $_latitude, Lon: $_longitude, Speed: $_speed, Bearing: $_bearing',
+            );
+          }
         }
       }
     } catch (e) {

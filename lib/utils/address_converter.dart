@@ -1,0 +1,134 @@
+import 'package:latlong2/latlong.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+/// 住所情報を表すクラス
+class Address {
+  final String displayName;
+  final String? houseNumber;
+  final String? road;
+  final String? suburb;
+  final String? city;
+  final String? county;
+  final String? state;
+  final String? postcode;
+  final String? country;
+  final String? countryCode;
+
+  Address({
+    required this.displayName,
+    this.houseNumber,
+    this.road,
+    this.suburb,
+    this.city,
+    this.county,
+    this.state,
+    this.postcode,
+    this.country,
+    this.countryCode,
+  });
+
+  factory Address.fromJson(Map<String, dynamic> json) {
+    final address = json['address'] as Map<String, dynamic>?;
+
+    // 日本の場合、都道府県情報は複数のフィールドに格納される可能性がある
+    String? state = address?['state'] as String?;
+    state ??= address?['province'] as String?;
+    state ??= address?['region'] as String?;
+    state ??= address?['administrative'] as String?;
+
+    print('[Address] 住所フィールド詳細: ${address?.keys.toList()}');
+    print(
+      '[Address] state候補: state=${address?['state']}, province=${address?['province']}, region=${address?['region']}',
+    );
+
+    return Address(
+      displayName: json['display_name'] as String,
+      houseNumber: address?['house_number'] as String?,
+      road: address?['road'] as String?,
+      suburb: address?['suburb'] as String?,
+      city: address?['city'] as String?,
+      county: address?['county'] as String?,
+      state: state,
+      postcode: address?['postcode'] as String?,
+      country: address?['country'] as String?,
+      countryCode: address?['country_code'] as String?,
+    );
+  }
+
+  @override
+  String toString() {
+    return displayName;
+  }
+}
+
+/// 住所変換を管理するクラス
+class AddressConverter {
+  /// 緯度経度から住所を取得
+  static Future<Address?> getAddressFromLatLng(LatLng point) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?'
+        'lat=${point.latitude}&'
+        'lon=${point.longitude}&'
+        'format=json&'
+        'addressdetails=1',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {
+          'User-Agent': 'K_Maps/1.0', // アプリケーション名を指定
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('Nominatim APIレスポンス: ${json.encode(data)}');
+        final address = Address.fromJson(data);
+        print('住所取得成功: ${address.displayName}');
+        return address;
+      } else {
+        print('住所取得エラー: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('住所取得エラー: $e');
+      return null;
+    }
+  }
+
+  /// 住所から緯度経度を取得
+  static Future<LatLng?> getLatLngFromAddress(String address) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?'
+        'q=${Uri.encodeComponent(address)}&'
+        'format=json&'
+        'limit=1',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {
+          'User-Agent': 'K_Maps/1.0', // アプリケーション名を指定
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as List;
+        if (data.isNotEmpty) {
+          final result = data.first;
+          return LatLng(
+            double.parse(result['lat']),
+            double.parse(result['lon']),
+          );
+        }
+      }
+      return null;
+    } catch (e) {
+      print('緯度経度取得エラー: $e');
+      return null;
+    }
+  }
+}

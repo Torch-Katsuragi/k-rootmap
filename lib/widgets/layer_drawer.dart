@@ -918,11 +918,12 @@ class LayerDrawerTitleBar extends StatelessWidget {
 }
 
 /// メタデータ表示ダイアログ
-class MetadataTableDialog extends StatelessWidget {
+class MetadataTableDialog extends StatefulWidget {
   final MetadataTableData tableData;
   final String gpkgName;
   final String layerName;
   final String featureName;
+  final LatLng? featureLatLng;
 
   const MetadataTableDialog({
     super.key,
@@ -930,7 +931,43 @@ class MetadataTableDialog extends StatelessWidget {
     required this.gpkgName,
     required this.layerName,
     required this.featureName,
+    this.featureLatLng,
   });
+
+  @override
+  State<MetadataTableDialog> createState() => _MetadataTableDialogState();
+}
+
+class _MetadataTableDialogState extends State<MetadataTableDialog> {
+  late MetadataTableData currentTableData;
+
+  @override
+  void initState() {
+    super.initState();
+    currentTableData = widget.tableData;
+  }
+
+  /// 座標系を変更
+  Future<void> _changeCoordinateSystem(String newEpsgCode) async {
+    if (widget.featureLatLng == null) return;
+
+    try {
+      final newTableData = await MetadataParser.recalculateXYCoordinates(
+        currentTableData,
+        widget.featureLatLng!,
+        newEpsgCode,
+      );
+
+      setState(() {
+        currentTableData = newTableData;
+      });
+    } catch (e) {
+      print('[MetadataTable] 座標系変更エラー: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('座標系の変更に失敗しました: $e')));
+    }
+  }
 
   /// メタデータテーブルのTSVエクスポート処理
   Future<void> _exportMetadataToTSV(BuildContext context) async {
@@ -945,9 +982,15 @@ class MetadataTableDialog extends StatelessWidget {
       }
 
       // ファイル名を生成（指定された形式に変更）
-      final safeGpkgName = gpkgName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-      final safeLayerName = layerName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-      final safeFeatureName = featureName.replaceAll(
+      final safeGpkgName = widget.gpkgName.replaceAll(
+        RegExp(r'[<>:"/\\|?*]'),
+        '_',
+      );
+      final safeLayerName = widget.layerName.replaceAll(
+        RegExp(r'[<>:"/\\|?*]'),
+        '_',
+      );
+      final safeFeatureName = widget.featureName.replaceAll(
         RegExp(r'[<>:"/\\|?*]'),
         '_',
       );
@@ -962,11 +1005,13 @@ class MetadataTableDialog extends StatelessWidget {
       final sink = tsvFile.openWrite();
 
       // ヘッダー行を書き込み
-      final headerLine = tableData.headers.map(_escapeTsvField).join('\t');
+      final headerLine = currentTableData.headers
+          .map(_escapeTsvField)
+          .join('\t');
       sink.writeln(headerLine);
 
       // データ行を書き込み
-      for (final row in tableData.rows) {
+      for (final row in currentTableData.rows) {
         final escapedRow = row.map(_escapeTsvField).join('\t');
         sink.writeln(escapedRow);
       }
@@ -1005,7 +1050,35 @@ class MetadataTableDialog extends StatelessWidget {
     return AlertDialog(
       title: Row(
         children: [
-          Expanded(child: Text(tableData.title)),
+          Expanded(child: Text(currentTableData.title)),
+          // 座標系選択ドロップダウン（座標系選択肢がある場合のみ表示）
+          if (currentTableData.coordinateSystemOptions != null &&
+              currentTableData.coordinateSystemOptions!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: DropdownButton<String>(
+                value: currentTableData.selectedCoordinateSystem,
+                hint: const Text('座標系'),
+                items:
+                    currentTableData.coordinateSystemOptions!.entries
+                        .map(
+                          (entry) => DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Text(
+                              entry.value,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null &&
+                      newValue != currentTableData.selectedCoordinateSystem) {
+                    _changeCoordinateSystem(newValue);
+                  }
+                },
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.file_download),
             tooltip: 'TSVエクスポート',
@@ -1023,11 +1096,11 @@ class MetadataTableDialog extends StatelessWidget {
             child: DataTable(
               border: TableBorder.all(color: Colors.grey.shade300, width: 1),
               columns:
-                  tableData.headers
+                  currentTableData.headers
                       .map((header) => DataColumn(label: Text(header)))
                       .toList(),
               rows:
-                  tableData.rows
+                  currentTableData.rows
                       .map(
                         (row) => DataRow(
                           cells:
@@ -1115,7 +1188,7 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
     BuildContext context,
     String metadataStr,
     FeatureNode featureNode,
-  ) {
+  ) async {
     try {
       // デバッグ出力
       // print('[AttributeTable] メタデータ文字列: $metadataStr');
@@ -1124,7 +1197,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
       final metadataJson = jsonDecode(metadataStr) as Map<String, dynamic>;
       // print('[AttributeTable] JSONパース成功: $metadataJson');
 
-      final tableData = MetadataParser.parseMetadata(metadataJson);
+      // XY座標付きでメタデータをパース
+      final tableData = await MetadataParser.parseMetadataWithCoordinates(
+        metadataJson,
+        featureNode.centroid,
+      );
       // print('[AttributeTable] パース結果: $tableData');
 
       if (tableData != null) {
@@ -1148,6 +1225,7 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                 gpkgName: gpkgName,
                 layerName: layerName,
                 featureName: featureName,
+                featureLatLng: featureNode.centroid,
               ),
         );
       } else {

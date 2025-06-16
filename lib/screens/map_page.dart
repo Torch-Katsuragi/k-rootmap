@@ -13,7 +13,7 @@ import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
-// import '../widgets/cached_tile_layer.dart'; // Windows環境での安定性のため一時的に無効化
+import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
 import '../utils/global_config.dart';
 import '../models/basemap_provider.dart';
 import '../screens/basemap_settings_screen.dart';
@@ -1366,27 +1366,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     keepAlive: true,
                   ),
                   children: [
-                    // 標準地図タイルレイヤー（Windows環境での安定性を優先）
-                    TileLayer(
-                      urlTemplate:
-                          GlobalConfig
-                              .instance
-                              .baseMapService
-                              .currentProvider
-                              .urlTemplate,
-                      userAgentPackageName: 'k-maps',
-                      maxZoom: 22.0,
-                      minZoom:
-                          GlobalConfig
-                              .instance
-                              .baseMapService
-                              .currentProvider
-                              .minZoom
-                              .toDouble(),
-                      // Windows環境でのパフォーマンス向上設定
-                      evictErrorTileStrategy: EvictErrorTileStrategy.dispose,
-                      retinaMode: false, // Windows環境での安定性を優先
-                      tileSize: 256,
+                    // キャッシュ機能付き地図タイルレイヤー
+                    CachedTileLayer(
+                      provider:
+                          GlobalConfig.instance.baseMapService.currentProvider,
+                      baseMapService: GlobalConfig.instance.baseMapService,
                     ),
                     PolylineLayer(
                       polylines: [

@@ -268,19 +268,43 @@ class BaseMapService extends ChangeNotifier {
     String providerId,
     int z,
     int x,
-    int y,
-  ) async {
+    int y, {
+    bool allowCrossPlatformCache = false,
+  }) async {
     try {
+      // 指定プロバイダーのキャッシュを優先取得
       final cacheKey = '${providerId}_${z}_${x}_$y';
       final cachedTile = _tileCache[cacheKey];
 
       if (cachedTile != null) {
         final file = File(cachedTile.filePath);
         if (file.existsSync()) {
+          print('[DEBUG] BaseMapService: 指定プロバイダーキャッシュヒット - $cacheKey');
           return await file.readAsBytes();
         } else {
           // ファイルが存在しない場合はキャッシュから削除
+          print('[WARN] BaseMapService: キャッシュファイル不存在のため削除 - $cacheKey');
           _tileCache.remove(cacheKey);
+        }
+      }
+
+      // クロスプラットフォームキャッシュ検索（他プロバイダーの同座標タイル）
+      if (allowCrossPlatformCache) {
+        print('[DEBUG] BaseMapService: クロスプラットフォームキャッシュ検索 - z=$z, x=$x, y=$y');
+        for (final entry in _tileCache.entries) {
+          final tile = entry.value;
+          if (tile.z == z &&
+              tile.x == x &&
+              tile.y == y &&
+              tile.providerId != providerId) {
+            final file = File(tile.filePath);
+            if (file.existsSync()) {
+              print(
+                '[SUCCESS] BaseMapService: クロスプラットフォームキャッシュヒット - ${tile.providerId} -> $providerId',
+              );
+              return await file.readAsBytes();
+            }
+          }
         }
       }
 
@@ -328,24 +352,35 @@ class BaseMapService extends ChangeNotifier {
     int x,
     int y, {
     bool allowNetworkAccess = true,
+    int retryCount = 0,
   }) async {
     try {
       // まずキャッシュから取得を試行
+      print('[DEBUG] BaseMapService: キャッシュからタイル取得を試行 - z=$z, x=$x, y=$y');
       final cachedData = await _getCachedTile(provider.id, z, x, y);
       if (cachedData != null) {
+        print(
+          '[SUCCESS] BaseMapService: キャッシュからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${cachedData.length}バイト)',
+        );
         return cachedData;
       }
+      print('[DEBUG] BaseMapService: キャッシュにタイルなし - z=$z, x=$x, y=$y');
 
       // オフラインモードまたはネットワークアクセス禁止の場合はここで終了
       if (_isOfflineMode || !allowNetworkAccess) {
+        print('[DEBUG] BaseMapService: オフラインモード/ネットワークアクセス禁止のため、ネットワーク取得をスキップ');
         return null;
       }
 
-      // ネットワークからダウンロード
+      // ネットワークからダウンロード（リトライ機能付き）
       final url = provider.urlTemplate
           .replaceAll('{z}', z.toString())
           .replaceAll('{x}', x.toString())
           .replaceAll('{y}', y.toString());
+
+      print(
+        '[DEBUG] BaseMapService: ネットワークからタイル取得を試行 - URL: $url (試行回数: ${retryCount + 1})',
+      );
 
       final response = await http
           .get(
@@ -359,6 +394,9 @@ class BaseMapService extends ChangeNotifier {
 
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         final data = response.bodyBytes;
+        print(
+          '[SUCCESS] BaseMapService: ネットワークからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${data.length}バイト)',
+        );
 
         // キャッシュに保存
         await _cacheTile(provider.id, z, x, y, data);
@@ -366,12 +404,79 @@ class BaseMapService extends ChangeNotifier {
         return data;
       } else {
         print(
-          '[DEBUG] BaseMapService: タイル取得失敗: z=$z, x=$x, y=$y (${response.statusCode})',
+          '[WARN] BaseMapService: ネットワークタイル取得失敗 - z=$z, x=$x, y=$y (ステータス: ${response.statusCode}, サイズ: ${response.bodyBytes.length})',
         );
+
+        // ネットワーク取得失敗時にキャッシュを再確認（別プロバイダーや古いキャッシュの可能性）
+        print('[DEBUG] BaseMapService: ネットワーク失敗後のキャッシュ再確認 - z=$z, x=$x, y=$y');
+        final fallbackCachedData = await _getCachedTile(
+          provider.id,
+          z,
+          x,
+          y,
+          allowCrossPlatformCache: true,
+        );
+        if (fallbackCachedData != null) {
+          print(
+            '[SUCCESS] BaseMapService: フォールバックキャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
+          );
+          return fallbackCachedData;
+        }
+
+        // リトライ機能（最大2回）
+        if (retryCount < 2) {
+          print(
+            '[DEBUG] BaseMapService: リトライ実行 - z=$z, x=$x, y=$y (${retryCount + 1}/2)',
+          );
+          await Future.delayed(
+            Duration(milliseconds: 500 * (retryCount + 1)),
+          ); // 徐々に遅延を増加
+          return await _getTileInternal(
+            provider,
+            z,
+            x,
+            y,
+            allowNetworkAccess: allowNetworkAccess,
+            retryCount: retryCount + 1,
+          );
+        }
+
         return null;
       }
     } catch (e) {
-      print('[DEBUG] BaseMapService: タイル取得エラー: z=$z, x=$x, y=$y - $e');
+      print('[ERROR] BaseMapService: タイル取得エラー - z=$z, x=$x, y=$y - $e');
+
+      // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
+      print('[DEBUG] BaseMapService: エラー後のキャッシュ確認 - z=$z, x=$x, y=$y');
+      final errorFallbackData = await _getCachedTile(
+        provider.id,
+        z,
+        x,
+        y,
+        allowCrossPlatformCache: true,
+      );
+      if (errorFallbackData != null) {
+        print(
+          '[SUCCESS] BaseMapService: エラー後キャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
+        );
+        return errorFallbackData;
+      }
+
+      // リトライ機能（エラー時も適用）
+      if (retryCount < 1 && allowNetworkAccess) {
+        // エラー時はリトライ回数を減らす
+        print('[DEBUG] BaseMapService: エラー後リトライ実行 - z=$z, x=$x, y=$y');
+        await Future.delayed(Duration(milliseconds: 1000));
+        return await _getTileInternal(
+          provider,
+          z,
+          x,
+          y,
+          allowNetworkAccess: allowNetworkAccess,
+          retryCount: retryCount + 1,
+        );
+      }
+
       return null;
     }
   }
@@ -611,6 +716,116 @@ class BaseMapService extends ChangeNotifier {
     }
 
     return stats;
+  }
+
+  /// 詳細なキャッシュ統計を取得（デバッグ用）
+  Map<String, Map<String, dynamic>> getDetailedCacheStatistics() {
+    final stats = <String, Map<String, dynamic>>{};
+
+    for (final tile in _tileCache.values) {
+      if (!stats.containsKey(tile.providerId)) {
+        stats[tile.providerId] = {
+          'count': 0,
+          'tiles': <Map<String, dynamic>>[],
+          'zoomLevels': <int, int>{},
+          'lastAccessed': null,
+          'totalSize': 0,
+        };
+      }
+
+      final providerStats = stats[tile.providerId]!;
+      providerStats['count'] = (providerStats['count'] as int) + 1;
+
+      // ズームレベル別統計
+      final zoomLevels = providerStats['zoomLevels'] as Map<int, int>;
+      zoomLevels[tile.z] = (zoomLevels[tile.z] ?? 0) + 1;
+
+      // 個別タイル情報
+      final tiles = providerStats['tiles'] as List<Map<String, dynamic>>;
+      tiles.add({
+        'z': tile.z,
+        'x': tile.x,
+        'y': tile.y,
+        'timestamp': tile.cachedAt,
+        'filePath': tile.filePath,
+        'cacheKey': tile.cacheKey,
+      });
+
+      // 最終アクセス時刻更新
+      if (providerStats['lastAccessed'] == null ||
+          tile.cachedAt.isAfter(providerStats['lastAccessed'] as DateTime)) {
+        providerStats['lastAccessed'] = tile.cachedAt;
+      }
+    }
+
+    return stats;
+  }
+
+  /// キャッシュ検証（欠損ファイルの確認・修復）
+  Future<Map<String, dynamic>> validateAndRepairCache() async {
+    final result = {
+      'totalTiles': _tileCache.length,
+      'validTiles': 0,
+      'invalidTiles': 0,
+      'repairedTiles': 0,
+      'removedTiles': 0,
+      'details': <String, dynamic>{},
+    };
+
+    final tilesToRemove = <String>[];
+
+    for (final entry in _tileCache.entries) {
+      final cacheKey = entry.key;
+      final tile = entry.value;
+
+      try {
+        final file = File(tile.filePath);
+        if (file.existsSync()) {
+          final fileSize = await file.length();
+          if (fileSize > 0) {
+            result['validTiles'] = (result['validTiles'] as int) + 1;
+          } else {
+            print('[WARN] BaseMapService: 空のキャッシュファイル検出 - $cacheKey');
+            tilesToRemove.add(cacheKey);
+            result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
+          }
+        } else {
+          print('[WARN] BaseMapService: 存在しないキャッシュファイル検出 - $cacheKey');
+          tilesToRemove.add(cacheKey);
+          result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
+        }
+      } catch (e) {
+        print('[ERROR] BaseMapService: キャッシュ検証エラー - $cacheKey: $e');
+        tilesToRemove.add(cacheKey);
+        result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
+      }
+    }
+
+    // 無効なタイルをキャッシュから削除
+    for (final cacheKey in tilesToRemove) {
+      _tileCache.remove(cacheKey);
+      result['removedTiles'] = (result['removedTiles'] as int) + 1;
+    }
+
+    // インデックスファイルを更新
+    if (tilesToRemove.isNotEmpty) {
+      await _saveCacheIndex();
+    }
+
+    result['details'] = {
+      'removedKeys': tilesToRemove,
+      'cacheDirectory': _cacheDirectory,
+      'indexFilePath':
+          _cacheDirectory != null
+              ? path.join(_cacheDirectory!, 'cache_index.json')
+              : null,
+    };
+
+    print(
+      '[INFO] BaseMapService: キャッシュ検証完了 - 有効:${result['validTiles']}, 無効:${result['invalidTiles']}, 削除:${result['removedTiles']}',
+    );
+
+    return result;
   }
 
   @override

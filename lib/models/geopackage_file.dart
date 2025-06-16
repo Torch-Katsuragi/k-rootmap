@@ -279,7 +279,7 @@ class GeoPackageFile {
   }
 
   /// 点フィーチャを追加（属性付き）
-  Future<void> addPoint(
+  Future<int?> addPoint(
     String tableName,
     LatLng pt, {
     String name = '',
@@ -305,18 +305,21 @@ class GeoPackageFile {
         print('  encoded: $encodedMetadata');
         data['kmaps_metadata'] = encodedMetadata;
       }
-      await db.insert(tableName, data);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
     } catch (e) {
       print('addPoint: エラー発生 - $e');
+      return null;
     }
   }
 
-  /// 指定座標の点フィーチャを削除
-  Future<void> removePoint(String tableName, LatLng pt) async {
+  /// 指定IDの点フィーチャを削除
+  Future<void> removePoint(String tableName, int id) async {
     try {
       final db = await _getDatabase();
-      final wkb = createWkbPoint(pt.longitude, pt.latitude);
-      await db.delete(tableName, where: 'geom = ?', whereArgs: [wkb]);
+      await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
     } catch (e) {
       print('removePoint: エラー発生 - $e');
     }

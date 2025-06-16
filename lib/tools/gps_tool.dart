@@ -207,7 +207,7 @@ class GpsTool extends MapTool {
         };
 
         debugPrint('[GpsTool] 長押し測量 metadata: $metadata');
-        await PointFeatureNode.createIn(
+        final pointFeature = await PointFeatureNode.createIn(
           selected,
           position,
           'GPS測量ポイント',
@@ -215,21 +215,26 @@ class GpsTool extends MapTool {
           metadata: metadata,
         );
 
-        // UI更新（pen_toolと同様）
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-          GlobalConfig.instance.mapState.setState(() {});
+        if (pointFeature != null) {
+          // UI更新（pen_toolと同様）
+          if (GlobalConfig.instance.mapState != null) {
+            GlobalConfig.instance.mapState.refreshFeatures();
+            GlobalConfig.instance.mapState.setState(() {});
+          }
+
+          // Point測量完了後はGPS測量を停止（リソース効率化）
+          await _gpsManager.stopGpsSurvey();
+
+          // データ収集タイマーも確実に停止（念のため）
+          _gpsCollectionTimer?.cancel();
+          _gpsCollectionTimer = null;
+
+          debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
+          return true; // 成功
+        } else {
+          debugPrint('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
+          return false; // 失敗
         }
-
-        // Point測量完了後はGPS測量を停止（リソース効率化）
-        await _gpsManager.stopGpsSurvey();
-
-        // 連続測量データもクリア
-        _gpsManager.clearContinuousSurveyData();
-
-        debugPrint(
-          '[GpsTool] 長押しGPS測量ポイントフィーチャを作成しました（${_longPressGpsData.length}サンプル平均・GPS停止済み・タイマー停止済み）',
-        );
       } else if (selected is LineLayerNode) {
         _surveyLine.add(position);
         _surveyGpsData.add(optimizedGpsData);
@@ -314,7 +319,7 @@ class GpsTool extends MapTool {
         };
 
         debugPrint('[GpsTool] 単発測量 metadata: $metadata');
-        await PointFeatureNode.createIn(
+        final pointFeature = await PointFeatureNode.createIn(
           selected,
           position,
           'GPS測量ポイント',
@@ -322,20 +327,26 @@ class GpsTool extends MapTool {
           metadata: metadata,
         );
 
-        // UI更新（pen_toolと同様）
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-          GlobalConfig.instance.mapState.setState(() {});
+        if (pointFeature != null) {
+          // UI更新（pen_toolと同様）
+          if (GlobalConfig.instance.mapState != null) {
+            GlobalConfig.instance.mapState.refreshFeatures();
+            GlobalConfig.instance.mapState.setState(() {});
+          }
+
+          // Point測量完了後はGPS測量を停止（リソース効率化）
+          await _gpsManager.stopGpsSurvey();
+
+          // データ収集タイマーも確実に停止（念のため）
+          _gpsCollectionTimer?.cancel();
+          _gpsCollectionTimer = null;
+
+          debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
+          return true; // 成功
+        } else {
+          debugPrint('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
+          return false; // 失敗
         }
-
-        // Point測量完了後はGPS測量を停止（リソース効率化）
-        await _gpsManager.stopGpsSurvey();
-
-        // データ収集タイマーも確実に停止（念のため）
-        _gpsCollectionTimer?.cancel();
-        _gpsCollectionTimer = null;
-
-        debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
       } else if (selected is LineLayerNode) {
         _surveyLine.add(position);
         _surveyGpsData.add(optimizedGpsData);

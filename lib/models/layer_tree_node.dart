@@ -825,21 +825,19 @@ class PointFeatureNode extends FeatureNode {
     // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
     await super.dispose();
 
-    // DBからの削除を非同期で実行（UIには影響させない）
-    if (points.isNotEmpty) {
-      geoPackageFile
-          .removePoint(layerName, points.first)
-          .then((_) {
-            print(
-              '[DEBUG] PointFeatureNode.dispose: DB deletion completed for ${name}',
-            );
-          })
-          .catchError((e) {
-            print(
-              '[ERROR] PointFeatureNode.dispose: DB deletion failed for ${name}: $e',
-            );
-          });
-    }
+    // DBからID指定で削除を非同期で実行（UIには影響させない）
+    geoPackageFile
+        .removePoint(layerName, rowId)
+        .then((_) {
+          print(
+            '[DEBUG] PointFeatureNode.dispose: DB deletion completed for ${name}',
+          );
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] PointFeatureNode.dispose: DB deletion failed for ${name}: $e',
+          );
+        });
 
     print('[DEBUG] PointFeatureNode.dispose: point feature dispose completed');
   }
@@ -866,36 +864,32 @@ class PointFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
-    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+    // DBへの保存を実行して実際のrowIdを取得
+    final actualRowId = await gpkgFile.addPoint(
+      layerName,
+      point,
+      name: name ?? '',
+      description: description ?? '',
+      metadata: metadata,
+    );
 
-    // FeatureNodeを即座に作成（地図表示用）
+    if (actualRowId == null) {
+      print('[ERROR] PointFeatureNode: DB保存に失敗しました - $name');
+      return null;
+    }
+
+    // 実際のrowIdを使用してFeatureNodeを作成
     final node = PointFeatureNode(
       [point],
       name,
       parent: parent,
-      rowId: tempRowId,
+      rowId: actualRowId,
       description: description,
       metadata: metadata,
     );
     parent.addChild(node);
 
-    // DBへの保存を非同期で実行（UIには影響しない）
-    gpkgFile
-        .addPoint(
-          layerName,
-          point,
-          name: name ?? '',
-          description: description ?? '',
-          metadata: metadata,
-        )
-        .then((_) {
-          print('[DEBUG] PointFeatureNode: DB保存完了 - $name');
-        })
-        .catchError((e) {
-          print('[ERROR] PointFeatureNode: DB保存エラー - $e');
-        });
-
+    print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
 }

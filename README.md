@@ -1315,3 +1315,12 @@ final newTableData = await MetadataParser.recalculateXYCoordinates(
 - 大阪駅: X=-136366.717, Y=-396934.101 (JGD2011 CS IX - キャッシュ使用)
 - 札幌駅: X=785342.941, Y=123277.784 (JGD2011 CS IX - キャッシュ使用)
 - 各地点で異なる座標が正しく計算される
+
+## 🐛 修正済み問題 (Bug Fixes)
+
+### 2024年版修正
+- **点フィーチャ保存問題の修正** (2024-12-19)
+  - 原因: PointFeatureNodeが座標指定で削除、Line/PolygonがID指定で削除という不整合
+  - 解決: GeoPackageFile.addPoint()で実際のrowIdを返却、removePoint()をID指定に統一
+  - 影響: pen_tool、GPS測量での点フィーチャが正常に保存・削除されるように
+  - 詳細: WKBバイナリ比較の精度問題とGPBinaryヘッダー差異を解決

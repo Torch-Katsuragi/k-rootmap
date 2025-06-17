@@ -1,5 +1,32 @@
 # K-MAPS
 
+## 最新の修正・改善
+
+### 2024/12/XX - PenToolのポリゴン描画フリーズ問題の修正
+
+**問題：** PenToolによるタップでのポリゴン描画時、3点目または2点目のタイミングでフリーズが発生する問題
+
+**原因：** `addDrawingPolygonPoint`メソッドで毎回setStateを同期実行することで、UI更新の負荷が高くなっていた
+
+**修正内容：**
+1. `addDrawingPolygonPointOptimized`メソッドを新規追加
+   - UI更新を`Future.microtask`で遅延実行
+   - 座標追加とUI更新を分離してパフォーマンスを向上
+2. onTapメソッドにデバッグログを追加
+   - フリーズ発生箇所の特定が容易に
+   - 処理の流れを詳細にトレース可能
+3. エラーハンドリングの強化
+   - try-catch文でエラー処理を明確化
+
+**影響範囲：**
+- `lib/tools/pen_tool.dart`：onTapメソッドとaddDrawingPolygonPointOptimizedメソッド
+- ラインレイヤーやポイントレイヤーには影響なし
+- フリーハンド描画（onScale）には影響なし
+
+**テスト：**
+- タップによるポリゴン描画の連続実行テスト
+- UI更新の最適化テスト（作成済み: `test/simple_pen_tool_test.dart`）
+
 ## 概要
 K-MAPSはGeoPackageベースの地理情報管理・編集アプリケーションです。地図上での点・線・面の描画・編集、GPS位置情報の取得、外部GNSS受信機との連携などの機能を提供します。
 
@@ -1324,3 +1351,20 @@ final newTableData = await MetadataParser.recalculateXYCoordinates(
   - 解決: GeoPackageFile.addPoint()で実際のrowIdを返却、removePoint()をID指定に統一
   - 影響: pen_tool、GPS測量での点フィーチャが正常に保存・削除されるように
   - 詳細: WKBバイナリ比較の精度問題とGPBinaryヘッダー差異を解決
+
+### 2025年版修正
+- **ポリゴン描画の2点エラー修正** (2025-01-27)
+  - 問題: 2点目追加時に「LatLngBounds cannot be created with an empty List of LatLng」エラーでマップが真っ赤になる
+  - 根本原因: `closeRing`関数が3点未満の場合に空のリストを返し、flutter_mapでLatLngBounds作成時にエラー発生
+  - 解決策:
+    1. **2点時の適切な処理**: `getPolygonPreview`メソッドで2点の場合は`closeRing`を呼び出さず直接座標リストを返す
+    2. **UI表示レイヤーの分離**: 2点時は線として表示、3点以上はポリゴンとして表示
+  - 技術詳細:
+    ```dart
+    // 修正されたgetPolygonPreviewメソッド
+    if (drawingPolygon.length == 2) {
+      return List<LatLng>.from(drawingPolygon); // 線として扱う
+    }
+    return closeRing(drawingPolygon); // 3点以上はポリゴン
+    ```
+  - 効果: 2点目追加時のエラー解消、適切なプレビュー表示の実現

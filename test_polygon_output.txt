@@ -1,0 +1,97 @@
+00:00 +0: loading C:/Users/mtmtk/Github/k_maps/test/pen_tool_polygon_test.dart
+test/pen_tool_polygon_test.dart:236:5: Error: Type 'DiagnosticsTreeStyle' not found.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+    ^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:256:5: Error: Type 'DiagnosticsTreeStyle' not found.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+    ^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:218:7: Error: The non-abstract class '_MockBuildContext' is missing implementations for these members:
+ - BuildContext.getInheritedWidgetOfExactType
+Try to either
+ - provide an implementation,
+ - inherit an implementation from a superclass or mixin,
+ - mark the class as abstract, or
+ - provide a 'noSuchMethod' implementation.
+
+class _MockBuildContext implements BuildContext {
+      ^^^^^^^^^^^^^^^^^
+/C:/flutter/packages/flutter/lib/src/widgets/framework.dart:2414:6: Context: 'BuildContext.getInheritedWidgetOfExactType' is defined here.
+  T? getInheritedWidgetOfExactType<T extends InheritedWidget>();
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:223:20: Error: The return type of the method '_MockBuildContext.dependOnInheritedElement' is 'InheritedWidget?', which does not match the return type, 'InheritedWidget', of the overridden method, 'BuildContext.dependOnInheritedElement'.
+ - 'InheritedWidget' is from 'package:flutter/src/widgets/framework.dart' ('/C:/flutter/packages/flutter/lib/src/widgets/framework.dart').
+Change to a subtype of 'InheritedWidget'.
+  InheritedWidget? dependOnInheritedElement(
+                   ^
+/C:/flutter/packages/flutter/lib/src/widgets/framework.dart:2346:19: Context: This is the overridden method ('dependOnInheritedElement').
+  InheritedWidget dependOnInheritedElement(InheritedElement ancestor, {Object? aspect});
+                  ^
+test/pen_tool_polygon_test.dart:236:34: Error: Undefined name 'DiagnosticsTreeStyle'.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+                                 ^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:256:34: Error: Undefined name 'DiagnosticsTreeStyle'.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+                                 ^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:26:47: Error: Member not found: 'GeoPackageNode.createNewFile'.
+        final gpkgNode = await GeoPackageNode.createNewFile(
+                                              ^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:32:30: Error: A value of type 'PolygonLayerNode?' can't be assigned to a variable of type 'PolygonLayerNode' because 'PolygonLayerNode?' is nullable and 'PolygonLayerNode' isn't.
+ - 'PolygonLayerNode' is from 'lib/models/layer_tree_node.dart'.
+          testPolygonLayer = await PolygonLayerNode.createIn(
+                             ^
+test/pen_tool_polygon_test.dart:236:5: Error: 'DiagnosticsTreeStyle' isn't a type.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+    ^^^^^^^^^^^^^^^^^^^^
+test/pen_tool_polygon_test.dart:256:5: Error: 'DiagnosticsTreeStyle' isn't a type.
+    DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+    ^^^^^^^^^^^^^^^^^^^^
+00:00 +0 -1: loading C:/Users/mtmtk/Github/k_maps/test/pen_tool_polygon_test.dart [E]
+  Failed to load "C:/Users/mtmtk/Github/k_maps/test/pen_tool_polygon_test.dart":
+  Compilation failed for testPath=C:/Users/mtmtk/Github/k_maps/test/pen_tool_polygon_test.dart: test/pen_tool_polygon_test.dart:236:5: Error: Type 'DiagnosticsTreeStyle' not found.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+      ^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:256:5: Error: Type 'DiagnosticsTreeStyle' not found.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+      ^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:218:7: Error: The non-abstract class '_MockBuildContext' is missing implementations for these members:
+   - BuildContext.getInheritedWidgetOfExactType
+  Try to either
+   - provide an implementation,
+   - inherit an implementation from a superclass or mixin,
+   - mark the class as abstract, or
+   - provide a 'noSuchMethod' implementation.
+  
+  class _MockBuildContext implements BuildContext {
+        ^^^^^^^^^^^^^^^^^
+  /C:/flutter/packages/flutter/lib/src/widgets/framework.dart:2414:6: Context: 'BuildContext.getInheritedWidgetOfExactType' is defined here.
+    T? getInheritedWidgetOfExactType<T extends InheritedWidget>();
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:223:20: Error: The return type of the method '_MockBuildContext.dependOnInheritedElement' is 'InheritedWidget?', which does not match the return type, 'InheritedWidget', of the overridden method, 'BuildContext.dependOnInheritedElement'.
+   - 'InheritedWidget' is from 'package:flutter/src/widgets/framework.dart' ('/C:/flutter/packages/flutter/lib/src/widgets/framework.dart').
+  Change to a subtype of 'InheritedWidget'.
+    InheritedWidget? dependOnInheritedElement(
+                     ^
+  /C:/flutter/packages/flutter/lib/src/widgets/framework.dart:2346:19: Context: This is the overridden method ('dependOnInheritedElement').
+    InheritedWidget dependOnInheritedElement(InheritedElement ancestor, {Object? aspect});
+                    ^
+  test/pen_tool_polygon_test.dart:236:34: Error: Undefined name 'DiagnosticsTreeStyle'.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+                                   ^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:256:34: Error: Undefined name 'DiagnosticsTreeStyle'.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+                                   ^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:26:47: Error: Member not found: 'GeoPackageNode.createNewFile'.
+          final gpkgNode = await GeoPackageNode.createNewFile(
+                                                ^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:32:30: Error: A value of type 'PolygonLayerNode?' can't be assigned to a variable of type 'PolygonLayerNode' because 'PolygonLayerNode?' is nullable and 'PolygonLayerNode' isn't.
+   - 'PolygonLayerNode' is from 'lib/models/layer_tree_node.dart'.
+            testPolygonLayer = await PolygonLayerNode.createIn(
+                               ^
+  test/pen_tool_polygon_test.dart:236:5: Error: 'DiagnosticsTreeStyle' isn't a type.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+      ^^^^^^^^^^^^^^^^^^^^
+  test/pen_tool_polygon_test.dart:256:5: Error: 'DiagnosticsTreeStyle' isn't a type.
+      DiagnosticsTreeStyle style = DiagnosticsTreeStyle.errorProperty,
+      ^^^^^^^^^^^^^^^^^^^^
+  .
+00:00 +0 -1: Some tests failed.

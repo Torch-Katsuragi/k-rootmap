@@ -10,6 +10,7 @@ import '../models/layer_tree_node.dart';
 import 'package:latlong2/latlong.dart';
 import 'pan_tool.dart'; // てのひらツールを利用
 import 'select_tool.dart';
+import 'dart:async'; // デバウンス機能用
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
@@ -30,6 +31,13 @@ class PenTool extends MapTool {
   /// ポリゴンの描画点列
   final List<LatLng> drawingPolygon = [];
 
+  /// ポリゴンプレビュー用キャッシュ（パフォーマンス最適化）
+  List<LatLng>? _cachedPolygonPreview;
+  int _lastPolygonUpdateCount = -1;
+
+  /// UI更新デバウンス用タイマー
+  Timer? _uiUpdateTimer;
+
   Offset? _lastFingerPosition;
   bool _isDrawing = false;
   int _pointerCount = 0;
@@ -38,9 +46,44 @@ class PenTool extends MapTool {
   /// プレビュー用の点座標（外部参照用getter）
   LatLng? get pointPreview => _pointPreview;
 
+  /// ポリゴンプレビュー取得（キャッシュ機能付き・パフォーマンス最適化）
+  List<LatLng>? getPolygonPreview(
+    List<LatLng> Function(List<LatLng>) closeRing,
+  ) {
+    if (drawingPolygon.length < 2) return null;
+
+    // キャッシュが有効かチェック
+    if (_lastPolygonUpdateCount == drawingPolygon.length &&
+        _cachedPolygonPreview != null) {
+      return _cachedPolygonPreview;
+    }
+
+    // 2点の場合は線として扱い、closeRingは呼び出さない
+    if (drawingPolygon.length == 2) {
+      _cachedPolygonPreview = List<LatLng>.from(drawingPolygon);
+      _lastPolygonUpdateCount = drawingPolygon.length;
+
+      print(
+        '[DEBUG] PenTool.getPolygonPreview: 線プレビュー - 点数: ${drawingPolygon.length}',
+      );
+      return _cachedPolygonPreview;
+    }
+
+    // 3点以上の場合は新しい計算を実行してキャッシュ
+    _cachedPolygonPreview = closeRing(drawingPolygon);
+    _lastPolygonUpdateCount = drawingPolygon.length;
+
+    print(
+      '[DEBUG] PenTool.getPolygonPreview: キャッシュ更新 - 点数: ${drawingPolygon.length}',
+    );
+    return _cachedPolygonPreview;
+  }
+
   /// タップイベント
   @override
   void onTap(TapUpDetails details, dynamic mapState) {
+    print('[DEBUG] PenTool.onTap: タップイベント開始');
+
     // フロートボタン押下時は消しゴム動作
     if (GlobalConfig.instance.isFabActive) {
       final latlng = mapState.offsetToLatLng(details.localPosition);
@@ -62,10 +105,16 @@ class PenTool extends MapTool {
       }
       return;
     }
+
     // 通常は描画
     final selected = GlobalConfig.instance.selectedLayerNode;
-    if (selected == null) return;
+    if (selected == null) {
+      print('[DEBUG] PenTool.onTap: 選択されたレイヤーがありません');
+      return;
+    }
+
     if (!selected.isVisibleRecursive()) {
+      print('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
       // 警告ポップアップ
       final context = mapState.context;
       ScaffoldMessenger.of(
@@ -73,18 +122,37 @@ class PenTool extends MapTool {
       ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
       return;
     }
+
     final latlng = mapState.offsetToLatLng(details.localPosition);
+    print('[DEBUG] PenTool.onTap: 座標取得完了 $latlng');
+
     if (selected is PointLayerNode) {
+      print('[DEBUG] PenTool.onTap: ポイントレイヤー処理');
       PointFeatureNode.createIn(selected, latlng, '', '').then((_) {
         // フィーチャー作成完了後にUI更新
         mapState.refreshFeatures();
       });
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
+      print('[DEBUG] PenTool.onTap: ラインレイヤー処理');
       addDrawingLinePoint(latlng, mapState.setState);
     } else if (selected is PolygonLayerNode) {
-      addDrawingPolygonPoint(latlng, mapState.setState);
+      print(
+        '[DEBUG] PenTool.onTap: ポリゴンレイヤー処理開始 - 現在の点数: ${drawingPolygon.length}',
+      );
+
+      // タップ時のポリゴン描画の最適化（UI更新頻度を抑制）
+      try {
+        addDrawingPolygonPointOptimized(latlng, mapState.setState);
+        print(
+          '[DEBUG] PenTool.onTap: ポリゴン点追加完了 - 新しい点数: ${drawingPolygon.length}',
+        );
+      } catch (e) {
+        print('[ERROR] PenTool.onTap: ポリゴン点追加エラー: $e');
+      }
     }
+
+    print('[DEBUG] PenTool.onTap: タップイベント完了');
   }
 
   /// スケール開始イベント
@@ -286,6 +354,42 @@ class PenTool extends MapTool {
     });
   }
 
+  /// ポリゴンの描画点を追加（最適化版：デバウンス機能付き）
+  void addDrawingPolygonPointOptimized(
+    LatLng latlng,
+    void Function(void Function()) setState,
+  ) {
+    print('[DEBUG] addDrawingPolygonPointOptimized: 開始 - 座標: $latlng');
+
+    // まず座標をリストに追加
+    drawingPolygon.add(latlng);
+
+    // キャッシュを無効化
+    _cachedPolygonPreview = null;
+    _lastPolygonUpdateCount = -1;
+
+    print(
+      '[DEBUG] addDrawingPolygonPointOptimized: 座標追加完了 - 現在の点数: ${drawingPolygon.length}',
+    );
+
+    // 既存のタイマーをキャンセル
+    _uiUpdateTimer?.cancel();
+
+    // デバウンス機能：50ms後にUI更新を実行
+    _uiUpdateTimer = Timer(Duration(milliseconds: 50), () {
+      try {
+        setState(() {
+          print('[DEBUG] addDrawingPolygonPointOptimized: デバウンス後UI更新実行');
+        });
+        print('[DEBUG] addDrawingPolygonPointOptimized: UI更新完了');
+      } catch (e) {
+        print('[ERROR] addDrawingPolygonPointOptimized: UI更新エラー: $e');
+      }
+    });
+
+    print('[DEBUG] addDrawingPolygonPointOptimized: 完了');
+  }
+
   /// 1つ取り消し
   void undo(void Function(void Function()) setState, {required bool isLine}) {
     setState(() {
@@ -306,6 +410,13 @@ class PenTool extends MapTool {
         drawingPolygon.clear();
       }
     });
+  }
+
+  /// リソースのクリーンアップ
+  void dispose() {
+    _uiUpdateTimer?.cancel();
+    _uiUpdateTimer = null;
+    _cachedPolygonPreview = null;
   }
 
   /// 確定処理（属性入力ダイアログはUI側で呼ぶこと）

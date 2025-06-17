@@ -1414,6 +1414,23 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             color: Colors.orange,
                             strokeWidth: 3.0,
                           ),
+                        // --- Pen tool polygon line preview (2点の場合) ---
+                        if (GlobalConfig.instance.currentTool is PenTool)
+                          ...((() {
+                            final penTool =
+                                GlobalConfig.instance.currentTool as PenTool;
+                            // 2点の場合は線として表示
+                            if (penTool.drawingPolygon.length == 2) {
+                              return [
+                                Polyline(
+                                  points: penTool.drawingPolygon,
+                                  color: Colors.orange,
+                                  strokeWidth: 3.0,
+                                ),
+                              ];
+                            }
+                            return <Polyline>[];
+                          })()),
                         // --- GPS追跡中の軌跡プレビュー ---
                         if (_isGpsTrackingServiceRunning &&
                             GpsTrackManager().currentTrack != null &&
@@ -1469,21 +1486,30 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             borderStrokeWidth: 4.0,
                             borderColor: Colors.purple,
                           ),
-                        // --- Pen tool polygon preview ---
-                        if (GlobalConfig.instance.currentTool is PenTool &&
-                            (GlobalConfig.instance.currentTool as PenTool)
-                                    .drawingPolygon
-                                    .length >=
-                                2)
-                          Polygon(
-                            points: closeRing(
-                              (GlobalConfig.instance.currentTool as PenTool)
-                                  .drawingPolygon,
-                            ),
-                            color: Colors.orange.withOpacity(0.4),
-                            borderStrokeWidth: 3.0,
-                            borderColor: Colors.orange,
-                          ),
+                        // --- Pen tool polygon preview (3点以上の場合) ---
+                        if (GlobalConfig.instance.currentTool is PenTool)
+                          ...((() {
+                            final penTool =
+                                GlobalConfig.instance.currentTool as PenTool;
+                            // 3点以上の場合のみポリゴンプレビューを表示
+                            if (penTool.drawingPolygon.length >= 3) {
+                              final previewPoints = penTool.getPolygonPreview(
+                                closeRing,
+                              );
+                              if (previewPoints != null &&
+                                  previewPoints.isNotEmpty) {
+                                return [
+                                  Polygon(
+                                    points: previewPoints,
+                                    color: Colors.orange.withOpacity(0.4),
+                                    borderStrokeWidth: 3.0,
+                                    borderColor: Colors.orange,
+                                  ),
+                                ];
+                              }
+                            }
+                            return <Polygon>[];
+                          })()),
                         // --- SelectTool lasso preview ---
                         if (GlobalConfig.instance.currentTool is SelectTool &&
                             (GlobalConfig.instance.currentTool as SelectTool)

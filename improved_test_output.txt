@@ -1,25 +1,19 @@
-謾ｹ蝟・沿Dart繝・せ繝磯幕蟋・..
-=== 謾ｹ蝟・沿蠎ｧ讓吝､画鋤繝・せ繝磯幕蟋・===
-繝・せ繝亥ｺｧ讓・ 邱ｯ蠎ｦ=33.938994976060606, 邨悟ｺｦ=135.94809600530303
-菴ｿ逕ｨ蠎ｧ讓咏ｳｻ: JGD2011 / Japan Plane Rectangular CS VI (EPSG:6674)
-謾ｹ蝟・沿繧ｰ繝ｪ繝・ラ蜿取據隗定ｨ育ｮ・ 荳ｭ螟ｮ蟄仙壕邱・136.0ﾂｰ, ﾎ釆ｻ=-0.05190399469697126ﾂｰ, ﾏ・33.938994976060606ﾂｰ
-謾ｹ蝟・沿邵ｮ蟆ｺ菫よ焚險育ｮ・ k0=0.9999, ﾏ・33.938994976060606ﾂｰ, sec(ﾏ・=1.205353
 
-=== 謾ｹ蝟・沿險育ｮ礼ｵ先棡 ===
-逵溷圏譁ｹ蜷題ｧ・ -0.028978518 蠎ｦ
-逵溷圏譁ｹ蜷題ｧ・ -0.000505771 繝ｩ繧ｸ繧｢繝ｳ
-邵ｮ蟆ｺ菫よ焚: 1.20802458
+00:00 +0: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart                                                                                                                                 
+00:01 +0: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart                                                                                                                                 
+00:02 +0: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart                                                                                                                                 
+00:03 +0: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart                                                                                                                                 
+../../AppData/Local/Temp/flutter_tools.d919fa36/flutter_test_listener.931bee3d/listener.dart:21:21: Error: Undefined name 'main'.
+  await Future(test.main);
+                    ^^^^
+00:04 +0: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart                                                                                                                                 
+00:04 +0 -1: loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart [E]                                                                                                                          
+  Failed to load "C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart":
+  Compilation failed for testPath=C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart: ../../AppData/Local/Temp/flutter_tools.d919fa36/flutter_test_listener.931bee3d/listener.dart:21:21: Error: Undefined name 'main'.
+    await Future(test.main);
+                      ^^^^
+  .
 
-=== 蝗ｽ蝨溷慍逅・劼縺ｨ縺ｮ豈碑ｼ・===
-蝗ｽ蝨溷慍逅・劼邨先棡:
-逵溷圏譁ｹ蜷題ｧ・ 0.028977778 蠎ｦ
-邵ｮ蟆ｺ菫よ焚: 0.99990028
+To run this test again: C:\flutter\bin\cache\dart-sdk\bin\dart.exe test C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart -p vm --plain-name "loading C:/Users/mtmtk/Github/k_maps/lib/tools/pen_tool.dart"
 
-=== 謾ｹ蝟・沿蟾ｮ逡ｰ險育ｮ・===
-逵溷圏譁ｹ蜷題ｧ貞ｷｮ: -0.057956296 蠎ｦ
-謾ｹ蝟・ｺｦ: 隕∬ｪｿ謨ｴ
-邵ｮ蟆ｺ菫よ焚蟾ｮ: 0.20812430
-邊ｾ蠎ｦ: 隕∬ｪｿ謨ｴ
-
-=== 謾ｹ蝟・沿繝・せ繝亥ｮ御ｺ・===
-謾ｹ蝟・沿Dart繝・せ繝育ｵゆｺ・
+00:04 +0 -1: Some tests failed.                                                                                                                                                                        

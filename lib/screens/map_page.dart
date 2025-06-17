@@ -438,11 +438,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         setState(() {}); // プレビュー更新
 
         if (mounted) {
+          final totalPoints =
+              GlobalConfig.instance.drawingState.drawingLine.length +
+              GlobalConfig.instance.drawingState.drawingPolygon.length;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'GPS位置を記録しました (${currentTool.surveyGpsData.length}ポイント目)',
-              ),
+              content: Text('GPS位置を記録しました (${totalPoints}ポイント目)'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 1),
             ),
@@ -769,7 +770,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'GPS測量データ（${currentTool.surveyGpsData.length}ポイント）が自動的に記録されます',
+                  'GPS測量データ（${GlobalConfig.instance.drawingState.drawingLine.length + GlobalConfig.instance.drawingState.drawingPolygon.length}ポイント）が自動的に記録されます',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -1551,15 +1552,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           for (
                             int i = 0;
                             i <
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyLine
+                                GlobalConfig
+                                    .instance
+                                    .drawingState
+                                    .drawingLine
                                     .length;
                             i++
                           )
                             Marker(
                               point:
-                                  (GlobalConfig.instance.currentTool as GpsTool)
-                                      .surveyLine[i],
+                                  GlobalConfig
+                                      .instance
+                                      .drawingState
+                                      .drawingLine[i],
                               width: 32,
                               height: 32,
                               child: Container(
@@ -1573,7 +1578,24 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 ),
                                 child: Center(
                                   child: Text(
-                                    '${(GlobalConfig.instance.currentTool as GpsTool).surveyLineGpsCount.length > i ? (GlobalConfig.instance.currentTool as GpsTool).surveyLineGpsCount[i] : 1}',
+                                    '${(() {
+                                      try {
+                                        final drawingState = GlobalConfig.instance.drawingState;
+                                        final metadataList = drawingState.lineMetadata;
+                                        if (i >= metadataList.length) return i + 1;
+                                        final metadata = metadataList[i];
+                                        if (metadata == null) return 1;
+                                        if (metadata.containsKey('point_count')) {
+                                          return metadata['point_count'] as int? ?? 1;
+                                        }
+                                        if (metadata.containsKey('collected_points') && metadata['collected_points'] is List) {
+                                          return (metadata['collected_points'] as List).length;
+                                        }
+                                        return 1;
+                                      } catch (e) {
+                                        return i + 1;
+                                      }
+                                    })()}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -1587,15 +1609,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           for (
                             int i = 0;
                             i <
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyPolygon
+                                GlobalConfig
+                                    .instance
+                                    .drawingState
+                                    .drawingPolygon
                                     .length;
                             i++
                           )
                             Marker(
                               point:
-                                  (GlobalConfig.instance.currentTool as GpsTool)
-                                      .surveyPolygon[i],
+                                  GlobalConfig
+                                      .instance
+                                      .drawingState
+                                      .drawingPolygon[i],
                               width: 32,
                               height: 32,
                               child: Container(
@@ -1609,7 +1635,24 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 ),
                                 child: Center(
                                   child: Text(
-                                    '${(GlobalConfig.instance.currentTool as GpsTool).surveyPolygonGpsCount.length > i ? (GlobalConfig.instance.currentTool as GpsTool).surveyPolygonGpsCount[i] : 1}',
+                                    '${(() {
+                                      try {
+                                        final drawingState = GlobalConfig.instance.drawingState;
+                                        final metadataList = drawingState.polygonMetadata;
+                                        if (i >= metadataList.length) return i + 1;
+                                        final metadata = metadataList[i];
+                                        if (metadata == null) return 1;
+                                        if (metadata.containsKey('point_count')) {
+                                          return metadata['point_count'] as int? ?? 1;
+                                        }
+                                        if (metadata.containsKey('collected_points') && metadata['collected_points'] is List) {
+                                          return (metadata['collected_points'] as List).length;
+                                        }
+                                        return 1;
+                                      } catch (e) {
+                                        return i + 1;
+                                      }
+                                    })()}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -2216,13 +2259,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   FloatingActionButton(
                     heroTag: 'undo',
                     onPressed: () {
-                      setState(() {
+                      if (currentTool is PenTool) {
+                        final penTool = currentTool as PenTool;
                         if (isLineDrawing) {
-                          (currentTool).drawingLine.removeLast();
+                          penTool.undo(setState, isLine: true);
                         } else if (isPolygonDrawing) {
-                          (currentTool).drawingPolygon.removeLast();
+                          penTool.undo(setState, isLine: false);
                         }
-                      });
+                      }
                     },
                     tooltip: 'Undo',
                     child: const Icon(Icons.undo),
@@ -2232,13 +2276,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   FloatingActionButton(
                     heroTag: 'cancel',
                     onPressed: () {
-                      setState(() {
+                      if (currentTool is PenTool) {
+                        final penTool = currentTool as PenTool;
                         if (isLineDrawing) {
-                          (currentTool).drawingLine.clear();
+                          penTool.cancel(setState, isLine: true);
                         } else if (isPolygonDrawing) {
-                          (currentTool).drawingPolygon.clear();
+                          penTool.cancel(setState, isLine: false);
                         }
-                      });
+                      }
                     },
                     tooltip: 'Cancel',
                     child: const Icon(Icons.clear),

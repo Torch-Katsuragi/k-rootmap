@@ -9,6 +9,7 @@ import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
 import '../services/basemap_service.dart';
+import 'global_drawing_state.dart';
 
 class GlobalConfig {
   // シングルトンインスタンス
@@ -46,6 +47,9 @@ class GlobalConfig {
 
   /// 背景地図管理サービス
   final BaseMapService baseMapService = BaseMapService();
+
+  /// グローバル描画状態管理
+  final GlobalDrawingState drawingState = GlobalDrawingState.instance;
 
   /// GPS関連の設定
   String? preferredGpsSourceType; // 'internal' または 'external'

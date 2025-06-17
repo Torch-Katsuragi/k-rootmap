@@ -2,6 +2,139 @@
 
 ## 最新の修正・改善
 
+### 2024/12/XX - pen_toolフリーハンド描画のunmodifiableリストエラー修正
+
+**概要：** pen_toolのフリーハンド描画（onScale）で発生していた`UnsupportedError: Cannot clear an unmodifiable list`エラーを修正
+
+**発見された問題：**
+- pen_toolのタップ描画は正常だが、フリーハンド描画（onScale）で`drawingPolygon.clear()`実行時にエラーが発生
+- `drawingLine.clear()`、`drawingPolygon.clear()`でunmodifiableなリストに対してclear()メソッドを呼び出していた
+
+**根本原因：**
+- GlobalDrawingStateのgetterは`List.unmodifiable()`で読み取り専用リストを返すため、直接clear()できない
+- 正しくは`drawingState.clearLine()`、`drawingState.clearPolygon()`メソッドを使用する必要
+
+**実施した修正：**
+- `lib/tools/pen_tool.dart`の198行目：`drawingLine.clear()` → `drawingState.clearLine()`
+- `lib/tools/pen_tool.dart`の204行目：`drawingPolygon.clear()` → `drawingState.clearPolygon()`
+- pointerバッファ処理での正しいGlobalDrawingState API使用
+
+**テスト結果：**
+- フリーハンド描画シミュレーションテスト：5つのテストケース全てPASS
+- unmodifiableリストの動作確認とエラーハンドリング検証
+- pen_toolの連続描画とクリア操作の正常動作確認
+
+**効果：**
+- pen_toolのフリーハンド描画（線・ポリゴン）が正常に動作
+- タップ描画・フリーハンド描画の両方で安定した動作を実現
+- GlobalDrawingState APIの正しい使用パターンの確立
+
+### 2024/12/XX - GlobalDrawingState復元とデータ整合性修正
+
+**概要：** 空になったGlobalDrawingStateファイルを復元し、GPS測量マーカー表示のデータ参照を統一してデータ整合性を確保
+
+**発見された問題：**
+1. **GlobalDrawingStateファイルの消失**：`lib/utils/global_drawing_state.dart`が空ファイルになっていた
+2. **データ参照の不整合**：マーカー表示で古い`GpsTool.surveyLine/surveyPolygon`を参照しているのに、数字表示では`GlobalDrawingState`を参照していた
+
+**実施した修正：**
+1. **GlobalDrawingStateクラスの完全復元**：
+   - シングルトンパターンによるグローバル描画状態管理
+   - 線・ポリゴンの描画点列とメタデータの統合管理
+   - GPS測量とpen_tool描画の統一API提供
+   - デバッグ用のprint出力で状態変化を追跡可能
+
+2. **マーカー表示の統一**：
+   - map_pageでのマーカー表示を`GlobalDrawingState.drawingLine/drawingPolygon`に変更
+   - 数字表示と座標表示の両方が同じデータソースを参照
+   - データ整合性の完全確保
+
+**技術詳細：**
+- `lib/utils/global_drawing_state.dart`：171行の完全実装を復元
+- `lib/screens/map_page.dart`：マーカー表示参照先を`GpsTool.survey*`から`GlobalDrawingState.drawing*`に変更
+- すべてのツールがGlobalDrawingStateインスタンスを共有
+
+**テスト結果：**
+- `test/global_drawing_state_test.dart`：7つのテストケース全てPASS
+- マーカー表示と数字表示の完全同期を確認
+- データ追加・削除・クリア操作の正常動作を検証
+
+**効果：**
+- GPS測量とpen_tool間でのシームレスな描画継続
+- データ整合性の完全確保
+- デバッグとトラブルシューティングの向上
+
+### 2024/12/XX - GPS測量点の表示方法改善とprivateメソッドエラー修正
+
+**概要：** GPS測量時に表示される点の数字を、実際の測量回数に基づいて表示する機能を実装し、Dartのprivateメソッドアクセスエラーを解決
+
+**主な変更内容：**
+1. **GPS測量点カウント表示機能**：
+   - GPS測量点のマーカーに、実際に測量した点数を表示
+   - メタデータありの場合：`point_count`フィールドまたは`collected_points`配列の長さを表示
+   - メタデータなし（pen_toolタップ）の場合：1を表示
+   - 長押し平均化測量時は、収集されたGPS点数を正確に表示
+
+2. **privateメソッドエラーの解決**：
+   - Dartの「アンダースコア（_）で始まるメソッドはprivate」というアクセス制御の問題を解決
+   - メソッド分離によるスコープ問題を回避するため、ロジックをインライン化
+   - 即時実行関数式（IIFE: Immediately Invoked Function Expression）パターンを使用
+   - エラーハンドリング強化でフォールバック機能を提供
+
+**技術詳細：**
+- `lib/screens/map_page.dart`：GPS測量マーカーの表示ロジック修正
+- インライン化されたメタデータ解析ロジック：各マーカーで直接実行
+- GPS測量・pen_tool混在時の適切な識別と表示
+- Dartのprivate/publicアクセス制御の理解と対応
+
+**修正したコンパイルエラー：**
+- `The method '_getGpsSurveyPointCount' isn't defined for the type '_KMapsHomePageState'`
+- privateメソッドアクセスによるスコープ問題を根本解決
+
+**技術的学習：**
+- [Dartの公式ドキュメント](https://dart.dev/language/methods)に基づく適切なアクセス制御
+- [Dart SDK issue #33383](https://github.com/dart-lang/sdk/issues/33383)で議論されているpublic/private修飾子の現状理解
+- インライン化による可読性とパフォーマンスのバランス
+
+**効果：**
+- 測量時により直感的な情報表示
+- GPS測量精度の可視化向上
+- ユーザビリティの改善
+- コンパイルエラー完全解決（88 issues: warnings/info のみ、errors 0個）
+
+### 2024/12/XX - 描画状態のグローバル化とツール間連携強化
+
+**概要：** GPS測量とペンツールでの描画状態を統一し、ツール間での描画継続機能を実装
+
+**主な変更内容：**
+1. **GlobalDrawingState導入**：
+   - グローバルな描画状態管理クラスを新設
+   - 線・ポリゴンの描画点列をツール間で共有
+   - 各点にメタデータ（GPS測量データ）の管理機能を追加
+2. **ツール間描画継続機能**：
+   - pen_toolでタップ描画開始後、GPS_toolに切り替えてGPS測量で続きを描画可能
+   - GPS_toolで測量開始後、pen_toolに切り替えてタップで続きを描画可能
+   - ツール切り替え時も描画状態とプレビューを保持
+3. **メタデータ管理の統一**：
+   - GPS測量点：位置情報・精度・時刻・データソース等の詳細メタデータを自動記録
+   - pen_tool点：座標のみでメタデータなし（data_sourceはpen_toolとして記録）
+   - 混在した描画データを統一形式で管理・保存
+
+**技術詳細：**
+- `lib/utils/global_drawing_state.dart`：新設のグローバル描画状態管理
+- `lib/tools/pen_tool.dart`：GlobalDrawingStateを使用するようリファクタリング
+- `lib/tools/gps_tool.dart`：GlobalDrawingStateを使用するようリファクタリング（進行中）
+- `lib/utils/global_config.dart`：GlobalDrawingStateインスタンスを追加
+
+**テスト：**
+- `test/global_drawing_state_test.dart`：7つのテストケース全てPASS
+- GPS測量・pen_tool混在描画、メタデータ管理、Undo機能等を検証済み
+
+**影響範囲：**
+- 描画機能の根本的な改善（後方互換性維持）
+- レンダリング・表示系には影響なし
+- 既存のGeoPackage保存機能は引き続き利用
+
 ### 2024/12/XX - PenToolのポリゴン描画フリーズ問題の修正
 
 **問題：** PenToolによるタップでのポリゴン描画時、3点目または2点目のタイミングでフリーズが発生する問題

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import '../utils/global_config.dart';
+import '../utils/global_drawing_state.dart';
 import '../models/layer_tree_node.dart';
 import 'package:latlong2/latlong.dart';
 import 'pan_tool.dart'; // てのひらツールを利用
@@ -17,6 +18,9 @@ class PenTool extends MapTool {
   /// てのひらツールのグローバルインスタンス（2本指パン・回転用）
   PanTool get panTool => GlobalConfig.instance.panTool;
 
+  /// グローバル描画状態への参照
+  GlobalDrawingState get drawingState => GlobalConfig.instance.drawingState;
+
   @override
   String get name => 'Pen';
 
@@ -24,12 +28,6 @@ class PenTool extends MapTool {
   IconData get icon => Icons.edit;
 
   final List<Offset> _currentPath = [];
-
-  /// 線の描画点列
-  final List<LatLng> drawingLine = [];
-
-  /// ポリゴンの描画点列
-  final List<LatLng> drawingPolygon = [];
 
   /// ポリゴンプレビュー用キャッシュ（パフォーマンス最適化）
   List<LatLng>? _cachedPolygonPreview;
@@ -41,10 +39,16 @@ class PenTool extends MapTool {
   Offset? _lastFingerPosition;
   bool _isDrawing = false;
   int _pointerCount = 0;
-  LatLng? _pointPreview;
 
   /// プレビュー用の点座標（外部参照用getter）
-  LatLng? get pointPreview => _pointPreview;
+  /// グローバル描画状態から取得
+  LatLng? get pointPreview => drawingState.pointPreview;
+
+  /// 線の描画点列（グローバル描画状態から取得）
+  List<LatLng> get drawingLine => drawingState.drawingLine;
+
+  /// ポリゴンの描画点列（グローバル描画状態から取得）
+  List<LatLng> get drawingPolygon => drawingState.drawingPolygon;
 
   /// ポリゴンプレビュー取得（キャッシュ機能付き・パフォーマンス最適化）
   List<LatLng>? getPolygonPreview(
@@ -191,13 +195,13 @@ class PenTool extends MapTool {
       // Pointerバッファがあれば最初に反映
       if (pointerBuffer.isNotEmpty) {
         if (selected is LineLayerNode) {
-          drawingLine.clear();
+          drawingState.clearLine(); // 正しいメソッドを使用
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
             addDrawingLinePoint(latlng, mapState.setState);
           }
         } else if (selected is PolygonLayerNode) {
-          drawingPolygon.clear();
+          drawingState.clearPolygon(); // 正しいメソッドを使用
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
             addDrawingPolygonPoint(latlng, mapState.setState);
@@ -207,7 +211,7 @@ class PenTool extends MapTool {
       }
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
-        _pointPreview = latlng;
+        drawingState.setPointPreview(latlng);
         mapState.setState(() {});
       } else if (selected is LineLayerNode) {
         if (drawingLine.isEmpty) {
@@ -264,7 +268,7 @@ class PenTool extends MapTool {
       }
       final latlng = mapState.offsetToLatLng(details.localFocalPoint);
       if (selected is PointLayerNode) {
-        _pointPreview = latlng;
+        drawingState.setPointPreview(latlng);
         mapState.setState(() {});
       } else if (selected is LineLayerNode && _isDrawing) {
         addDrawingLinePoint(latlng, mapState.setState);
@@ -290,17 +294,17 @@ class PenTool extends MapTool {
     // 1本指の場合のみレイヤー選択チェック
     if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 1) {
-      if (selected is PointLayerNode && _pointPreview != null) {
+      if (selected is PointLayerNode && pointPreview != null) {
         PointFeatureNode.createIn(
           selected,
-          _pointPreview!,
+          pointPreview!,
           'FreeHandPoint',
           '',
         ).then((_) {
           // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
-        _pointPreview = null;
+        drawingState.setPointPreview(null);
         mapState.setState(() {});
       } else if (selected is LineLayerNode && drawingLine.length >= 2) {
         LineFeatureNode.createIn(
@@ -312,7 +316,7 @@ class PenTool extends MapTool {
           // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
-        drawingLine.clear();
+        drawingState.clearLine();
         _isDrawing = false;
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
@@ -326,7 +330,7 @@ class PenTool extends MapTool {
           // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
-        drawingPolygon.clear();
+        drawingState.clearPolygon();
         _isDrawing = false;
         mapState.setState(() {});
       }
@@ -334,24 +338,24 @@ class PenTool extends MapTool {
     _pointerCount = 0;
   }
 
-  /// 線の描画点を追加
+  /// 線の描画点を追加（グローバル描画状態使用）
   void addDrawingLinePoint(
     LatLng latlng,
     void Function(void Function()) setState,
   ) {
-    setState(() {
-      drawingLine.add(latlng);
-    });
+    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
+    drawingState.addLinePoint(latlng, null);
+    setState(() {});
   }
 
-  /// ポリゴンの描画点を追加
+  /// ポリゴンの描画点を追加（グローバル描画状態使用）
   void addDrawingPolygonPoint(
     LatLng latlng,
     void Function(void Function()) setState,
   ) {
-    setState(() {
-      drawingPolygon.add(latlng);
-    });
+    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
+    drawingState.addPolygonPoint(latlng, null);
+    setState(() {});
   }
 
   /// ポリゴンの描画点を追加（最適化版：デバウンス機能付き）
@@ -361,8 +365,8 @@ class PenTool extends MapTool {
   ) {
     print('[DEBUG] addDrawingPolygonPointOptimized: 開始 - 座標: $latlng');
 
-    // まず座標をリストに追加
-    drawingPolygon.add(latlng);
+    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
+    drawingState.addPolygonPoint(latlng, null);
 
     // キャッシュを無効化
     _cachedPolygonPreview = null;
@@ -390,26 +394,24 @@ class PenTool extends MapTool {
     print('[DEBUG] addDrawingPolygonPointOptimized: 完了');
   }
 
-  /// 1つ取り消し
+  /// 1つ取り消し（グローバル描画状態使用）
   void undo(void Function(void Function()) setState, {required bool isLine}) {
-    setState(() {
-      if (isLine && drawingLine.isNotEmpty) {
-        drawingLine.removeLast();
-      } else if (!isLine && drawingPolygon.isNotEmpty) {
-        drawingPolygon.removeLast();
-      }
-    });
+    if (isLine && drawingLine.isNotEmpty) {
+      drawingState.removeLastLinePoint();
+    } else if (!isLine && drawingPolygon.isNotEmpty) {
+      drawingState.removeLastPolygonPoint();
+    }
+    setState(() {});
   }
 
-  /// キャンセル（全消去）
+  /// キャンセル（全消去・グローバル描画状態使用）
   void cancel(void Function(void Function()) setState, {required bool isLine}) {
-    setState(() {
-      if (isLine) {
-        drawingLine.clear();
-      } else {
-        drawingPolygon.clear();
-      }
-    });
+    if (isLine) {
+      drawingState.clearLine();
+    } else {
+      drawingState.clearPolygon();
+    }
+    setState(() {});
   }
 
   /// リソースのクリーンアップ

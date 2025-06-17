@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
 import '../utils/global_config.dart';
+import '../utils/global_drawing_state.dart';
 import '../services/gps_manager_service.dart';
 import '../models/layer_tree_node.dart';
 import 'package:latlong2/latlong.dart';
@@ -32,17 +33,11 @@ class GpsTool extends MapTool {
   /// パンツールインスタンスへの参照（GlobalConfigから取得）
   PanTool get _panTool => GlobalConfig.instance.panTool;
 
+  /// グローバル描画状態への参照
+  GlobalDrawingState get drawingState => GlobalConfig.instance.drawingState;
+
   /// GPS管理サービスインスタンス
   final GpsManagerService _gpsManager = GpsManagerService();
-
-  /// GPS測量中の描画データ
-  final List<LatLng> _surveyLine = [];
-  final List<LatLng> _surveyPolygon = [];
-  final List<Map<String, dynamic>> _surveyGpsData = [];
-
-  /// 各測量ポイントのGPS点数を追跡
-  final List<int> _surveyLineGpsCount = [];
-  final List<int> _surveyPolygonGpsCount = [];
 
   /// 長押しGPS測量用データ
   Timer? _longPressTimer;
@@ -51,14 +46,9 @@ class GpsTool extends MapTool {
   final List<Map<String, dynamic>> _longPressGpsData = [];
   DateTime? _longPressStartTime;
 
-  /// GPS測量機能のgetters
-  List<LatLng> get surveyLine => List.unmodifiable(_surveyLine);
-  List<LatLng> get surveyPolygon => List.unmodifiable(_surveyPolygon);
-  List<Map<String, dynamic>> get surveyGpsData =>
-      List.unmodifiable(_surveyGpsData);
-  List<int> get surveyLineGpsCount => List.unmodifiable(_surveyLineGpsCount);
-  List<int> get surveyPolygonGpsCount =>
-      List.unmodifiable(_surveyPolygonGpsCount);
+  /// GPS測量機能のgetters（GlobalDrawingStateから取得）
+  List<LatLng> get surveyLine => drawingState.drawingLine;
+  List<LatLng> get surveyPolygon => drawingState.drawingPolygon;
   bool get isLongPressing => _isLongPressing;
   int get longPressGpsCount => _longPressGpsData.length;
 
@@ -236,13 +226,11 @@ class GpsTool extends MapTool {
           return false; // 失敗
         }
       } else if (selected is LineLayerNode) {
-        _surveyLine.add(position);
-        _surveyGpsData.add(optimizedGpsData);
-        _surveyLineGpsCount.add(_longPressGpsData.length); // GPS点数を記録
+        // GlobalDrawingStateにGPS測量データとして追加
+        drawingState.addLinePoint(position, optimizedGpsData);
       } else if (selected is PolygonLayerNode) {
-        _surveyPolygon.add(position);
-        _surveyGpsData.add(optimizedGpsData);
-        _surveyPolygonGpsCount.add(_longPressGpsData.length); // GPS点数を記録
+        // GlobalDrawingStateにGPS測量データとして追加
+        drawingState.addPolygonPoint(position, optimizedGpsData);
       }
 
       // クリーンアップ
@@ -348,13 +336,11 @@ class GpsTool extends MapTool {
           return false; // 失敗
         }
       } else if (selected is LineLayerNode) {
-        _surveyLine.add(position);
-        _surveyGpsData.add(optimizedGpsData);
-        _surveyLineGpsCount.add(1); // 通常測量は1点
+        // GlobalDrawingStateにGPS測量データとして追加
+        drawingState.addLinePoint(position, optimizedGpsData);
       } else if (selected is PolygonLayerNode) {
-        _surveyPolygon.add(position);
-        _surveyGpsData.add(optimizedGpsData);
-        _surveyPolygonGpsCount.add(1); // 通常測量は1点
+        // GlobalDrawingStateにGPS測量データとして追加
+        drawingState.addPolygonPoint(position, optimizedGpsData);
       }
 
       debugPrint(
@@ -464,20 +450,16 @@ class GpsTool extends MapTool {
   int _getNextPointNumber() {
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected is LineLayerNode) {
-      return _surveyLine.length + 1;
+      return surveyLine.length + 1;
     } else if (selected is PolygonLayerNode) {
-      return _surveyPolygon.length + 1;
+      return surveyPolygon.length + 1;
     }
     return 1; // PointLayerNode
   }
 
-  /// GPS測量データをクリア
+  /// GPS測量データをクリア（GlobalDrawingState使用）
   void clearSurveyData() {
-    _surveyLine.clear();
-    _surveyPolygon.clear();
-    _surveyGpsData.clear();
-    _surveyLineGpsCount.clear();
-    _surveyPolygonGpsCount.clear();
+    drawingState.clearAll();
 
     // 長押し関連もクリア
     _gpsCollectionTimer?.cancel();
@@ -502,16 +484,12 @@ class GpsTool extends MapTool {
     debugPrint('[GpsTool] GPS測量をキャンセルしてGPS停止しました');
   }
 
-  /// 1つ取り消し
+  /// 1つ取り消し（GlobalDrawingState使用）
   void undoLastPoint() {
-    if (_surveyLine.isNotEmpty) {
-      _surveyLine.removeLast();
-      _surveyGpsData.removeLast();
-      _surveyLineGpsCount.removeLast();
-    } else if (_surveyPolygon.isNotEmpty) {
-      _surveyPolygon.removeLast();
-      _surveyGpsData.removeLast();
-      _surveyPolygonGpsCount.removeLast();
+    if (surveyLine.isNotEmpty) {
+      drawingState.removeLastLinePoint();
+    } else if (surveyPolygon.isNotEmpty) {
+      drawingState.removeLastPolygonPoint();
     }
     debugPrint('[GpsTool] 最後のGPS測量ポイントを取り消しました');
   }
@@ -527,12 +505,16 @@ class GpsTool extends MapTool {
     if (selected == null) return false;
 
     try {
-      // GPS測量データをメタデータとして構造化（リスト形式で保存）
-      debugPrint('[GpsTool] 線・面測量確定 _surveyGpsData: $_surveyGpsData');
+      // GPS測量データをメタデータとして構造化（GlobalDrawingState使用）
+      final surveyGpsData =
+          surveyLine.isNotEmpty
+              ? drawingState.getLineWithMetadata()
+              : drawingState.getPolygonWithMetadata();
+      debugPrint('[GpsTool] 線・面測量確定 surveyGpsData: $surveyGpsData');
       final metadata = {
         'type': 'measurement_log',
         'contents': List<Map<String, dynamic>>.from(
-          _surveyGpsData.map((e) => Map<String, dynamic>.from(e)),
+          surveyGpsData.map((e) => Map<String, dynamic>.from(e)),
         ),
       };
       debugPrint('[GpsTool] 線・面測量確定 metadata: $metadata');
@@ -545,10 +527,10 @@ class GpsTool extends MapTool {
         await _gpsManager.stopGpsSurvey();
         debugPrint('[GpsTool] GPS測量ポイント完了（既に作成済み）- GPS停止しました');
         return true;
-      } else if (selected is LineLayerNode && _surveyLine.length >= 2) {
+      } else if (selected is LineLayerNode && surveyLine.length >= 2) {
         await LineFeatureNode.createIn(
           selected,
-          List<LatLng>.from(_surveyLine),
+          List<LatLng>.from(surveyLine),
           name.isNotEmpty ? name : 'GPS測量ライン',
           description,
           metadata: metadata,
@@ -559,8 +541,8 @@ class GpsTool extends MapTool {
         });
         debugPrint('[GpsTool] GPS測量ラインフィーチャを作成してGPS停止しました');
         return true;
-      } else if (selected is PolygonLayerNode && _surveyPolygon.length >= 3) {
-        final closed = closeRing(_surveyPolygon);
+      } else if (selected is PolygonLayerNode && surveyPolygon.length >= 3) {
+        final closed = closeRing(surveyPolygon);
         await PolygonFeatureNode.createIn(
           selected,
           List<List<LatLng>>.from([closed]),
@@ -583,12 +565,17 @@ class GpsTool extends MapTool {
     }
   }
 
-  /// GPS測量データを文字列形式でフォーマット（最適化された辞書構造対応）
+  /// GPS測量データを文字列形式でフォーマット（GlobalDrawingState対応）
   String _formatGpsDataForDescription() {
-    if (_surveyGpsData.isEmpty) return 'GPS測量データなし';
+    final surveyGpsData =
+        surveyLine.isNotEmpty
+            ? drawingState.getLineWithMetadata()
+            : drawingState.getPolygonWithMetadata();
+
+    if (surveyGpsData.isEmpty) return 'GPS測量データなし';
 
     // 最適化された辞書のlistをそのまま文字列に変換
-    return _surveyGpsData.toString();
+    return surveyGpsData.toString();
   }
 
   /// GPSタップイベント処理

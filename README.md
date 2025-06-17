@@ -2,6 +2,40 @@
 
 ## 最新の修正・改善
 
+### 2024/12/XX - GPS測量ポリゴン2点目のLatLngBoundsエラー修正
+
+**概要：** GPS測量でポリゴンの2点目を追加した際に発生していた`LatLngBounds cannot be created with an empty List of LatLng`エラーを修正
+
+**発見された問題：**
+- GPS測量でポリゴンの2点目追加時にマップが真っ赤になりエラーが表示される
+- 3点目追加後は正常に動作するが、2点目の時点でエラーが発生
+
+**根本原因：**
+- pen_toolでは既に修正済みだったが、GPS測量では2点以上（`>= 2`）でポリゴンプレビューを表示していた
+- 2点で`closeRing`を呼び出すと空のリストが返され、flutter_mapのLatLngBounds作成時にエラーが発生
+
+**実施した修正：**
+1. **GPS測量ポリゴンプレビュー条件を3点以上に変更**：
+   - `lib/screens/map_page.dart`：GPS測量ポリゴンプレビューの条件を`>= 2`から`>= 3`に修正
+   
+2. **データ参照の統一化**：
+   - GPS測量表示を古い`(GpsTool).surveyPolygon`から`GlobalDrawingState.drawingPolygon`に変更
+   - GPS測量ライン表示も`GlobalDrawingState.drawingLine`に統一
+   
+3. **2点時のライン表示追加**：
+   - GPS測量でポリゴン2点時は線として表示（pen_toolと同様の動作）
+   - 2点では`closeRing`を呼ばずに直接線として描画
+
+**技術詳細：**
+- GPS測量ポリゴンプレビュー：`>= 2` → `>= 3`に条件変更
+- GPS測量2点時：`Polyline`として表示（紫色、4.0px幅）
+- GPS測量3点以上：`Polygon`として表示（紫色、透明度0.4）
+
+**効果：**
+- GPS測量ポリゴン2点目追加時のエラー完全解消
+- pen_toolとGPS測量で一貫した動作を実現
+- データ参照の統一によるバグ防止
+
 ### 2024/12/XX - pen_toolフリーハンド描画のunmodifiableリストエラー修正
 
 **概要：** pen_toolのフリーハンド描画（onScale）で発生していた`UnsupportedError: Cannot clear an unmodifiable list`エラーを修正

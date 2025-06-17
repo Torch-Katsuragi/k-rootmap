@@ -1393,13 +1393,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           ),
                         // --- GPS survey line preview ---
                         if (GlobalConfig.instance.currentTool is GpsTool &&
-                            (GlobalConfig.instance.currentTool as GpsTool)
-                                .surveyLine
+                            GlobalConfig
+                                .instance
+                                .drawingState
+                                .drawingLine
                                 .isNotEmpty)
                           Polyline(
                             points:
-                                (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyLine,
+                                GlobalConfig.instance.drawingState.drawingLine,
                             color: Colors.purple,
                             strokeWidth: 4.0,
                           ),
@@ -1414,6 +1415,23 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     .drawingLine,
                             color: Colors.orange,
                             strokeWidth: 3.0,
+                          ),
+                        // --- GPS survey polygon line preview (2点の場合) ---
+                        if (GlobalConfig.instance.currentTool is GpsTool &&
+                            GlobalConfig
+                                    .instance
+                                    .drawingState
+                                    .drawingPolygon
+                                    .length ==
+                                2)
+                          Polyline(
+                            points:
+                                GlobalConfig
+                                    .instance
+                                    .drawingState
+                                    .drawingPolygon,
+                            color: Colors.purple,
+                            strokeWidth: 4.0,
                           ),
                         // --- Pen tool polygon line preview (2点の場合) ---
                         if (GlobalConfig.instance.currentTool is PenTool)
@@ -1474,14 +1492,15 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           ),
                         // --- GPS survey polygon preview ---
                         if (GlobalConfig.instance.currentTool is GpsTool &&
-                            (GlobalConfig.instance.currentTool as GpsTool)
-                                    .surveyPolygon
+                            GlobalConfig
+                                    .instance
+                                    .drawingState
+                                    .drawingPolygon
                                     .length >=
-                                2)
+                                3) // 3点以上でのみポリゴンプレビューを表示
                           Polygon(
                             points: closeRing(
-                              (GlobalConfig.instance.currentTool as GpsTool)
-                                  .surveyPolygon,
+                              GlobalConfig.instance.drawingState.drawingPolygon,
                             ),
                             color: Colors.purple.withOpacity(0.4),
                             borderStrokeWidth: 4.0,

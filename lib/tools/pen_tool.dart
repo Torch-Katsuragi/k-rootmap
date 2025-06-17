@@ -394,73 +394,11 @@ class PenTool extends MapTool {
     print('[DEBUG] addDrawingPolygonPointOptimized: 完了');
   }
 
-  /// 1つ取り消し（グローバル描画状態使用）
-  void undo(void Function(void Function()) setState, {required bool isLine}) {
-    if (isLine && drawingLine.isNotEmpty) {
-      drawingState.removeLastLinePoint();
-    } else if (!isLine && drawingPolygon.isNotEmpty) {
-      drawingState.removeLastPolygonPoint();
-    }
-    setState(() {});
-  }
-
-  /// キャンセル（全消去・グローバル描画状態使用）
-  void cancel(void Function(void Function()) setState, {required bool isLine}) {
-    if (isLine) {
-      drawingState.clearLine();
-    } else {
-      drawingState.clearPolygon();
-    }
-    setState(() {});
-  }
-
   /// リソースのクリーンアップ
   void dispose() {
     _uiUpdateTimer?.cancel();
     _uiUpdateTimer = null;
     _cachedPolygonPreview = null;
-  }
-
-  /// 確定処理（属性入力ダイアログはUI側で呼ぶこと）
-  void confirm({
-    required LayerNode selected,
-    required String name,
-    required String description,
-    required void Function(void Function()) setState,
-    required List<LatLng> Function(List<LatLng>) closeRing,
-  }) {
-    if (selected is LineLayerNode && drawingLine.length >= 2) {
-      LineFeatureNode.createIn(
-        selected,
-        List<LatLng>.from(drawingLine),
-        name,
-        description,
-      ).then((_) {
-        // フィーチャ表示を更新（mapStateが利用可能なら）
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-        }
-      });
-      setState(() {
-        drawingLine.clear();
-      });
-    } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
-      final closed = closeRing(drawingPolygon);
-      PolygonFeatureNode.createIn(
-        selected,
-        List<List<LatLng>>.from([closed]),
-        name,
-        description,
-      ).then((_) {
-        // フィーチャ表示を更新（mapStateが利用可能なら）
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-        }
-      });
-      setState(() {
-        drawingPolygon.clear();
-      });
-    }
   }
 
   /// 選択されたフィーチャーを効率的に削除（最適化・UI更新修正）

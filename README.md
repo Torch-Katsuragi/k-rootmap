@@ -2,6 +2,50 @@
 
 ## 最新の修正・改善
 
+### 2024/12/XX - GlobalDrawingStateの権限移譲・描画管理の統一化
+
+**概要：** `GlobalDrawingState`により多くの描画管理機能を移譲し、各ツールに分散していたconfirm処理、cancel処理、undo処理を統一化
+
+**実施した改善：**
+1. **確定処理の統一**：
+   - `confirmLineFeature` / `confirmPolygonFeature` / `confirmCurrentFeature`メソッドを追加
+   - 線・ポリゴンフィーチャの作成をGlobalDrawingStateが直接実行
+   - メタデータの統合（GPS測量データ + pen_toolデータ）も自動処理
+   - 作成後のUI更新もコールバック機能で対応
+
+2. **操作処理の統一**：
+   - `undo(isLine: bool)`：統一されたUndo処理
+   - `cancel(isLine: bool)`：統一されたキャンセル処理
+   - 各ツール（pen_tool、gps_tool）は統一APIを呼び出すだけ
+
+3. **統計情報の強化**：
+   - `getDrawingStats()`：GPS点・Pen点の内訳を含む詳細統計
+   - `printDebugInfo()`：より詳細なデバッグ情報出力
+   - 描画状態のリアルタイム監視機能
+
+**技術詳細：**
+- `lib/utils/global_drawing_state.dart`：権限移譲により142行追加（計384行）
+- 統一されたconfirm/cancel/undo API
+- フィーチャ作成時のメタデータ自動統合
+- エラーハンドリングと戻り値による成功/失敗判定
+
+**テスト結果：**
+- `test/global_drawing_state_confirm_test.dart`：5つのテストケース全てPASS
+- 統一undo処理、統一cancel処理、描画統計情報、メタデータ統合、描画状態チェックを検証
+- 権限移譲による機能拡張の動作確認
+
+**効果：**
+- 描画管理のロジックをGlobalDrawingStateに集約
+- 各ツールのコード簡素化とバグ防止
+- 統一されたAPIによる保守性向上
+- フィーチャ作成処理の再利用性向上
+
+**移行完了内容（続き）:**
+- `lib/screens/map_page.dart`：`_onConfirmDrawing`と`_onConfirmGpsSurvey`を統一API使用に変更
+- `lib/tools/pen_tool.dart`：`confirm/undo/cancel`メソッドを統一API使用に変更（@deprecated警告付き）
+- `lib/tools/gps_tool.dart`：`confirmSurveyFeature/undoLastPoint`を統一API使用に変更（@deprecated警告付き）
+- 既存コードとの後方互換性を維持しながら新しいAPIへの段階的移行を実現
+
 ### 2024/12/XX - GPS測量ポリゴン2点目のLatLngBoundsエラー修正
 
 **概要：** GPS測量でポリゴンの2点目を追加した際に発生していた`LatLngBounds cannot be created with an empty List of LatLng`エラーを修正
@@ -62,6 +106,54 @@
 - pen_toolのフリーハンド描画（線・ポリゴン）が正常に動作
 - タップ描画・フリーハンド描画の両方で安定した動作を実現
 - GlobalDrawingState APIの正しい使用パターンの確立
+
+### 2024/12/17 - GlobalDrawingState権限移譲の完全移行 ✅
+
+**概要：** 確定・取り消し・キャンセル処理をGlobalDrawingStateに完全移譲し、分散していた処理を統一APIに集約
+
+**主要移行内容：**
+1. **権限移譲の完了**：
+   - `map_page.dart`：`_onConfirmDrawing`と`_onConfirmGpsSurvey`でGlobalDrawingStateの統一確定処理を使用
+   - すべてのUndo/Cancelボタンハンドラーで直接`GlobalDrawingState.undo/cancel`を呼び出し
+   - ツール固有の処理から汎用的な統一APIへの完全移行
+   
+2. **統一API追加**：
+   - `confirmLineFeature/confirmPolygonFeature`：タイプ別確定処理
+   - `confirmCurrentFeature`：レイヤータイプ自動判定による汎用確定処理
+   - `undo/cancel(isLine: bool)`：線/ポリゴン識別による統一取り消し・キャンセル
+   - `getDrawingStats()`：GPS/Pen点数の詳細統計情報取得
+   
+3. **メタデータ統合機能**：
+   - GPS測量データ：元の詳細メタデータ（精度・時刻・データソース）を保持
+   - pen_toolデータ：座標とタイムスタンプのみの基本メタデータを生成
+   - 混在データを`drawing_points`フィールドに統一格納、GPS測量ログを`measurement_log`構造で保存
+
+4. **後方互換性維持**：
+   - 既存ツールメソッドに`@deprecated`マーク追加
+   - 段階的移行により既存コードの動作継続保証
+   - `pen_tool.dart`と`gps_tool.dart`の古いメソッドは新統一APIにリダイレクト
+
+5. **古いAPIの完全削除**：
+   - `pen_tool.dart`：deprecated `undo/cancel/confirm`メソッドを削除
+   - `gps_tool.dart`：deprecated `undoLastPoint/confirmSurveyFeature`メソッドを削除
+   - `map_page.dart`：古い`penTool.drawingLine/drawingPolygon`参照を`GlobalDrawingState`参照に変更
+
+**テスト結果：**
+- `test/global_drawing_state_confirm_test.dart`：5つのテストケース全てPASS ✅
+- 統一undo処理、統一cancel処理、描画統計、メタデータ統合、描画状態チェックすべて正常動作確認
+- 移行後の動作検証：正常な動作を確認済み
+
+**技術的達成：**
+- **コード重複の排除**：3つのファイル間に分散していた似たような処理を1箇所に集約
+- **統一APIによる保守性向上**：将来の機能追加・変更が容易になる設計
+- **エラーハンドリング強化**：boolean戻り値による成功・失敗の明確化
+- **UI更新コールバック**：フレキシブルなUI更新による表示精度向上
+
+**効果：**
+- 開発効率の大幅向上（コード重複削除、統一API）
+- バグ発生率の低減（処理の中央集約化）
+- 新機能追加時の影響範囲最小化
+- ツール間の一貫性確保
 
 ### 2024/12/XX - GlobalDrawingState復元とデータ整合性修正
 

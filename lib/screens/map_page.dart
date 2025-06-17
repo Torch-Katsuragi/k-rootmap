@@ -30,6 +30,7 @@ import '../tools/gps_utils.dart'; // Added GPS utility
 import '../screens/gps_settings_screen.dart'; // GPS設定画面
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
 import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
+import '../utils/global_drawing_state.dart'; // GlobalDrawingState
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -795,13 +796,41 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
       if (result == null) return;
 
-      // GPS測量フィーチャを作成
-      final success = await currentTool.confirmSurveyFeature(
-        name: result['name'] ?? '',
+      // GlobalDrawingStateの統一確定処理を使用（GPS測量メタデータ付き）
+      final drawingState = GlobalDrawingState.instance;
+
+      // GPS測量データを追加メタデータとして準備
+      final surveyGpsData =
+          drawingState.isLineDrawing
+              ? drawingState.getLineWithMetadata()
+              : drawingState.getPolygonWithMetadata();
+      final additionalMetadata = {
+        'type': 'measurement_log',
+        'contents': List<Map<String, dynamic>>.from(
+          surveyGpsData.map((e) => Map<String, dynamic>.from(e)),
+        ),
+      };
+
+      final success = await drawingState.confirmCurrentFeature(
+        layerNode: selected,
+        name:
+            result['name']?.isNotEmpty == true ? result['name']! : 'GPS測量フィーチャ',
         description: result['description'] ?? '',
-        setState: setState,
         closeRing: closeRing,
+        additionalMetadata: additionalMetadata,
+        refreshCallback: () {
+          // フィーチャ表示を更新
+          if (GlobalConfig.instance.mapState != null) {
+            GlobalConfig.instance.mapState.refreshFeatures();
+          }
+          setState(() {});
+        },
       );
+
+      // GPS測量成功時はGPS停止（map_pageの_gpsManagerを使用）
+      if (success && currentTool is GpsTool) {
+        await _gpsManager.stopGpsSurvey();
+      }
 
       if (success) {
         // フィーチャ表示を更新
@@ -842,74 +871,61 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   Future<void> _onConfirmDrawing() async {
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) return;
-    final penTool = GlobalConfig.instance.currentTool as PenTool;
-    if (selected is LineLayerNode && penTool.drawingLine.length >= 2) {
-      String? name = await showDialog<String>(
-        context: context,
-        builder: (context) {
-          String text = '';
-          return AlertDialog(
-            title: const Text('Attribute Input'),
-            content: TextField(
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Attribute (Text)'),
-              onChanged: (v) => text = v,
+
+    final drawingState = GlobalDrawingState.instance;
+
+    // 描画データがあるかチェック
+    if (!drawingState.isDrawing) {
+      print('[MAP] 確定処理: 描画データがありません');
+      return;
+    }
+
+    // 属性入力ダイアログを表示
+    String? name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        String text = '';
+        return AlertDialog(
+          title: const Text('Attribute Input'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Attribute (Text)'),
+            onChanged: (v) => text = v,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancel'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, null),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, text),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-      if (name == null) return;
-      penTool.confirm(
-        selected: selected,
-        name: name,
-        description: '',
-        setState: setState,
-        closeRing: closeRing,
-      );
-    } else if (selected is PolygonLayerNode &&
-        penTool.drawingPolygon.length >= 3) {
-      String? name = await showDialog<String>(
-        context: context,
-        builder: (context) {
-          String text = '';
-          return AlertDialog(
-            title: const Text('Attribute Input'),
-            content: TextField(
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Attribute (Text)'),
-              onChanged: (v) => text = v,
+            TextButton(
+              onPressed: () => Navigator.pop(context, text),
+              child: const Text('OK'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, null),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, text),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-      if (name == null) return;
-      penTool.confirm(
-        selected: selected,
-        name: name,
-        description: '',
-        setState: setState,
-        closeRing: closeRing,
-      );
+          ],
+        );
+      },
+    );
+    if (name == null) return;
+
+    // GlobalDrawingStateの統一確定処理を使用
+    final success = await drawingState.confirmCurrentFeature(
+      layerNode: selected,
+      name: name.isNotEmpty ? name : '新規フィーチャ',
+      description: '',
+      closeRing: closeRing,
+      refreshCallback: () {
+        // フィーチャ表示を更新
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+        }
+        setState(() {});
+      },
+    );
+
+    if (success) {
+      print('[MAP] フィーチャ確定成功: $name');
+    } else {
+      print('[MAP] フィーチャ確定失敗: $name');
     }
   }
 
@@ -1436,13 +1452,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         // --- Pen tool polygon line preview (2点の場合) ---
                         if (GlobalConfig.instance.currentTool is PenTool)
                           ...((() {
-                            final penTool =
-                                GlobalConfig.instance.currentTool as PenTool;
+                            final drawingState = GlobalDrawingState.instance;
                             // 2点の場合は線として表示
-                            if (penTool.drawingPolygon.length == 2) {
+                            if (drawingState.drawingPolygon.length == 2) {
                               return [
                                 Polyline(
-                                  points: penTool.drawingPolygon,
+                                  points: drawingState.drawingPolygon,
                                   color: Colors.orange,
                                   strokeWidth: 3.0,
                                 ),
@@ -1509,15 +1524,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         // --- Pen tool polygon preview (3点以上の場合) ---
                         if (GlobalConfig.instance.currentTool is PenTool)
                           ...((() {
-                            final penTool =
-                                GlobalConfig.instance.currentTool as PenTool;
+                            final drawingState = GlobalDrawingState.instance;
                             // 3点以上の場合のみポリゴンプレビューを表示
-                            if (penTool.drawingPolygon.length >= 3) {
-                              final previewPoints = penTool.getPolygonPreview(
-                                closeRing,
+                            if (drawingState.drawingPolygon.length >= 3) {
+                              final previewPoints = closeRing(
+                                drawingState.drawingPolygon,
                               );
-                              if (previewPoints != null &&
-                                  previewPoints.isNotEmpty) {
+                              if (previewPoints.isNotEmpty) {
                                 return [
                                   Polygon(
                                     points: previewPoints,
@@ -1835,12 +1848,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       }
                       // Line layer
                       else if (selected is LineLayerNode &&
-                          penTool.drawingLine.length >= 2) {
+                          GlobalDrawingState.instance.drawingLine.length >= 2) {
                         final len = GeometryCalc.calcLineLength(
-                          penTool.drawingLine,
+                          GlobalDrawingState.instance.drawingLine,
                         );
                         final centroid = GeometryCalc.calcLineCentroid(
-                          penTool.drawingLine,
+                          GlobalDrawingState.instance.drawingLine,
                         );
                         if (len >= 10000) {
                           previewText =
@@ -1852,8 +1865,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       }
                       // Polygon layer
                       else if (selected is PolygonLayerNode &&
-                          penTool.drawingPolygon.length >= 3) {
-                        final closed = closeRing(penTool.drawingPolygon);
+                          GlobalDrawingState.instance.drawingPolygon.length >=
+                              3) {
+                        final closed = closeRing(
+                          GlobalDrawingState.instance.drawingPolygon,
+                        );
                         final areaDeg2 = GeometryCalc.calcPolygonArea([closed]);
                         final centroid = GeometryCalc.calcPolygonCentroid([
                           closed,
@@ -2226,9 +2242,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   FloatingActionButton(
                     heroTag: 'gps_undo',
                     onPressed: () {
-                      setState(() {
-                        (currentTool as GpsTool).undoLastPoint();
-                      });
+                      final drawingState = GlobalDrawingState.instance;
+                      final gpsTool = currentTool as GpsTool;
+                      // GPS測量の場合、線と面のどちらかを判定
+                      final isLine = gpsTool.surveyLine.isNotEmpty;
+                      drawingState.undo(isLine: isLine);
+                      setState(() {});
                     },
                     tooltip: 'GPS測量の最後のポイントを取り消し',
                     child: const Icon(Icons.undo),
@@ -2278,13 +2297,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   FloatingActionButton(
                     heroTag: 'undo',
                     onPressed: () {
-                      if (currentTool is PenTool) {
-                        final penTool = currentTool as PenTool;
-                        if (isLineDrawing) {
-                          penTool.undo(setState, isLine: true);
-                        } else if (isPolygonDrawing) {
-                          penTool.undo(setState, isLine: false);
-                        }
+                      final drawingState = GlobalDrawingState.instance;
+                      if (isLineDrawing) {
+                        drawingState.undo(isLine: true);
+                        setState(() {}); // UI更新
+                      } else if (isPolygonDrawing) {
+                        drawingState.undo(isLine: false);
+                        setState(() {}); // UI更新
                       }
                     },
                     tooltip: 'Undo',
@@ -2295,13 +2314,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   FloatingActionButton(
                     heroTag: 'cancel',
                     onPressed: () {
-                      if (currentTool is PenTool) {
-                        final penTool = currentTool as PenTool;
-                        if (isLineDrawing) {
-                          penTool.cancel(setState, isLine: true);
-                        } else if (isPolygonDrawing) {
-                          penTool.cancel(setState, isLine: false);
-                        }
+                      final drawingState = GlobalDrawingState.instance;
+                      if (isLineDrawing) {
+                        drawingState.cancel(isLine: true);
+                        setState(() {}); // UI更新
+                      } else if (isPolygonDrawing) {
+                        drawingState.cancel(isLine: false);
+                        setState(() {}); // UI更新
                       }
                     },
                     tooltip: 'Cancel',

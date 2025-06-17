@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import '../lib/tools/pen_tool.dart';
 import '../lib/models/layer_tree_node.dart';
 import '../lib/utils/global_config.dart';
+import '../lib/utils/global_drawing_state.dart';
 
 void main() {
   group('PenTool Simple Tests', () {
@@ -48,14 +49,17 @@ void main() {
           () => penTool.onTap(tapDetails, mockMapState),
           isNot(throwsA(anything)),
         );
-        expect(penTool.drawingPolygon.length, equals(i + 1));
+        expect(
+          GlobalDrawingState.instance.drawingPolygon.length,
+          equals(i + 1),
+        );
 
         print(
-          '[TEST] Point ${i + 1} added successfully. Total points: ${penTool.drawingPolygon.length}',
+          '[TEST] Point ${i + 1} added successfully. Total points: ${GlobalDrawingState.instance.drawingPolygon.length}',
         );
       }
 
-      expect(penTool.drawingPolygon.length, equals(3));
+      expect(GlobalDrawingState.instance.drawingPolygon.length, equals(3));
       print('[TEST] Polygon tap simulation completed successfully');
     });
 
@@ -95,7 +99,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 10));
       }
 
-      expect(penTool.drawingPolygon.length, equals(5));
+      expect(GlobalDrawingState.instance.drawingPolygon.length, equals(5));
       print('[TEST] Rapid tap test completed successfully');
     });
   });

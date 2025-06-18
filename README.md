@@ -1,5 +1,182 @@
 # K-MAPS
 
+GIS（地理情報システム）アプリケーション for Flutter
+
+## アーキテクチャ概要
+
+### ツール系統
+- **PanTool**: パン・ズーム・回転機能
+- **PenTool**: 線・ポリゴン描画機能（GlobalDrawingStateと連携）
+- **GpsTool**: GPS測量機能（GlobalDrawingStateと連携）
+- **SelectTool**: フィーチャ選択・編集機能
+
+### 状態管理
+- **GlobalConfig**: アプリケーション全体の設定とシングルトン管理
+- **GlobalDrawingState**: 描画状態の共有管理（2024/6/18 メソッド整理実施）
+
+### データレイヤ
+- **LayerTreeNode**: レイヤ階層構造の基底クラス
+  - **FolderNode**: フォルダ管理
+  - **GeoPackageNode**: GeoPackageファイル管理
+  - **LayerNode**: レイヤ基底クラス
+    - **PointLayerNode**: ポイントレイヤ
+    - **LineLayerNode**: ラインレイヤ
+    - **PolygonLayerNode**: ポリゴンレイヤ
+- **FeatureNode**: フィーチャ基底クラス
+  - **PointFeatureNode**: ポイントフィーチャ
+  - **LineFeatureNode**: ラインフィーチャ
+  - **PolygonFeatureNode**: ポリゴンフィーチャ
+
+### サービス層
+- **GpsManagerService**: GPS機能統合管理
+- **BaseMapService**: 背景地図管理
+- **ForegroundService**: バックグラウンドGPS追跡
+
+## 最近の更新履歴
+
+### 2024/12/19 - ツール系のメソッド整理・リファクタリング
+**PenToolの整理**
+- 削除されたメソッド・プロパティ：
+  - `_currentPath` - 未使用フィールド
+  - `_cachedPolygonPreview` & `_lastPolygonUpdateCount` - 削除されたgetPolygonPreviewで使用
+  - `getPolygonPreview()` - map_pageで直接使用されていない
+  - `addDrawingLinePoint()` & `addDrawingPolygonPoint()` - 内部でのみ使用、直接GlobalDrawingStateに置き換え
+  - `addDrawingPolygonPointOptimized()` - 通常のメソッドで代替可能
+  - `dispose()` - map_pageで直接呼ばれていない → `cleanUp()`に簡略化
+
+**GpsToolの整理**
+- 削除されたメソッド・プロパティ：
+  - `isLongPressing` & `longPressGpsCount` getters - map_pageで未使用
+  - `clearSurveyData()` - `_cleanupGpsFeatures()`に統合
+  - `_formatGpsDataForDescription()` - 未使用
+  - `_handleGpsTap()` ～ `_handleGpsScaleEnd()` - TODO実装で未使用
+  - `toggleGpsTracking()` ～ `centerOnCurrentLocation()` - TODO実装で未使用
+  - `_collectGpsDataForLongPress()` - @Deprecated削除
+
+**改善効果**：
+- 不要なメソッドの削除により保守性向上
+- GlobalDrawingStateへの一元化によるアーキテクチャの単純化
+- 実際に使用されている機能に集中したクリーンなAPI
+
+### 2024/12/18 - GlobalDrawingStateメソッド整理
+**削除されたメソッド**：
+- `removeLastLinePoint()` → `undo(isLine: true)`に統合
+- `removeLastPolygonPoint()` → `undo(isLine: false)`に統合  
+- `printDebugInfo()` → テスト専用削除
+- `getDrawingStats()` → テスト専用削除
+
+**統合されたインターフェース**：
+```dart
+void undo({required bool isLine})     // 最後の点を削除
+void cancel({required bool isLine})   // 描画をキャンセル
+```
+
+### 主要クラス構成
+
+#### GlobalDrawingState（描画状態管理）
+```dart
+// 描画データ
+List<LatLng> get drawingLine          // 線描画データ
+List<LatLng> get drawingPolygon       // ポリゴン描画データ
+List<Map<String, dynamic>?> get lineMetadata    // 線メタデータ
+List<Map<String, dynamic>?> get polygonMetadata // ポリゴンメタデータ
+
+// 描画操作
+void addLinePoint(LatLng, Map<String, dynamic>?)     // 線に点追加
+void addPolygonPoint(LatLng, Map<String, dynamic>?)  // ポリゴンに点追加
+void setPointPreview(LatLng?)                         // プレビュー設定
+
+// 制御操作
+void undo({required bool isLine})        // 最後の点を削除
+void cancel({required bool isLine})      // 描画をキャンセル
+void clearLine()                         // 線データクリア
+void clearPolygon()                      // ポリゴンデータクリア
+void clearAll()                          // 全データクリア
+
+// 状態取得
+bool get isDrawing                       // 描画中チェック
+bool get isLineDrawing                   // 線描画中チェック
+bool get isPolygonDrawing                // ポリゴン描画中チェック
+bool get isEditMode                      // 追記モードチェック
+
+// データ取得
+List<Map<String, dynamic>> getLineWithMetadata()    // メタデータ付き線データ
+List<Map<String, dynamic>> getPolygonWithMetadata() // メタデータ付きポリゴンデータ
+
+// フィーチャ確定
+Future<bool> confirmCurrentFeature(...)  // 汎用確定処理
+Future<bool> confirmLineFeature(...)     // 線フィーチャ確定
+Future<bool> confirmPolygonFeature(...)  // ポリゴンフィーチャ確定
+
+// 追記モード
+void startEditingLineFeature(LineFeatureNode)       // 線フィーチャ追記開始
+void startEditingPolygonFeature(PolygonFeatureNode) // ポリゴンフィーチャ追記開始
+bool startEditingFeature(FeatureNode)               // 汎用追記開始
+```
+
+#### LayerTreeNode（レイヤ階層管理）
+```dart
+// 基本属性
+String name                              // ノード名
+bool visible                             // 表示状態
+List<LayerTreeNode> children            // 子ノード
+
+// 階層操作
+void addChild(LayerTreeNode)            // 子ノード追加
+void removeChild(LayerTreeNode)         // 子ノード削除
+bool isVisibleRecursive()               // 再帰的表示チェック
+
+// 初期化・更新
+Future<void> ensureInitialized()        // 初期化確認
+Future<void> updateChildren()           // 子ノード更新
+```
+
+#### FeatureNode（フィーチャ管理）
+```dart
+// 基本属性
+String name                             // フィーチャ名
+String description                      // 説明
+Map<String, dynamic>? metadata         // メタデータ
+
+// ジオメトリ操作
+Future<bool> updateGeometry(...)        // ジオメトリ更新
+Future<bool> delete()                   // フィーチャ削除
+
+// 静的ファクトリ
+static Future<FeatureNode> createIn(LayerNode, ...)  // フィーチャ作成
+```
+
+## テスト構成
+
+### 単体テスト
+- `test/global_drawing_state_test.dart` - 描画状態管理テスト
+- `test/gps_survey_point_count_test.dart` - GPS測量点数テスト
+- `test/coordinate_test.dart` - 座標変換テスト
+- `test/metadata_parser_test.dart` - メタデータパースンテスト
+
+### 統合テスト
+- `test/pen_tool_polygon_test.dart` - ペンツールポリゴンテスト
+- `test/simple_pen_tool_test.dart` - シンプルペンツールテスト
+
+## 開発方針
+
+### デザインパターン
+- **Singleton**: GlobalConfig, GlobalDrawingState
+- **Factory**: FeatureNode作成
+- **Strategy**: ツール切り替え
+- **Observer**: 状態変更通知
+
+### エラーハンドリング
+- 非同期処理での例外キャッチ
+- ユーザーフレンドリーなエラーメッセージ
+- デバッグログの充実
+
+### 保守性向上
+- 統一されたインターフェース
+- コードの重複排除
+- 適切なコメント付与
+- テストカバレッジ向上
+
 ## 最新の修正・改善
 
 ### 2024/12/XX - フィーチャ追記機能とジオメトリ更新APIの実装

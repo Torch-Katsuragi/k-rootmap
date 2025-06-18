@@ -27,12 +27,6 @@ class PenTool extends MapTool {
   @override
   IconData get icon => Icons.edit;
 
-  final List<Offset> _currentPath = [];
-
-  /// ポリゴンプレビュー用キャッシュ（パフォーマンス最適化）
-  List<LatLng>? _cachedPolygonPreview;
-  int _lastPolygonUpdateCount = -1;
-
   /// UI更新デバウンス用タイマー
   Timer? _uiUpdateTimer;
 
@@ -49,39 +43,6 @@ class PenTool extends MapTool {
 
   /// ポリゴンの描画点列（グローバル描画状態から取得）
   List<LatLng> get drawingPolygon => drawingState.drawingPolygon;
-
-  /// ポリゴンプレビュー取得（キャッシュ機能付き・パフォーマンス最適化）
-  List<LatLng>? getPolygonPreview(
-    List<LatLng> Function(List<LatLng>) closeRing,
-  ) {
-    if (drawingPolygon.length < 2) return null;
-
-    // キャッシュが有効かチェック
-    if (_lastPolygonUpdateCount == drawingPolygon.length &&
-        _cachedPolygonPreview != null) {
-      return _cachedPolygonPreview;
-    }
-
-    // 2点の場合は線として扱い、closeRingは呼び出さない
-    if (drawingPolygon.length == 2) {
-      _cachedPolygonPreview = List<LatLng>.from(drawingPolygon);
-      _lastPolygonUpdateCount = drawingPolygon.length;
-
-      print(
-        '[DEBUG] PenTool.getPolygonPreview: 線プレビュー - 点数: ${drawingPolygon.length}',
-      );
-      return _cachedPolygonPreview;
-    }
-
-    // 3点以上の場合は新しい計算を実行してキャッシュ
-    _cachedPolygonPreview = closeRing(drawingPolygon);
-    _lastPolygonUpdateCount = drawingPolygon.length;
-
-    print(
-      '[DEBUG] PenTool.getPolygonPreview: キャッシュ更新 - 点数: ${drawingPolygon.length}',
-    );
-    return _cachedPolygonPreview;
-  }
 
   /// タップイベント
   @override
@@ -139,15 +100,23 @@ class PenTool extends MapTool {
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       print('[DEBUG] PenTool.onTap: ラインレイヤー処理');
-      addDrawingLinePoint(latlng, mapState.setState);
+      drawingState.addLinePoint(latlng, null);
+      mapState.setState(() {});
     } else if (selected is PolygonLayerNode) {
       print(
         '[DEBUG] PenTool.onTap: ポリゴンレイヤー処理開始 - 現在の点数: ${drawingPolygon.length}',
       );
 
-      // タップ時のポリゴン描画の最適化（UI更新頻度を抑制）
+      // タップ時のポリゴン描画
       try {
-        addDrawingPolygonPointOptimized(latlng, mapState.setState);
+        drawingState.addPolygonPoint(latlng, null);
+
+        // デバウンス機能：50ms後にUI更新を実行
+        _uiUpdateTimer?.cancel();
+        _uiUpdateTimer = Timer(Duration(milliseconds: 50), () {
+          mapState.setState(() {});
+        });
+
         print(
           '[DEBUG] PenTool.onTap: ポリゴン点追加完了 - 新しい点数: ${drawingPolygon.length}',
         );
@@ -195,16 +164,16 @@ class PenTool extends MapTool {
       // Pointerバッファがあれば最初に反映
       if (pointerBuffer.isNotEmpty) {
         if (selected is LineLayerNode) {
-          drawingState.clearLine(); // 正しいメソッドを使用
+          drawingState.clearLine();
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
-            addDrawingLinePoint(latlng, mapState.setState);
+            drawingState.addLinePoint(latlng, null);
           }
         } else if (selected is PolygonLayerNode) {
-          drawingState.clearPolygon(); // 正しいメソッドを使用
+          drawingState.clearPolygon();
           for (final offset in pointerBuffer) {
             final latlng = mapState.offsetToLatLng(offset);
-            addDrawingPolygonPoint(latlng, mapState.setState);
+            drawingState.addPolygonPoint(latlng, null);
           }
         }
         clearPointerBuffer();
@@ -215,12 +184,14 @@ class PenTool extends MapTool {
         mapState.setState(() {});
       } else if (selected is LineLayerNode) {
         if (drawingLine.isEmpty) {
-          addDrawingLinePoint(latlng, mapState.setState);
+          drawingState.addLinePoint(latlng, null);
+          mapState.setState(() {});
         }
         _isDrawing = true;
       } else if (selected is PolygonLayerNode) {
         if (drawingPolygon.isEmpty) {
-          addDrawingPolygonPoint(latlng, mapState.setState);
+          drawingState.addPolygonPoint(latlng, null);
+          mapState.setState(() {});
         }
         _isDrawing = true;
       }
@@ -271,9 +242,11 @@ class PenTool extends MapTool {
         drawingState.setPointPreview(latlng);
         mapState.setState(() {});
       } else if (selected is LineLayerNode && _isDrawing) {
-        addDrawingLinePoint(latlng, mapState.setState);
+        drawingState.addLinePoint(latlng, null);
+        mapState.setState(() {});
       } else if (selected is PolygonLayerNode && _isDrawing) {
-        addDrawingPolygonPoint(latlng, mapState.setState);
+        drawingState.addPolygonPoint(latlng, null);
+        mapState.setState(() {});
       }
     }
   }
@@ -338,67 +311,10 @@ class PenTool extends MapTool {
     _pointerCount = 0;
   }
 
-  /// 線の描画点を追加（グローバル描画状態使用）
-  void addDrawingLinePoint(
-    LatLng latlng,
-    void Function(void Function()) setState,
-  ) {
-    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
-    drawingState.addLinePoint(latlng, null);
-    setState(() {});
-  }
-
-  /// ポリゴンの描画点を追加（グローバル描画状態使用）
-  void addDrawingPolygonPoint(
-    LatLng latlng,
-    void Function(void Function()) setState,
-  ) {
-    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
-    drawingState.addPolygonPoint(latlng, null);
-    setState(() {});
-  }
-
-  /// ポリゴンの描画点を追加（最適化版：デバウンス機能付き）
-  void addDrawingPolygonPointOptimized(
-    LatLng latlng,
-    void Function(void Function()) setState,
-  ) {
-    print('[DEBUG] addDrawingPolygonPointOptimized: 開始 - 座標: $latlng');
-
-    // グローバル描画状態に追加（pen_toolによる点はメタデータなし）
-    drawingState.addPolygonPoint(latlng, null);
-
-    // キャッシュを無効化
-    _cachedPolygonPreview = null;
-    _lastPolygonUpdateCount = -1;
-
-    print(
-      '[DEBUG] addDrawingPolygonPointOptimized: 座標追加完了 - 現在の点数: ${drawingPolygon.length}',
-    );
-
-    // 既存のタイマーをキャンセル
-    _uiUpdateTimer?.cancel();
-
-    // デバウンス機能：50ms後にUI更新を実行
-    _uiUpdateTimer = Timer(Duration(milliseconds: 50), () {
-      try {
-        setState(() {
-          print('[DEBUG] addDrawingPolygonPointOptimized: デバウンス後UI更新実行');
-        });
-        print('[DEBUG] addDrawingPolygonPointOptimized: UI更新完了');
-      } catch (e) {
-        print('[ERROR] addDrawingPolygonPointOptimized: UI更新エラー: $e');
-      }
-    });
-
-    print('[DEBUG] addDrawingPolygonPointOptimized: 完了');
-  }
-
   /// リソースのクリーンアップ
-  void dispose() {
+  void cleanUp() {
     _uiUpdateTimer?.cancel();
     _uiUpdateTimer = null;
-    _cachedPolygonPreview = null;
   }
 
   /// 選択されたフィーチャーを効率的に削除（最適化・UI更新修正）

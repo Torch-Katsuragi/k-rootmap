@@ -49,7 +49,6 @@ class GpsTool extends MapTool {
   /// GPS測量機能のgetters（GlobalDrawingStateから取得）
   List<LatLng> get surveyLine => drawingState.drawingLine;
   List<LatLng> get surveyPolygon => drawingState.drawingPolygon;
-  bool get isLongPressing => _isLongPressing;
   int get longPressGpsCount => _longPressGpsData.length;
 
   /// ツール有効化時の初期化処理
@@ -72,28 +71,24 @@ class GpsTool extends MapTool {
   @override
   void onTap(TapUpDetails details, dynamic mapState) {
     _panTool.onTap(details, mapState);
-    _handleGpsTap(details, mapState);
   }
 
   /// スケール開始イベント - パンツールに丸投げ
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
     _panTool.onScaleStart(details, mapState);
-    _handleGpsScaleStart(details, mapState);
   }
 
   /// スケール更新イベント - パンツールに丸投げ
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
     _panTool.onScaleUpdate(details, mapState);
-    _handleGpsScaleUpdate(details, mapState);
   }
 
   /// スケール終了イベント - パンツールに丸投げ
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
     _panTool.onScaleEnd(details, mapState);
-    _handleGpsScaleEnd(details, mapState);
   }
 
   /// バッファへの座標追加 - パンツールのバッファと同期
@@ -120,15 +115,29 @@ class GpsTool extends MapTool {
 
   /// GPS機能の初期化
   void _initializeGpsFeatures() {
-    // GPS測量データの初期化
-    clearSurveyData();
+    // GPS測量データの初期化（GlobalDrawingStateを使用）
+    drawingState.clearAll();
     debugPrint('[GpsTool] GPS測量機能を初期化しました');
   }
 
   /// GPS機能のクリーンアップ
   void _cleanupGpsFeatures() {
-    // GPS測量データのクリア
-    clearSurveyData();
+    // GPS測量データのクリア（GlobalDrawingStateを使用）
+    drawingState.clearAll();
+
+    // 長押し関連もクリア
+    _gpsCollectionTimer?.cancel();
+    _gpsCollectionTimer = null;
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _isLongPressing = false;
+    _longPressGpsData.clear();
+    _longPressStartTime = null;
+
+    // GPS Manager Service の連続測量もクリア
+    _gpsManager.stopContinuousSurvey();
+    _gpsManager.clearContinuousSurveyData();
+
     debugPrint('[GpsTool] GPS測量機能をクリーンアップしました');
   }
 
@@ -356,17 +365,6 @@ class GpsTool extends MapTool {
     }
   }
 
-  /// 長押し中のGPSデータ収集（位置更新ベースのため廃止）
-  ///
-  /// 注意: このメソッドは位置更新ベースの連続測量への移行により廃止されました。
-  /// 現在は _onContinuousSurveyUpdate() を使用して位置更新のタイミングで
-  /// GPS Manager Service から自動的にデータを収集します。
-  @Deprecated('位置更新ベース連続測量への移行により廃止')
-  Future<void> _collectGpsDataForLongPress() async {
-    // 互換性維持のため空実装
-    debugPrint('[GpsTool] _collectGpsDataForLongPress は廃止されました（位置更新ベース移行）');
-  }
-
   /// GPS平均化計算
   Map<String, dynamic> _calculateAveragedGpsPosition(
     List<Map<String, dynamic>> gpsDataList,
@@ -437,6 +435,7 @@ class GpsTool extends MapTool {
       },
       'usedGpsData': List<Map<String, dynamic>>.from(rawGpsDataList),
       'sampleCount': rawGpsDataList.length,
+      'point_count': rawGpsDataList.length, // マーカー表示用の点数
       'averagingDuration':
           isSingleTap ? '瞬時測量' : '${duration.toStringAsFixed(1)}秒',
       'recordedAt': DateTime.now().toIso8601String(),
@@ -457,100 +456,11 @@ class GpsTool extends MapTool {
     return 1; // PointLayerNode
   }
 
-  /// GPS測量データをクリア（GlobalDrawingState使用）
-  void clearSurveyData() {
-    drawingState.clearAll();
-
-    // 長押し関連もクリア
-    _gpsCollectionTimer?.cancel();
-    _gpsCollectionTimer = null;
-    _longPressTimer?.cancel();
-    _longPressTimer = null;
-    _isLongPressing = false;
-    _longPressGpsData.clear();
-    _longPressStartTime = null;
-
-    // GPS Manager Service の連続測量もクリア
-    _gpsManager.stopContinuousSurvey();
-    _gpsManager.clearContinuousSurveyData();
-
-    debugPrint('[GpsTool] GPS測量データと連続測量をクリアしました');
-  }
-
   /// GPS測量をキャンセル（GPS停止付き）
   Future<void> cancelSurveyWithGpsStop() async {
-    clearSurveyData();
+    _cleanupGpsFeatures();
     await _gpsManager.stopGpsSurvey();
     debugPrint('[GpsTool] GPS測量をキャンセルしてGPS停止しました');
-  }
-
-  /// GPS測量データを文字列形式でフォーマット（GlobalDrawingState対応）
-  String _formatGpsDataForDescription() {
-    final surveyGpsData =
-        surveyLine.isNotEmpty
-            ? drawingState.getLineWithMetadata()
-            : drawingState.getPolygonWithMetadata();
-
-    if (surveyGpsData.isEmpty) return 'GPS測量データなし';
-
-    // 最適化された辞書のlistをそのまま文字列に変換
-    return surveyGpsData.toString();
-  }
-
-  /// GPSタップイベント処理
-  void _handleGpsTap(TapUpDetails details, dynamic mapState) {
-    // TODO: 将来実装
-    // - タップ位置でのGPS情報表示
-    // - GPS中心移動のトグル
-    // - 位置情報の詳細ポップアップ
-    debugPrint('[GpsTool] GPSタップ処理（将来実装予定）');
-  }
-
-  /// GPSスケール開始イベント処理
-  void _handleGpsScaleStart(ScaleStartDetails details, dynamic mapState) {
-    // TODO: 将来実装
-    // - GPS追跡中の自動フォロー無効化
-    debugPrint('[GpsTool] GPSスケール開始（将来実装予定）');
-  }
-
-  /// GPSスケール更新イベント処理
-  void _handleGpsScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
-    // TODO: 将来実装
-    // - ズームレベルに応じた精度表示の調整
-    debugPrint('[GpsTool] GPSスケール更新（将来実装予定）');
-  }
-
-  /// GPSスケール終了イベント処理
-  void _handleGpsScaleEnd(ScaleEndDetails details, dynamic mapState) {
-    // TODO: 将来実装
-    // - GPS追跡の再開確認
-    debugPrint('[GpsTool] GPSスケール終了（将来実装予定）');
-  }
-
-  // --- 将来実装予定のGPS専用機能 ---
-
-  /// GPS中心移動の有効/無効切り替え
-  void toggleGpsTracking() {
-    // TODO: 将来実装
-    debugPrint('[GpsTool] GPS追跡トグル（将来実装予定）');
-  }
-
-  /// GPS軌跡表示の有効/無効切り替え
-  void toggleTrackDisplay() {
-    // TODO: 将来実装
-    debugPrint('[GpsTool] 軌跡表示トグル（将来実装予定）');
-  }
-
-  /// GPS精度の可視化切り替え
-  void toggleAccuracyDisplay() {
-    // TODO: 将来実装
-    debugPrint('[GpsTool] 精度表示トグル（将来実装予定）');
-  }
-
-  /// 現在位置への自動移動
-  void centerOnCurrentLocation() {
-    // TODO: 将来実装
-    debugPrint('[GpsTool] 現在位置中心移動（将来実装予定）');
   }
 
   /// 連続測量位置更新コールバック

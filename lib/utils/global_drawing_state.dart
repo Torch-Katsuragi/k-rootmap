@@ -104,31 +104,21 @@ class GlobalDrawingState {
   /// 何らかの描画が進行中かチェック
   bool get isDrawing => isLineDrawing || isPolygonDrawing;
 
-  /// 線描画の最後の点を削除（Undo機能）
-  void removeLastLinePoint() {
-    if (_drawingLine.isNotEmpty) {
-      final removedPoint = _drawingLine.removeLast();
-      final removedMetadata = _lineMetadata.removeLast();
-      print('[GlobalDrawingState] 線の最後の点を削除: $removedPoint');
-    }
-  }
-
-  /// ポリゴン描画の最後の点を削除（Undo機能）
-  void removeLastPolygonPoint() {
-    if (_drawingPolygon.isNotEmpty) {
-      final removedPoint = _drawingPolygon.removeLast();
-      final removedMetadata = _polygonMetadata.removeLast();
-      print('[GlobalDrawingState] ポリゴンの最後の点を削除: $removedPoint');
-    }
-  }
-
   /// 元に戻す処理（Undo）- 統一インターフェース
   /// [isLine] - true: 線の最後の点を削除, false: ポリゴンの最後の点を削除
   void undo({required bool isLine}) {
     if (isLine && isLineDrawing) {
-      removeLastLinePoint();
+      if (_drawingLine.isNotEmpty) {
+        final removedPoint = _drawingLine.removeLast();
+        final removedMetadata = _lineMetadata.removeLast();
+        print('[GlobalDrawingState] 線の最後の点を削除: $removedPoint');
+      }
     } else if (!isLine && isPolygonDrawing) {
-      removeLastPolygonPoint();
+      if (_drawingPolygon.isNotEmpty) {
+        final removedPoint = _drawingPolygon.removeLast();
+        final removedMetadata = _polygonMetadata.removeLast();
+        print('[GlobalDrawingState] ポリゴンの最後の点を削除: $removedPoint');
+      }
     } else {
       print('[GlobalDrawingState] Undo: 削除する点がありません');
     }
@@ -438,33 +428,6 @@ class GlobalDrawingState {
       }
     }
     return result;
-  }
-
-  /// 描画状態の統計情報を取得
-  Map<String, int> getDrawingStats() {
-    return {
-      'line_points': _drawingLine.length,
-      'polygon_points': _drawingPolygon.length,
-      'line_gps_points': _lineMetadata.where((m) => m != null).length,
-      'polygon_gps_points': _polygonMetadata.where((m) => m != null).length,
-      'line_pen_points': _lineMetadata.where((m) => m == null).length,
-      'polygon_pen_points': _polygonMetadata.where((m) => m == null).length,
-    };
-  }
-
-  /// デバッグ用情報出力
-  void printDebugInfo() {
-    final stats = getDrawingStats();
-    print('[GlobalDrawingState] === デバッグ情報 ===');
-    print(
-      '線の点数: ${stats['line_points']} (GPS: ${stats['line_gps_points']}, Pen: ${stats['line_pen_points']})',
-    );
-    print(
-      'ポリゴンの点数: ${stats['polygon_points']} (GPS: ${stats['polygon_gps_points']}, Pen: ${stats['polygon_pen_points']})',
-    );
-    print('点プレビュー: $_pointPreview');
-    print('描画中: $isDrawing (線: $isLineDrawing, ポリゴン: $isPolygonDrawing)');
-    print('================================');
   }
 
   /// 線フィーチャの追記を開始

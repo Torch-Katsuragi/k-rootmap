@@ -118,8 +118,8 @@ void main() {
 
       expect(drawingState.drawingPolygon.length, 3);
 
-      // 最後の点を削除
-      drawingState.removeLastPolygonPoint();
+      // 最後の点を削除（undoメソッドを使用）
+      drawingState.undo(isLine: false);
       expect(drawingState.drawingPolygon.length, 2);
 
       // 全クリア
@@ -251,16 +251,14 @@ void main() {
       drawingState.addPolygonPoint(LatLng(35.6795, 139.6536), null);
       drawingState.addPolygonPoint(LatLng(35.6806, 139.6547), null);
 
-      final stats = drawingState.getDrawingStats();
+      // 基本的な統計を直接チェック
+      expect(drawingState.drawingLine.length, 3);
+      expect(drawingState.drawingPolygon.length, 2);
+      expect(drawingState.lineMetadata.where((m) => m != null).length, 2);
+      expect(drawingState.lineMetadata.where((m) => m == null).length, 1);
+      expect(drawingState.polygonMetadata.where((m) => m == null).length, 2);
 
-      expect(stats['line_points'], 3);
-      expect(stats['polygon_points'], 2);
-      expect(stats['line_gps_points'], 2);
-      expect(stats['line_pen_points'], 1);
-      expect(stats['polygon_gps_points'], 0);
-      expect(stats['polygon_pen_points'], 2);
-
-      print('[TEST] 統計情報テスト成功: $stats');
+      print('[TEST] 統計情報テスト成功');
     });
 
     test('デバッグ情報出力テスト', () {
@@ -277,10 +275,12 @@ void main() {
       drawingState.addLinePoint(LatLng(35.6773, 139.6514), null);
       drawingState.setPointPreview(LatLng(35.6784, 139.6525));
 
-      // デバッグ情報出力（例外が発生しないことを確認）
-      expect(() => drawingState.printDebugInfo(), returnsNormally);
+      // 基本的な状態確認
+      expect(drawingState.isDrawing, true);
+      expect(drawingState.isLineDrawing, true);
+      expect(drawingState.pointPreview, isNotNull);
 
-      print('[TEST] デバッグ情報出力テスト成功');
+      print('[TEST] デバッグ情報テスト成功（簡略版）');
     });
   });
 }

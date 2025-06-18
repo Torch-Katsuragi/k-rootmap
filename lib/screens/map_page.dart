@@ -819,11 +819,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         closeRing: closeRing,
         additionalMetadata: additionalMetadata,
         refreshCallback: () {
-          // フィーチャ表示を更新
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-          }
-          setState(() {});
+          // フィーチャ表示を更新（pen_toolと同じ処理を使用）
+          _forceMapRefresh();
         },
       );
 

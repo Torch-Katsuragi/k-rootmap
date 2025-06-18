@@ -1,5 +1,7 @@
 import 'package:latlong2/latlong.dart';
 import '../models/layer_tree_node.dart';
+import '../utils/global_config.dart';
+import 'dart:async';
 
 /// グローバルな描画状態とメタデータを管理するクラス
 /// GPS測量とペンツールでの描画状態を共有する
@@ -22,6 +24,11 @@ class GlobalDrawingState {
   /// 追記モード関連
   /// 追記対象のFeatureNode（nullの場合は新規作成モード）
   FeatureNode? _editingFeature;
+
+  /// 自動保存機能関連
+  Timer? _autoSaveTimer;
+  static const Duration _autoSaveInterval = Duration(minutes: 1);
+  int _autoSaveCounter = 0;
 
   /// 追記モードかどうか
   bool get isEditMode => _editingFeature != null;
@@ -52,6 +59,9 @@ class GlobalDrawingState {
       '[GlobalDrawingState] 線に点追加: $position, メタデータ: ${metadata != null ? 'あり' : 'なし'}',
     );
     print('[GlobalDrawingState] 現在の線の点数: ${_drawingLine.length}');
+
+    // 自動保存タイマーの開始/リセット
+    _resetAutoSaveTimer();
   }
 
   /// ポリゴン描画に点を追加
@@ -65,6 +75,9 @@ class GlobalDrawingState {
       '[GlobalDrawingState] ポリゴンに点追加: $position, メタデータ: ${metadata != null ? 'あり' : 'なし'}',
     );
     print('[GlobalDrawingState] 現在のポリゴンの点数: ${_drawingPolygon.length}');
+
+    // 自動保存タイマーの開始/リセット
+    _resetAutoSaveTimer();
   }
 
   /// 点プレビューの設定
@@ -92,6 +105,7 @@ class GlobalDrawingState {
     clearPolygon();
     _pointPreview = null;
     _editingFeature = null; // 追記モードもクリア
+    _stopAutoSaveTimer(); // 自動保存タイマーも停止
     print('[GlobalDrawingState] 全描画データをクリア');
   }
 
@@ -141,12 +155,14 @@ class GlobalDrawingState {
   /// [description] - フィーチャ説明
   /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
+  /// [clearAfterConfirm] - 確定後に描画データをクリアするか（デフォルト: true）
   Future<bool> confirmLineFeature({
     LineLayerNode? layerNode,
     required String name,
     required String description,
     Map<String, dynamic>? additionalMetadata,
     void Function()? refreshCallback,
+    bool clearAfterConfirm = true,
   }) async {
     if (_drawingLine.length < 2) {
       print('[GlobalDrawingState] 線確定: 点数が不足しています（最低2点必要）');
@@ -203,7 +219,9 @@ class GlobalDrawingState {
       }
 
       // 描画データをクリア
-      clearAll();
+      if (clearAfterConfirm) {
+        clearAll();
+      }
 
       // UI更新（追記モードの場合はより強力な更新を実行）
       refreshCallback?.call();
@@ -227,6 +245,7 @@ class GlobalDrawingState {
   /// [closeRing] - ポリゴンを閉じる処理
   /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
+  /// [clearAfterConfirm] - 確定後に描画データをクリアするか（デフォルト: true）
   Future<bool> confirmPolygonFeature({
     PolygonLayerNode? layerNode,
     required String name,
@@ -234,6 +253,7 @@ class GlobalDrawingState {
     required List<LatLng> Function(List<LatLng>) closeRing,
     Map<String, dynamic>? additionalMetadata,
     void Function()? refreshCallback,
+    bool clearAfterConfirm = true,
   }) async {
     if (_drawingPolygon.length < 3) {
       print('[GlobalDrawingState] ポリゴン確定: 点数が不足しています（最低3点必要）');
@@ -293,7 +313,9 @@ class GlobalDrawingState {
       }
 
       // 描画データをクリア
-      clearAll();
+      if (clearAfterConfirm) {
+        clearAll();
+      }
 
       // UI更新（追記モードの場合はより強力な更新を実行）
       refreshCallback?.call();
@@ -543,6 +565,142 @@ class GlobalDrawingState {
         '[GlobalDrawingState] サポートされていないフィーチャタイプです: ${feature.runtimeType}',
       );
       return false;
+    }
+  }
+
+  /// 自動保存タイマーをリセット（既存のタイマーを停止して新しくスタート）
+  void _resetAutoSaveTimer() {
+    _stopAutoSaveTimer();
+    _startAutoSaveTimer();
+  }
+
+  /// 自動保存タイマーを開始
+  void _startAutoSaveTimer() {
+    // 描画中の場合のみタイマーを開始
+    if (!isDrawing) return;
+
+    _autoSaveTimer = Timer(_autoSaveInterval, () {
+      print('[GlobalDrawingState] 自動保存タイマー満了 - 自動保存を実行');
+      _performAutoSave();
+    });
+
+    print('[GlobalDrawingState] 自動保存タイマー開始 (${_autoSaveInterval.inMinutes}分)');
+  }
+
+  /// 自動保存タイマーを停止
+  void _stopAutoSaveTimer() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
+    print('[GlobalDrawingState] 自動保存タイマー停止');
+  }
+
+  /// 自動保存処理を実行
+  Future<void> _performAutoSave() async {
+    if (!isDrawing) {
+      print('[GlobalDrawingState] 自動保存: 描画中ではないためスキップ');
+      return;
+    }
+
+    // 現在選択されているレイヤーを取得
+    final selectedLayer = GlobalConfig.instance.selectedLayerNode;
+    if (selectedLayer == null) {
+      print('[GlobalDrawingState] 自動保存エラー: 選択されているレイヤーがありません');
+      return;
+    }
+
+    _autoSaveCounter++;
+    final autoSaveName =
+        '自動保存_${_autoSaveCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final autoSaveDescription = '自動保存により作成されたフィーチャ';
+
+    print('[GlobalDrawingState] 自動保存実行: $autoSaveName');
+    print(
+      '[GlobalDrawingState] 自動保存DEBUG - selectedLayer: ${selectedLayer.name} (${selectedLayer.runtimeType})',
+    );
+    print(
+      '[GlobalDrawingState] 自動保存DEBUG - isLineDrawing: $isLineDrawing, isPolygonDrawing: $isPolygonDrawing',
+    );
+    print('[GlobalDrawingState] 自動保存DEBUG - isEditMode: $isEditMode');
+
+    try {
+      bool success = false;
+      FeatureNode? savedFeature;
+
+      if (isLineDrawing && selectedLayer is LineLayerNode) {
+        print('[GlobalDrawingState] 自動保存: 線の処理開始 - 点数: ${_drawingLine.length}');
+
+        // 線の自動保存（常に新規作成、描画データはクリアしない）
+        success = await confirmLineFeature(
+          layerNode: selectedLayer,
+          name: autoSaveName,
+          description: autoSaveDescription,
+          refreshCallback: () {},
+          clearAfterConfirm: false,
+        );
+
+        // 作成されたフィーチャを取得
+        if (success) {
+          final features = await selectedLayer.features;
+          if (features.isNotEmpty) {
+            savedFeature = features.last;
+            print(
+              '[GlobalDrawingState] 自動保存: 作成された線フィーチャを取得 - ${savedFeature.name}',
+            );
+          }
+        }
+      } else if (isPolygonDrawing && selectedLayer is PolygonLayerNode) {
+        print(
+          '[GlobalDrawingState] 自動保存: ポリゴンの処理開始 - 点数: ${_drawingPolygon.length}',
+        );
+
+        // ポリゴンの自動保存（常に新規作成、描画データはクリアしない）
+        success = await confirmPolygonFeature(
+          layerNode: selectedLayer,
+          name: autoSaveName,
+          description: autoSaveDescription,
+          closeRing: (points) => List<LatLng>.from(points)..add(points.first),
+          refreshCallback: () {},
+          clearAfterConfirm: false,
+        );
+
+        // 作成されたフィーチャを取得
+        if (success) {
+          final features = await selectedLayer.features;
+          if (features.isNotEmpty) {
+            savedFeature = features.last;
+            print(
+              '[GlobalDrawingState] 自動保存: 作成されたポリゴンフィーチャを取得 - ${savedFeature.name}',
+            );
+          }
+        }
+      } else {
+        print('[GlobalDrawingState] 自動保存エラー: レイヤータイプが描画タイプと一致しません');
+        print(
+          '[GlobalDrawingState] 自動保存エラー: selectedLayer=${selectedLayer.runtimeType}, isLineDrawing=$isLineDrawing, isPolygonDrawing=$isPolygonDrawing',
+        );
+      }
+
+      if (success && savedFeature != null) {
+        // 自動保存成功後、追記モードで描画を継続（clearAll()は呼ばない）
+        print('[GlobalDrawingState] 自動保存成功 - 追記モードで継続開始');
+
+        if (savedFeature is LineFeatureNode) {
+          startEditingLineFeature(savedFeature);
+        } else if (savedFeature is PolygonFeatureNode) {
+          startEditingPolygonFeature(savedFeature);
+        }
+
+        // タイマーを再開（追記モードでの継続）
+        _resetAutoSaveTimer();
+        print('[GlobalDrawingState] 自動保存: 追記モードでタイマー再開');
+      } else {
+        print(
+          '[GlobalDrawingState] 自動保存失敗 - success: $success, savedFeature: $savedFeature',
+        );
+      }
+    } catch (e, stackTrace) {
+      print('[GlobalDrawingState] 自動保存エラー: $e');
+      print('[GlobalDrawingState] 自動保存スタックトレース: $stackTrace');
     }
   }
 }

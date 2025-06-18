@@ -100,6 +100,7 @@ class PenTool extends MapTool {
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
       print('[DEBUG] PenTool.onTap: ラインレイヤー処理');
+
       drawingState.addLinePoint(latlng, null);
       mapState.setState(() {});
     } else if (selected is PolygonLayerNode) {

@@ -112,6 +112,11 @@ Future<bool> confirmPolygonFeature(...)  // ポリゴンフィーチャ確定
 void startEditingLineFeature(LineFeatureNode)       // 線フィーチャ追記開始
 void startEditingPolygonFeature(PolygonFeatureNode) // ポリゴンフィーチャ追記開始
 bool startEditingFeature(FeatureNode)               // 汎用追記開始
+
+// 自動保存機能（2024/12/19 新機能）
+void setAutoSaveLayerNode(LayerNode?, void Function()?)  // 自動保存先レイヤー設定
+Timer? _autoSaveTimer                               // 1分間の自動保存タイマー
+Duration _autoSaveInterval = Duration(minutes: 1)   // 自動保存間隔
 ```
 
 #### LayerTreeNode（レイヤ階層管理）
@@ -1873,3 +1878,37 @@ final newTableData = await MetadataParser.recalculateXYCoordinates(
     }
     ```
   - **効果**: 追記完了後のリアルタイムマップ表示更新の実現
+
+### 2024/12/19 - 自動保存機能の実装
+**概要：** 線/ポリゴン描画中の自動保存機能を追加。1分間の無操作で自動的にフィーチャを保存し、追記モードで描画を継続
+
+**実装機能：**
+1. **自動保存タイマー**：
+   - 点追加時に1分間のタイマーを開始/リセット
+   - タイマー満了時に自動的にconfirm処理を実行
+   - 適切な自動生成名でフィーチャを保存
+
+2. **追記モード継続**：
+   - 自動保存後は保存されたフィーチャの追記モードで描画を継続
+   - 既存のconfirmLineFeature/confirmPolygonFeatureを活用
+   - 新規作成と追記モードの両方に対応
+
+3. **設定とコールバック**：
+   - `setAutoSaveLayerNode()`：自動保存先レイヤーとUI更新コールバックを設定
+   - 自動保存カウンターによる一意な名前生成
+   - エラーハンドリングとデバッグログ
+
+**使用方法：**
+```dart
+// 描画開始前に自動保存先を設定
+drawingState.setAutoSaveLayerNode(targetLayer, refreshCallback);
+
+// 通常通り点を追加（自動でタイマーが開始・リセット）
+drawingState.addLinePoint(position, metadata);
+
+// 1分間無操作で自動保存が実行され、追記モードで継続
+```
+
+**テスト：**
+- `test/auto_save_test.dart`：自動保存機能の単体テスト
+- `lib/examples/auto_save_example.dart`：サンプルアプリケーション

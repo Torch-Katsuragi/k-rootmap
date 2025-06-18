@@ -15,6 +15,7 @@ import '../models/layer_tree_node.dart';
 import '../models/geopackage_file.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../utils/metadata_parser.dart'; // メタデータパーサーをインポート
+import '../utils/global_drawing_state.dart'; // 追記機能のため追加
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -26,6 +27,9 @@ class LayerDrawer extends StatefulWidget {
   /// 地図ジャンプ用コールバック（中心座標に移動）
   final void Function(LatLng latLng)? onJumpTo;
 
+  /// 追記モード開始用コールバック（ツール切り替えとレイヤー選択）
+  final void Function(FeatureNode feature)? onStartAppendMode;
+
   /// LayerDrawerコンストラクタ
   const LayerDrawer({
     super.key,
@@ -33,6 +37,7 @@ class LayerDrawer extends StatefulWidget {
     required this.onDirChanged,
     required this.setStateCallback,
     this.onJumpTo,
+    this.onStartAppendMode,
   });
 
   @override
@@ -121,6 +126,7 @@ class _LayerDrawerState extends State<LayerDrawer> {
           });
         },
         onJumpTo: widget.onJumpTo,
+        onStartAppendMode: widget.onStartAppendMode,
       );
     }
     return Column(
@@ -1148,11 +1154,16 @@ class AttributeTablePanel extends StatefulWidget {
 
   /// 地図ジャンプ用コールバック
   final void Function(LatLng latLng)? onJumpTo;
+
+  /// 追記モード開始用コールバック（ツール切り替えとレイヤー選択）
+  final void Function(FeatureNode feature)? onStartAppendMode;
+
   const AttributeTablePanel({
     super.key,
     required this.layerNode,
     required this.onBack,
     this.onJumpTo,
+    this.onStartAppendMode,
   });
 
   @override
@@ -1356,6 +1367,60 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
         .replaceAll('\r', ' '); // 復帰文字をスペースに置換
   }
 
+  /// 追記ボタン用のDataCellを構築
+  /// 線と面のフィーチャの場合のみボタンを表示
+  DataCell _buildAppendCell(FeatureNode feature) {
+    // 線または面のフィーチャの場合のみ追記ボタンを表示
+    if (feature is LineFeatureNode || feature is PolygonFeatureNode) {
+      return DataCell(
+        SizedBox(
+          height: 28,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+              minimumSize: const Size(40, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              backgroundColor: Colors.orange.shade100,
+            ),
+            onPressed: () {
+              // GlobalDrawingStateで追記モードを開始
+              final drawingState = GlobalDrawingState.instance;
+              final success = drawingState.startEditingFeature(feature);
+
+              if (success) {
+                // 追記モード開始のコールバックを呼び出し
+                widget.onStartAppendMode?.call(feature);
+
+                // 属性テーブルを閉じて地図画面に戻る
+                widget.onBack();
+
+                // ユーザーに追記モード開始を通知
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${feature.name}の追記モードを開始しました'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                // エラーメッセージを表示
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('追記モードの開始に失敗しました'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text('追記', style: TextStyle(fontSize: 13)),
+          ),
+        ),
+      );
+    } else {
+      // 点フィーチャの場合は空のセル
+      return const DataCell(SizedBox(height: 28, child: Text('')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1435,6 +1500,8 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                     ),
                     columns: [
                       for (final col in columns) DataColumn(label: Text(col)),
+                      // 追記ボタン用の列を追加
+                      const DataColumn(label: Text('追記')),
                     ],
                     rows: [
                       for (final feature in features)
@@ -1608,6 +1675,8 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                                       ),
                                     ),
                                   ),
+                            // 追記ボタン用のDataCellを追加
+                            _buildAppendCell(feature),
                           ],
                         ),
                     ],

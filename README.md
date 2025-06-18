@@ -2,6 +2,46 @@
 
 ## 最新の修正・改善
 
+### 2024/12/XX - フィーチャ追記機能とジオメトリ更新APIの実装
+
+**概要：** 既存のフィーチャに対して新しい点を追加する「追記」機能を実装し、ジオメトリと属性の完全更新機能を提供
+
+**実装した機能：**
+1. **FeatureNode更新API**：
+   - `updateGeometry()`：各フィーチャタイプ（Point/Line/Polygon）でジオメトリと属性を完全更新
+   - 実際のGeoPackageファイルとFeatureNodeプロパティの両方を同期更新
+   - メタデータ・名前・説明の更新も同時実行
+
+2. **GeoPackageFile更新メソッド**：
+   - `updatePoint/updateLine/updatePolygon()`：IDを指定してフィーチャの完全更新
+   - WKBジオメトリ、属性、メタデータの一括更新処理
+   - デバッグログによる更新状況の追跡
+
+3. **GlobalDrawingState追記機能**：
+   - `startEditingFeature()`：既存フィーチャから点データとメタデータを復元
+   - `isEditMode`：追記モードと新規作成モードの状態管理
+   - 確定処理での条件分岐：追記時は更新、新規時は作成
+   
+4. **既存データの完全復元**：
+   - LineFeatureNode：既存の線データとdrawing_pointsメタデータを復元
+   - PolygonFeatureNode：外環データの復元（閉じられた環の最終点を除去）
+   - GPS測量データとpen_toolデータの混在状態も正確に復元
+
+**技術詳細：**
+- フィーチャ生成時にrowIdを保持：`LineFeatureNode.createIn()`と`PolygonFeatureNode.createIn()`でrowId取得
+- 追記開始時の既存データ復元：`drawing_points`フィールドからdata_sourceを判定してメタデータ復元
+- 確定処理の条件分岐：`isEditMode`により新規作成と更新を自動判別
+
+**追加予定：**
+- 属性テーブルでの「追記」ボタン実装
+- 選択フィーチャから追記モードへの自動遷移
+- pen_toolとの完全統合
+
+**効果：**
+- 既存フィーチャの拡張・修正が可能
+- 測量データの継続的な追記作業をサポート
+- ジオメトリと属性の整合性を保証
+
 ### 2024/12/XX - GlobalDrawingStateの権限移譲・描画管理の統一化
 
 **概要：** `GlobalDrawingState`により多くの描画管理機能を移譲し、各ツールに分散していたconfirm処理、cancel処理、undo処理を統一化
@@ -1627,3 +1667,32 @@ final newTableData = await MetadataParser.recalculateXYCoordinates(
     return closeRing(drawingPolygon); // 3点以上はポリゴン
     ```
   - 効果: 2点目追加時のエラー解消、適切なプレビュー表示の実現
+
+- **追記機能のUI更新問題修正** (2025-01-27)
+  - **問題**: 追記完了後にマップ上のフィーチャ形状が変わらない（データベースは更新済み）
+  - **根本原因**: FeatureNodeのジオメトリ変数が`final`宣言のため、追記後のローカル表示変数が更新されない
+  - **修正内容**:
+    1. **final宣言削除**: `LineFeatureNode.line`と`PolygonFeatureNode.polygon`から`final`を削除
+    2. **updateGeometryメソッド強化**: 新しいジオメトリパラメータ`newGeometry`を追加し、ローカル変数も同時更新
+    3. **GlobalDrawingState統合**: 追記モードで`updateLine`/`updatePolygon`と`updateGeometry`呼び出しを統合
+  - **技術詳細**:
+    ```dart
+    // 修正前：final宣言のため更新不可
+    class LineFeatureNode extends FeatureNode {
+      final List<LatLng> line;  // ← 変更不可
+    
+    // 修正後：mutable変数で更新可能
+    class LineFeatureNode extends FeatureNode {
+      List<LatLng> line;  // ← 変更可能
+      
+      @override
+      Future<bool> updateGeometry({..., dynamic newGeometry}) async {
+        // 新しいジオメトリでDBとローカル変数を同時更新
+        if (newGeometry != null) {
+          line.clear();
+          line.addAll(geometryToUpdate);
+        }
+      }
+    }
+    ```
+  - **効果**: 追記完了後のリアルタイムマップ表示更新の実現

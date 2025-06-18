@@ -19,6 +19,16 @@ class GlobalDrawingState {
   final List<Map<String, dynamic>?> _lineMetadata = [];
   final List<Map<String, dynamic>?> _polygonMetadata = [];
 
+  /// 追記モード関連
+  /// 追記対象のFeatureNode（nullの場合は新規作成モード）
+  FeatureNode? _editingFeature;
+
+  /// 追記モードかどうか
+  bool get isEditMode => _editingFeature != null;
+
+  /// 追記対象のFeatureNode
+  FeatureNode? get editingFeature => _editingFeature;
+
   /// Getters
   List<LatLng> get drawingLine => List.unmodifiable(_drawingLine);
   List<LatLng> get drawingPolygon => List.unmodifiable(_drawingPolygon);
@@ -81,6 +91,7 @@ class GlobalDrawingState {
     clearLine();
     clearPolygon();
     _pointPreview = null;
+    _editingFeature = null; // 追記モードもクリア
     print('[GlobalDrawingState] 全描画データをクリア');
   }
 
@@ -134,14 +145,14 @@ class GlobalDrawingState {
     print('[GlobalDrawingState] ${isLine ? '線' : 'ポリゴン'}描画をキャンセル');
   }
 
-  /// 線フィーチャの確定作成
-  /// [layerNode] - 作成先のLayerNode
+  /// 線フィーチャの確定作成・更新
+  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
   /// [name] - フィーチャ名
   /// [description] - フィーチャ説明
   /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
   Future<bool> confirmLineFeature({
-    required LineLayerNode layerNode,
+    LineLayerNode? layerNode,
     required String name,
     required String description,
     Map<String, dynamic>? additionalMetadata,
@@ -165,38 +176,69 @@ class GlobalDrawingState {
         metadata['drawing_points'] = pointsWithMetadata;
       }
 
-      // フィーチャ作成
-      await LineFeatureNode.createIn(
-        layerNode,
-        List<LatLng>.from(_drawingLine),
-        name.isNotEmpty ? name : '線フィーチャ',
-        description,
-        metadata: metadata.isNotEmpty ? metadata : null,
-      );
+      if (isEditMode && _editingFeature is LineFeatureNode) {
+        // 追記モード：既存フィーチャを更新
+        final feature = _editingFeature as LineFeatureNode;
+
+        // updateGeometryで新しいジオメトリと属性を同時に更新
+        final success = await feature.updateGeometry(
+          name: name.isNotEmpty ? name : feature.name,
+          description: description,
+          metadata: metadata.isNotEmpty ? metadata : null,
+          newGeometry: List<LatLng>.from(_drawingLine),
+        );
+
+        if (success) {
+          print('[GlobalDrawingState] 線フィーチャを更新しました: $name');
+        } else {
+          print('[GlobalDrawingState] 線フィーチャ更新エラー');
+          return false;
+        }
+      } else {
+        // 新規作成モード
+        if (layerNode == null) {
+          print('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
+          return false;
+        }
+
+        await LineFeatureNode.createIn(
+          layerNode,
+          List<LatLng>.from(_drawingLine),
+          name.isNotEmpty ? name : '線フィーチャ',
+          description,
+          metadata: metadata.isNotEmpty ? metadata : null,
+        );
+
+        print('[GlobalDrawingState] 線フィーチャを確定作成しました: $name');
+      }
 
       // 描画データをクリア
-      clearLine();
+      clearAll();
 
-      // UI更新
+      // UI更新（追記モードの場合はより強力な更新を実行）
       refreshCallback?.call();
 
-      print('[GlobalDrawingState] 線フィーチャを確定作成しました: $name');
+      // 追記モードの場合はデバッグログ出力
+      if (isEditMode) {
+        print('[GlobalDrawingState] 追記モード完了 - UI強制更新を実行');
+      }
+
       return true;
     } catch (e) {
-      print('[GlobalDrawingState] 線フィーチャ作成エラー: $e');
+      print('[GlobalDrawingState] 線フィーチャ処理エラー: $e');
       return false;
     }
   }
 
-  /// ポリゴンフィーチャの確定作成
-  /// [layerNode] - 作成先のLayerNode
+  /// ポリゴンフィーチャの確定作成・更新
+  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
   /// [name] - フィーチャ名
   /// [description] - フィーチャ説明
   /// [closeRing] - ポリゴンを閉じる処理
   /// [additionalMetadata] - 追加メタデータ（GPS測量データなど）
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
   Future<bool> confirmPolygonFeature({
-    required PolygonLayerNode layerNode,
+    PolygonLayerNode? layerNode,
     required String name,
     required String description,
     required List<LatLng> Function(List<LatLng>) closeRing,
@@ -224,69 +266,130 @@ class GlobalDrawingState {
         metadata['drawing_points'] = pointsWithMetadata;
       }
 
-      // フィーチャ作成
-      await PolygonFeatureNode.createIn(
-        layerNode,
-        [closedPolygon],
-        name.isNotEmpty ? name : 'ポリゴンフィーチャ',
-        description,
-        metadata: metadata.isNotEmpty ? metadata : null,
-      );
+      if (isEditMode && _editingFeature is PolygonFeatureNode) {
+        // 追記モード：既存フィーチャを更新
+        final feature = _editingFeature as PolygonFeatureNode;
+
+        // updateGeometryで新しいジオメトリと属性を同時に更新
+        final success = await feature.updateGeometry(
+          name: name.isNotEmpty ? name : feature.name,
+          description: description,
+          metadata: metadata.isNotEmpty ? metadata : null,
+          newGeometry: [closedPolygon],
+        );
+
+        if (success) {
+          print('[GlobalDrawingState] ポリゴンフィーチャを更新しました: $name');
+        } else {
+          print('[GlobalDrawingState] ポリゴンフィーチャ更新エラー');
+          return false;
+        }
+      } else {
+        // 新規作成モード
+        if (layerNode == null) {
+          print('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
+          return false;
+        }
+
+        await PolygonFeatureNode.createIn(
+          layerNode,
+          [closedPolygon],
+          name.isNotEmpty ? name : 'ポリゴンフィーチャ',
+          description,
+          metadata: metadata.isNotEmpty ? metadata : null,
+        );
+
+        print('[GlobalDrawingState] ポリゴンフィーチャを確定作成しました: $name');
+      }
 
       // 描画データをクリア
-      clearPolygon();
+      clearAll();
 
-      // UI更新
+      // UI更新（追記モードの場合はより強力な更新を実行）
       refreshCallback?.call();
 
-      print('[GlobalDrawingState] ポリゴンフィーチャを確定作成しました: $name');
+      // 追記モードの場合はデバッグログ出力
+      if (isEditMode) {
+        print('[GlobalDrawingState] 追記モード完了 - UI強制更新を実行');
+      }
+
       return true;
     } catch (e) {
-      print('[GlobalDrawingState] ポリゴンフィーチャ作成エラー: $e');
+      print('[GlobalDrawingState] ポリゴンフィーチャ処理エラー: $e');
       return false;
     }
   }
 
   /// 汎用的な確定処理
-  /// [layerNode] - 作成先のLayerNode
+  /// [layerNode] - 作成先のLayerNode（新規作成の場合のみ）
   /// [name] - フィーチャ名
   /// [description] - フィーチャ説明
   /// [closeRing] - ポリゴンを閉じる処理（PolygonLayerNodeの場合のみ）
   /// [additionalMetadata] - 追加メタデータ
   /// [refreshCallback] - フィーチャ作成後のUI更新コールバック
   Future<bool> confirmCurrentFeature({
-    required LayerNode layerNode,
+    LayerNode? layerNode,
     required String name,
     required String description,
     List<LatLng> Function(List<LatLng>)? closeRing,
     Map<String, dynamic>? additionalMetadata,
     void Function()? refreshCallback,
   }) async {
-    if (layerNode is LineLayerNode && isLineDrawing) {
-      return await confirmLineFeature(
-        layerNode: layerNode,
-        name: name,
-        description: description,
-        additionalMetadata: additionalMetadata,
-        refreshCallback: refreshCallback,
-      );
-    } else if (layerNode is PolygonLayerNode && isPolygonDrawing) {
-      if (closeRing == null) {
-        print('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
+    // 追記モードの場合、layerNodeは不要
+    if (isEditMode) {
+      if (_editingFeature is LineFeatureNode && isLineDrawing) {
+        return await confirmLineFeature(
+          name: name,
+          description: description,
+          additionalMetadata: additionalMetadata,
+          refreshCallback: refreshCallback,
+        );
+      } else if (_editingFeature is PolygonFeatureNode && isPolygonDrawing) {
+        if (closeRing == null) {
+          print('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
+          return false;
+        }
+        return await confirmPolygonFeature(
+          name: name,
+          description: description,
+          closeRing: closeRing,
+          additionalMetadata: additionalMetadata,
+          refreshCallback: refreshCallback,
+        );
+      }
+    } else {
+      // 新規作成モード
+      if (layerNode == null) {
+        print('[GlobalDrawingState] 新規作成にはlayerNodeが必要です');
         return false;
       }
-      return await confirmPolygonFeature(
-        layerNode: layerNode,
-        name: name,
-        description: description,
-        closeRing: closeRing,
-        additionalMetadata: additionalMetadata,
-        refreshCallback: refreshCallback,
-      );
-    } else {
-      print('[GlobalDrawingState] 確定処理: 有効な描画データまたはレイヤーがありません');
-      return false;
+
+      if (layerNode is LineLayerNode && isLineDrawing) {
+        return await confirmLineFeature(
+          layerNode: layerNode,
+          name: name,
+          description: description,
+          additionalMetadata: additionalMetadata,
+          refreshCallback: refreshCallback,
+        );
+      } else if (layerNode is PolygonLayerNode && isPolygonDrawing) {
+        if (closeRing == null) {
+          print('[GlobalDrawingState] ポリゴン確定: closeRing関数が必要です');
+          return false;
+        }
+        return await confirmPolygonFeature(
+          layerNode: layerNode,
+          name: name,
+          description: description,
+          closeRing: closeRing,
+          additionalMetadata: additionalMetadata,
+          refreshCallback: refreshCallback,
+        );
+      }
     }
+
+    print('[GlobalDrawingState] 確定処理: 有効な描画データまたはレイヤーがありません');
+    return false;
   }
 
   /// メタデータ付きの線座標リストを取得
@@ -362,5 +465,121 @@ class GlobalDrawingState {
     print('点プレビュー: $_pointPreview');
     print('描画中: $isDrawing (線: $isLineDrawing, ポリゴン: $isPolygonDrawing)');
     print('================================');
+  }
+
+  /// 線フィーチャの追記を開始
+  /// [feature] - 追記対象のLineFeatureNode
+  void startEditingLineFeature(LineFeatureNode feature) {
+    // 現在の描画データをクリア
+    clearAll();
+
+    // 追記対象を設定
+    _editingFeature = feature;
+
+    // 既存の線データを復元
+    final existingLine = feature.line;
+    _drawingLine.addAll(existingLine);
+
+    // 既存のメタデータを復元（drawing_pointsから復元を試行）
+    final existingMetadata = feature.metadata;
+    if (existingMetadata != null &&
+        existingMetadata.containsKey('drawing_points')) {
+      final drawingPoints =
+          existingMetadata['drawing_points'] as List<dynamic>?;
+      if (drawingPoints != null) {
+        // メタデータから復元
+        for (final pointData in drawingPoints) {
+          if (pointData is Map<String, dynamic>) {
+            if (pointData['data_source'] == 'pen_tool') {
+              _lineMetadata.add(null); // pen_toolの点はnull
+            } else {
+              _lineMetadata.add(Map<String, dynamic>.from(pointData));
+            }
+          } else {
+            _lineMetadata.add(null); // デフォルトはpen_tool扱い
+          }
+        }
+      }
+    }
+
+    // メタデータの数が足りない場合は補完
+    while (_lineMetadata.length < _drawingLine.length) {
+      _lineMetadata.add(null); // pen_tool扱いで補完
+    }
+
+    print(
+      '[GlobalDrawingState] 線フィーチャの追記開始: ${feature.name} (${_drawingLine.length}点)',
+    );
+  }
+
+  /// ポリゴンフィーチャの追記を開始
+  /// [feature] - 追記対象のPolygonFeatureNode
+  void startEditingPolygonFeature(PolygonFeatureNode feature) {
+    // 現在の描画データをクリア
+    clearAll();
+
+    // 追記対象を設定
+    _editingFeature = feature;
+
+    // 既存のポリゴンデータを復元（外環のみ）
+    if (feature.polygon.isNotEmpty) {
+      final outerRing = feature.polygon[0];
+      // 最後の点が最初の点と同じ場合（閉じられている場合）は除外
+      if (outerRing.length > 1 &&
+          outerRing.first.latitude == outerRing.last.latitude &&
+          outerRing.first.longitude == outerRing.last.longitude) {
+        _drawingPolygon.addAll(outerRing.sublist(0, outerRing.length - 1));
+      } else {
+        _drawingPolygon.addAll(outerRing);
+      }
+    }
+
+    // 既存のメタデータを復元（drawing_pointsから復元を試行）
+    final existingMetadata = feature.metadata;
+    if (existingMetadata != null &&
+        existingMetadata.containsKey('drawing_points')) {
+      final drawingPoints =
+          existingMetadata['drawing_points'] as List<dynamic>?;
+      if (drawingPoints != null) {
+        // メタデータから復元
+        for (final pointData in drawingPoints) {
+          if (pointData is Map<String, dynamic>) {
+            if (pointData['data_source'] == 'pen_tool') {
+              _polygonMetadata.add(null); // pen_toolの点はnull
+            } else {
+              _polygonMetadata.add(Map<String, dynamic>.from(pointData));
+            }
+          } else {
+            _polygonMetadata.add(null); // デフォルトはpen_tool扱い
+          }
+        }
+      }
+    }
+
+    // メタデータの数が足りない場合は補完
+    while (_polygonMetadata.length < _drawingPolygon.length) {
+      _polygonMetadata.add(null); // pen_tool扱いで補完
+    }
+
+    print(
+      '[GlobalDrawingState] ポリゴンフィーチャの追記開始: ${feature.name} (${_drawingPolygon.length}点)',
+    );
+  }
+
+  /// 汎用的な追記開始メソッド
+  /// [feature] - 追記対象のFeatureNode
+  bool startEditingFeature(FeatureNode feature) {
+    if (feature is LineFeatureNode) {
+      startEditingLineFeature(feature);
+      return true;
+    } else if (feature is PolygonFeatureNode) {
+      startEditingPolygonFeature(feature);
+      return true;
+    } else {
+      print(
+        '[GlobalDrawingState] サポートされていないフィーチャタイプです: ${feature.runtimeType}',
+      );
+      return false;
+    }
   }
 }

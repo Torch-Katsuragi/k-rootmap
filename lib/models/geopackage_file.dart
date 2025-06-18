@@ -519,7 +519,7 @@ class GeoPackageFile {
   }
 
   /// 線フィーチャを追加（属性付き）
-  Future<void> addLine(
+  Future<int?> addLine(
     String tableName,
     List<LatLng> line, {
     String name = '',
@@ -538,14 +538,18 @@ class GeoPackageFile {
         print('  encoded: $encodedMetadata');
         data['kmaps_metadata'] = encodedMetadata;
       }
-      await db.insert(tableName, data);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
     } catch (e) {
       print('addLine: エラー発生 - $e');
+      return null;
     }
   }
 
   /// ポリゴンフィーチャを追加（属性付き、外環＋穴リスト対応）
-  Future<void> addPolygon(
+  Future<int?> addPolygon(
     String tableName,
     List<List<LatLng>> rings, {
     String name = '',
@@ -564,9 +568,13 @@ class GeoPackageFile {
         print('  encoded: $encodedMetadata');
         data['kmaps_metadata'] = encodedMetadata;
       }
-      await db.insert(tableName, data);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
     } catch (e) {
       print('addPolygon: エラー発生 - $e');
+      return null;
     }
   }
 
@@ -724,6 +732,126 @@ class GeoPackageFile {
     } catch (e, stack) {
       print('[GeoPackageFile] deleteFile: ファイル削除エラー - $e');
       print('スタックトレース: $stack');
+      return false;
+    }
+  }
+
+  /// 点フィーチャを更新（位置と属性を完全更新）
+  Future<bool> updatePoint(
+    String tableName,
+    int id,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbPoint(pt.longitude, pt.latitude);
+
+      // WKBデータの妥当性チェック（デバッグ）
+      if (!validateWkbData(wkb)) {
+        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
+        debugWkbData(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
+      }
+
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] updatePoint メタデータ更新:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+
+      final affectedRows = await db.update(
+        tableName,
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      return affectedRows > 0;
+    } catch (e) {
+      print('updatePoint: エラー発生 - $e');
+      return false;
+    }
+  }
+
+  /// 線フィーチャを更新（ジオメトリと属性を完全更新）
+  Future<bool> updateLine(
+    String tableName,
+    int id,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbLineString(line);
+
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] updateLine メタデータ更新:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+
+      final affectedRows = await db.update(
+        tableName,
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      return affectedRows > 0;
+    } catch (e) {
+      print('updateLine: エラー発生 - $e');
+      return false;
+    }
+  }
+
+  /// ポリゴンフィーチャを更新（ジオメトリと属性を完全更新）
+  Future<bool> updatePolygon(
+    String tableName,
+    int id,
+    List<List<LatLng>> rings, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbPolygon(rings);
+
+      final data = {'geom': wkb, 'name': name, 'description': description};
+      if (metadata != null) {
+        final encodedMetadata = jsonEncode(metadata);
+        print('[GeoPackageFile] updatePolygon メタデータ更新:');
+        print('  metadata: $metadata');
+        print('  encoded: $encodedMetadata');
+        data['kmaps_metadata'] = encodedMetadata;
+      }
+      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+
+      final affectedRows = await db.update(
+        tableName,
+        data,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      return affectedRows > 0;
+    } catch (e) {
+      print('updatePolygon: エラー発生 - $e');
       return false;
     }
   }

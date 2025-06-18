@@ -915,10 +915,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       closeRing: closeRing,
       refreshCallback: () {
         // フィーチャ表示を更新
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-        }
-        setState(() {});
+        _forceMapRefresh();
       },
     );
 
@@ -1160,6 +1157,74 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// フィーチャデータの公開更新メソッド（外部から呼び出し可能）
   void refreshFeatures() {
     _updateFeatures();
+  }
+
+  /// 追記モード開始処理
+  /// [feature] - 追記対象のFeatureNode
+  void _startAppendMode(FeatureNode feature) {
+    print('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
+
+    // 1. ツールをPenToolに切り替え
+    setState(() {
+      GlobalConfig.instance.currentTool = GlobalConfig.instance.penTool;
+    });
+
+    // 2. 選択レイヤーを該当フィーチャのレイヤーに設定
+    LayerNode? targetLayer;
+    if (feature is LineFeatureNode) {
+      targetLayer = feature.parent as LayerNode?;
+    } else if (feature is PolygonFeatureNode) {
+      targetLayer = feature.parent as LayerNode?;
+    }
+
+    if (targetLayer != null) {
+      setState(() {
+        GlobalConfig.instance.selectedLayerNode = targetLayer;
+      });
+      print('[MAP] 選択レイヤーを設定: ${targetLayer.name}');
+    }
+
+    // 3. UI状態を更新してツール変更とレイヤー選択を反映
+    setState(() {});
+
+    print('[MAP] 追記モード開始完了');
+  }
+
+  /// マップの強制更新処理
+  /// フィーチャの追加・更新・削除後にマップ表示を強制的にリフレッシュ
+  void _forceMapRefresh() {
+    print('[MAP] マップ強制更新開始');
+
+    // 1. フィーチャデータのキャッシュをクリア
+    _pointFeatures.clear();
+    _lineFeatures.clear();
+    _polygonFeatures.clear();
+    _photoNodes.clear();
+
+    // 2. 【重要】LayerNodeのchildrenも強制的にクリアしてDBから再読み込みを強制
+    final folderTree = GlobalConfig.instance.folderTree;
+    if (folderTree != null) {
+      final visibleLayers = folderTree.getVisibleLayerNodes();
+      for (final layer in visibleLayers) {
+        print(
+          '[MAP] レイヤー ${layer.name} のchildren をクリア (${layer.children.length} features)',
+        );
+        layer.children.clear(); // 既存のFeatureNodeをクリア
+      }
+    }
+
+    // 3. フィーチャデータを再読み込み
+    _updateFeatures()
+        .then((_) {
+          // 4. UI全体を更新
+          if (mounted) {
+            setState(() {});
+            print('[MAP] マップ強制更新完了');
+          }
+        })
+        .catchError((error) {
+          print('[ERROR] マップ強制更新エラー: $error');
+        });
   }
 
   @override
@@ -2062,6 +2127,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                               latLng,
                               _mapController.camera.zoom,
                             );
+                          },
+                          onStartAppendMode: (feature) {
+                            // 追記モード開始処理
+                            _startAppendMode(feature);
                           },
                         ),
                       ),

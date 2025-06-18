@@ -1,0 +1,88 @@
+00:00 +0: loading C:/Users/mtmtk/Github/k_maps/test/global_drawing_state_test.dart
+00:00 +0: GlobalDrawingState Tests 邱壽緒逕ｻ縺ｫGPS貂ｬ驥上ョ繝ｼ繧ｿ繧定ｿｽ蜉
+[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[TEST] GPS貂ｬ驥上ョ繝ｼ繧ｿ霑ｽ蜉謌仙粥: {latitude: 35.6762, longitude: 139.6503, accuracy: 5.0, data_source: gps_tool, timestamp: 2025-06-18T07:35:46.580115}
+00:00 +1: GlobalDrawingState Tests 邱壽緒逕ｻ縺ｫpen_tool縺ｮ繧ｿ繝・・繝・・繧ｿ繧定ｿｽ蜉
+[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[TEST] pen_tool繝・・繧ｿ霑ｽ蜉謌仙粥
+00:00 +2: GlobalDrawingState Tests GPS貂ｬ驥上→pen_tool縺ｮ豺ｷ蝨ｨ繝・せ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6784, longitude:139.6525), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 3
+[TEST] 豺ｷ蝨ｨ繝・・繧ｿ霑ｽ蜉謌仙粥: 轤ｹ謨ｰ=3
+00:00 +3: GlobalDrawingState Tests 繝｡繧ｿ繝・・繧ｿ莉倥″邱壼ｺｧ讓吶Μ繧ｹ繝医・蜿門ｾ・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[TEST] 繝｡繧ｿ繝・・繧ｿ莉倥″繝ｪ繧ｹ繝亥叙蠕玲・蜉・00:00 +4: GlobalDrawingState Tests 繝昴Μ繧ｴ繝ｳ謠冗判縺ｨundo繝・せ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 1
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 2
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6784, longitude:139.6525), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 3
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｮ譛蠕後・轤ｹ繧貞炎髯､: LatLng(latitude:35.6784, longitude:139.6525)
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[TEST] 繝昴Μ繧ｴ繝ｳUndo繝ｻ繧ｯ繝ｪ繧｢讖溯・謌仙粥
+00:00 +5: GlobalDrawingState Tests 謠冗判迥ｶ諷九・蛻､螳壹ユ繧ｹ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 1
+[TEST] 謠冗判迥ｶ諷句愛螳壽・蜉・00:00 +6: GlobalDrawingState Tests 繝励Ξ繝薙Η繝ｼ讖溯・繝・せ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[TEST] 繝励Ξ繝薙Η繝ｼ讖溯・謌仙粥
+00:00 +7: GlobalDrawingState Tests 霑ｽ險倥Δ繝ｼ繝峨・繝・せ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[TEST] 霑ｽ險倥Δ繝ｼ繝牙・譛溽憾諷狗｢ｺ隱肴・蜉・00:00 +8: GlobalDrawingState Tests 霑ｽ險倥Δ繝ｼ繝蛾幕蟋九・繧ｷ繝溘Η繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ
+[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[TEST] 霑ｽ險倥Δ繝ｼ繝画ｺ門ｙ迥ｶ諷狗｢ｺ隱肴・蜉・00:00 +9: GlobalDrawingState Tests 霑ｽ險倥Δ繝ｼ繝峨〒縺ｮ迥ｶ諷狗｢ｺ隱・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6784, longitude:139.6525), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 3
+[TEST] 霑ｽ險倥Δ繝ｼ繝峨〒縺ｮ迥ｶ諷狗｢ｺ隱肴・蜉・00:00 +10: GlobalDrawingState Tests 謠冗判迥ｶ諷九・邨ｱ險域ュ蝣ｱ繝・せ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6784, longitude:139.6525), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 3
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6795, longitude:139.6536), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 1
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ縺ｫ轤ｹ霑ｽ蜉: LatLng(latitude:35.6806, longitude:139.6547), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 2
+[TEST] 邨ｱ險域ュ蝣ｱ繝・せ繝域・蜉・ {line_points: 3, polygon_points: 2, line_gps_points: 2, polygon_gps_points: 0, line_pen_points: 1, polygon_pen_points: 2}
+00:00 +11: GlobalDrawingState Tests 繝・ヰ繝・げ諠・ｱ蜃ｺ蜉帙ユ繧ｹ繝・[GlobalDrawingState] 邱壽緒逕ｻ繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 繝昴Μ繧ｴ繝ｳ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 蜈ｨ謠冗判繝・・繧ｿ繧偵け繝ｪ繧｢
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6762, longitude:139.6503), 繝｡繧ｿ繝・・繧ｿ: 縺ゅｊ
+[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 1
+[GlobalDrawingState] 邱壹↓轤ｹ霑ｽ蜉: LatLng(latitude:35.6773, longitude:139.6514), 繝｡繧ｿ繝・・繧ｿ: 縺ｪ縺・[GlobalDrawingState] 迴ｾ蝨ｨ縺ｮ邱壹・轤ｹ謨ｰ: 2
+[GlobalDrawingState] === 繝・ヰ繝・げ諠・ｱ ===
+邱壹・轤ｹ謨ｰ: 2 (GPS: 1, Pen: 1)
+繝昴Μ繧ｴ繝ｳ縺ｮ轤ｹ謨ｰ: 0 (GPS: 0, Pen: 0)
+轤ｹ繝励Ξ繝薙Η繝ｼ: LatLng(latitude:35.6784, longitude:139.6525)
+謠冗判荳ｭ: true (邱・ true, 繝昴Μ繧ｴ繝ｳ: false)
+================================
+[TEST] 繝・ヰ繝・げ諠・ｱ蜃ｺ蜉帙ユ繧ｹ繝域・蜉・00:00 +12: All tests passed!

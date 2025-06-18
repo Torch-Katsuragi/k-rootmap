@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import '../lib/utils/global_drawing_state.dart';
+import '../lib/models/layer_tree_node.dart';
 
 void main() {
   group('GlobalDrawingState Tests', () {
@@ -164,6 +165,122 @@ void main() {
       expect(drawingState.pointPreview, isNull);
 
       print('[TEST] プレビュー機能成功');
+    });
+
+    test('追記モードのテスト', () {
+      // 初期状態は追記モードではない
+      expect(drawingState.isEditMode, false);
+      expect(drawingState.editingFeature, isNull);
+
+      print('[TEST] 追記モード初期状態確認成功');
+    });
+
+    test('追記モード開始のシミュレーション', () {
+      // FeatureNodeのモックが必要だが、実際のテストでは
+      // 実在するFeatureNodeを使用する必要がある
+      // ここでは状態の確認のみ
+
+      // 線描画を開始
+      drawingState.addLinePoint(LatLng(35.6762, 139.6503), null);
+      drawingState.addLinePoint(LatLng(35.6773, 139.6514), null);
+
+      expect(drawingState.isLineDrawing, true);
+      expect(drawingState.drawingLine.length, 2);
+
+      print('[TEST] 追記モード準備状態確認成功');
+    });
+
+    test('追記モードでの状態確認', () {
+      // GPS測量データを含む線を作成
+      final gpsMetadata1 = {
+        'latitude': 35.6762,
+        'longitude': 139.6503,
+        'accuracy': 5.0,
+        'data_source': 'gps_tool',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      final gpsMetadata2 = {
+        'latitude': 35.6773,
+        'longitude': 139.6514,
+        'accuracy': 3.5,
+        'data_source': 'gps_tool',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      // 初期線データ（GPS測量）
+      drawingState.addLinePoint(LatLng(35.6762, 139.6503), gpsMetadata1);
+      drawingState.addLinePoint(LatLng(35.6773, 139.6514), gpsMetadata2);
+
+      // 新しい点を追加（pen_tool）
+      drawingState.addLinePoint(LatLng(35.6784, 139.6525), null);
+
+      expect(drawingState.drawingLine.length, 3);
+      expect(drawingState.lineMetadata.length, 3);
+
+      // メタデータ付きリストの確認
+      final lineWithMetadata = drawingState.getLineWithMetadata();
+      expect(lineWithMetadata.length, 3);
+
+      // 最初の2点はGPS測量データ
+      expect(lineWithMetadata[0]['data_source'], 'gps_tool');
+      expect(lineWithMetadata[1]['data_source'], 'gps_tool');
+
+      // 3番目の点はpen_tool
+      expect(lineWithMetadata[2]['data_source'], 'pen_tool');
+
+      print('[TEST] 追記モードでの状態確認成功');
+    });
+
+    test('描画状態の統計情報テスト', () {
+      // GPS測量データ
+      final gpsMetadata = {
+        'latitude': 35.6762,
+        'longitude': 139.6503,
+        'accuracy': 5.0,
+        'data_source': 'gps_tool',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      // 線に混在データを追加
+      drawingState.addLinePoint(LatLng(35.6762, 139.6503), gpsMetadata);
+      drawingState.addLinePoint(LatLng(35.6773, 139.6514), null);
+      drawingState.addLinePoint(LatLng(35.6784, 139.6525), gpsMetadata);
+
+      // ポリゴンにpen_toolデータを追加
+      drawingState.addPolygonPoint(LatLng(35.6795, 139.6536), null);
+      drawingState.addPolygonPoint(LatLng(35.6806, 139.6547), null);
+
+      final stats = drawingState.getDrawingStats();
+
+      expect(stats['line_points'], 3);
+      expect(stats['polygon_points'], 2);
+      expect(stats['line_gps_points'], 2);
+      expect(stats['line_pen_points'], 1);
+      expect(stats['polygon_gps_points'], 0);
+      expect(stats['polygon_pen_points'], 2);
+
+      print('[TEST] 統計情報テスト成功: $stats');
+    });
+
+    test('デバッグ情報出力テスト', () {
+      // GPS測量データ
+      final gpsMetadata = {
+        'latitude': 35.6762,
+        'longitude': 139.6503,
+        'accuracy': 5.0,
+        'data_source': 'gps_tool',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      drawingState.addLinePoint(LatLng(35.6762, 139.6503), gpsMetadata);
+      drawingState.addLinePoint(LatLng(35.6773, 139.6514), null);
+      drawingState.setPointPreview(LatLng(35.6784, 139.6525));
+
+      // デバッグ情報出力（例外が発生しないことを確認）
+      expect(() => drawingState.printDebugInfo(), returnsNormally);
+
+      print('[TEST] デバッグ情報出力テスト成功');
     });
   });
 }

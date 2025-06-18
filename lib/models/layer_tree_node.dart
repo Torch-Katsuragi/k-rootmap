@@ -488,6 +488,188 @@ class PointLayerNode extends LayerNode {
   }
 }
 
+/// LineFeatureNode: 線フィーチャ用
+class LineFeatureNode extends FeatureNode {
+  /// 単一の線分（頂点リスト）
+  List<LatLng> line;
+  LineFeatureNode(
+    this.line,
+    String name, {
+    required super.parent,
+    required super.rowId,
+    super.description,
+    super.metadata,
+  }) : super(
+         name: name,
+         centroid:
+             line.isNotEmpty
+                 ? GeometryCalc.calcLineCentroid(line)
+                 : LatLng(0, 0),
+       );
+
+  @override
+  List<MapEntry<String, String>> get detailEntries {
+    final len = GeometryCalc.calcLineLength(line);
+    String lengthStr;
+    if (len >= 10000) {
+      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
+    } else {
+      lengthStr = '${len.toStringAsFixed(2)} m';
+    }
+    return [
+      ...super.detailEntries,
+      MapEntry('length', lengthStr),
+      MapEntry('vertex_count', '${line.length}'),
+    ];
+  }
+
+  @override
+  Object get geometry => line;
+
+  @override
+  Future<void> dispose() async {
+    print('[DEBUG] LineFeatureNode.dispose: disposing line feature ${name}');
+
+    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
+    await super.dispose();
+
+    // DBから該当線を削除（非同期で実行、UIには影響させない）
+    geoPackageFile
+        .removeLine(layerName, rowId)
+        .then((_) {
+          print(
+            '[DEBUG] LineFeatureNode.dispose: DB deletion completed for ${name}',
+          );
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] LineFeatureNode.dispose: DB deletion failed for ${name}: $e',
+          );
+        });
+
+    print('[DEBUG] LineFeatureNode.dispose: line feature dispose completed');
+  }
+
+  @override
+  IconData get baseIcon => Icons.timeline;
+  @override
+  Color get baseIconColor => Colors.blueGrey;
+  @override
+  Future<void> updateChildren() async {
+    children.clear();
+  }
+
+  /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
+  /// DBへの保存を同期で実行し、実際のrowIdを取得してからFeatureNodeを作成
+  static Future<LineFeatureNode?> createIn(
+    LayerNode parent,
+    List<LatLng> line,
+    String name,
+    String? description, {
+    Map<String, dynamic>? metadata,
+  }) async {
+    if (parent is! LineLayerNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final layerName = parent.layerName;
+
+    // DBへの保存を実行して実際のrowIdを取得
+    final actualRowId = await gpkgFile.addLine(
+      layerName,
+      line,
+      name: name ?? '',
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (actualRowId == null) {
+      print('[ERROR] LineFeatureNode: DB保存に失敗しました - $name');
+      return null;
+    }
+
+    // 実際のrowIdを使用してFeatureNodeを作成
+    final node = LineFeatureNode(
+      line,
+      name,
+      parent: parent,
+      rowId: actualRowId,
+      description: description,
+      metadata: metadata,
+    );
+    parent.addChild(node);
+
+    print('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
+    return node;
+  }
+
+  /// 線フィーチャのジオメトリと属性を更新
+  @override
+  Future<bool> updateGeometry({
+    required String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+    dynamic newGeometry,
+  }) async {
+    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のlineを使用
+    final geometryToUpdate = newGeometry as List<LatLng>? ?? line;
+
+    final success = await geoPackageFile.updateLine(
+      layerName,
+      rowId,
+      geometryToUpdate,
+      name: name,
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (success) {
+      // ローカルのプロパティを更新
+      this.name = name;
+      this.description = description;
+      this.metadata = metadata;
+
+      // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
+      if (newGeometry != null) {
+        line.clear();
+        line.addAll(geometryToUpdate);
+        print(
+          '[DEBUG] LineFeatureNode: ジオメトリ形状更新 - ${geometryToUpdate.length} vertices',
+        );
+      }
+
+      print('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
+    } else {
+      print('[ERROR] LineFeatureNode: ジオメトリ更新失敗 - $name');
+    }
+
+    return success;
+  }
+
+  /// 線フィーチャのジオメトリのみを更新（頂点変更）
+  Future<bool> updateLine(List<LatLng> newLine) async {
+    final success = await geoPackageFile.updateLine(
+      layerName,
+      rowId,
+      newLine,
+      name: name,
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (success) {
+      // ローカルのジオメトリも更新（mutableリストなので直接変更）
+      line.clear();
+      line.addAll(newLine);
+      print(
+        '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
+      );
+    } else {
+      print('[ERROR] LineFeatureNode: 線更新失敗 - $name');
+    }
+
+    return success;
+  }
+}
+
 class LineLayerNode extends LayerNode {
   LineLayerNode(super.file, super.name, {super.visible, super.parent});
 
@@ -785,6 +967,18 @@ abstract class FeatureNode extends LayerTreeNode {
     );
   }
 
+  /// ジオメトリと属性を更新する抽象メソッド
+  /// サブクラスでジオメトリ型に応じた具体的な実装を行う
+  Future<bool> updateGeometry({
+    required String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+    dynamic newGeometry,
+  }) async {
+    // 基底クラスでは何もしない（サブクラスでオーバーライド必須）
+    throw UnimplementedError('updateGeometry must be implemented by subclass');
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -892,130 +1086,79 @@ class PointFeatureNode extends FeatureNode {
     print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
-}
 
-/// LineFeatureNode: 線フィーチャ用
-class LineFeatureNode extends FeatureNode {
-  /// 単一の線分（頂点リスト）
-  final List<LatLng> line;
-  LineFeatureNode(
-    this.line,
-    String name, {
-    required super.parent,
-    required super.rowId,
-    super.description,
-    super.metadata,
-  }) : super(
-         name: name,
-         centroid:
-             line.isNotEmpty
-                 ? GeometryCalc.calcLineCentroid(line)
-                 : LatLng(0, 0),
-       );
-
+  /// 点フィーチャのジオメトリと属性を更新
   @override
-  List<MapEntry<String, String>> get detailEntries {
-    final len = GeometryCalc.calcLineLength(line);
-    String lengthStr;
-    if (len >= 10000) {
-      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
-    } else {
-      lengthStr = '${len.toStringAsFixed(2)} m';
-    }
-    return [
-      ...super.detailEntries,
-      MapEntry('length', lengthStr),
-      MapEntry('vertex_count', '${line.length}'),
-    ];
-  }
-
-  @override
-  Object get geometry => line;
-
-  @override
-  Future<void> dispose() async {
-    print('[DEBUG] LineFeatureNode.dispose: disposing line feature ${name}');
-
-    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
-    await super.dispose();
-
-    // DBから該当線を削除（非同期で実行、UIには影響させない）
-    geoPackageFile
-        .removeLine(layerName, rowId)
-        .then((_) {
-          print(
-            '[DEBUG] LineFeatureNode.dispose: DB deletion completed for ${name}',
-          );
-        })
-        .catchError((e) {
-          print(
-            '[ERROR] LineFeatureNode.dispose: DB deletion failed for ${name}: $e',
-          );
-        });
-
-    print('[DEBUG] LineFeatureNode.dispose: line feature dispose completed');
-  }
-
-  @override
-  IconData get baseIcon => Icons.timeline;
-  @override
-  Color get baseIconColor => Colors.blueGrey;
-  @override
-  Future<void> updateChildren() async {
-    children.clear();
-  }
-
-  /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
-  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
-  static Future<LineFeatureNode?> createIn(
-    LayerNode parent,
-    List<LatLng> line,
-    String name,
-    String? description, {
+  Future<bool> updateGeometry({
+    required String name,
+    String? description,
     Map<String, dynamic>? metadata,
+    dynamic newGeometry,
   }) async {
-    if (parent is! LineLayerNode) return null;
-    final gpkgFile = parent.geoPackageFile;
-    final layerName = parent.layerName;
+    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpointsを使用
+    final geometryToUpdate =
+        newGeometry as LatLng? ?? (points.isNotEmpty ? points.first : null);
 
-    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
-    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+    if (geometryToUpdate == null) return false;
 
-    // FeatureNodeを即座に作成（地図表示用）
-    final node = LineFeatureNode(
-      line,
-      name,
-      parent: parent,
-      rowId: tempRowId,
-      description: description,
+    final success = await geoPackageFile.updatePoint(
+      layerName,
+      rowId,
+      geometryToUpdate,
+      name: name,
+      description: description ?? '',
       metadata: metadata,
     );
-    parent.addChild(node);
 
-    // DBへの保存を非同期で実行（UIには影響しない）
-    gpkgFile
-        .addLine(
-          layerName,
-          line,
-          name: name ?? '',
-          description: description ?? '',
-          metadata: metadata,
-        )
-        .then((_) {
-          print('[DEBUG] LineFeatureNode: DB保存完了 - $name');
-        })
-        .catchError((e) {
-          print('[ERROR] LineFeatureNode: DB保存エラー - $e');
-        });
+    if (success) {
+      // ローカルのプロパティを更新
+      this.name = name;
+      this.description = description;
+      this.metadata = metadata;
 
-    return node;
+      // 新しいジオメトリが渡された場合はローカル変数も更新
+      if (newGeometry != null) {
+        points.clear();
+        points.add(geometryToUpdate);
+        print('[DEBUG] PointFeatureNode: ジオメトリ位置更新 - $geometryToUpdate');
+      }
+
+      print('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
+    } else {
+      print('[ERROR] PointFeatureNode: ジオメトリ更新失敗 - $name');
+    }
+
+    return success;
+  }
+
+  /// 点フィーチャのジオメトリのみを更新（位置変更）
+  Future<bool> updateLocation(LatLng newLocation) async {
+    final success = await geoPackageFile.updatePoint(
+      layerName,
+      rowId,
+      newLocation,
+      name: name,
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (success) {
+      // ローカルのジオメトリも更新（mutableリストなので直接変更）
+      points.clear();
+      points.add(newLocation);
+      print('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
+    } else {
+      print('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
+    }
+
+    return success;
   }
 }
 
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
   /// 単一のポリゴン（外環＋穴リスト）
-  final List<List<LatLng>> polygon;
+  List<List<LatLng>> polygon;
   PolygonFeatureNode(
     this.polygon,
     String name, {
@@ -1089,7 +1232,7 @@ class PolygonFeatureNode extends FeatureNode {
   }
 
   /// 指定したPolygonLayerNodeの下に新しい面フィーチャを作成し、PolygonFeatureNodeインスタンスを返す
-  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
+  /// DBへの保存を同期で実行し、実際のrowIdを取得してからFeatureNodeを作成
   static Future<PolygonFeatureNode?> createIn(
     LayerNode parent,
     List<List<LatLng>> polygon,
@@ -1102,37 +1245,101 @@ class PolygonFeatureNode extends FeatureNode {
     final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
 
-    // 仮のrowIdを生成（実際のDBへの保存は非同期で実行）
-    final tempRowId = DateTime.now().millisecondsSinceEpoch;
+    // DBへの保存を実行して実際のrowIdを取得
+    final actualRowId = await gpkgFile.addPolygon(
+      layerName,
+      polygon,
+      name: name ?? '',
+      description: description ?? '',
+      metadata: metadata,
+    );
 
-    // FeatureNodeを即座に作成（地図表示用）
+    if (actualRowId == null) {
+      print('[ERROR] PolygonFeatureNode: DB保存に失敗しました - $name');
+      return null;
+    }
+
+    // 実際のrowIdを使用してFeatureNodeを作成
     final node = PolygonFeatureNode(
       polygon,
       name,
       parent: parent,
-      rowId: tempRowId,
+      rowId: actualRowId,
       description: description,
       metadata: metadata,
     );
     parent.addChild(node);
 
-    // DBへの保存を非同期で実行（UIには影響しない）
-    gpkgFile
-        .addPolygon(
-          layerName,
-          polygon,
-          name: name ?? '',
-          description: description ?? '',
-          metadata: metadata,
-        )
-        .then((_) {
-          print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name');
-        })
-        .catchError((e) {
-          print('[ERROR] PolygonFeatureNode: DB保存エラー - $e');
-        });
-
+    print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
+  }
+
+  /// 面フィーチャのジオメトリと属性を更新
+  @override
+  Future<bool> updateGeometry({
+    required String name,
+    String? description,
+    Map<String, dynamic>? metadata,
+    dynamic newGeometry,
+  }) async {
+    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpolygonを使用
+    final geometryToUpdate = newGeometry as List<List<LatLng>>? ?? polygon;
+
+    final success = await geoPackageFile.updatePolygon(
+      layerName,
+      rowId,
+      geometryToUpdate,
+      name: name,
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (success) {
+      // ローカルのプロパティを更新
+      this.name = name;
+      this.description = description;
+      this.metadata = metadata;
+
+      // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
+      if (newGeometry != null) {
+        polygon.clear();
+        polygon.addAll(geometryToUpdate);
+        print(
+          '[DEBUG] PolygonFeatureNode: ジオメトリ形状更新 - ${geometryToUpdate.length} rings',
+        );
+      }
+
+      print('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
+    } else {
+      print('[ERROR] PolygonFeatureNode: ジオメトリ更新失敗 - $name');
+    }
+
+    return success;
+  }
+
+  /// 面フィーチャのジオメトリのみを更新（ポリゴン変更）
+  Future<bool> updatePolygon(List<List<LatLng>> newPolygon) async {
+    final success = await geoPackageFile.updatePolygon(
+      layerName,
+      rowId,
+      newPolygon,
+      name: name,
+      description: description ?? '',
+      metadata: metadata,
+    );
+
+    if (success) {
+      // ローカルのジオメトリも更新（mutableリストなので直接変更）
+      polygon.clear();
+      polygon.addAll(newPolygon);
+      print(
+        '[DEBUG] PolygonFeatureNode: ポリゴン更新成功 - $name (${newPolygon.length} rings)',
+      );
+    } else {
+      print('[ERROR] PolygonFeatureNode: ポリゴン更新失敗 - $name');
+    }
+
+    return success;
   }
 }
 

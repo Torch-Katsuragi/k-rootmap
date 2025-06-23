@@ -16,6 +16,7 @@ import '../models/geopackage_file.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../utils/metadata_parser.dart'; // メタデータパーサーをインポート
 import '../utils/global_drawing_state.dart'; // 追記機能のため追加
+import '../utils/feature_calc_utils.dart'; // ポリゴン合成機能のため追加
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -542,11 +543,16 @@ class _LayerDrawerState extends State<LayerDrawer> {
             setState(() {
               attributeTableLayerNode = node;
             });
+          } else if (value == 'merge' && node is PolygonLayerNode) {
+            _mergePolygonsInLayer(context, node);
           }
         },
         itemBuilder:
             (context) => [
               const PopupMenuItem(value: 'attributes', child: Text('属性テーブル')),
+              // PolygonLayerNodeの場合のみ合成メニューを表示
+              if (node is PolygonLayerNode)
+                const PopupMenuItem(value: 'merge', child: Text('合成')),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
@@ -828,6 +834,119 @@ class _LayerDrawerState extends State<LayerDrawer> {
         ],
       ),
     );
+  }
+
+  /// ポリゴンレイヤー内のポリゴンを合成
+  Future<void> _mergePolygonsInLayer(
+    BuildContext context,
+    PolygonLayerNode layerNode,
+  ) async {
+    try {
+      // レイヤー内の全てのポリゴンFeatureNodeを取得
+      final features = layerNode.children.cast<FeatureNode>();
+
+      // 合成可能なポリゴンの数をチェック
+      final mergeableCount = PolygonMerge.countMergeablePolygons(features);
+
+      if (mergeableCount < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('合成するには2つ以上の有効なポリゴンが必要です')),
+        );
+        return;
+      }
+
+      // 確認ダイアログを表示
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('ポリゴン合成'),
+              content: Text(
+                '${layerNode.name} 内の ${mergeableCount} 個のポリゴンを合成しますか？\n\n'
+                '最も面積の大きいポリゴンを外形とし、それ以外を穴として扱います。\n'
+                '合成後は新しいレイヤー「${layerNode.name}_merged」に保存されます。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('キャンセル'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('合成'),
+                ),
+              ],
+            ),
+      );
+
+      if (confirm != true) return;
+
+      // 合成を実行
+      final mergedPolygon = PolygonMerge.mergePolygonFeatures(features);
+
+      if (mergedPolygon.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ポリゴンの合成に失敗しました')));
+        return;
+      }
+
+      // 新しいレイヤー名を生成
+      final newLayerName = '${layerNode.name}_merged';
+
+      // 同じGeoPackageNode内に新しいPolygonLayerNodeを作成
+      final parentGpkg = layerNode.parent as GeoPackageNode;
+      final newLayerNode = await PolygonLayerNode.createIn(
+        parentGpkg,
+        newLayerName,
+      );
+
+      if (newLayerNode == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('新しいレイヤーの作成に失敗しました')));
+        return;
+      }
+
+      // 合成されたポリゴンを新しいレイヤーに追加
+      final mergedFeature = await PolygonFeatureNode.createIn(
+        newLayerNode,
+        mergedPolygon,
+        'merged_polygon',
+        '${layerNode.name}の${mergeableCount}個のポリゴンを合成',
+        metadata: {
+          'source_layer': layerNode.name,
+          'merged_count': mergeableCount,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      if (mergedFeature != null) {
+        // UI更新
+        widget.setStateCallback(() {});
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.setState(() {});
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。'),
+          ),
+        );
+
+        print('[LayerDrawer] ポリゴン合成完了: $newLayerName');
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('合成ポリゴンの保存に失敗しました')));
+      }
+    } catch (e, stack) {
+      print('[LayerDrawer] ポリゴン合成エラー: $e');
+      print('[LayerDrawer] スタックトレース: $stack');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
+    }
   }
 }
 

@@ -1,7 +1,0 @@
-Launching lib\main.dart on Windows in debug mode...
-Building Windows application...                                 
-Nuget.exe not found, trying to download or use cached version.
-Nuget.exe not found, trying to download or use cached version.
-LINK : fatal error LNK1168: 繝輔ぃ繧､繝ｫ C:\Users\mtmtk\Github\k_maps\build\windows\x64\runner\Debug\k_maps.exe 繧帝幕縺・※譖ｸ縺崎ｾｼ繧縺薙→縺後〒縺阪∪縺帙ｓ縲・[C:\Users\mtmtk\Github\k_maps\build\windows\x64\runner\k_maps.vcxproj]
-Building Windows application...                                    56.3s
-Error: Build process failed.

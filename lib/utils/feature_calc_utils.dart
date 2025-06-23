@@ -288,3 +288,86 @@ class FeatureSearch {
     return MapEntry(nearest, minDist);
   }
 }
+
+/// ポリゴン合成処理
+class PolygonMerge {
+  /// 複数のポリゴンFeatureNodeを合成
+  /// 最も面積の大きいポリゴンを外形とし、それ以外を穴として扱う
+  /// [features]: 合成対象のPolygonFeatureNodeリスト
+  /// 戻り値: 合成ポリゴン（外環＋穴リスト）
+  static List<List<LatLng>> mergePolygonFeatures(List<FeatureNode> features) {
+    if (features.isEmpty) return [];
+
+    // PolygonFeatureNodeのみを抽出し、面積と共にリスト化
+    final polygonFeatures = <({double area, List<List<LatLng>> polygon})>[];
+
+    for (final feature in features) {
+      if (feature is PolygonFeatureNode) {
+        final polygon = feature.polygon;
+        if (polygon.isNotEmpty && polygon[0].length >= 3) {
+          final area = GeometryCalc.calcPolygonArea(polygon);
+          polygonFeatures.add((area: area, polygon: polygon));
+        }
+      }
+    }
+
+    if (polygonFeatures.isEmpty) return [];
+
+    // 面積の降順でソート（最も面積の大きいものが最初）
+    polygonFeatures.sort((a, b) => b.area.compareTo(a.area));
+
+    // 最も面積の大きいポリゴンの外環を使用
+    final largestPolygon = polygonFeatures.first.polygon;
+    final outerRing = largestPolygon[0];
+
+    // 合成結果のポリゴン（外環＋穴リスト）
+    final mergedPolygon = <List<LatLng>>[outerRing];
+
+    // 最も面積の大きいポリゴンの既存の穴も追加
+    if (largestPolygon.length > 1) {
+      mergedPolygon.addAll(largestPolygon.skip(1));
+    }
+
+    // それ以外のポリゴンを穴として追加
+    for (int i = 1; i < polygonFeatures.length; i++) {
+      final polygon = polygonFeatures[i].polygon;
+      // 外環のみを穴として追加（既存の穴は無視）
+      mergedPolygon.add(polygon[0]);
+    }
+
+    print('[PolygonMerge] 合成完了: 外環1個 + 穴${mergedPolygon.length - 1}個');
+    return mergedPolygon;
+  }
+
+  /// ポリゴンが有効かどうかをチェック
+  /// [polygon]: チェック対象のポリゴン
+  /// 戻り値: 有効ならtrue
+  static bool isValidPolygon(List<List<LatLng>> polygon) {
+    if (polygon.isEmpty) return false;
+
+    // 外環は最低3点必要
+    if (polygon[0].length < 3) return false;
+
+    // すべてのリング（穴）も最低3点必要
+    for (int i = 1; i < polygon.length; i++) {
+      if (polygon[i].length < 3) return false;
+    }
+
+    return true;
+  }
+
+  /// 合成可能なポリゴンFeatureNodeの数をカウント
+  /// [features]: チェック対象のFeatureNodeリスト
+  /// 戻り値: 合成可能なポリゴンの数
+  static int countMergeablePolygons(List<FeatureNode> features) {
+    int count = 0;
+    for (final feature in features) {
+      if (feature is PolygonFeatureNode) {
+        if (isValidPolygon(feature.polygon)) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+}

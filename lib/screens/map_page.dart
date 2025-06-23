@@ -1,6 +1,8 @@
 // K-MAPS: Map and edit screen
 // Main UI for map display and layer/feature editing
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // PointerScrollEvent用
+import 'package:flutter/services.dart'; // マウスボタン定数用
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -1852,17 +1854,48 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 Positioned.fill(
                   child: Listener(
                     onPointerMove: (event) {
-                      GlobalConfig.instance.currentTool.addPointerToBuffer(
-                        event.localPosition,
-                      );
+                      // 中ボタンドラッグ中の場合は中ボタン移動処理を呼び出し
+                      if (event.buttons == kMiddleMouseButton) {
+                        GlobalConfig.instance.currentTool.onMiddleButtonMove(
+                          event,
+                          this,
+                        );
+                      } else {
+                        GlobalConfig.instance.currentTool.addPointerToBuffer(
+                          event.localPosition,
+                        );
+                      }
                     },
                     onPointerDown: (event) {
-                      GlobalConfig.instance.currentTool.addPointerToBuffer(
-                        event.localPosition,
-                      );
+                      // 中ボタンが押下された場合は中ボタンダウン処理を呼び出し
+                      if (event.buttons == kMiddleMouseButton) {
+                        GlobalConfig.instance.currentTool.onMiddleButtonDown(
+                          event,
+                          this,
+                        );
+                      } else {
+                        GlobalConfig.instance.currentTool.addPointerToBuffer(
+                          event.localPosition,
+                        );
+                      }
                     },
                     onPointerUp: (event) {
+                      // 中ボタンが離された場合は中ボタンアップ処理を呼び出し
+                      if (event.buttons == 0) {
+                        // ボタンが離された状態
+                        GlobalConfig.instance.currentTool.onMiddleButtonUp(
+                          event,
+                          this,
+                        );
+                      }
                       GlobalConfig.instance.currentTool.clearPointerBuffer();
+                    },
+                    onPointerSignal: (event) {
+                      // 現在のツールのonPointerSignalメソッドを呼び出し
+                      GlobalConfig.instance.currentTool.onPointerSignal(
+                        event,
+                        this,
+                      );
                     },
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,

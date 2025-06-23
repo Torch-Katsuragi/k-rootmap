@@ -2,6 +2,7 @@
 // GPS関連機能を扱うツール（GPS測量機能対応）
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // PointerScrollEvent用
 import 'map_tool.dart';
 import 'pan_tool.dart';
 import '../utils/global_config.dart';
@@ -471,5 +472,31 @@ class GpsTool extends MapTool {
     _longPressGpsData.addAll(continuousData);
 
     debugPrint('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
+  }
+
+  /// マウスホイールスクロールイベント（ズーム機能）
+  /// PanToolの統一処理を呼び出し
+  @override
+  void onPointerSignal(PointerEvent event, dynamic mapState) {
+    if (event is PointerScrollEvent) {
+      // PanToolの統一されたマウスホイールズーム処理を使用
+      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+    }
+  }
+
+  /// 中ボタンドラッグイベント - PanToolに委譲
+  @override
+  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }

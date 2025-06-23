@@ -33,6 +33,18 @@ abstract class MapTool {
   /// スケール終了イベント
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {}
 
+  /// マウスホイールスクロールイベント
+  void onPointerSignal(PointerEvent event, dynamic mapState) {}
+
+  /// 中ボタンドラッグ開始イベント
+  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {}
+
+  /// 中ボタンドラッグ移動イベント
+  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {}
+
+  /// 中ボタンドラッグ終了イベント
+  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {}
+
   /// バッファに座標を追加
   void addPointerToBuffer(Offset offset) {
     pointerBuffer.add(offset);

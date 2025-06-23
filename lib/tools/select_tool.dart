@@ -1,6 +1,7 @@
 // lib/tools/select_tool.dart
 // オブジェクト選択ツール
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // PointerScrollEvent用
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/global_config.dart';
@@ -145,6 +146,8 @@ class SelectTool extends MapTool {
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
     if (mapState == null) return;
+    // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     _pointerCount = details.pointerCount ?? 1;
     if (_pointerCount == 2) {
       GlobalConfig.instance.panTool.onScaleStart(details, mapState);
@@ -161,6 +164,8 @@ class SelectTool extends MapTool {
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
     if (mapState == null) return;
+    // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
       GlobalConfig.instance.panTool.onScaleUpdate(details, mapState);
       return;
@@ -176,6 +181,8 @@ class SelectTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) async {
     if (mapState == null) return;
+    // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
       GlobalConfig.instance.panTool.onScaleEnd(details, mapState);
       _pointerCount = 0;
@@ -253,5 +260,31 @@ class SelectTool extends MapTool {
       mapState.setState(() {});
     }
     _pointerCount = 0;
+  }
+
+  /// マウスホイールスクロールイベント（ズーム機能）
+  /// PanToolの統一処理を呼び出し
+  @override
+  void onPointerSignal(PointerEvent event, dynamic mapState) {
+    if (event is PointerScrollEvent) {
+      // PanToolの統一されたマウスホイールズーム処理を使用
+      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+    }
+  }
+
+  /// 中ボタンドラッグイベント - PanToolに委譲
+  @override
+  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }

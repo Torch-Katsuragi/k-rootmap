@@ -133,6 +133,9 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+    // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+
     final selected = GlobalConfig.instance.selectedLayerNode;
 
     if (_pointerCount == 2) {
@@ -203,6 +206,9 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+    // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+
     final selected = GlobalConfig.instance.selectedLayerNode;
 
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
@@ -256,6 +262,9 @@ class PenTool extends MapTool {
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
   void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+    // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
+    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+
     final selected = GlobalConfig.instance.selectedLayerNode;
 
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
@@ -373,5 +382,31 @@ class PenTool extends MapTool {
             '[ERROR] PenTool._disposeSelectedFeatures: error during batch disposal: $e',
           );
         });
+  }
+
+  /// マウスホイールスクロールイベント（ズーム機能）
+  /// PanToolの統一処理を呼び出し
+  @override
+  void onPointerSignal(PointerEvent event, dynamic mapState) {
+    if (event is PointerScrollEvent) {
+      // PanToolの統一されたマウスホイールズーム処理を使用
+      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+    }
+  }
+
+  /// 中ボタンドラッグイベント - PanToolに委譲
+  @override
+  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+  }
+
+  @override
+  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }

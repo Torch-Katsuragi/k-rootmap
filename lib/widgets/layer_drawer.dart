@@ -11,12 +11,14 @@ import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 // import '../utils/meta_data.dart' as meta_util;
 import 'package:collection/collection.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geopackage_file.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../utils/metadata_parser.dart'; // メタデータパーサーをインポート
 import '../utils/global_drawing_state.dart'; // 追記機能のため追加
 import '../utils/feature_calc_utils.dart'; // ポリゴン合成機能のため追加
+import '../services/import_export_service.dart'; // インポート機能用
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -57,6 +59,48 @@ class _LayerDrawerState extends State<LayerDrawer> {
 
   /// ユーザーが明示的に閉じたGeoPackageノードのパスを記録
   final Set<String> _userClosedGpkgPaths = {};
+
+  /// ドラッグ中のファイル管理
+  bool _isDragging = false;
+  String? _draggedFilePath;
+  GeoPackageNode? _dragTargetGeoPackageNode;
+  int? _dragInsertIndex;
+
+  /// ImportExportServiceのインスタンス
+  ImportExportService get _importExportService => ImportExportService();
+
+  /// インポート成功メッセージを表示
+  void _showImportSuccess(ImportExportResult result) {
+    String message = 'Import completed successfully!';
+    if (result.metadata != null) {
+      final metadata = result.metadata!;
+      if (metadata['layerName'] != null) {
+        message += '\nLayer: ${metadata['layerName']}';
+      }
+      if (metadata['featureCount'] != null) {
+        message += '\nFeatures: ${metadata['featureCount']}';
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// インポートエラーメッセージを表示
+  void _showImportError(String errorMessage) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Import failed: $errorMessage'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -130,177 +174,212 @@ class _LayerDrawerState extends State<LayerDrawer> {
         onStartAppendMode: widget.onStartAppendMode,
       );
     }
-    return Column(
-      children: [
-        LayerDrawerTitleBar(
-          title: widget.currentNode!.name,
-          currentNode: widget.currentNode!,
-          onAddFolder:
-              widget.currentNode is FolderNode
-                  ? () async {
-                    String input = '';
-                    final result = await showDialog<String>(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: const Text('新規サブフォルダ'),
-                          content: TextField(
-                            autofocus: true,
-                            decoration: const InputDecoration(
-                              labelText: 'フォルダ名',
+
+    return Container(
+      decoration:
+          _isDragging
+              ? BoxDecoration(
+                border: Border.all(color: Colors.blue, width: 2),
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.blue.withOpacity(0.1),
+              )
+              : null,
+      child: Column(
+        children: [
+          LayerDrawerTitleBar(
+            title: widget.currentNode!.name,
+            currentNode: widget.currentNode!,
+            onAddFolder:
+                widget.currentNode is FolderNode
+                    ? () async {
+                      String input = '';
+                      final result = await showDialog<String>(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: const Text('新規サブフォルダ'),
+                            content: TextField(
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                labelText: 'フォルダ名',
+                              ),
+                              onChanged: (v) => input = v,
                             ),
-                            onChanged: (v) => input = v,
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, null),
-                              child: const Text('キャンセル'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, input),
-                              child: const Text('作成'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                    if (result != null && result.isNotEmpty) {
-                      final folderNode = widget.currentNode as FolderNode;
-                      final dir = folderNode.getAbsoluteFilePath();
-                      final path = p.join(dir ?? '', result);
-                      if (Directory(path).existsSync()) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('同名のフォルダが既に存在します')),
-                        );
-                        return;
-                      }
-                      Directory(path).createSync();
-                      folderNode.addChild(
-                        FolderNode(result, visible: true, parent: folderNode),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, null),
+                                child: const Text('キャンセル'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, input),
+                                child: const Text('作成'),
+                              ),
+                            ],
+                          );
+                        },
                       );
-                      widget.setStateCallback(() {});
+                      if (result != null && result.isNotEmpty) {
+                        final folderNode = widget.currentNode as FolderNode;
+                        final dir = folderNode.getAbsoluteFilePath();
+                        final path = p.join(dir ?? '', result);
+                        if (Directory(path).existsSync()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('同名のフォルダが既に存在します')),
+                          );
+                          return;
+                        }
+                        Directory(path).createSync();
+                        folderNode.addChild(
+                          FolderNode(result, visible: true, parent: folderNode),
+                        );
+                        widget.setStateCallback(() {});
+                      }
                     }
-                  }
-                  : null,
-          onAddGeoPackage:
-              widget.currentNode is FolderNode
-                  ? () async {
-                    String input = '';
-                    final result = await showDialog<String>(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: const Text('新規GeoPackageファイル'),
-                          content: TextField(
-                            autofocus: true,
-                            decoration: const InputDecoration(
-                              labelText: 'ファイル名（.gpkg）',
+                    : null,
+            onAddGeoPackage:
+                widget.currentNode is FolderNode
+                    ? () async {
+                      String input = '';
+                      final result = await showDialog<String>(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: const Text('新規GeoPackageファイル'),
+                            content: TextField(
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                labelText: 'ファイル名（.gpkg）',
+                              ),
+                              onChanged: (v) => input = v,
                             ),
-                            onChanged: (v) => input = v,
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, null),
-                              child: const Text('キャンセル'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, input),
-                              child: const Text('作成'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                    if (result != null && result.isNotEmpty) {
-                      print('[LayerDrawer] GeoPackage作成開始: $result');
-
-                      final folderNode = widget.currentNode as FolderNode;
-                      final dir = folderNode.getAbsoluteFilePath();
-                      final fileName =
-                          result.endsWith('.gpkg') ? result : '$result.gpkg';
-                      final path = p.join(dir ?? '', fileName);
-
-                      print('[LayerDrawer] 作成予定パス: $path');
-                      print('[LayerDrawer] 親ディレクトリ: $dir');
-
-                      if (File(path).existsSync()) {
-                        print('[LayerDrawer] 同名ファイルが既に存在します');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('同名のGeoPackageファイルが既に存在します')),
-                        );
-                        return;
-                      }
-
-                      print('[LayerDrawer] GeoPackageNodeを作成中...');
-                      final parentNode = widget.currentNode as FolderNode;
-                      final parentPath = parentNode.getAbsolutePathSegments();
-                      final fileNameList = [fileName];
-                      final gpkgFile = GeoPackageFile([
-                        ...parentPath,
-                        ...fileNameList,
-                      ]);
-
-                      print(
-                        '[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}',
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, null),
+                                child: const Text('キャンセル'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, input),
+                                child: const Text('作成'),
+                              ),
+                            ],
+                          );
+                        },
                       );
+                      if (result != null && result.isNotEmpty) {
+                        print('[LayerDrawer] GeoPackage作成開始: $result');
 
-                      final newNode = GeoPackageNode(
-                        gpkgFile,
-                        visible: true,
-                        parent: folderNode,
-                      );
-                      folderNode.addChild(newNode);
+                        final folderNode = widget.currentNode as FolderNode;
+                        final dir = folderNode.getAbsoluteFilePath();
+                        final fileName =
+                            result.endsWith('.gpkg') ? result : '$result.gpkg';
+                        final path = p.join(dir ?? '', fileName);
 
-                      // 空のGeoPackageファイルを即座に作成
-                      print('[LayerDrawer] 空のGeoPackageファイル作成中...');
-                      final createSuccess =
-                          await gpkgFile.createEmptyDatabase();
-                      if (!createSuccess) {
-                        print('[LayerDrawer] 空のGeoPackageファイル作成失敗');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
+                        print('[LayerDrawer] 作成予定パス: $path');
+                        print('[LayerDrawer] 親ディレクトリ: $dir');
+
+                        if (File(path).existsSync()) {
+                          print('[LayerDrawer] 同名ファイルが既に存在します');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('同名のGeoPackageファイルが既に存在します'),
+                            ),
+                          );
+                          return;
+                        }
+
+                        print('[LayerDrawer] GeoPackageNodeを作成中...');
+                        final parentNode = widget.currentNode as FolderNode;
+                        final parentPath = parentNode.getAbsolutePathSegments();
+                        final fileNameList = [fileName];
+                        final gpkgFile = GeoPackageFile([
+                          ...parentPath,
+                          ...fileNameList,
+                        ]);
+
+                        print(
+                          '[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}',
                         );
-                        // 作成失敗時はノードを削除
-                        folderNode.removeChild(newNode);
-                        return;
-                      }
 
-                      // 新規作成されたGeoPackageを自動展開
-                      final newAbsPath = gpkgFile.getAbsolutePath();
-                      print('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
-                      if (newAbsPath != null) {
-                        expandedGpkgPaths.add(newAbsPath);
-                      }
+                        final newNode = GeoPackageNode(
+                          gpkgFile,
+                          visible: true,
+                          parent: folderNode,
+                        );
+                        folderNode.addChild(newNode);
 
-                      print('[LayerDrawer] UI更新中...');
-                      widget.setStateCallback(() {});
-                      print('[LayerDrawer] GeoPackage作成完了');
+                        // 空のGeoPackageファイルを即座に作成
+                        print('[LayerDrawer] 空のGeoPackageファイル作成中...');
+                        final createSuccess =
+                            await gpkgFile.createEmptyDatabase();
+                        if (!createSuccess) {
+                          print('[LayerDrawer] 空のGeoPackageファイル作成失敗');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
+                          );
+                          // 作成失敗時はノードを削除
+                          folderNode.removeChild(newNode);
+                          return;
+                        }
+
+                        // 新規作成されたGeoPackageを自動展開
+                        final newAbsPath = gpkgFile.getAbsolutePath();
+                        print('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
+                        if (newAbsPath != null) {
+                          expandedGpkgPaths.add(newAbsPath);
+                        }
+
+                        print('[LayerDrawer] UI更新中...');
+                        widget.setStateCallback(() {});
+                        print('[LayerDrawer] GeoPackage作成完了');
+                      }
                     }
-                  }
-                  : null,
-          onBack:
-              widget.currentNode!.parent != null
-                  ? () => widget.onDirChanged(widget.currentNode!.parent)
-                  : null,
-        ),
-        Expanded(
-          child: ListView(
-            children: [
-              ...widget.currentNode!.children.map((node) {
-                if (node is FolderNode) {
-                  return _buildFolderTile(context, node);
-                } else if (node is GeoPackageNode) {
-                  return _buildGeoPackageTile(context, node);
-                } else if (node is PhotoNode) {
-                  return _buildPhotoTile(context, node);
-                }
-                // LayerNodeはここで描画しない
-                return const SizedBox.shrink();
-              }),
-            ],
+                    : null,
+            onBack:
+                widget.currentNode!.parent != null
+                    ? () => widget.onDirChanged(widget.currentNode!.parent)
+                    : null,
           ),
-        ),
-      ],
+          if (_isDragging)
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.cloud_upload, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text(
+                    'Drop file on GeoPackage to import as layer',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: ListView(
+              children: [
+                ...widget.currentNode!.children.map((node) {
+                  if (node is FolderNode) {
+                    return _buildFolderTile(context, node);
+                  } else if (node is GeoPackageNode) {
+                    return _buildGeoPackageTile(context, node);
+                  } else if (node is PhotoNode) {
+                    return _buildPhotoTile(context, node);
+                  }
+                  // LayerNodeはここで描画しない
+                  return const SizedBox.shrink();
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -367,91 +446,162 @@ class _LayerDrawerState extends State<LayerDrawer> {
   Widget _buildGeoPackageTile(BuildContext context, GeoPackageNode node) {
     final absPath = node.geoPackageFile.getAbsolutePath();
     final isExpanded = absPath != null && expandedGpkgPaths.contains(absPath);
-    return Column(
-      children: [
-        ListTile(
-          leading: _buildIconWithVisibility(node),
-          title: Text(node.name),
-          onTap: () {
-            setState(() {
-              if (isExpanded) {
-                // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
-                expandedGpkgPaths.remove(absPath);
-                _userClosedGpkgPaths.add(absPath);
-              } else {
-                // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
-                if (absPath != null) {
-                  expandedGpkgPaths.add(absPath);
-                  _userClosedGpkgPaths.remove(absPath);
-                }
-              }
-            });
-          },
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // GeoPackageノードの右側に…メニュー（削除操作）を追加
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'delete') {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder:
-                          (context) => AlertDialog(
-                            title: const Text('GeoPackage削除'),
-                            content: Text(
-                              '${node.name} を本当に削除しますか？\nファイルも完全に削除されます。',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('キャンセル'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('削除'),
-                              ),
-                            ],
-                          ),
-                    );
-                    if (confirm == true) {
-                      try {
-                        // geopackageノード削除（ファイルも含めて削除）
-                        await node.dispose();
-                        setState(() {});
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('${node.name} を削除しました')),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('削除に失敗しました: $e')),
-                        );
-                      }
+    final isDropTarget = _isDragging && _dragTargetGeoPackageNode == node;
+
+    return DropTarget(
+      onDragEntered: (details) {
+        setState(() {
+          _isDragging = true;
+          _dragTargetGeoPackageNode = node;
+        });
+      },
+      onDragExited: (details) {
+        setState(() {
+          if (_dragTargetGeoPackageNode == node) {
+            _dragTargetGeoPackageNode = null;
+            // 他にターゲットがない場合はドラッグ状態をリセット
+            _isDragging = false;
+          }
+        });
+      },
+      onDragDone: (details) async {
+        if (details.files.isNotEmpty) {
+          final file = details.files.first;
+          await _handleSpecificGeoPackageDrop(file.path, node);
+
+          // 処理完了後にフラグをリセット
+          setState(() {
+            _isDragging = false;
+            _draggedFilePath = null;
+            _dragTargetGeoPackageNode = null;
+            _dragInsertIndex = null;
+          });
+        }
+      },
+      child: Container(
+        decoration:
+            isDropTarget
+                ? BoxDecoration(
+                  border: Border.all(color: Colors.green, width: 2),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.green.withOpacity(0.1),
+                )
+                : null,
+        child: Column(
+          children: [
+            ListTile(
+              leading: _buildIconWithVisibility(node),
+              title: Row(
+                children: [
+                  Expanded(child: Text(node.name)),
+                  if (isDropTarget)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'DROP HERE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
+                    expandedGpkgPaths.remove(absPath);
+                    _userClosedGpkgPaths.add(absPath);
+                  } else {
+                    // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
+                    if (absPath != null) {
+                      expandedGpkgPaths.add(absPath);
+                      _userClosedGpkgPaths.remove(absPath);
                     }
                   }
-                },
-                itemBuilder:
-                    (context) => [
-                      const PopupMenuItem(value: 'delete', child: Text('削除')),
-                    ],
+                });
+              },
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // GeoPackageノードの右側に…メニュー（削除操作）を追加
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'delete') {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder:
+                              (context) => AlertDialog(
+                                title: const Text('GeoPackage削除'),
+                                content: Text(
+                                  '${node.name} を本当に削除しますか？\nファイルも完全に削除されます。',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed:
+                                        () => Navigator.pop(context, false),
+                                    child: const Text('キャンセル'),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        () => Navigator.pop(context, true),
+                                    child: const Text('削除'),
+                                  ),
+                                ],
+                              ),
+                        );
+                        if (confirm == true) {
+                          try {
+                            // geopackageノード削除（ファイルも含めて削除）
+                            await node.dispose();
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${node.name} を削除しました')),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('削除に失敗しました: $e')),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    itemBuilder:
+                        (context) => [
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('削除'),
+                          ),
+                        ],
+                  ),
+                ],
+              ),
+            ),
+            if (isExpanded) ...[
+              ...node.children.map(
+                (layerNode) => _buildLayerTile(layerNode as LayerNode),
+              ),
+              // レイヤリストの最下部にレイヤ追加ボタンを表示
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 32, top: 4, bottom: 4),
+                  child: _buildAddLayerButton(context, node),
+                ),
               ),
             ],
-          ),
+          ],
         ),
-        if (isExpanded) ...[
-          ...node.children.map(
-            (layerNode) => _buildLayerTile(layerNode as LayerNode),
-          ),
-          // レイヤリストの最下部にレイヤ追加ボタンを表示
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 32, top: 4, bottom: 4),
-              child: _buildAddLayerButton(context, node),
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 
@@ -946,6 +1096,46 @@ class _LayerDrawerState extends State<LayerDrawer> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
+    }
+  }
+
+  /// 特定のGeoPackageノードへのファイルドロップを処理
+  Future<void> _handleSpecificGeoPackageDrop(
+    String filePath,
+    GeoPackageNode targetNode,
+  ) async {
+    try {
+      print(
+        '[LayerDrawer] GeoPackageドロップ処理開始: $filePath -> ${targetNode.name}',
+      );
+
+      // インポート実行
+      final result = await _importExportService.importFile(
+        filePath,
+        targetNode,
+      );
+
+      if (result.success) {
+        // 成功：レイヤーツリーを更新
+        await targetNode.updateChildren();
+
+        // GeoPackageを自動展開
+        final absPath = targetNode.geoPackageFile.getAbsolutePath();
+        if (absPath != null) {
+          expandedGpkgPaths.add(absPath);
+        }
+
+        widget.setStateCallback(() {});
+        _showImportSuccess(result);
+
+        print('[LayerDrawer] GeoPackageドロップ処理完了');
+      } else {
+        _showImportError(result.errorMessage ?? 'Import failed');
+      }
+    } catch (e, stack) {
+      print('[LayerDrawer] GeoPackageドロップエラー: $e');
+      print('スタックトレース: $stack');
+      _showImportError('Unexpected error during import: $e');
     }
   }
 }

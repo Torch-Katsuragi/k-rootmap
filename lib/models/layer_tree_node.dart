@@ -374,6 +374,18 @@ abstract class LayerNode extends LayerTreeNode {
   /// レイヤ名（DBテーブル名）
   final String layerName;
 
+  /// 親のGeoPackageNodeを取得
+  GeoPackageNode get geoPackageNode {
+    LayerTreeNode? current = parent;
+    while (current != null) {
+      if (current is GeoPackageNode) {
+        return current;
+      }
+      current = current.parent;
+    }
+    throw StateError('LayerNode must have a GeoPackageNode parent');
+  }
+
   /// このレイヤに含まれるFeatureNodeリスト（非同期取得）
   Future<List<FeatureNode>> get features async {
     return <FeatureNode>[];

@@ -5,18 +5,18 @@ packages:
     dependency: transitive
     description:
       name: _fe_analyzer_shared
-      sha256: e55636ed79578b9abca5fecf9437947798f5ef7456308b5cb85720b793eac92f
+      sha256: c81659312e021e3b780a502206130ea106487b34793bce61e26dc0f9b84807af
       url: "https://pub.dev"
     source: hosted
-    version: "82.0.0"
+    version: "83.0.0"
   analyzer:
     dependency: transitive
     description:
       name: analyzer
-      sha256: "904ae5bb474d32c38fb9482e2d925d5454cda04ddd0e55d2e6826bc72f6ba8c0"
+      sha256: "9c35a79bf2a150b3ea0d40010fbbb45b5ebea143d47096e0f82fd922a324b49b"
       url: "https://pub.dev"
     source: hosted
-    version: "7.4.5"
+    version: "7.4.6"
   archive:
     dependency: transitive
     description:
@@ -98,7 +98,7 @@ packages:
     source: hosted
     version: "1.14.1"
   cross_file:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: cross_file
       sha256: "7caf6a750a0c04effbb52a676dce9a4a592e10ad35c34d6d2d0e4811160d5670"
@@ -129,6 +129,38 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.0"
+  dart_hydrologis_utils:
+    dependency: transitive
+    description:
+      name: dart_hydrologis_utils
+      sha256: "6b6f5ba9d4c3a7db83438e2db40fced1c87690b5eb272ff96d58f17b49c10c43"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.2"
+  dart_jts:
+    dependency: transitive
+    description:
+      name: dart_jts
+      sha256: f9cb8b359346f453b5bfa2186fcd7fb8a7e6fbc7e076cba46898b44edd6fd8c7
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0+1"
+  dart_shp:
+    dependency: "direct main"
+    description:
+      name: dart_shp
+      sha256: "2f032ce4e5a83cd9e6e7e9922840bb419c012de3b2976014c2fe00c3c6eabdbb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0+1"
+  desktop_drop:
+    dependency: "direct main"
+    description:
+      name: desktop_drop
+      sha256: d55a010fe46c8e8fcff4ea4b451a9ff84a162217bdb3b2a0aa1479776205e15d
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.4"
   fake_async:
     dependency: transitive
     description:
@@ -157,10 +189,10 @@ packages:
     dependency: "direct main"
     description:
       name: file_picker
-      sha256: "77f8e81d22d2a07d0dee2c62e1dda71dc1da73bf43bb2d45af09727406167964"
+      sha256: ef9908739bdd9c476353d6adff72e88fd00c625f5b959ae23f7567bd5137db0a
       url: "https://pub.dev"
     source: hosted
-    version: "10.1.9"
+    version: "10.2.0"
   fixnum:
     dependency: transitive
     description:
@@ -444,10 +476,10 @@ packages:
     dependency: transitive
     description:
       name: logger
-      sha256: be4b23575aac7ebf01f225a241eb7f6b5641eeaf43c6a8613510fc2f8cf187d1
+      sha256: "2621da01aabaf223f8f961e751f2c943dbb374dc3559b982f200ccedadaa6999"
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.0"
+    version: "2.6.0"
   logging:
     dependency: transitive
     description:
@@ -841,10 +873,10 @@ packages:
     dependency: "direct main"
     description:
       name: sqflite_common_ffi
-      sha256: "1f3ef3888d3bfbb47785cc1dda0dc7dd7ebd8c1955d32a9e8e9dae1e38d1c4c1"
+      sha256: "9faa2fedc5385ef238ce772589f7718c24cdddd27419b609bb9c6f703ea27988"
       url: "https://pub.dev"
     source: hosted
-    version: "2.3.5"
+    version: "2.3.6"
   sqflite_darwin:
     dependency: transitive
     description:
@@ -1017,10 +1049,10 @@ packages:
     dependency: transitive
     description:
       name: win32
-      sha256: "329edf97fdd893e0f1e3b9e88d6a0e627128cc17cc316a8d67fda8f1451178ba"
+      sha256: "66814138c3562338d05613a6e368ed8cfb237ad6d64a9e9334be3f309acfca03"
       url: "https://pub.dev"
     source: hosted
-    version: "5.13.0"
+    version: "5.14.0"
   wkt_parser:
     dependency: transitive
     description:
@@ -1054,5 +1086,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.7.2 <4.0.0"
+  dart: ">=3.8.0 <4.0.0"
   flutter: ">=3.27.0"

@@ -677,6 +677,134 @@ class GeoPackageFile {
     }
   }
 
+  /// 属性カラムを動的に追加
+  /// [tableName] テーブル名
+  /// [columnName] カラム名
+  /// [columnType] カラム型（'TEXT', 'INTEGER', 'REAL', 'BLOB'）
+  Future<void> addAttributeColumn(
+    String tableName,
+    String columnName,
+    String columnType,
+  ) async {
+    try {
+      final db = await _getDatabase();
+
+      // カラム名の安全性チェック（SQLインジェクション対策）
+      if (!RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$').hasMatch(columnName)) {
+        throw Exception('無効なカラム名です: $columnName');
+      }
+
+      // 既存カラムのチェック
+      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columns = result.map((row) => row['name'] as String).toList();
+
+      if (!columns.contains(columnName)) {
+        await db.execute(
+          'ALTER TABLE "$tableName" ADD COLUMN "$columnName" $columnType;',
+        );
+        print('[GeoPackageFile] カラム追加成功: $tableName.$columnName ($columnType)');
+      } else {
+        print('[GeoPackageFile] カラム既存: $tableName.$columnName');
+      }
+    } catch (e) {
+      print('[GeoPackageFile] addAttributeColumn エラー発生 - $e');
+      throw e;
+    }
+  }
+
+  /// シェープファイルの属性構造を元にGeoPackageテーブルを拡張
+  /// [tableName] テーブル名
+  /// [attributeSchema] 属性スキーマ（カラム名 -> データ型のマップ）
+  Future<void> addAttributeColumns(
+    String tableName,
+    Map<String, String> attributeSchema,
+  ) async {
+    try {
+      print('[GeoPackageFile] 属性カラム追加開始: $tableName');
+      print('スキーマ: $attributeSchema');
+
+      for (final entry in attributeSchema.entries) {
+        final columnName = entry.key;
+        final columnType = entry.value;
+        await addAttributeColumn(tableName, columnName, columnType);
+      }
+
+      print('[GeoPackageFile] 属性カラム追加完了: $tableName');
+    } catch (e) {
+      print('[GeoPackageFile] addAttributeColumns エラー発生 - $e');
+      throw e;
+    }
+  }
+
+  /// フィーチャを完全な属性テーブルとして追加
+  /// [tableName] テーブル名
+  /// [geometry] ジオメトリデータ（WKB形式）
+  /// [attributes] 属性データ（カラム名 -> 値のマップ）
+  Future<int?> addFeatureWithAttributes(
+    String tableName,
+    Uint8List geometry,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      final db = await _getDatabase();
+
+      // 属性データを準備
+      final data = <String, dynamic>{'geom': geometry};
+      data.addAll(attributes);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      print('[GeoPackageFile] フィーチャ追加成功: $tableName, rowId: $rowId');
+      return rowId;
+    } catch (e) {
+      print('[GeoPackageFile] addFeatureWithAttributes エラー発生 - $e');
+      return null;
+    }
+  }
+
+  /// レイヤの全属性カラム情報を取得（詳細）
+  /// [tableName] テーブル名
+  /// [includeBuiltIn] 組み込みカラム（id, geom等）を含めるか
+  Future<List<Map<String, dynamic>>> getAttributeColumnInfo(
+    String tableName, {
+    bool includeBuiltIn = false,
+  }) async {
+    try {
+      final db = await _getDatabase();
+      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+
+      final columnInfo = <Map<String, dynamic>>[];
+      final builtInColumns = {
+        'id',
+        'geom',
+        'name',
+        'description',
+        'kmaps_metadata',
+      };
+
+      for (final row in result) {
+        final columnName = row['name'] as String;
+
+        if (!includeBuiltIn && builtInColumns.contains(columnName)) {
+          continue; // 組み込みカラムをスキップ
+        }
+
+        columnInfo.add({
+          'name': columnName,
+          'type': row['type'] as String,
+          'notNull': (row['notnull'] as int) == 1,
+          'defaultValue': row['dflt_value'],
+          'primaryKey': (row['pk'] as int) == 1,
+        });
+      }
+
+      return columnInfo;
+    } catch (e) {
+      print('[GeoPackageFile] getAttributeColumnInfo エラー発生 - $e');
+      return [];
+    }
+  }
+
   /// 線フィーチャをidで削除
   Future<void> removeLine(String tableName, int id) async {
     try {

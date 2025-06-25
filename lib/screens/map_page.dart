@@ -6,6 +6,7 @@ import 'package:flutter/services.dart'; // マウスボタン定数用
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_compass/flutter_compass.dart'; // コンパス機能用
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -16,6 +17,7 @@ import '../models/geometry_type.dart'; // ジオメトリタイプenumをイン�
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer.dart';
 import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
+import '../widgets/compass_fan_painter.dart'; // コンパス扇形描画用
 import '../utils/global_config.dart';
 import '../models/basemap_provider.dart';
 import '../screens/basemap_settings_screen.dart';
@@ -58,6 +60,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   LatLng? _currentLocation;
   Stream<Position>? _positionStream;
   StreamSubscription<Position>? _positionSubscription;
+
+  // コンパス（端末の向き）関連
+  double? _currentHeading; // 現在の方角（度数）
+  StreamSubscription<CompassEvent>? _compassSubscription;
   final MapController _mapController = MapController();
   ToolType _selectedTool = ToolType.pen;
   int _selectedBottomIndex = 0;
@@ -138,6 +144,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     // 背景地図サービス初期化
     _initializeBaseMapService();
 
+    // コンパス機能の初期化
+    _initializeCompass();
+
     // 定期的にサービス状態を更新（10秒間隔に変更、かつ変化がある時のみ更新）
     // LayerDrawerに影響を与えないよう、更新頻度を最小限に抑制
     _serviceStatusUpdateTimer = Timer.periodic(Duration(seconds: 10), (timer) {
@@ -189,6 +198,33 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       print('[DEBUG] BaseMapService: 初期化完了');
     } catch (e) {
       print('[ERROR] BaseMapService: 初期化エラー: $e');
+    }
+  }
+
+  /// コンパス機能初期化
+  Future<void> _initializeCompass() async {
+    try {
+      print('[DEBUG] Compass: 初期化開始');
+
+      // コンパスストリームが利用可能かチェック
+      final compassStream = FlutterCompass.events;
+      if (compassStream == null) {
+        print('[DEBUG] Compass: コンパスストリームが利用できません');
+        return;
+      }
+
+      // コンパスストリームの監視を開始
+      _compassSubscription = compassStream.listen((CompassEvent event) {
+        if (mounted && event.heading != null) {
+          setState(() {
+            _currentHeading = event.heading;
+          });
+        }
+      });
+
+      print('[DEBUG] Compass: 初期化完了');
+    } catch (e) {
+      print('[ERROR] Compass: 初期化エラー: $e');
     }
   }
 
@@ -299,6 +335,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       _gpsManager.stopGps();
     }
     _positionSubscription?.cancel();
+    _compassSubscription?.cancel(); // コンパス監視を停止
     _gpsWaitTimer?.cancel();
     _serviceStatusUpdateTimer?.cancel();
     _longPressCountUpdateTimer?.cancel(); // 長押しカウンタータイマーも破棄
@@ -1158,6 +1195,42 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _updateFeatures();
   }
 
+  /// コンパス方向付きの現在位置マーカーを構築
+  Widget _buildLocationMarkerWithCompass() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 方向を示す扇形（背景）
+        if (_currentHeading != null)
+          Transform.rotate(
+            angle: (_currentHeading! * pi / 180) - (pi / 2), // 北を上に調整
+            child: Container(
+              width: 60,
+              height: 60,
+              child: CustomPaint(painter: CompassFanPainter()),
+            ),
+          ),
+        // 現在位置の中心円
+        Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// 追記モード開始処理
   /// [feature] - 追記対象のFeatureNode
   void _startAppendMode(FeatureNode feature) {
@@ -1629,17 +1702,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     // MarkerLayerを最後に移動（線・ポリゴンの上に点を表示）
                     MarkerLayer(
                       markers: [
-                        // --- Current location marker ---
+                        // --- Current location marker with compass direction ---
                         if (_currentLocation != null)
                           Marker(
                             point: _currentLocation!,
-                            width: 44,
-                            height: 44,
-                            child: Icon(
-                              Icons.my_location,
-                              color: Colors.blue,
-                              size: 36,
-                            ),
+                            width: 64,
+                            height: 64,
+                            child: _buildLocationMarkerWithCompass(),
                           ),
 
                         // --- GPS survey line/polygon point markers ---
@@ -2515,6 +2584,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             ],
             SizedBox(width: 16),
             Text('ソース: $sourceName'),
+            // コンパス情報を表示
+            if (_currentHeading != null) ...[
+              SizedBox(width: 16),
+              Text('方角: ${_currentHeading!.toStringAsFixed(0)}°'),
+            ],
           ],
         ),
       ),

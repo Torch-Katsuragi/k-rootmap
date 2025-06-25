@@ -56,6 +56,9 @@ dependencies:
   
   # バックグラウンドサービス用パッケージ
   flutter_background_service: ^5.0.9  # フォアグラウンド・バックグラウンドタスク実行用
+  
+  # コンパス・センサー用パッケージ
+  flutter_compass: ^0.8.0             # コンパス（磁気センサー）データ取得用
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

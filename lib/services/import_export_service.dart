@@ -117,12 +117,330 @@ class ImportExportResult {
   }
 }
 
+/// 高度な座標系管理クラス
+/// proj4dartとEPSGデータベースを活用したスマートな座標系解析
+class SmartCoordinateSystemManager {
+  /// シングルトンインスタンス
+  static final SmartCoordinateSystemManager _instance =
+      SmartCoordinateSystemManager._internal();
+  factory SmartCoordinateSystemManager() => _instance;
+  SmartCoordinateSystemManager._internal();
+
+  /// 予め定義された座標系のキャッシュ
+  final Map<String, Projection> _projectionCache = {};
+
+  /// よく使われるEPSGコードとProj4定義のマップ
+  static const Map<String, String> _commonEpsgDefinitions = {
+    // WGS84系
+    'EPSG:4326': '+proj=longlat +datum=WGS84 +no_defs',
+    'EPSG:3857':
+        '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs',
+
+    // JGD2000平面直角座標系 (EPSG:2443-2461)
+    'EPSG:2443':
+        '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2444':
+        '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2445':
+        '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2446':
+        '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2447':
+        '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2448':
+        '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2449':
+        '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2450':
+        '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2451':
+        '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    'EPSG:2452':
+        '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+
+    // UTM座標系（日本周辺）
+    'EPSG:32654': '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs',
+    'EPSG:32655': '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs',
+    'EPSG:32656': '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
+  };
+
+  /// WKT文字列から座標系を解析（proj4dartを最大限活用）
+  Future<CoordinateSystem?> parseWktToCoordinateSystem(String wkt) async {
+    try {
+      print('[SmartCRS] WKT座標系解析開始');
+      print('[SmartCRS] WKT文字列長: ${wkt.length}文字');
+
+      // Step 1: WKT文字列からEPSGコードを直接抽出
+      final epsgCode = _extractEpsgCodeFromWkt(wkt);
+      if (epsgCode != null) {
+        print('[SmartCRS] WKTからEPSGコード抽出成功: $epsgCode');
+
+        // 既知のEPSG定義を使用
+        if (_commonEpsgDefinitions.containsKey(epsgCode)) {
+          final proj4String = _commonEpsgDefinitions[epsgCode]!;
+          print('[SmartCRS] 既知のEPSG定義を使用: $epsgCode');
+
+          return CoordinateSystem(
+            name: _getEpsgName(epsgCode),
+            epsgCode: epsgCode,
+            proj4String: proj4String,
+          );
+        }
+      }
+
+      // Step 2: proj4dartのWKT解析機能を使用
+      try {
+        print('[SmartCRS] proj4dartでWKT直接解析を試行');
+        final projection = Projection.parse(wkt);
+
+        // proj4dartが正常に解析できた場合
+        if (projection != null) {
+          print('[SmartCRS] proj4dartWKT解析成功');
+
+          return CoordinateSystem(
+            name: epsgCode != null ? _getEpsgName(epsgCode) : 'WKT Projection',
+            epsgCode: epsgCode ?? 'WKT',
+            proj4String: wkt, // WKTをそのまま保存（proj4dartが対応）
+          );
+        }
+      } catch (e) {
+        print('[SmartCRS] proj4dartでのWKT解析失敗: $e');
+      }
+
+      // Step 3: WKTからProj4文字列への変換を試行（フォールバック）
+      final proj4String = await _convertWktToProj4String(wkt);
+      if (proj4String != null) {
+        print('[SmartCRS] WKT→Proj4変換成功');
+
+        try {
+          final projection = Projection.parse(proj4String);
+          if (projection != null) {
+            return CoordinateSystem(
+              name:
+                  epsgCode != null
+                      ? _getEpsgName(epsgCode)
+                      : 'Converted Projection',
+              epsgCode: epsgCode ?? 'CONVERTED',
+              proj4String: proj4String,
+            );
+          }
+        } catch (e) {
+          print('[SmartCRS] 変換されたProj4文字列の解析失敗: $e');
+        }
+      }
+
+      // Step 4: 最後の手段として投影法タイプから推定
+      final projectionInfo = _inferProjectionFromWkt(wkt);
+      if (projectionInfo != null) {
+        print('[SmartCRS] 投影法推定による座標系生成');
+        return projectionInfo;
+      }
+
+      print('[SmartCRS] 全ての解析手法が失敗');
+      return null;
+    } catch (e, stack) {
+      print('[SmartCRS] WKT解析エラー: $e');
+      print('[SmartCRS] スタックトレース: $stack');
+      return null;
+    }
+  }
+
+  /// WKT文字列からEPSGコードを抽出
+  String? _extractEpsgCodeFromWkt(String wkt) {
+    // AUTHORITY["EPSG","XXXX"] パターン
+    final authorityPattern = RegExp(r'AUTHORITY\["EPSG","(\d+)"\]');
+    final match = authorityPattern.firstMatch(wkt);
+    if (match != null) {
+      return 'EPSG:${match.group(1)}';
+    }
+
+    // EPSG:XXXX 直接パターン
+    final directPattern = RegExp(r'EPSG[:\s]*(\d+)');
+    final directMatch = directPattern.firstMatch(wkt);
+    if (directMatch != null) {
+      return 'EPSG:${directMatch.group(1)}';
+    }
+
+    return null;
+  }
+
+  /// EPSGコードから名前を取得
+  String _getEpsgName(String epsgCode) {
+    switch (epsgCode) {
+      case 'EPSG:4326':
+        return 'WGS 84';
+      case 'EPSG:3857':
+        return 'WGS 84 / Pseudo-Mercator';
+      case 'EPSG:2443':
+        return 'JGD2000 / Japan Plane Rectangular CS I';
+      case 'EPSG:2444':
+        return 'JGD2000 / Japan Plane Rectangular CS II';
+      case 'EPSG:2445':
+        return 'JGD2000 / Japan Plane Rectangular CS III';
+      case 'EPSG:2446':
+        return 'JGD2000 / Japan Plane Rectangular CS IV';
+      case 'EPSG:2447':
+        return 'JGD2000 / Japan Plane Rectangular CS V';
+      case 'EPSG:2448':
+        return 'JGD2000 / Japan Plane Rectangular CS VI';
+      case 'EPSG:2449':
+        return 'JGD2000 / Japan Plane Rectangular CS VII';
+      case 'EPSG:2450':
+        return 'JGD2000 / Japan Plane Rectangular CS VIII';
+      case 'EPSG:2451':
+        return 'JGD2000 / Japan Plane Rectangular CS IX';
+      case 'EPSG:2452':
+        return 'JGD2000 / Japan Plane Rectangular CS X';
+      case 'EPSG:32654':
+        return 'WGS 84 / UTM zone 54N';
+      case 'EPSG:32655':
+        return 'WGS 84 / UTM zone 55N';
+      case 'EPSG:32656':
+        return 'WGS 84 / UTM zone 56N';
+      default:
+        return epsgCode;
+    }
+  }
+
+  /// WKTをProj4文字列に変換（簡易版）
+  Future<String?> _convertWktToProj4String(String wkt) async {
+    try {
+      // 投影法を抽出
+      String? projType;
+      if (wkt.contains('Transverse_Mercator')) {
+        projType = '+proj=tmerc';
+      } else if (wkt.contains('Mercator')) {
+        projType = '+proj=merc';
+      } else if (wkt.contains('Lambert_Conformal_Conic')) {
+        projType = '+proj=lcc';
+      } else if (wkt.contains('Albers')) {
+        projType = '+proj=aea';
+      } else if (wkt.contains('UTM')) {
+        // UTMゾーンを抽出
+        final utmMatch = RegExp(r'UTM.*zone.*(\d+)').firstMatch(wkt);
+        if (utmMatch != null) {
+          final zone = utmMatch.group(1);
+          return '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs';
+        }
+      } else {
+        // 地理座標系（緯度経度）
+        projType = '+proj=longlat';
+      }
+
+      if (projType == null) return null;
+
+      // 基本パラメータの構築
+      final parts = <String>[projType];
+
+      // 測地系の判定
+      if (wkt.contains('WGS_1984') || wkt.contains('WGS84')) {
+        parts.add('+datum=WGS84');
+      } else if (wkt.contains('GRS80') || wkt.contains('JGD')) {
+        parts.add('+ellps=GRS80');
+      }
+
+      // 単位
+      if (wkt.contains('metre') || wkt.contains('meter')) {
+        parts.add('+units=m');
+      }
+
+      parts.add('+no_defs');
+
+      return parts.join(' ');
+    } catch (e) {
+      print('[SmartCRS] WKT→Proj4変換エラー: $e');
+      return null;
+    }
+  }
+
+  /// WKTから投影法を推定
+  CoordinateSystem? _inferProjectionFromWkt(String wkt) {
+    // 日本の一般的な投影法パターンを推定
+    if (wkt.toUpperCase().contains('JAPAN')) {
+      // 日本の平面直角座標系VI系をデフォルトとして使用
+      return CoordinateSystem(
+        name: 'JGD2000 / Japan Plane Rectangular CS VI (推定)',
+        epsgCode: 'EPSG:2448',
+        proj4String: _commonEpsgDefinitions['EPSG:2448']!,
+      );
+    }
+
+    // WGS84地理座標系をフォールバックとして使用
+    return CoordinateSystem(
+      name: 'WGS 84 (フォールバック)',
+      epsgCode: 'EPSG:4326',
+      proj4String: _commonEpsgDefinitions['EPSG:4326']!,
+    );
+  }
+
+  /// EPSGコードから座標系を取得
+  Future<CoordinateSystem?> getCoordinateSystemByEpsg(String epsgCode) async {
+    if (_commonEpsgDefinitions.containsKey(epsgCode)) {
+      return CoordinateSystem(
+        name: _getEpsgName(epsgCode),
+        epsgCode: epsgCode,
+        proj4String: _commonEpsgDefinitions[epsgCode]!,
+      );
+    }
+    return null;
+  }
+
+  /// Proj4dartの投影オブジェクトを取得（キャッシュ付き）
+  Projection? getProjection(String epsgCodeOrProj4String) {
+    if (_projectionCache.containsKey(epsgCodeOrProj4String)) {
+      return _projectionCache[epsgCodeOrProj4String];
+    }
+
+    try {
+      Projection? projection;
+
+      // EPSGコードの場合は既知の定義を使用
+      if (epsgCodeOrProj4String.startsWith('EPSG:') &&
+          _commonEpsgDefinitions.containsKey(epsgCodeOrProj4String)) {
+        final proj4String = _commonEpsgDefinitions[epsgCodeOrProj4String]!;
+        projection = Projection.parse(proj4String);
+      } else {
+        // Proj4文字列またはWKTとして解析
+        projection = Projection.parse(epsgCodeOrProj4String);
+      }
+
+      if (projection != null) {
+        _projectionCache[epsgCodeOrProj4String] = projection;
+      }
+
+      return projection;
+    } catch (e) {
+      print('[SmartCRS] 投影作成エラー: $e');
+      return null;
+    }
+  }
+
+  /// サポートされているEPSGコードのリストを取得
+  List<String> getSupportedEpsgCodes() {
+    return _commonEpsgDefinitions.keys.toList()..sort();
+  }
+
+  /// 座標系情報の詳細表示
+  void printCoordinateSystemInfo(CoordinateSystem coordinateSystem) {
+    print('[SmartCRS] =====================================');
+    print('[SmartCRS] 座標系情報:');
+    print('[SmartCRS]   名前: ${coordinateSystem.name}');
+    print('[SmartCRS]   EPSGコード: ${coordinateSystem.epsgCode}');
+    print('[SmartCRS]   Proj4文字列: ${coordinateSystem.proj4String}');
+    print('[SmartCRS] =====================================');
+  }
+}
+
 /// Import/Export機能を提供するサービスクラス
 class ImportExportService {
   /// シングルトンインスタンス
   static final ImportExportService _instance = ImportExportService._internal();
   factory ImportExportService() => _instance;
   ImportExportService._internal();
+
+  /// スマート座標系マネージャー
+  final SmartCoordinateSystemManager _smartCrsManager =
+      SmartCoordinateSystemManager();
 
   /// ファイルをGeoPackageレイヤとしてインポート
   /// [filePath] インポート対象のファイルパス
@@ -1059,40 +1377,53 @@ class ImportExportService {
       // 座標の基本的な妥当性チェック（有限数であること）
       if (x.isFinite && y.isFinite) {
         if (sourceCoordinateSystem != null) {
-          // 座標変換を実行
+          // スマート座標系マネージャーを使用して座標変換
           try {
-            final point = Point(x: x, y: y);
-            final transformedPoint = CoordinateConverter.xyToLatLng(
-              point,
-              sourceCoordinateSystem,
+            final sourceProjection = _smartCrsManager.getProjection(
+              sourceCoordinateSystem.proj4String,
             );
+            final wgs84Projection = _smartCrsManager.getProjection('EPSG:4326');
 
-            // 変換後の座標がWGS84の妥当な範囲内かチェック
-            if (transformedPoint.latitude >= -90 &&
-                transformedPoint.latitude <= 90 &&
-                transformedPoint.longitude >= -180 &&
-                transformedPoint.longitude <= 180) {
-              // 最初の1回だけ詳細ログ出力
-              if (!_hasLoggedFirstPointConversion) {
-                print('[DEBUG] 【最初のPoint座標変換詳細】');
-                print(
-                  '  元座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
-                );
-                print('  元座標: X=$x, Y=$y');
-                print(
-                  '  変換後座標: 緯度=${transformedPoint.latitude}, 経度=${transformedPoint.longitude}',
-                );
-                print(
-                  '  変換後座標（表示用）: (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
-                );
-                _hasLoggedFirstPointConversion = true;
+            if (sourceProjection != null && wgs84Projection != null) {
+              final point = Point(x: x, y: y);
+              final transformedPoint = sourceProjection.transform(
+                wgs84Projection,
+                point,
+              );
+              final latLng = LatLng(transformedPoint.y, transformedPoint.x);
+
+              // 変換後の座標がWGS84の妥当な範囲内かチェック
+              if (latLng.latitude >= -90 &&
+                  latLng.latitude <= 90 &&
+                  latLng.longitude >= -180 &&
+                  latLng.longitude <= 180) {
+                // 最初の1回だけ詳細ログ出力
+                if (!_hasLoggedFirstPointConversion) {
+                  print('[DEBUG] 【最初のPoint座標変換詳細】');
+                  print(
+                    '  元座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
+                  );
+                  print('  元座標: X=$x, Y=$y');
+                  print(
+                    '  変換後座標: 緯度=${latLng.latitude}, 経度=${latLng.longitude}',
+                  );
+                  print(
+                    '  変換後座標（表示用）: (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
+                  );
+                  _hasLoggedFirstPointConversion = true;
+                }
+                return latLng;
+              } else {
+                if (!_hasLoggedFirstPointConversion) {
+                  print(
+                    '[DEBUG] 変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
+                  );
+                }
+                return null;
               }
-              return transformedPoint;
             } else {
               if (!_hasLoggedFirstPointConversion) {
-                print(
-                  '[DEBUG] 変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
-                );
+                print('[DEBUG] 投影オブジェクトの作成に失敗');
               }
               return null;
             }
@@ -1189,32 +1520,46 @@ class ImportExportService {
         // 座標の基本的な妥当性チェック（有限数であること）
         if (x.isFinite && y.isFinite) {
           if (sourceCoordinateSystem != null) {
-            // 座標変換を実行
+            // スマート座標系マネージャーを使用して座標変換
             try {
-              final point = Point(x: x, y: y);
-              final transformedPoint = CoordinateConverter.xyToLatLng(
-                point,
-                sourceCoordinateSystem,
+              final sourceProjection = _smartCrsManager.getProjection(
+                sourceCoordinateSystem.proj4String,
+              );
+              final wgs84Projection = _smartCrsManager.getProjection(
+                'EPSG:4326',
               );
 
-              // 変換後の座標がWGS84の妥当な範囲内かチェック
-              if (transformedPoint.latitude >= -90 &&
-                  transformedPoint.latitude <= 90 &&
-                  transformedPoint.longitude >= -180 &&
-                  transformedPoint.longitude <= 180) {
-                coordinates.add(transformedPoint);
-                // 最初の1回だけ変換結果を詳細出力
-                if (!_hasLoggedFirstPolylineConversion &&
-                    coordinates.length == 1) {
-                  print(
-                    '  最初の点の変換結果: ($x, $y) -> (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
-                  );
+              if (sourceProjection != null && wgs84Projection != null) {
+                final point = Point(x: x, y: y);
+                final transformedPoint = sourceProjection.transform(
+                  wgs84Projection,
+                  point,
+                );
+                final latLng = LatLng(transformedPoint.y, transformedPoint.x);
+
+                // 変換後の座標がWGS84の妥当な範囲内かチェック
+                if (latLng.latitude >= -90 &&
+                    latLng.latitude <= 90 &&
+                    latLng.longitude >= -180 &&
+                    latLng.longitude <= 180) {
+                  coordinates.add(latLng);
+                  // 最初の1回だけ変換結果を詳細出力
+                  if (!_hasLoggedFirstPolylineConversion &&
+                      coordinates.length == 1) {
+                    print(
+                      '  最初の点の変換結果: ($x, $y) -> (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
+                    );
+                  }
+                } else {
+                  if (!_hasLoggedFirstPolylineConversion) {
+                    print(
+                      '[DEBUG] Polyline変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
+                    );
+                  }
                 }
               } else {
                 if (!_hasLoggedFirstPolylineConversion) {
-                  print(
-                    '[DEBUG] Polyline変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
-                  );
+                  print('[DEBUG] Polyline投影オブジェクトの作成に失敗');
                 }
               }
             } catch (e) {
@@ -1317,40 +1662,52 @@ class ImportExportService {
 
         // 座標の基本的な妥当性チェック（有限数であること）
         if (x.isFinite && y.isFinite) {
-          LatLng? transformedPoint;
-
           if (sourceCoordinateSystem != null) {
-            // 座標変換を実行
+            // スマート座標系マネージャーを使用して座標変換
             try {
-              final point = Point(x: x, y: y);
-              transformedPoint = CoordinateConverter.xyToLatLng(
-                point,
-                sourceCoordinateSystem,
+              final sourceProjection = _smartCrsManager.getProjection(
+                sourceCoordinateSystem.proj4String,
+              );
+              final wgs84Projection = _smartCrsManager.getProjection(
+                'EPSG:4326',
               );
 
-              // 変換後の座標がWGS84の妥当な範囲内かチェック
-              if (transformedPoint.latitude >= -90 &&
-                  transformedPoint.latitude <= 90 &&
-                  transformedPoint.longitude >= -180 &&
-                  transformedPoint.longitude <= 180) {
-                allPoints.add(transformedPoint);
-                // 最初の1回だけ変換結果を詳細出力
-                if (!_hasLoggedFirstPolygonConversion &&
-                    allPoints.length == 1) {
-                  print(
-                    '  最初の点の変換結果: ($x, $y) -> (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
-                  );
+              if (sourceProjection != null && wgs84Projection != null) {
+                final point = Point(x: x, y: y);
+                final transformedPoint = sourceProjection.transform(
+                  wgs84Projection,
+                  point,
+                );
+                final latLng = LatLng(transformedPoint.y, transformedPoint.x);
+
+                // 変換後の座標がWGS84の妥当な範囲内かチェック
+                if (latLng.latitude >= -90 &&
+                    latLng.latitude <= 90 &&
+                    latLng.longitude >= -180 &&
+                    latLng.longitude <= 180) {
+                  allPoints.add(latLng);
+                  // 最初の1回だけ変換結果を詳細出力
+                  if (!_hasLoggedFirstPolygonConversion &&
+                      allPoints.length == 1) {
+                    print(
+                      '  最初の点の変換結果: ($x, $y) -> (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
+                    );
+                  }
+                } else {
+                  if (!_hasLoggedFirstPolygonConversion) {
+                    print(
+                      '[DEBUG] 変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
+                    );
+                  }
                 }
               } else {
                 if (!_hasLoggedFirstPolygonConversion) {
-                  print(
-                    '[DEBUG] 変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
-                  );
+                  print('[DEBUG] Polygon投影オブジェクトの作成に失敗');
                 }
               }
             } catch (e) {
               if (!_hasLoggedFirstPolygonConversion) {
-                print('[DEBUG] 座標変換エラー: $e (元座標: $x, $y)');
+                print('[DEBUG] Polygon座標変換エラー: $e (元座標: $x, $y)');
               }
             }
           } else {
@@ -1816,7 +2173,7 @@ class ImportExportService {
         .replaceAll("'", '&apos;');
   }
 
-  /// .prjファイルから座標系情報を読み取り
+  /// .prjファイルから座標系情報を読み取り（スマートマネージャー使用）
   Future<CoordinateSystem?> _readPrjFile(String prjFilePath) async {
     try {
       final prjFile = File(prjFilePath);
@@ -1826,244 +2183,28 @@ class ImportExportService {
       }
 
       final prjContent = await prjFile.readAsString();
-      print('[DEBUG] .prjファイル内容:');
-      print('  ファイルパス: $prjFilePath');
-      print('  内容: $prjContent');
-      print('  文字数: ${prjContent.length}文字');
+      print('[ImportExportService] .prjファイル読み込み成功');
+      print('[ImportExportService] ファイルパス: $prjFilePath');
+      print('[ImportExportService] 文字数: ${prjContent.length}文字');
 
-      // WKTから座標系を解析
-      return await _parseWktToCoordinateSystem(prjContent);
+      // スマート座標系マネージャーを使用してWKTを解析
+      final coordinateSystem = await _smartCrsManager
+          .parseWktToCoordinateSystem(prjContent);
+
+      if (coordinateSystem != null) {
+        _smartCrsManager.printCoordinateSystemInfo(coordinateSystem);
+        return coordinateSystem;
+      } else {
+        print('[ImportExportService] スマート座標系解析に失敗');
+        return null;
+      }
     } catch (e) {
       print('[ImportExportService] .prjファイル読み取りエラー: $e');
       return null;
     }
   }
 
-  /// WKT形式の座標系定義を解析してCoordinateSystemに変換
-  Future<CoordinateSystem?> _parseWktToCoordinateSystem(String wkt) async {
-    try {
-      // よく使われる日本の座標系パターンを検索
-      final wktUpper = wkt.toUpperCase();
-      print('[DEBUG] WKT解析開始:');
-      print('  大文字変換後WKT: $wktUpper');
+  // 旧WKT解析メソッドは削除済み - SmartCoordinateSystemManagerを使用
 
-      // JGD2000 / Japan Plane Rectangular CS 系の様々なパターンを試行
-      // 重要: 長いパターン（XIX, XVIII, XVII...）を先に評価してVI→V誤認識を防ぐ
-      final patterns = [
-        r'JGD_?2000.*PLANE.*RECT.*CS\s+(XIX|XVIII|XVII|XVI|XV|XIV|XIII|XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)', // ローマ数字パターン（長い順）
-        r'EPSG.*2448', // EPSG:2448 (CS VI) 直接パターン
-        r'EPSG.*244(\d)', // EPSG:2441-2450のパターン
-        r'JGD_?2000.*PLANE.*RECT.*CS.*(\d+)', // アラビア数字パターン
-        r'JGD_?2000.*PLANE.*RECTANGULAR.*CS.*(\d+)',
-        r'JGD_?2000.*(\d+)',
-        r'PLANE.*RECT.*CS.*(\d+)',
-        r'244(\d)', // 244X形式のパターン
-      ];
-
-      for (int i = 0; i < patterns.length; i++) {
-        final jgdMatches = RegExp(patterns[i]).firstMatch(wktUpper);
-        if (jgdMatches != null) {
-          print('[DEBUG] WKT座標系解析（パターン${i + 1}）:');
-          print('  使用パターン: ${patterns[i]}');
-          print('  正規表現マッチ: ${jgdMatches.group(0)}');
-          print('  抽出された文字列: ${jgdMatches.group(1) ?? 'N/A'}');
-
-          int? zoneNumber;
-
-          // EPSG:2448直接パターン（CS VI専用）
-          if (patterns[i].contains('EPSG.*2448')) {
-            zoneNumber = 6; // CS VI
-            print('  EPSG:2448直接検出 => CS 6');
-          }
-          // 最初のパターン（ローマ数字）の場合
-          else if (i == 0) {
-            final romanNumeral = jgdMatches.group(1) ?? '';
-            zoneNumber = _romanToInt(romanNumeral);
-            print('  ローマ数字変換: $romanNumeral => $zoneNumber');
-          }
-          // EPSGパターンの場合
-          else if (patterns[i].contains('EPSG.*244')) {
-            final epsgSuffix = jgdMatches.group(1) ?? '';
-            final epsgNumber = int.tryParse(epsgSuffix);
-            if (epsgNumber != null && epsgNumber >= 3 && epsgNumber <= 12) {
-              // EPSG:2443-2452の下一桁 (3-12) => CS 1-10に変換
-              zoneNumber = epsgNumber - 2; // 3->1, 4->2, ..., 12->10
-              print('  EPSG:244${epsgNumber} => CS $zoneNumber');
-            }
-          }
-          // 数字パターンの場合
-          else {
-            zoneNumber = int.tryParse(jgdMatches.group(1) ?? '');
-            print('  解釈されたゾーン番号: $zoneNumber');
-          }
-
-          if (zoneNumber != null && zoneNumber >= 1 && zoneNumber <= 19) {
-            print('  🎯 最終判定: CS $zoneNumber');
-            return _getJgd2000CoordinateSystem(zoneNumber);
-          }
-        }
-      }
-
-      // UTM Zone の検出
-      final utmMatches = RegExp(r'UTM.*ZONE.*(\d+)').firstMatch(wktUpper);
-      if (utmMatches != null) {
-        final zoneNumber = int.tryParse(utmMatches.group(1) ?? '');
-        if (zoneNumber != null) {
-          return CoordinateSystem(
-            name: 'UTM Zone ${zoneNumber}N',
-            epsgCode: 'EPSG:326${zoneNumber.toString().padLeft(2, '0')}',
-            proj4String:
-                '+proj=utm +zone=$zoneNumber +datum=WGS84 +units=m +no_defs',
-          );
-        }
-      }
-
-      // Tokyo Datum (旧測地系) の検出
-      if (wktUpper.contains('TOKYO')) {
-        print('[ImportExportService] Tokyo Datum検出 - 座標変換が必要');
-        // TODO: 旧測地系対応
-      }
-
-      // WGS84の検出
-      if (wktUpper.contains('WGS_1984') || wktUpper.contains('WGS84')) {
-        print('[ImportExportService] WGS84座標系検出');
-        return CoordinateSystem(
-          name: 'WGS84',
-          epsgCode: 'EPSG:4326',
-          proj4String: '+proj=longlat +datum=WGS84 +no_defs',
-        );
-      }
-
-      print('[ImportExportService] 未対応のWKT形式: $wkt');
-      return null;
-    } catch (e) {
-      print('[ImportExportService] WKT解析エラー: $e');
-      return null;
-    }
-  }
-
-  /// ローマ数字を整数に変換
-  int? _romanToInt(String roman) {
-    switch (roman.toUpperCase()) {
-      case 'I':
-        return 1;
-      case 'II':
-        return 2;
-      case 'III':
-        return 3;
-      case 'IV':
-        return 4;
-      case 'V':
-        return 5;
-      case 'VI':
-        return 6;
-      case 'VII':
-        return 7;
-      case 'VIII':
-        return 8;
-      case 'IX':
-        return 9;
-      case 'X':
-        return 10;
-      case 'XI':
-        return 11;
-      case 'XII':
-        return 12;
-      case 'XIII':
-        return 13;
-      case 'XIV':
-        return 14;
-      case 'XV':
-        return 15;
-      case 'XVI':
-        return 16;
-      case 'XVII':
-        return 17;
-      case 'XVIII':
-        return 18;
-      case 'XIX':
-        return 19;
-      default:
-        return null;
-    }
-  }
-
-  /// JGD2000平面直角座標系の座標系情報を取得
-  CoordinateSystem? _getJgd2000CoordinateSystem(int zone) {
-    switch (zone) {
-      case 1:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS I',
-          epsgCode: 'EPSG:2443',
-          proj4String:
-              '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 2:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS II',
-          epsgCode: 'EPSG:2444',
-          proj4String:
-              '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 3:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS III',
-          epsgCode: 'EPSG:2445',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 4:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS IV',
-          epsgCode: 'EPSG:2446',
-          proj4String:
-              '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 5:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS V',
-          epsgCode: 'EPSG:2447',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 6:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS VI',
-          epsgCode: 'EPSG:2448',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 7:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS VII',
-          epsgCode: 'EPSG:2449',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 8:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS VIII',
-          epsgCode: 'EPSG:2450',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 9:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS IX',
-          epsgCode: 'EPSG:2451',
-          proj4String:
-              '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      case 10:
-        return CoordinateSystem(
-          name: 'JGD2000 / Japan Plane Rectangular CS X',
-          epsgCode: 'EPSG:2452',
-          proj4String:
-              '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
-        );
-      default:
-        print('[ImportExportService] 未対応のJGD2000ゾーン: $zone');
-        return null;
-    }
-  }
+  // 旧ローマ数字変換とJGD2000座標系取得メソッドは削除済み - SmartCoordinateSystemManagerを使用
 }

@@ -805,6 +805,10 @@ class ImportExportService {
     int featureCount = 0;
     // 全フィーチャを読み込み（制限なし）
 
+    // バッチ処理用のデータを蓄積
+    final List<Map<String, dynamic>> batchData = [];
+    const int batchSize = 1000; // 1000個ずつバッチ処理
+
     while (offset < bytes.length - 8) {
       try {
         // レコードヘッダーを読み込み（8バイト）
@@ -846,24 +850,25 @@ class ImportExportService {
 
         offset += 4; // シェープタイプ分を進める
 
+        // フィーチャデータを抽出してバッチリストに追加
+        Map<String, dynamic>? featureData;
+
         if (recordShapeType == 1) {
           // Point
           final coordinates = await _extractPointCoordinates(bytes, offset);
           if (coordinates != null) {
-            await targetGeoPackage.geoPackageFile.addPoint(
-              layerName,
-              coordinates,
-              name: 'Point ${featureCount + 1}',
-              description: 'Extracted from ${p.basename(shpFilePath)}',
-              metadata: {
+            featureData = {
+              'point': coordinates,
+              'name': 'Point ${featureCount + 1}',
+              'description': 'Extracted from ${p.basename(shpFilePath)}',
+              'metadata': {
                 'sourceFile': shpFilePath,
                 'recordNumber': recordNumber,
                 'shapeType': recordShapeType,
-                'importMethod': 'actual_coordinate_extraction',
+                'importMethod': 'batch_coordinate_extraction',
                 'extractionOffset': offset,
               },
-            );
-            featureCount++;
+            };
           }
           offset += 16; // Point は X,Y の 8バイト × 2
         } else if (recordShapeType == 3) {
@@ -874,20 +879,18 @@ class ImportExportService {
             contentLength,
           );
           if (coordinates != null && coordinates.isNotEmpty) {
-            await targetGeoPackage.geoPackageFile.addLine(
-              layerName,
-              coordinates,
-              name: 'Line ${featureCount + 1}',
-              description: 'Extracted from ${p.basename(shpFilePath)}',
-              metadata: {
+            featureData = {
+              'line': coordinates,
+              'name': 'Line ${featureCount + 1}',
+              'description': 'Extracted from ${p.basename(shpFilePath)}',
+              'metadata': {
                 'sourceFile': shpFilePath,
                 'recordNumber': recordNumber,
                 'shapeType': recordShapeType,
-                'importMethod': 'actual_coordinate_extraction',
+                'importMethod': 'batch_coordinate_extraction',
                 'pointCount': coordinates.length,
               },
-            );
-            featureCount++;
+            };
           }
           offset += (contentLength * 2) - 4; // コンテンツ長から既に読んだシェープタイプを除く
         } else if (recordShapeType == 5) {
@@ -898,30 +901,57 @@ class ImportExportService {
             contentLength,
           );
           if (coordinates != null && coordinates.isNotEmpty) {
-            await targetGeoPackage.geoPackageFile.addPolygon(
-              layerName,
-              coordinates,
-              name: 'Polygon ${featureCount + 1}',
-              description: 'Extracted from ${p.basename(shpFilePath)}',
-              metadata: {
+            featureData = {
+              'rings': coordinates,
+              'name': 'Polygon ${featureCount + 1}',
+              'description': 'Extracted from ${p.basename(shpFilePath)}',
+              'metadata': {
                 'sourceFile': shpFilePath,
                 'recordNumber': recordNumber,
                 'shapeType': recordShapeType,
-                'importMethod': 'actual_coordinate_extraction',
+                'importMethod': 'batch_coordinate_extraction',
                 'ringCount': coordinates.length,
               },
-            );
-            featureCount++;
+            };
           }
           offset += (contentLength * 2) - 4; // コンテンツ長から既に読んだシェープタイプを除く
         } else {
           print('[ImportExportService] 未対応のシェープタイプ: $recordShapeType');
           offset += (contentLength * 2) - 4; // レコードをスキップ
         }
+
+        // 有効なフィーチャデータがあればバッチリストに追加
+        if (featureData != null) {
+          batchData.add(featureData);
+          featureCount++;
+
+          // バッチサイズに達したらデータベースに書き込み
+          if (batchData.length >= batchSize) {
+            await _processBatchData(
+              targetGeoPackage,
+              layerName,
+              geometryType,
+              batchData,
+            );
+            batchData.clear();
+            print('[ImportExportService] バッチ処理完了: ${featureCount}個まで処理済み');
+          }
+        }
       } catch (e) {
         print('[ImportExportService] レコード解析エラー（offset: $offset）: $e');
         break;
       }
+    }
+
+    // 残りのデータをバッチ処理
+    if (batchData.isNotEmpty) {
+      await _processBatchData(
+        targetGeoPackage,
+        layerName,
+        geometryType,
+        batchData,
+      );
+      print('[ImportExportService] 最終バッチ処理完了: ${batchData.length}個');
     }
 
     print('[ImportExportService] 座標データ抽出完了: $featureCount個のフィーチャ');
@@ -932,6 +962,41 @@ class ImportExportService {
     }
 
     return featureCount;
+  }
+
+  /// バッチデータをデータベースに書き込み
+  Future<void> _processBatchData(
+    GeoPackageNode targetGeoPackage,
+    String layerName,
+    GeometryType geometryType,
+    List<Map<String, dynamic>> batchData,
+  ) async {
+    try {
+      switch (geometryType) {
+        case GeometryType.point:
+          await targetGeoPackage.geoPackageFile.addPointsBatch(
+            layerName,
+            batchData,
+          );
+          break;
+        case GeometryType.linestring:
+          await targetGeoPackage.geoPackageFile.addLinesBatch(
+            layerName,
+            batchData,
+          );
+          break;
+        case GeometryType.polygon:
+          await targetGeoPackage.geoPackageFile.addPolygonsBatch(
+            layerName,
+            batchData,
+          );
+          break;
+        default:
+          print('[ImportExportService] 未対応のジオメトリタイプ: $geometryType');
+      }
+    } catch (e) {
+      print('[ImportExportService] バッチデータ処理エラー: $e');
+    }
   }
 
   /// Pointの座標を抽出

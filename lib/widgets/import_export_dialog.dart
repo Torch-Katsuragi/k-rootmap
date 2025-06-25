@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
 import '../models/layer_tree_node.dart';
+import '../utils/global_config.dart';
 
 /// Import/Export機能を提供するダイアログ
 class ImportExportDialog extends StatefulWidget {
@@ -554,6 +555,16 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
                 : importResult.errorMessage ?? 'Import failed';
       });
 
+      // インポート成功時はマップのフィーチャ更新をトリガー
+      if (importResult.success) {
+        _triggerMapRefresh();
+
+        // 少し遅延させて再度更新（確実性のため）
+        Future.delayed(Duration(milliseconds: 500), () {
+          _triggerMapRefresh();
+        });
+      }
+
       // 成功時はダイアログを自動で閉じる（オプション）
       if (importResult.success && mounted) {
         await Future.delayed(const Duration(seconds: 2));
@@ -570,6 +581,23 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
         _statusMessage = 'Import failed: $e';
         _lastResult = ImportExportResult.error(e.toString());
       });
+    }
+  }
+
+  /// マップページのフィーチャ更新をトリガー
+  void _triggerMapRefresh() {
+    try {
+      // GlobalConfigを通じてマップページの更新をトリガー
+      final mapState = GlobalConfig.instance.mapState;
+      if (mapState != null && mapState.mounted) {
+        // マップページのrefreshFeaturesメソッドを呼び出し
+        (mapState as dynamic).refreshFeatures();
+        print('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
+      } else {
+        print('[ImportExportDialog] マップページが見つからないか、マウントされていません');
+      }
+    } catch (e) {
+      print('[ImportExportDialog] マップ更新エラー: $e');
     }
   }
 }

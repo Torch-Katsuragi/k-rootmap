@@ -102,6 +102,23 @@ class _LayerDrawerState extends State<LayerDrawer> {
     );
   }
 
+  /// マップページのフィーチャ更新をトリガー
+  void _triggerMapRefresh() {
+    try {
+      // GlobalConfigを通じてマップページの更新をトリガー
+      final mapState = GlobalConfig.instance.mapState;
+      if (mapState != null && mapState.mounted) {
+        // マップページのrefreshFeaturesメソッドを呼び出し
+        (mapState as dynamic).refreshFeatures();
+        print('[LayerDrawer] マップフィーチャ更新をトリガーしました');
+      } else {
+        print('[LayerDrawer] マップページが見つからないか、マウントされていません');
+      }
+    } catch (e) {
+      print('[LayerDrawer] マップ更新エラー: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1119,13 +1136,48 @@ class _LayerDrawerState extends State<LayerDrawer> {
         // 成功：レイヤーツリーを更新
         await targetNode.updateChildren();
 
+        // 作成されたレイヤーノードもFeatureNodeを更新
+        if (result.createdLayer != null) {
+          print(
+            '[LayerDrawer] 作成されたレイヤーのフィーチャ更新: ${result.createdLayer!.layerName}',
+          );
+          await result.createdLayer!.updateChildren();
+
+          // デバッグ：フィーチャが正しく読み込まれたかを確認
+          final features = await result.createdLayer!.features;
+          print(
+            '[LayerDrawer] レイヤー「${result.createdLayer!.layerName}」のフィーチャ数: ${features.length}',
+          );
+
+          // デバッグ：最初のフィーチャの詳細
+          if (features.isNotEmpty) {
+            final firstFeature = features.first;
+            print(
+              '[LayerDrawer] 最初のフィーチャ: ${firstFeature.name}, 中心座標: ${firstFeature.centroid}',
+            );
+          }
+        }
+
         // GeoPackageを自動展開
         final absPath = targetNode.geoPackageFile.getAbsolutePath();
         if (absPath != null) {
           expandedGpkgPaths.add(absPath);
         }
 
+        // UIとマップを強制更新
         widget.setStateCallback(() {});
+
+        // 追加：インポート完了後に状態を確実に更新
+        setState(() {});
+
+        // マップページのフィーチャデータを強制更新
+        _triggerMapRefresh();
+
+        // 追加の確実な更新（少し遅延させて実行）
+        Future.delayed(Duration(milliseconds: 500), () {
+          _triggerMapRefresh();
+        });
+
         _showImportSuccess(result);
 
         print('[LayerDrawer] GeoPackageドロップ処理完了');

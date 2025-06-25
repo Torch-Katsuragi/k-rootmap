@@ -748,13 +748,12 @@ class GeoPackageFile {
     try {
       final db = await _getDatabase();
 
-      // 属性データを準備
+      // geomカラムを追加
       final data = <String, dynamic>{'geom': geometry};
       data.addAll(attributes);
 
       // insertして実際のrowIdを取得
       final rowId = await db.insert(tableName, data);
-      print('[GeoPackageFile] フィーチャ追加成功: $tableName, rowId: $rowId');
       return rowId;
     } catch (e) {
       print('[GeoPackageFile] addFeatureWithAttributes エラー発生 - $e');
@@ -981,6 +980,178 @@ class GeoPackageFile {
     } catch (e) {
       print('updatePolygon: エラー発生 - $e');
       return false;
+    }
+  }
+
+  /// バッチ処理でポリゴンを高速追加
+  /// [tableName] テーブル名
+  /// [polygonData] ポリゴンデータのリスト
+  Future<List<int>> addPolygonsBatch(
+    String tableName,
+    List<Map<String, dynamic>> polygonData,
+  ) async {
+    try {
+      print(
+        '[GeoPackageFile] バッチ処理開始: $tableName, ${polygonData.length}個のポリゴン',
+      );
+
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final batch = db.batch();
+      final insertedIds = <int>[];
+
+      // バッチでINSERT文を準備
+      for (int i = 0; i < polygonData.length; i++) {
+        final data = polygonData[i];
+        final rings = data['rings'] as List<List<LatLng>>;
+        final name = data['name'] as String? ?? 'Polygon ${i + 1}';
+        final description = data['description'] as String? ?? '';
+        final metadata = data['metadata'] as Map<String, dynamic>?;
+
+        final wkb = createWkbPolygon(rings);
+        final insertData = {
+          'geom': wkb,
+          'name': name,
+          'description': description,
+        };
+
+        if (metadata != null) {
+          insertData['kmaps_metadata'] = jsonEncode(metadata);
+        }
+
+        batch.insert(tableName, insertData);
+      }
+
+      // バッチ実行
+      print('[GeoPackageFile] バッチ実行中...');
+      final results = await batch.commit(noResult: false);
+
+      // 結果をrowIdリストに変換
+      for (final result in results) {
+        if (result is int) {
+          insertedIds.add(result);
+        }
+      }
+
+      print('[GeoPackageFile] バッチ処理完了: ${insertedIds.length}個のポリゴンを追加');
+      return insertedIds;
+    } catch (e) {
+      print('[GeoPackageFile] addPolygonsBatch エラー発生 - $e');
+      return [];
+    }
+  }
+
+  /// バッチ処理でポイントを高速追加
+  /// [tableName] テーブル名
+  /// [pointData] ポイントデータのリスト
+  Future<List<int>> addPointsBatch(
+    String tableName,
+    List<Map<String, dynamic>> pointData,
+  ) async {
+    try {
+      print(
+        '[GeoPackageFile] ポイントバッチ処理開始: $tableName, ${pointData.length}個のポイント',
+      );
+
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final batch = db.batch();
+      final insertedIds = <int>[];
+
+      // バッチでINSERT文を準備
+      for (int i = 0; i < pointData.length; i++) {
+        final data = pointData[i];
+        final point = data['point'] as LatLng;
+        final name = data['name'] as String? ?? 'Point ${i + 1}';
+        final description = data['description'] as String? ?? '';
+        final metadata = data['metadata'] as Map<String, dynamic>?;
+
+        final wkb = createWkbPoint(point.longitude, point.latitude);
+        final insertData = {
+          'geom': wkb,
+          'name': name,
+          'description': description,
+        };
+
+        if (metadata != null) {
+          insertData['kmaps_metadata'] = jsonEncode(metadata);
+        }
+
+        batch.insert(tableName, insertData);
+      }
+
+      // バッチ実行
+      print('[GeoPackageFile] ポイントバッチ実行中...');
+      final results = await batch.commit(noResult: false);
+
+      // 結果をrowIdリストに変換
+      for (final result in results) {
+        if (result is int) {
+          insertedIds.add(result);
+        }
+      }
+
+      print('[GeoPackageFile] ポイントバッチ処理完了: ${insertedIds.length}個のポイントを追加');
+      return insertedIds;
+    } catch (e) {
+      print('[GeoPackageFile] addPointsBatch エラー発生 - $e');
+      return [];
+    }
+  }
+
+  /// バッチ処理でラインを高速追加
+  /// [tableName] テーブル名
+  /// [lineData] ラインデータのリスト
+  Future<List<int>> addLinesBatch(
+    String tableName,
+    List<Map<String, dynamic>> lineData,
+  ) async {
+    try {
+      print('[GeoPackageFile] ラインバッチ処理開始: $tableName, ${lineData.length}個のライン');
+
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final batch = db.batch();
+      final insertedIds = <int>[];
+
+      // バッチでINSERT文を準備
+      for (int i = 0; i < lineData.length; i++) {
+        final data = lineData[i];
+        final line = data['line'] as List<LatLng>;
+        final name = data['name'] as String? ?? 'Line ${i + 1}';
+        final description = data['description'] as String? ?? '';
+        final metadata = data['metadata'] as Map<String, dynamic>?;
+
+        final wkb = createWkbLineString(line);
+        final insertData = {
+          'geom': wkb,
+          'name': name,
+          'description': description,
+        };
+
+        if (metadata != null) {
+          insertData['kmaps_metadata'] = jsonEncode(metadata);
+        }
+
+        batch.insert(tableName, insertData);
+      }
+
+      // バッチ実行
+      print('[GeoPackageFile] ラインバッチ実行中...');
+      final results = await batch.commit(noResult: false);
+
+      // 結果をrowIdリストに変換
+      for (final result in results) {
+        if (result is int) {
+          insertedIds.add(result);
+        }
+      }
+
+      print('[GeoPackageFile] ラインバッチ処理完了: ${insertedIds.length}個のラインを追加');
+      return insertedIds;
+    } catch (e) {
+      print('[GeoPackageFile] addLinesBatch エラー発生 - $e');
+      return [];
     }
   }
 }

@@ -1154,4 +1154,32 @@ class GeoPackageFile {
       return [];
     }
   }
+
+  /// 指定レイヤーの全フィーチャの属性データを一括取得（属性テーブル表示用最適化）
+  /// [tableName] テーブル名
+  /// [columns] 取得するカラムのリスト（nullの場合は全カラムを取得）
+  /// 戻り値: List<Map<String, dynamic>> - 各行の属性データ
+  Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
+    String tableName, {
+    List<String>? columns,
+  }) async {
+    try {
+      final db = await _getDatabase();
+
+      // カラム指定がある場合は指定されたカラムのみ、ない場合は全カラム
+      final columnList = columns?.join(', ') ?? '*';
+
+      print('[GeoPackageFile] 一括属性取得開始: $tableName, カラム: $columnList');
+
+      final result = await db.rawQuery(
+        'SELECT $columnList FROM "$tableName" ORDER BY id',
+      );
+
+      print('[GeoPackageFile] 一括属性取得完了: ${result.length}件');
+      return result;
+    } catch (e) {
+      print('[GeoPackageFile] getAllFeatureAttributes エラー発生 - $e');
+      return [];
+    }
+  }
 }

@@ -1538,6 +1538,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
   String editingValue = '';
   bool showAllColumns = false;
 
+  // ページネーション関連
+  int _currentPage = 0;
+  int _pageSize = 50; // 1ページあたりの表示件数
+  int _totalRecords = 0;
+
   // スクロール位置保持用のコントローラー
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
@@ -1545,6 +1550,7 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
   // データキャッシュ用変数（不必要な再読み込みを防ぐ）
   List<String>? _cachedColumns;
   List<FeatureNode>? _cachedFeatures;
+  List<Map<String, dynamic>>? _cachedAttributeData; // 属性データキャッシュ
   bool _lastShowAllColumns = false;
   Future<List<dynamic>>? _dataFuture;
 
@@ -1629,27 +1635,97 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
 
   /// データを取得または再利用（キャッシュ機能付き）
   Future<List<dynamic>> _getTableData() {
-    // showAllColumnsが変更された場合は再読み込み
+    // showAllColumnsが変更された場合、またはページが変更された場合は再読み込み
     if (_dataFuture == null || _lastShowAllColumns != showAllColumns) {
       _lastShowAllColumns = showAllColumns;
-      _dataFuture = Future.wait([
+      _dataFuture = _loadTableDataOptimized();
+    }
+    return _dataFuture!;
+  }
+
+  /// 最適化されたテーブルデータ読み込み（一括属性取得）
+  Future<List<dynamic>> _loadTableDataOptimized() async {
+    try {
+      print('[AttributeTable] 最適化データ読み込み開始');
+
+      // カラム名と基本データを並行取得
+      final results = await Future.wait([
         widget.layerNode.geoPackageFile.getColumnNames(
           widget.layerNode.layerName,
           getAll: showAllColumns,
         ),
         widget.layerNode.features,
       ]);
+
+      final columns = results[0] as List<String>;
+      final features = results[1] as List<FeatureNode>;
+
+      print(
+        '[AttributeTable] カラム数: ${columns.length}, フィーチャ数: ${features.length}',
+      );
+
+      // 属性データを一括取得
+      final attributeData = await widget.layerNode.geoPackageFile
+          .getAllFeatureAttributes(
+            widget.layerNode.layerName,
+            columns: columns,
+          );
+
+      print('[AttributeTable] 属性データ一括取得完了: ${attributeData.length}件');
+
+      // 総レコード数を保存（ページネーション用）
+      _totalRecords = features.length;
+
+      // データが0件の場合の処理
+      if (_totalRecords == 0) {
+        print('[AttributeTable] データなし: 0件');
+        _cachedColumns = columns;
+        _cachedFeatures = features;
+        _cachedAttributeData = attributeData;
+        return [columns, <FeatureNode>[], <Map<String, dynamic>>[]];
+      }
+
+      // ページングされたデータを作成
+      final startIndex = _currentPage * _pageSize;
+      final endIndex = (startIndex + _pageSize).clamp(
+        startIndex,
+        features.length,
+      );
+
+      final pagedFeatures = features.sublist(startIndex, endIndex);
+      final pagedAttributeData =
+          attributeData.length > startIndex
+              ? attributeData.sublist(
+                startIndex,
+                endIndex.clamp(startIndex, attributeData.length),
+              )
+              : <Map<String, dynamic>>[];
+
+      print(
+        '[AttributeTable] ページング: ${startIndex}-${endIndex - 1} / $_totalRecords件',
+      );
+
+      // キャッシュに保存（全データを保持）
+      _cachedColumns = columns;
+      _cachedFeatures = features;
+      _cachedAttributeData = attributeData;
+
+      return [columns, pagedFeatures, pagedAttributeData];
+    } catch (e, stack) {
+      print('[AttributeTable] データ読み込みエラー: $e');
+      print('[AttributeTable] スタックトレース: $stack');
+      return [<String>[], <FeatureNode>[], <Map<String, dynamic>>[]];
     }
-    return _dataFuture!;
   }
 
-  /// TSVエクスポート処理
+  /// TSVエクスポート処理（最適化版）
   Future<void> _exportToTSV(BuildContext context) async {
     try {
-      // データを取得
+      // データを取得（一括取得済みの場合はそれを使用）
       final tableData = await _getTableData();
       final columns = tableData[0] as List<String>;
       final features = tableData[1] as List<FeatureNode>;
+      final attributeData = tableData[2] as List<Map<String, dynamic>>;
 
       // エクスポート先パスを構築
       final gpkgPath = widget.layerNode.geoPackageFile.getAbsolutePath();
@@ -1676,22 +1752,19 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
       final headerLine = columns.map(_escapeTsvField).join('\t');
       sink.writeln(headerLine);
 
-      // データ行を書き込み
-      for (final feature in features) {
+      // データ行を書き込み（一括取得した属性データを使用）
+      for (int i = 0; i < features.length; i++) {
         final rowValues = <String>[];
+        final attributeRow =
+            attributeData.length > i ? attributeData[i] : <String, dynamic>{};
 
         for (final col in columns) {
           if (col == 'geom') {
             // geomカラムは'GEOMETRY'として出力
             rowValues.add(_escapeTsvField('GEOMETRY'));
           } else {
-            try {
-              final value = await feature.getAttributeValue(col);
-              rowValues.add(_escapeTsvField(value?.toString() ?? ''));
-            } catch (e) {
-              print('[AttributeTable] 属性値取得エラー (col: $col): $e');
-              rowValues.add(_escapeTsvField(''));
-            }
+            final value = attributeRow[col];
+            rowValues.add(_escapeTsvField(value?.toString() ?? ''));
           }
         }
 
@@ -1726,6 +1799,138 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
         .replaceAll('\t', ' ') // タブをスペースに置換
         .replaceAll('\n', ' ') // 改行をスペースに置換
         .replaceAll('\r', ' '); // 復帰文字をスペースに置換
+  }
+
+  /// 現在のページをリフレッシュ（編集後のデータ更新用）
+  void _refreshCurrentPage() {
+    _dataFuture = null;
+    _cachedAttributeData = null;
+    setState(() {
+      editingRowId = null;
+      editingColumn = null;
+    });
+  }
+
+  /// 最適化されたDataRowを構築（一括取得した属性データを使用）
+  DataRow _buildOptimizedDataRow(
+    FeatureNode feature,
+    List<String> columns,
+    Map<String, dynamic> attributeRow,
+  ) {
+    return DataRow(
+      cells: [
+        for (final col in columns)
+          col == 'geom'
+              ? DataCell(
+                SizedBox(
+                  height: 28,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
+                      minimumSize: const Size(40, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      // geom選択時に地図ジャンプ
+                      if (widget.onJumpTo != null) {
+                        widget.onJumpTo!(feature.centroid);
+                      }
+                      // feature選択: selectedFeaturesにセット
+                      final wasSelected = GlobalConfig.instance.selectedFeatures
+                          .contains(feature);
+                      if (!wasSelected) {
+                        GlobalConfig.instance.selectedFeatures = [feature];
+                        // 地図本体のみ再描画（属性テーブルは再描画しない）
+                        if (GlobalConfig.instance.mapState != null) {
+                          GlobalConfig.instance.mapState.setState(() {});
+                        }
+                      }
+                    },
+                    child: const Text('選択', style: TextStyle(fontSize: 13)),
+                  ),
+                ),
+              )
+              : col == 'kmaps_metadata'
+              ? DataCell(() {
+                final metadataStr = attributeRow[col] as String?;
+                if (metadataStr == null || metadataStr.isEmpty) {
+                  return const Text('');
+                }
+
+                return SizedBox(
+                  height: 28,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
+                      minimumSize: const Size(40, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      _showMetadataDialog(context, metadataStr, feature);
+                    },
+                    child: const Text('表示', style: TextStyle(fontSize: 13)),
+                  ),
+                );
+              }())
+              : (editingRowId == feature.rowId && editingColumn == col)
+              ? DataCell(
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    autofocus: true,
+                    controller: TextEditingController(text: editingValue)
+                      ..selection = TextSelection.collapsed(
+                        offset: editingValue.length,
+                      ),
+                    onChanged: (v) {
+                      setState(() {
+                        editingValue = v;
+                      });
+                    },
+                    onSubmitted: (v) {
+                      feature.editAttribute(col, v);
+                      // 編集後はキャッシュをクリアして再読み込み（ページは維持）
+                      _refreshCurrentPage();
+                    },
+                    onEditingComplete: () {
+                      feature.editAttribute(col, editingValue);
+                      // 編集後はキャッシュをクリアして再読み込み（ページは維持）
+                      _refreshCurrentPage();
+                    },
+                  ),
+                ),
+              )
+              : DataCell(
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    final value = attributeRow[col];
+                    setState(() {
+                      editingRowId = feature.rowId;
+                      editingColumn = col;
+                      editingValue = '${value ?? ''}';
+                    });
+                  },
+                  child: Container(
+                    alignment: Alignment.centerLeft,
+                    constraints: const BoxConstraints(
+                      minWidth: 80,
+                      minHeight: 40,
+                    ),
+                    child: Text('${attributeRow[col] ?? ''}'),
+                  ),
+                ),
+              ),
+        // 追記ボタン用のセルを追加
+        _buildAppendCell(feature),
+      ],
+    );
   }
 
   /// 追記ボタン用のDataCellを構築
@@ -1831,6 +2036,88 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
             ],
           ),
         ),
+        // ページネーションコントロール
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(top: BorderSide(color: Colors.grey.shade300)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // 表示情報
+              Text(
+                _totalRecords == 0
+                    ? '0 / 0 件'
+                    : '${_currentPage * _pageSize + 1}-${((_currentPage + 1) * _pageSize).clamp(_currentPage * _pageSize + 1, _totalRecords)} / $_totalRecords 件',
+                style: const TextStyle(fontSize: 14),
+              ),
+              // ページネーションボタン
+              Row(
+                children: [
+                  // ページサイズ選択
+                  DropdownButton<int>(
+                    value: _pageSize,
+                    items:
+                        [25, 50, 100, 200]
+                            .map(
+                              (size) => DropdownMenuItem(
+                                value: size,
+                                child: Text('$size件'),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (newSize) {
+                      if (newSize != null) {
+                        setState(() {
+                          _pageSize = newSize;
+                          _currentPage = 0; // 最初のページに戻る
+                          _dataFuture = null; // データ再読み込み
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 16),
+                  // 前のページボタン
+                  IconButton(
+                    onPressed:
+                        _totalRecords > 0 && _currentPage > 0
+                            ? () {
+                              setState(() {
+                                _currentPage--;
+                                _dataFuture = null; // データ再読み込み
+                              });
+                            }
+                            : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  // ページ番号表示
+                  Text(
+                    _totalRecords == 0
+                        ? '0 / 0'
+                        : '${_currentPage + 1} / ${((_totalRecords / _pageSize).ceil()).clamp(1, double.infinity).toInt()}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  // 次のページボタン
+                  IconButton(
+                    onPressed:
+                        _totalRecords > 0 &&
+                                (_currentPage + 1) * _pageSize < _totalRecords
+                            ? () {
+                              setState(() {
+                                _currentPage++;
+                                _dataFuture = null; // データ再読み込み
+                              });
+                            }
+                            : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: FutureBuilder<List<dynamic>>(
             future: _getTableData(),
@@ -1847,6 +2134,8 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
 
               final columns = snapshot.data![0] as List<String>;
               final features = snapshot.data![1] as List<FeatureNode>;
+              final attributeData =
+                  snapshot.data![2] as List<Map<String, dynamic>>;
 
               return SingleChildScrollView(
                 controller: _verticalScrollController,
@@ -1865,180 +2154,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                       const DataColumn(label: Text('追記')),
                     ],
                     rows: [
-                      for (final feature in features)
-                        DataRow(
-                          cells: [
-                            for (final col in columns)
-                              col == 'geom'
-                                  ? DataCell(
-                                    SizedBox(
-                                      height: 28,
-                                      child: TextButton(
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 0,
-                                          ),
-                                          minimumSize: const Size(40, 28),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        onPressed: () {
-                                          // geom選択時に地図ジャンプ
-                                          if (widget.onJumpTo != null) {
-                                            widget.onJumpTo!(feature.centroid);
-                                          }
-                                          // feature選択: selectedFeaturesにセット
-                                          final wasSelected = GlobalConfig
-                                              .instance
-                                              .selectedFeatures
-                                              .contains(feature);
-                                          if (!wasSelected) {
-                                            GlobalConfig
-                                                .instance
-                                                .selectedFeatures = [feature];
-                                            // 地図本体のみ再描画（属性テーブルは再描画しない）
-                                            if (GlobalConfig
-                                                    .instance
-                                                    .mapState !=
-                                                null) {
-                                              GlobalConfig.instance.mapState
-                                                  .setState(() {});
-                                            }
-                                          }
-                                        },
-                                        child: const Text(
-                                          '選択',
-                                          style: TextStyle(fontSize: 13),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  : col == 'id'
-                                  ? DataCell(
-                                    FutureBuilder<dynamic>(
-                                      future: feature.getAttributeValue(col),
-                                      builder: (context, attrSnapshot) {
-                                        return Text(
-                                          '${attrSnapshot.data ?? ''}',
-                                        );
-                                      },
-                                    ),
-                                  )
-                                  : col == 'kmaps_metadata'
-                                  ? DataCell(
-                                    FutureBuilder<dynamic>(
-                                      future: feature.getAttributeValue(col),
-                                      builder: (context, attrSnapshot) {
-                                        final metadataStr =
-                                            attrSnapshot.data as String?;
-                                        if (metadataStr == null ||
-                                            metadataStr.isEmpty) {
-                                          return const Text('');
-                                        }
-
-                                        return SizedBox(
-                                          height: 28,
-                                          child: TextButton(
-                                            style: TextButton.styleFrom(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 0,
-                                                  ),
-                                              minimumSize: const Size(40, 28),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                            onPressed: () {
-                                              _showMetadataDialog(
-                                                context,
-                                                metadataStr,
-                                                feature,
-                                              );
-                                            },
-                                            child: const Text(
-                                              '表示',
-                                              style: TextStyle(fontSize: 13),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  )
-                                  : (editingRowId == feature.rowId &&
-                                      editingColumn == col)
-                                  ? DataCell(
-                                    SizedBox(
-                                      width: 120,
-                                      child: TextField(
-                                        autofocus: true,
-                                        controller: TextEditingController(
-                                            text: editingValue,
-                                          )
-                                          ..selection = TextSelection.collapsed(
-                                            offset: editingValue.length,
-                                          ),
-                                        onChanged: (v) {
-                                          setState(() {
-                                            editingValue = v;
-                                          });
-                                        },
-                                        onSubmitted: (v) {
-                                          feature.editAttribute(col, v);
-                                          setState(() {
-                                            editingRowId = null;
-                                            editingColumn = null;
-                                          });
-                                        },
-                                        onEditingComplete: () {
-                                          feature.editAttribute(
-                                            col,
-                                            editingValue,
-                                          );
-                                          setState(() {
-                                            editingRowId = null;
-                                            editingColumn = null;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  )
-                                  : DataCell(
-                                    GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () async {
-                                        final value = await feature
-                                            .getAttributeValue(col);
-                                        setState(() {
-                                          editingRowId = feature.rowId;
-                                          editingColumn = col;
-                                          editingValue = '${value ?? ''}';
-                                        });
-                                      },
-                                      child: Container(
-                                        alignment: Alignment.centerLeft,
-                                        constraints: const BoxConstraints(
-                                          minWidth: 80,
-                                          minHeight: 40,
-                                        ),
-                                        child: FutureBuilder<dynamic>(
-                                          future: feature.getAttributeValue(
-                                            col,
-                                          ),
-                                          builder: (context, attrSnapshot) {
-                                            return Text(
-                                              '${attrSnapshot.data ?? ''}',
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                            // 追記ボタン用のDataCellを追加
-                            _buildAppendCell(feature),
-                          ],
+                      for (int i = 0; i < features.length; i++)
+                        _buildOptimizedDataRow(
+                          features[i],
+                          columns,
+                          attributeData.length > i ? attributeData[i] : {},
                         ),
                     ],
                   ),

@@ -6,8 +6,10 @@ import 'dart:convert';
 import 'dart:math' as Math;
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:proj4dart/proj4dart.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart';
+import '../utils/coordinate_converter.dart';
 
 /// ファイル形式の種類
 enum FileFormat {
@@ -199,11 +201,13 @@ class ImportExportService {
       final basePath = p.withoutExtension(shpFilePath);
       final dbfFile = File('$basePath.dbf');
       final shxFile = File('$basePath.shx');
+      final prjFile = File('$basePath.prj');
 
       print('[ImportExportService] 関連ファイル確認:');
       print('  .shp: ${shpFile.existsSync()}');
       print('  .dbf: ${dbfFile.existsSync()}');
       print('  .shx: ${shxFile.existsSync()}');
+      print('  .prj: ${prjFile.existsSync()}');
 
       final fileSize = shpFile.lengthSync();
       final fileName = p.basenameWithoutExtension(shpFilePath);
@@ -224,8 +228,28 @@ class ImportExportService {
       // 既存の「___」という名前のレイヤがある場合は削除
       await _removeInvalidLayers(targetGeoPackage);
 
-      // dart_shpライブラリを使ってシェープファイルを読み込み
+      // .prjファイルから座標系情報を読み取り
+      CoordinateSystem? sourceCoordinateSystem;
+      if (prjFile.existsSync()) {
+        sourceCoordinateSystem = await _readPrjFile(prjFile.path);
+        if (sourceCoordinateSystem != null) {
+          print(
+            '[ImportExportService] 座標系情報読み取り成功: ${sourceCoordinateSystem.name}',
+          );
+          print(
+            '[ImportExportService] EPSG: ${sourceCoordinateSystem.epsgCode}',
+          );
+        } else {
+          print('[ImportExportService] 座標系情報の読み取りに失敗、デフォルト処理を実行');
+        }
+      } else {
+        print('[ImportExportService] .prjファイルが見つからない、座標系を推定します');
+      }
+
+      // シェープファイルのバイナリ解析によるデータ読み込み
       try {
+        print('[ImportExportService] シェープファイルバイナリ解析でデータを読み込みます');
+
         // まず基本情報を読み込み（段階的実装）
         final shapeInfo = await _readShapefileInfo(shpFilePath);
         if (shapeInfo == null) {
@@ -261,6 +285,7 @@ class ImportExportService {
             targetGeoPackage,
             actualLayerName,
             geometryType,
+            sourceCoordinateSystem: sourceCoordinateSystem,
           );
         } catch (e) {
           print('[ImportExportService] フィーチャ読み込みエラー（サンプルデータで代替）: $e');
@@ -295,13 +320,13 @@ class ImportExportService {
             'featureCount': featureCount,
             'geometryType': geometryType.value,
             'shapeInfo': shapeInfo,
-            'importMethod': 'dart_shp_library',
-            'status': 'actual_shapefile_data',
+            'importMethod': 'binary_analysis',
+            'status': 'shapefile_binary_parsed',
           },
         );
       } catch (e) {
-        print('[ImportExportService] dart_shp読み込みエラー（サンプルデータで代替）: $e');
-        // dart_shpライブラリでの読み込みに失敗した場合はサンプルデータで代替
+        print('[ImportExportService] シェープファイル読み込みエラー（サンプルデータで代替）: $e');
+        // バイナリ解析での読み込みに失敗した場合はサンプルデータで代替
         return await _createSampleDataShapefile(
           shpFilePath,
           targetGeoPackage,
@@ -790,8 +815,9 @@ class ImportExportService {
     GeoPackageNode targetGeoPackage,
     String layerName,
     GeometryType geometryType,
-    String shpFilePath,
-  ) async {
+    String shpFilePath, {
+    CoordinateSystem? sourceCoordinateSystem,
+  }) async {
     print('[ImportExportService] 実際の座標データ抽出開始');
     print('  シェープタイプ: $shapeType');
     print('  ファイルサイズ: ${bytes.length}bytes');
@@ -855,7 +881,11 @@ class ImportExportService {
 
         if (recordShapeType == 1) {
           // Point
-          final coordinates = await _extractPointCoordinates(bytes, offset);
+          final coordinates = await _extractPointCoordinates(
+            bytes,
+            offset,
+            sourceCoordinateSystem: sourceCoordinateSystem,
+          );
           if (coordinates != null) {
             featureData = {
               'point': coordinates,
@@ -877,6 +907,7 @@ class ImportExportService {
             bytes,
             offset,
             contentLength,
+            sourceCoordinateSystem: sourceCoordinateSystem,
           );
           if (coordinates != null && coordinates.isNotEmpty) {
             featureData = {
@@ -899,6 +930,7 @@ class ImportExportService {
             bytes,
             offset,
             contentLength,
+            sourceCoordinateSystem: sourceCoordinateSystem,
           );
           if (coordinates != null && coordinates.isNotEmpty) {
             featureData = {
@@ -999,8 +1031,17 @@ class ImportExportService {
     }
   }
 
+  // デバッグ出力制御用フラグ
+  static bool _hasLoggedFirstPointConversion = false;
+  static bool _hasLoggedFirstPolylineConversion = false;
+  static bool _hasLoggedFirstPolygonConversion = false;
+
   /// Pointの座標を抽出
-  Future<LatLng?> _extractPointCoordinates(Uint8List bytes, int offset) async {
+  Future<LatLng?> _extractPointCoordinates(
+    Uint8List bytes,
+    int offset, {
+    CoordinateSystem? sourceCoordinateSystem,
+  }) async {
     try {
       if (offset + 16 > bytes.length) return null;
 
@@ -1015,17 +1056,71 @@ class ImportExportService {
         offset + 16,
       ).getFloat64(0, Endian.little);
 
-      // 座標値の妥当性をチェック（世界座標範囲内）
-      if (x.isFinite &&
-          y.isFinite &&
-          x >= -180 &&
-          x <= 180 &&
-          y >= -90 &&
-          y <= 90) {
-        print('[ImportExportService] Point座標抽出: ($y, $x)');
-        return LatLng(y, x); // LatLng(緯度, 経度)
+      // 座標の基本的な妥当性チェック（有限数であること）
+      if (x.isFinite && y.isFinite) {
+        if (sourceCoordinateSystem != null) {
+          // 座標変換を実行
+          try {
+            final point = Point(x: x, y: y);
+            final transformedPoint = CoordinateConverter.xyToLatLng(
+              point,
+              sourceCoordinateSystem,
+            );
+
+            // 変換後の座標がWGS84の妥当な範囲内かチェック
+            if (transformedPoint.latitude >= -90 &&
+                transformedPoint.latitude <= 90 &&
+                transformedPoint.longitude >= -180 &&
+                transformedPoint.longitude <= 180) {
+              // 最初の1回だけ詳細ログ出力
+              if (!_hasLoggedFirstPointConversion) {
+                print('[DEBUG] 【最初のPoint座標変換詳細】');
+                print(
+                  '  元座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
+                );
+                print('  元座標: X=$x, Y=$y');
+                print(
+                  '  変換後座標: 緯度=${transformedPoint.latitude}, 経度=${transformedPoint.longitude}',
+                );
+                print(
+                  '  変換後座標（表示用）: (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
+                );
+                _hasLoggedFirstPointConversion = true;
+              }
+              return transformedPoint;
+            } else {
+              if (!_hasLoggedFirstPointConversion) {
+                print(
+                  '[DEBUG] 変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
+                );
+              }
+              return null;
+            }
+          } catch (e) {
+            if (!_hasLoggedFirstPointConversion) {
+              print('[DEBUG] Point座標変換エラー: $e (元座標: $x, $y)');
+            }
+            return null;
+          }
+        } else {
+          // 座標変換なし、WGS84範囲チェック
+          if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+            if (!_hasLoggedFirstPointConversion) {
+              print('[DEBUG] Point座標抽出（変換なし）: ($y, $x)');
+              _hasLoggedFirstPointConversion = true;
+            }
+            return LatLng(y, x); // LatLng(緯度, 経度)
+          } else {
+            if (!_hasLoggedFirstPointConversion) {
+              print('[DEBUG] WGS84範囲外座標を検出、座標系が未定義です: X=$x, Y=$y');
+            }
+            return null;
+          }
+        }
       } else {
-        print('[ImportExportService] 無効な座標値: X=$x, Y=$y');
+        if (!_hasLoggedFirstPointConversion) {
+          print('[DEBUG] 無効な座標値: X=$x, Y=$y');
+        }
         return null;
       }
     } catch (e) {
@@ -1038,8 +1133,9 @@ class ImportExportService {
   Future<List<LatLng>?> _extractPolylineCoordinates(
     Uint8List bytes,
     int offset,
-    int contentLength,
-  ) async {
+    int contentLength, {
+    CoordinateSystem? sourceCoordinateSystem,
+  }) async {
     try {
       // Polylineの構造: Box(32bytes) + NumParts(4) + NumPoints(4) + Parts[] + Points[]
       if (offset + 36 > bytes.length) return null;
@@ -1058,9 +1154,18 @@ class ImportExportService {
         offset + 8,
       ).getInt32(0, Endian.little);
 
-      print(
-        '[ImportExportService] Polyline: $numParts parts, $numPoints points',
-      );
+      // 最初の1回だけ詳細ログ出力
+      if (!_hasLoggedFirstPolylineConversion) {
+        print('[DEBUG] 【最初のPolyline座標変換詳細】');
+        print('  Parts: $numParts, Points: $numPoints');
+        if (sourceCoordinateSystem != null) {
+          print(
+            '  座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
+          );
+        } else {
+          print('  座標系: 変換なし（WGS84想定）');
+        }
+      }
 
       offset += 8; // NumParts + NumPoints
 
@@ -1081,18 +1186,61 @@ class ImportExportService {
           offset + 16,
         ).getFloat64(0, Endian.little);
 
-        if (x.isFinite &&
-            y.isFinite &&
-            x >= -180 &&
-            x <= 180 &&
-            y >= -90 &&
-            y <= 90) {
-          coordinates.add(LatLng(y, x));
+        // 座標の基本的な妥当性チェック（有限数であること）
+        if (x.isFinite && y.isFinite) {
+          if (sourceCoordinateSystem != null) {
+            // 座標変換を実行
+            try {
+              final point = Point(x: x, y: y);
+              final transformedPoint = CoordinateConverter.xyToLatLng(
+                point,
+                sourceCoordinateSystem,
+              );
+
+              // 変換後の座標がWGS84の妥当な範囲内かチェック
+              if (transformedPoint.latitude >= -90 &&
+                  transformedPoint.latitude <= 90 &&
+                  transformedPoint.longitude >= -180 &&
+                  transformedPoint.longitude <= 180) {
+                coordinates.add(transformedPoint);
+                // 最初の1回だけ変換結果を詳細出力
+                if (!_hasLoggedFirstPolylineConversion &&
+                    coordinates.length == 1) {
+                  print(
+                    '  最初の点の変換結果: ($x, $y) -> (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
+                  );
+                }
+              } else {
+                if (!_hasLoggedFirstPolylineConversion) {
+                  print(
+                    '[DEBUG] Polyline変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
+                  );
+                }
+              }
+            } catch (e) {
+              if (!_hasLoggedFirstPolylineConversion) {
+                print('[DEBUG] Polyline座標変換エラー: $e (元座標: $x, $y)');
+              }
+            }
+          } else {
+            // 座標変換なし、WGS84範囲チェック
+            if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+              coordinates.add(LatLng(y, x));
+            } else {
+              if (!_hasLoggedFirstPolylineConversion) {
+                print('[DEBUG] Polyline WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
+              }
+            }
+          }
         }
         offset += 16;
       }
 
-      print('[ImportExportService] Polyline座標抽出完了: ${coordinates.length}点');
+      // 最初の1回のフラグを設定
+      if (!_hasLoggedFirstPolylineConversion) {
+        print('  Polyline座標抽出完了: ${coordinates.length}点');
+        _hasLoggedFirstPolylineConversion = true;
+      }
       return coordinates.isNotEmpty ? coordinates : null;
     } catch (e) {
       print('[ImportExportService] Polyline座標抽出エラー: $e');
@@ -1104,8 +1252,9 @@ class ImportExportService {
   Future<List<List<LatLng>>?> _extractPolygonCoordinates(
     Uint8List bytes,
     int offset,
-    int contentLength,
-  ) async {
+    int contentLength, {
+    CoordinateSystem? sourceCoordinateSystem,
+  }) async {
     try {
       // Polygonの構造: Box(32bytes) + NumParts(4) + NumPoints(4) + Parts[] + Points[]
       if (offset + 36 > bytes.length) return null;
@@ -1124,9 +1273,18 @@ class ImportExportService {
         offset + 8,
       ).getInt32(0, Endian.little);
 
-      print(
-        '[ImportExportService] Polygon: $numParts rings, $numPoints points',
-      );
+      // 最初の1回だけ詳細ログ出力
+      if (!_hasLoggedFirstPolygonConversion) {
+        print('[DEBUG] 【最初のPolygon座標変換詳細】');
+        print('  Rings: $numParts, Points: $numPoints');
+        if (sourceCoordinateSystem != null) {
+          print(
+            '  座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
+          );
+        } else {
+          print('  座標系: 変換なし（WGS84想定）');
+        }
+      }
 
       offset += 8; // NumParts + NumPoints
 
@@ -1157,13 +1315,54 @@ class ImportExportService {
           offset + 16,
         ).getFloat64(0, Endian.little);
 
-        if (x.isFinite &&
-            y.isFinite &&
-            x >= -180 &&
-            x <= 180 &&
-            y >= -90 &&
-            y <= 90) {
-          allPoints.add(LatLng(y, x));
+        // 座標の基本的な妥当性チェック（有限数であること）
+        if (x.isFinite && y.isFinite) {
+          LatLng? transformedPoint;
+
+          if (sourceCoordinateSystem != null) {
+            // 座標変換を実行
+            try {
+              final point = Point(x: x, y: y);
+              transformedPoint = CoordinateConverter.xyToLatLng(
+                point,
+                sourceCoordinateSystem,
+              );
+
+              // 変換後の座標がWGS84の妥当な範囲内かチェック
+              if (transformedPoint.latitude >= -90 &&
+                  transformedPoint.latitude <= 90 &&
+                  transformedPoint.longitude >= -180 &&
+                  transformedPoint.longitude <= 180) {
+                allPoints.add(transformedPoint);
+                // 最初の1回だけ変換結果を詳細出力
+                if (!_hasLoggedFirstPolygonConversion &&
+                    allPoints.length == 1) {
+                  print(
+                    '  最初の点の変換結果: ($x, $y) -> (${transformedPoint.latitude.toStringAsFixed(6)}, ${transformedPoint.longitude.toStringAsFixed(6)})',
+                  );
+                }
+              } else {
+                if (!_hasLoggedFirstPolygonConversion) {
+                  print(
+                    '[DEBUG] 変換後座標が範囲外: ${transformedPoint.latitude}, ${transformedPoint.longitude}',
+                  );
+                }
+              }
+            } catch (e) {
+              if (!_hasLoggedFirstPolygonConversion) {
+                print('[DEBUG] 座標変換エラー: $e (元座標: $x, $y)');
+              }
+            }
+          } else {
+            // 座標変換なし、WGS84範囲チェック
+            if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+              allPoints.add(LatLng(y, x));
+            } else {
+              if (!_hasLoggedFirstPolygonConversion) {
+                print('[DEBUG] Polygon WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
+              }
+            }
+          }
         }
         offset += 16;
       }
@@ -1183,7 +1382,24 @@ class ImportExportService {
         }
       }
 
-      print('[ImportExportService] Polygon座標抽出完了: ${rings.length}リング');
+      // 最初の1回のフラグを設定
+      if (!_hasLoggedFirstPolygonConversion) {
+        print('  Polygon座標抽出完了: ${rings.length}リング, 総${allPoints.length}点');
+        if (rings.isNotEmpty && rings.first.isNotEmpty) {
+          final firstRing = rings.first;
+          print('  最初のリング: ${firstRing.length}点');
+          print('  バウンディングボックス推定:');
+          final latitudes = firstRing.map((p) => p.latitude);
+          final longitudes = firstRing.map((p) => p.longitude);
+          print(
+            '    緯度範囲: ${latitudes.reduce((a, b) => a < b ? a : b).toStringAsFixed(6)} ~ ${latitudes.reduce((a, b) => a > b ? a : b).toStringAsFixed(6)}',
+          );
+          print(
+            '    経度範囲: ${longitudes.reduce((a, b) => a < b ? a : b).toStringAsFixed(6)} ~ ${longitudes.reduce((a, b) => a > b ? a : b).toStringAsFixed(6)}',
+          );
+        }
+        _hasLoggedFirstPolygonConversion = true;
+      }
       return rings.isNotEmpty ? rings : null;
     } catch (e) {
       print('[ImportExportService] Polygon座標抽出エラー: $e');
@@ -1276,8 +1492,9 @@ class ImportExportService {
     String shpFilePath,
     GeoPackageNode targetGeoPackage,
     String layerName,
-    GeometryType geometryType,
-  ) async {
+    GeometryType geometryType, {
+    CoordinateSystem? sourceCoordinateSystem,
+  }) async {
     try {
       print('[ImportExportService] シェープファイル構造解析開始: $shpFilePath');
 
@@ -1324,6 +1541,7 @@ class ImportExportService {
           layerName,
           geometryType,
           shpFilePath,
+          sourceCoordinateSystem: sourceCoordinateSystem,
         );
 
         if (featureCount > 0) {
@@ -1596,5 +1814,256 @@ class ImportExportService {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&apos;');
+  }
+
+  /// .prjファイルから座標系情報を読み取り
+  Future<CoordinateSystem?> _readPrjFile(String prjFilePath) async {
+    try {
+      final prjFile = File(prjFilePath);
+      if (!prjFile.existsSync()) {
+        print('[ImportExportService] .prjファイルが見つかりません: $prjFilePath');
+        return null;
+      }
+
+      final prjContent = await prjFile.readAsString();
+      print('[DEBUG] .prjファイル内容:');
+      print('  ファイルパス: $prjFilePath');
+      print('  内容: $prjContent');
+      print('  文字数: ${prjContent.length}文字');
+
+      // WKTから座標系を解析
+      return await _parseWktToCoordinateSystem(prjContent);
+    } catch (e) {
+      print('[ImportExportService] .prjファイル読み取りエラー: $e');
+      return null;
+    }
+  }
+
+  /// WKT形式の座標系定義を解析してCoordinateSystemに変換
+  Future<CoordinateSystem?> _parseWktToCoordinateSystem(String wkt) async {
+    try {
+      // よく使われる日本の座標系パターンを検索
+      final wktUpper = wkt.toUpperCase();
+      print('[DEBUG] WKT解析開始:');
+      print('  大文字変換後WKT: $wktUpper');
+
+      // JGD2000 / Japan Plane Rectangular CS 系の様々なパターンを試行
+      // 重要: 長いパターン（XIX, XVIII, XVII...）を先に評価してVI→V誤認識を防ぐ
+      final patterns = [
+        r'JGD_?2000.*PLANE.*RECT.*CS\s+(XIX|XVIII|XVII|XVI|XV|XIV|XIII|XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)', // ローマ数字パターン（長い順）
+        r'EPSG.*2448', // EPSG:2448 (CS VI) 直接パターン
+        r'EPSG.*244(\d)', // EPSG:2441-2450のパターン
+        r'JGD_?2000.*PLANE.*RECT.*CS.*(\d+)', // アラビア数字パターン
+        r'JGD_?2000.*PLANE.*RECTANGULAR.*CS.*(\d+)',
+        r'JGD_?2000.*(\d+)',
+        r'PLANE.*RECT.*CS.*(\d+)',
+        r'244(\d)', // 244X形式のパターン
+      ];
+
+      for (int i = 0; i < patterns.length; i++) {
+        final jgdMatches = RegExp(patterns[i]).firstMatch(wktUpper);
+        if (jgdMatches != null) {
+          print('[DEBUG] WKT座標系解析（パターン${i + 1}）:');
+          print('  使用パターン: ${patterns[i]}');
+          print('  正規表現マッチ: ${jgdMatches.group(0)}');
+          print('  抽出された文字列: ${jgdMatches.group(1) ?? 'N/A'}');
+
+          int? zoneNumber;
+
+          // EPSG:2448直接パターン（CS VI専用）
+          if (patterns[i].contains('EPSG.*2448')) {
+            zoneNumber = 6; // CS VI
+            print('  EPSG:2448直接検出 => CS 6');
+          }
+          // 最初のパターン（ローマ数字）の場合
+          else if (i == 0) {
+            final romanNumeral = jgdMatches.group(1) ?? '';
+            zoneNumber = _romanToInt(romanNumeral);
+            print('  ローマ数字変換: $romanNumeral => $zoneNumber');
+          }
+          // EPSGパターンの場合
+          else if (patterns[i].contains('EPSG.*244')) {
+            final epsgSuffix = jgdMatches.group(1) ?? '';
+            final epsgNumber = int.tryParse(epsgSuffix);
+            if (epsgNumber != null && epsgNumber >= 3 && epsgNumber <= 12) {
+              // EPSG:2443-2452の下一桁 (3-12) => CS 1-10に変換
+              zoneNumber = epsgNumber - 2; // 3->1, 4->2, ..., 12->10
+              print('  EPSG:244${epsgNumber} => CS $zoneNumber');
+            }
+          }
+          // 数字パターンの場合
+          else {
+            zoneNumber = int.tryParse(jgdMatches.group(1) ?? '');
+            print('  解釈されたゾーン番号: $zoneNumber');
+          }
+
+          if (zoneNumber != null && zoneNumber >= 1 && zoneNumber <= 19) {
+            print('  🎯 最終判定: CS $zoneNumber');
+            return _getJgd2000CoordinateSystem(zoneNumber);
+          }
+        }
+      }
+
+      // UTM Zone の検出
+      final utmMatches = RegExp(r'UTM.*ZONE.*(\d+)').firstMatch(wktUpper);
+      if (utmMatches != null) {
+        final zoneNumber = int.tryParse(utmMatches.group(1) ?? '');
+        if (zoneNumber != null) {
+          return CoordinateSystem(
+            name: 'UTM Zone ${zoneNumber}N',
+            epsgCode: 'EPSG:326${zoneNumber.toString().padLeft(2, '0')}',
+            proj4String:
+                '+proj=utm +zone=$zoneNumber +datum=WGS84 +units=m +no_defs',
+          );
+        }
+      }
+
+      // Tokyo Datum (旧測地系) の検出
+      if (wktUpper.contains('TOKYO')) {
+        print('[ImportExportService] Tokyo Datum検出 - 座標変換が必要');
+        // TODO: 旧測地系対応
+      }
+
+      // WGS84の検出
+      if (wktUpper.contains('WGS_1984') || wktUpper.contains('WGS84')) {
+        print('[ImportExportService] WGS84座標系検出');
+        return CoordinateSystem(
+          name: 'WGS84',
+          epsgCode: 'EPSG:4326',
+          proj4String: '+proj=longlat +datum=WGS84 +no_defs',
+        );
+      }
+
+      print('[ImportExportService] 未対応のWKT形式: $wkt');
+      return null;
+    } catch (e) {
+      print('[ImportExportService] WKT解析エラー: $e');
+      return null;
+    }
+  }
+
+  /// ローマ数字を整数に変換
+  int? _romanToInt(String roman) {
+    switch (roman.toUpperCase()) {
+      case 'I':
+        return 1;
+      case 'II':
+        return 2;
+      case 'III':
+        return 3;
+      case 'IV':
+        return 4;
+      case 'V':
+        return 5;
+      case 'VI':
+        return 6;
+      case 'VII':
+        return 7;
+      case 'VIII':
+        return 8;
+      case 'IX':
+        return 9;
+      case 'X':
+        return 10;
+      case 'XI':
+        return 11;
+      case 'XII':
+        return 12;
+      case 'XIII':
+        return 13;
+      case 'XIV':
+        return 14;
+      case 'XV':
+        return 15;
+      case 'XVI':
+        return 16;
+      case 'XVII':
+        return 17;
+      case 'XVIII':
+        return 18;
+      case 'XIX':
+        return 19;
+      default:
+        return null;
+    }
+  }
+
+  /// JGD2000平面直角座標系の座標系情報を取得
+  CoordinateSystem? _getJgd2000CoordinateSystem(int zone) {
+    switch (zone) {
+      case 1:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS I',
+          epsgCode: 'EPSG:2443',
+          proj4String:
+              '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 2:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS II',
+          epsgCode: 'EPSG:2444',
+          proj4String:
+              '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 3:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS III',
+          epsgCode: 'EPSG:2445',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 4:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS IV',
+          epsgCode: 'EPSG:2446',
+          proj4String:
+              '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 5:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS V',
+          epsgCode: 'EPSG:2447',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 6:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS VI',
+          epsgCode: 'EPSG:2448',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 7:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS VII',
+          epsgCode: 'EPSG:2449',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 8:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS VIII',
+          epsgCode: 'EPSG:2450',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 9:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS IX',
+          epsgCode: 'EPSG:2451',
+          proj4String:
+              '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      case 10:
+        return CoordinateSystem(
+          name: 'JGD2000 / Japan Plane Rectangular CS X',
+          epsgCode: 'EPSG:2452',
+          proj4String:
+              '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+      default:
+        print('[ImportExportService] 未対応のJGD2000ゾーン: $zone');
+        return null;
+    }
   }
 }

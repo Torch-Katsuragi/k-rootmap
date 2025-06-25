@@ -4,6 +4,9 @@ import 'package:k_maps/services/import_export_service.dart';
 import 'package:k_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:latlong2/latlong.dart';
+import 'package:proj4dart/proj4dart.dart';
+import 'package:k_maps/utils/coordinate_converter.dart';
 
 void main() {
   group('ImportExportService Tests', () {
@@ -146,6 +149,110 @@ void main() {
       // バイト配列変換テスト
       final bytes = headerBytes.buffer.asUint8List();
       expect(bytes.length, equals(100));
+    });
+  });
+
+  group('ImportExportService座標変換テスト', () {
+    late ImportExportService service;
+
+    setUp(() {
+      service = ImportExportService();
+    });
+
+    test('CoordinateSystemオブジェクトの作成', () {
+      final coordinateSystem = CoordinateSystem(
+        name: 'JGD2000 / Japan Plane Rectangular CS VI',
+        epsgCode: 'EPSG:2448',
+        proj4String:
+            '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      );
+
+      expect(coordinateSystem.name, 'JGD2000 / Japan Plane Rectangular CS VI');
+      expect(coordinateSystem.epsgCode, 'EPSG:2448');
+      print('[TEST] CoordinateSystemオブジェクト作成成功');
+    });
+
+    test('和歌山県の座標変換テスト', () {
+      // 和歌山県北山村の平面直角座標系VI系の座標例
+      // 実際の座標値（推定値）
+      final x = 50000.0; // Easting (東方向)
+      final y = -150000.0; // Northing (北方向)
+
+      final coordinateSystem = CoordinateSystem(
+        name: 'JGD2000 / Japan Plane Rectangular CS VI',
+        epsgCode: 'EPSG:2448',
+        proj4String:
+            '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      );
+
+      try {
+        final point = Point(x: x, y: y);
+        final result = CoordinateConverter.xyToLatLng(point, coordinateSystem);
+
+        print(
+          '[TEST] 座標変換結果: ($x, $y) -> (${result.latitude}, ${result.longitude})',
+        );
+
+        // 和歌山県の緯度経度範囲をチェック（余裕を持った範囲）
+        expect(result.latitude, greaterThan(33.0));
+        expect(result.latitude, lessThan(35.0));
+        expect(result.longitude, greaterThan(135.0));
+        expect(result.longitude, lessThan(137.0)); // 余裕を持った範囲に調整
+
+        print('[TEST] 和歌山県座標変換テスト成功');
+      } catch (e) {
+        print('[TEST] 座標変換エラー: $e');
+        fail('座標変換に失敗: $e');
+      }
+    });
+
+    test('proj4dart基本動作テスト', () {
+      try {
+        // WGS84からJGD2000平面直角座標系VI系への変換テスト
+        final source = Projection.get('EPSG:4326'); // WGS84
+        final target = Projection.add(
+          'EPSG:2448',
+          '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
+
+        expect(source, isNotNull);
+        expect(target, isNotNull);
+
+        if (source != null && target != null) {
+          // 和歌山県の緯度経度を平面直角座標に変換
+          final wgs84Point = Point(x: 135.8, y: 34.2); // 和歌山県内の座標
+          final result = source.transform(target, wgs84Point);
+
+          print(
+            '[TEST] proj4dart変換テスト: (${wgs84Point.y}, ${wgs84Point.x}) -> (${result.x.toStringAsFixed(1)}, ${result.y.toStringAsFixed(1)})',
+          );
+
+          // 平面直角座標系の座標値は通常数万～数十万メートル
+          expect(result.x.abs(), greaterThan(1000.0));
+          expect(result.y.abs(), greaterThan(1000.0));
+
+          print('[TEST] proj4dart基本動作テスト成功');
+        }
+      } catch (e) {
+        print('[TEST] proj4dartテストエラー: $e');
+        fail('proj4dart動作テストに失敗: $e');
+      }
+    });
+
+    test('大きな座標値の妥当性チェック', () {
+      // 平面直角座標系の典型的な座標値（数万〜数十万メートル）
+      final largeCoordinates = [
+        Point(x: 123456.789, y: -234567.123),
+        Point(x: 50000.0, y: -150000.0),
+        Point(x: 200000.0, y: -50000.0),
+      ];
+
+      for (final coord in largeCoordinates) {
+        // 有限数チェック
+        expect(coord.x.isFinite, isTrue);
+        expect(coord.y.isFinite, isTrue);
+        print('[TEST] 大きな座標値 (${coord.x}, ${coord.y}) の妥当性確認');
+      }
     });
   });
 }

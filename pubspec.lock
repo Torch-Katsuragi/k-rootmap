@@ -129,30 +129,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.0"
-  dart_hydrologis_utils:
-    dependency: transitive
-    description:
-      name: dart_hydrologis_utils
-      sha256: "6b6f5ba9d4c3a7db83438e2db40fced1c87690b5eb272ff96d58f17b49c10c43"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.8.2"
-  dart_jts:
-    dependency: transitive
-    description:
-      name: dart_jts
-      sha256: f9cb8b359346f453b5bfa2186fcd7fb8a7e6fbc7e076cba46898b44edd6fd8c7
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.0+1"
-  dart_shp:
-    dependency: "direct main"
-    description:
-      name: dart_shp
-      sha256: "2f032ce4e5a83cd9e6e7e9922840bb419c012de3b2976014c2fe00c3c6eabdbb"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.2.0+1"
   desktop_drop:
     dependency: "direct main"
     description:

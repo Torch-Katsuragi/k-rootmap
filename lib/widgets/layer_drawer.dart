@@ -6,6 +6,7 @@ library;
 import 'dart:io';
 import 'dart:convert'; // JSON処理のため追加
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // クリップボード機能のため追加
 import 'package:k_maps/utils/global_config.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
@@ -19,6 +20,9 @@ import '../utils/metadata_parser.dart'; // メタデータパーサーをイン�
 import '../utils/global_drawing_state.dart'; // 追記機能のため追加
 import '../utils/feature_calc_utils.dart'; // ポリゴン合成機能のため追加
 import '../services/import_export_service.dart'; // インポート機能用
+import '../converters/feature_converter.dart'; // フィーチャエクスポート機能用
+import '../converters/base_converter.dart'; // ConversionResultとパラメータクラス用
+import 'dialog_manager.dart'; // ダイアログ管理用
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -710,6 +714,12 @@ class _LayerDrawerState extends State<LayerDrawer> {
             setState(() {
               attributeTableLayerNode = node;
             });
+          } else if (value == 'export') {
+            // DialogManagerを使用してレイヤーエクスポートダイアログを表示
+            await DialogManager.showLayerExportDialog(
+              context,
+              sourceLayer: node,
+            );
           } else if (value == 'merge' && node is PolygonLayerNode) {
             _mergePolygonsInLayer(context, node);
           }
@@ -717,6 +727,16 @@ class _LayerDrawerState extends State<LayerDrawer> {
         itemBuilder:
             (context) => [
               const PopupMenuItem(value: 'attributes', child: Text('属性テーブル')),
+              const PopupMenuItem(
+                value: 'export',
+                child: Row(
+                  children: [
+                    Icon(Icons.file_download, size: 16),
+                    SizedBox(width: 8),
+                    Text('Export Layer'),
+                  ],
+                ),
+              ),
               // PolygonLayerNodeの場合のみ合成メニューを表示
               if (node is PolygonLayerNode)
                 const PopupMenuItem(value: 'merge', child: Text('合成')),
@@ -1822,34 +1842,47 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
         for (final col in columns)
           col == 'geom'
               ? DataCell(
-                SizedBox(
-                  height: 28,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 0,
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onSecondaryTapDown: (details) {
+                    _showRowContextMenu(
+                      context,
+                      feature,
+                      attributeRow,
+                      details.globalPosition,
+                    );
+                  },
+                  child: SizedBox(
+                    height: 28,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 0,
+                        ),
+                        minimumSize: const Size(40, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      minimumSize: const Size(40, 28),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () {
-                      // geom選択時に地図ジャンプ
-                      if (widget.onJumpTo != null) {
-                        widget.onJumpTo!(feature.centroid);
-                      }
-                      // feature選択: selectedFeaturesにセット
-                      final wasSelected = GlobalConfig.instance.selectedFeatures
-                          .contains(feature);
-                      if (!wasSelected) {
-                        GlobalConfig.instance.selectedFeatures = [feature];
-                        // 地図本体のみ再描画（属性テーブルは再描画しない）
-                        if (GlobalConfig.instance.mapState != null) {
-                          GlobalConfig.instance.mapState.setState(() {});
+                      onPressed: () {
+                        // geom選択時に地図ジャンプ
+                        if (widget.onJumpTo != null) {
+                          widget.onJumpTo!(feature.centroid);
                         }
-                      }
-                    },
-                    child: const Text('選択', style: TextStyle(fontSize: 13)),
+                        // feature選択: selectedFeaturesにセット
+                        final wasSelected = GlobalConfig
+                            .instance
+                            .selectedFeatures
+                            .contains(feature);
+                        if (!wasSelected) {
+                          GlobalConfig.instance.selectedFeatures = [feature];
+                          // 地図本体のみ再描画（属性テーブルは再描画しない）
+                          if (GlobalConfig.instance.mapState != null) {
+                            GlobalConfig.instance.mapState.setState(() {});
+                          }
+                        }
+                      },
+                      child: const Text('選択', style: TextStyle(fontSize: 13)),
+                    ),
                   ),
                 ),
               )
@@ -1917,6 +1950,14 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                       editingValue = '${value ?? ''}';
                     });
                   },
+                  onSecondaryTapDown: (details) {
+                    _showRowContextMenu(
+                      context,
+                      feature,
+                      attributeRow,
+                      details.globalPosition,
+                    );
+                  },
                   child: Container(
                     alignment: Alignment.centerLeft,
                     constraints: const BoxConstraints(
@@ -1931,6 +1972,152 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
         _buildAppendCell(feature),
       ],
     );
+  }
+
+  /// 行の右クリックメニューを表示
+  void _showRowContextMenu(
+    BuildContext context,
+    FeatureNode feature,
+    Map<String, dynamic> attributeRow,
+    Offset globalPosition,
+  ) {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx + 1,
+        globalPosition.dy + 1,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'export_feature',
+          child: const Row(
+            children: [
+              Icon(Icons.repeat, size: 16),
+              SizedBox(width: 8),
+              Text('Export Feature'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'copy_coordinates',
+          child: const Row(
+            children: [
+              Icon(Icons.copy, size: 16),
+              SizedBox(width: 8),
+              Text('Copy Coordinates'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value != null) {
+        _handleContextMenuAction(value, feature, attributeRow);
+      }
+    });
+  }
+
+  /// コンテキストメニューのアクション処理
+  void _handleContextMenuAction(
+    String action,
+    FeatureNode feature,
+    Map<String, dynamic> attributeRow,
+  ) {
+    switch (action) {
+      case 'export_feature':
+        _exportSingleFeature(feature, attributeRow);
+        break;
+      case 'copy_coordinates':
+        _copyCoordinates(feature);
+        break;
+    }
+  }
+
+  /// 単一フィーチャのエクスポート（ダイアログ表示）
+  Future<void> _exportSingleFeature(
+    FeatureNode feature,
+    Map<String, dynamic> attributeRow,
+  ) async {
+    try {
+      // フィーチャデータを構築
+      final featureData = {
+        'id': feature.rowId,
+        'geometry': _buildGeometryFromFeature(feature),
+        'metadata': attributeRow,
+      };
+
+      // DialogManagerを使用してフィーチャエクスポートダイアログを表示
+      await DialogManager.showFeatureExportDialog(
+        context,
+        features: [featureData],
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      print('[AttributeTable] エクスポートエラー: $e');
+    }
+  }
+
+  /// 座標のコピー
+  Future<void> _copyCoordinates(FeatureNode feature) async {
+    try {
+      final coordinates = feature.centroid;
+      final coordText = '${coordinates.latitude}, ${coordinates.longitude}';
+
+      // クリップボードにコピー
+      await Clipboard.setData(ClipboardData(text: coordText));
+      print('[AttributeTable] 座標コピー: $coordText');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Coordinates copied: $coordText'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to copy coordinates: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// フィーチャからジオメトリデータを構築
+  Map<String, dynamic> _buildGeometryFromFeature(FeatureNode feature) {
+    // 実際の実装では、フィーチャのジオメトリタイプに応じて適切なGeoJSON形式を生成
+    if (feature is PointFeatureNode) {
+      final coord = feature.centroid;
+      return {
+        'type': 'Point',
+        'coordinates': [coord.longitude, coord.latitude],
+      };
+    } else if (feature is LineFeatureNode) {
+      // 実際の線の座標データが必要
+      return {
+        'type': 'LineString',
+        'coordinates': [], // 実際の座標配列
+      };
+    } else if (feature is PolygonFeatureNode) {
+      // 実際のポリゴンの座標データが必要
+      return {
+        'type': 'Polygon',
+        'coordinates': [[]], // 実際の座標配列
+      };
+    }
+
+    return {
+      'type': 'Point',
+      'coordinates': [0.0, 0.0],
+    };
   }
 
   /// 追記ボタン用のDataCellを構築
@@ -2032,6 +2219,11 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
                 icon: const Icon(Icons.file_download, color: Colors.white),
                 tooltip: 'TSVエクスポート',
                 onPressed: () => _exportToTSV(context),
+              ),
+              IconButton(
+                icon: const Icon(Icons.transform, color: Colors.white),
+                tooltip: 'Feature変換出力',
+                onPressed: () => _showFeatureExportDialog(context),
               ),
             ],
           ),
@@ -2170,4 +2362,246 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
       ],
     );
   }
+
+  /// Feature変換出力ダイアログを表示
+  Future<void> _showFeatureExportDialog(BuildContext context) async {
+    String selectedFormat = 'geojson';
+    bool convertToPointCloud = false;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: const Text('Feature変換出力'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '出力形式を選択してください：',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButton<String>(
+                    value: selectedFormat,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'geojson',
+                        child: Text('GeoJSON (.geojson)'),
+                      ),
+                      DropdownMenuItem(value: 'csv', child: Text('CSV (.csv)')),
+                      DropdownMenuItem(value: 'kml', child: Text('KML (.kml)')),
+                      DropdownMenuItem(
+                        value: 'shapefile',
+                        child: Text('Shapefile (.shp)'),
+                      ),
+                    ],
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          selectedFormat = newValue;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title: const Text('ポイントクラウドに変換'),
+                    subtitle: const Text('LineやPolygonを構成点に分解してPoint形式で出力'),
+                    value: convertToPointCloud,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        convertToPointCloud = value ?? false;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'フィーチャ数: ${_cachedFeatures?.length ?? 0}件',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      () => Navigator.of(context).pop({
+                        'format': selectedFormat,
+                        'pointCloud': convertToPointCloud,
+                      }),
+                  child: const Text('エクスポート'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      await _executeFeatureExport(
+        context,
+        result['format'] as String,
+        result['pointCloud'] as bool,
+      );
+    }
+  }
+
+  /// Feature変換出力を実行
+  Future<void> _executeFeatureExport(
+    BuildContext context,
+    String format,
+    bool convertToPointCloud,
+  ) async {
+    try {
+      // ローディング表示
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(child: CircularProgressIndicator());
+        },
+      );
+
+      // エクスポート先パスを構築
+      final gpkgPath = widget.layerNode.geoPackageFile.getAbsolutePath();
+      if (gpkgPath == null) {
+        Navigator.of(context).pop(); // ローディング閉じる
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GeoPackageファイルのパスが見つかりません')),
+        );
+        return;
+      }
+
+      final gpkgDir = p.dirname(gpkgPath);
+      final gpkgName = p.basenameWithoutExtension(gpkgPath);
+      final layerName = widget.layerNode.layerName;
+
+      // ファイル拡張子を決定
+      final extension = _getFileExtension(format);
+      final fileName = '${gpkgName}_${layerName}_features$extension';
+      final outputPath = p.join(gpkgDir, fileName);
+
+      print('[AttributeTable] Feature変換出力開始: $outputPath');
+      print('[AttributeTable] 形式: $format, ポイントクラウド: $convertToPointCloud');
+
+      // レイヤーエクスポートと同じ処理フローを使用
+      // 1. DBから直接フィーチャを取得
+      final features = await widget.layerNode.geoPackageFile.getFeatures(
+        layerName,
+      );
+      final geometryType = await widget.layerNode.geoPackageFile
+          .getGeometryType(layerName);
+
+      if (features.isEmpty) {
+        Navigator.of(context).pop(); // ローディング閉じる
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('エクスポートするフィーチャがありません')));
+        return;
+      }
+
+      print(
+        '[AttributeTable] DBフィーチャ取得完了: ${features.length}個 (タイプ: ${geometryType?.value})',
+      );
+
+      // 2. import_export_serviceの統一されたGeoJSON変換を使用
+      final importExportService = ImportExportService();
+      final geoJsonFeatures = await importExportService
+          .convertFeaturesToGeoJson(features, geometryType);
+
+      if (geoJsonFeatures.isEmpty) {
+        Navigator.of(context).pop(); // ローディング閉じる
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('フィーチャの変換に失敗しました')));
+        return;
+      }
+
+      print('[AttributeTable] GeoJSON変換完了: ${geoJsonFeatures.length}個のフィーチャ');
+
+      // 3. FeatureExportConverterを使用（レイヤーエクスポートと同じ）
+      final converter = FeatureExportConverter(
+        exportFormat: _parseFileFormat(format),
+        outputPath: outputPath,
+        convertToPointCloud: convertToPointCloud,
+      );
+
+      final params = FeatureConversionParams(
+        targetLayer: widget.layerNode,
+        features: geoJsonFeatures,
+        selectedFeatureIds: null, // 全フィーチャをエクスポート
+      );
+
+      final result = await converter.convert(params);
+
+      Navigator.of(context).pop(); // ローディング閉じる
+
+      if (result.success) {
+        print('[AttributeTable] Feature変換出力完了: $outputPath');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ファイルを出力しました:\n$fileName'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        print('[AttributeTable] Feature変換出力失敗: ${result.errorMessage}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エクスポートに失敗しました: ${result.errorMessage}')),
+        );
+      }
+    } catch (e, stackTrace) {
+      Navigator.of(context).pop(); // ローディング閉じる
+      print('[AttributeTable] Feature変換出力エラー: $e');
+      print('[AttributeTable] スタックトレース: $stackTrace');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('エクスポートエラー: $e')));
+    }
+  }
+
+  /// ファイル形式から拡張子を取得
+  String _getFileExtension(String format) {
+    switch (format) {
+      case 'geojson':
+        return '.geojson';
+      case 'csv':
+        return '.csv';
+      case 'kml':
+        return '.kml';
+      case 'shapefile':
+        return '.shp';
+      default:
+        return '.txt';
+    }
+  }
+
+  /// 文字列からFileFormat enumに変換
+  FileFormat _parseFileFormat(String format) {
+    switch (format) {
+      case 'geojson':
+        return FileFormat.geojson;
+      case 'csv':
+        return FileFormat.csv;
+      case 'kml':
+        return FileFormat.kml;
+      case 'shapefile':
+        return FileFormat.shapefile;
+      default:
+        return FileFormat.geojson;
+    }
+  }
+
+  // _convertFeatureNodeToGeoJsonメソッドは削除
+  // レイヤーエクスポートと同じ処理フローを使用するため不要
 }

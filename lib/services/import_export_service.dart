@@ -10,6 +10,9 @@ import 'package:proj4dart/proj4dart.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart';
 import '../utils/coordinate_converter.dart';
+import '../utils/wkb_utils.dart';
+import '../converters/feature_converter.dart';
+import '../converters/base_converter.dart';
 
 /// ファイル形式の種類
 enum FileFormat {
@@ -76,6 +79,7 @@ enum FileFormat {
   bool get isExportSupported {
     switch (this) {
       case FileFormat.shapefile:
+        return true; // 点群エクスポート対応
       case FileFormat.geojson:
       case FileFormat.kml:
       case FileFormat.csv:
@@ -764,6 +768,8 @@ class ImportExportService {
       print('  出力先: $outputPath');
 
       switch (format) {
+        case FileFormat.shapefile:
+          return await _exportToShapefile(layer, outputPath);
         case FileFormat.geojson:
           return await _exportToGeoJSON(layer, outputPath);
         case FileFormat.csv:
@@ -780,6 +786,804 @@ class ImportExportService {
       print('スタックトレース: $stack');
       return ImportExportResult.error('Export failed: $e');
     }
+  }
+
+  /// Shapefile形式でエクスポート（元の形状を保持）
+  Future<ImportExportResult> _exportToShapefile(
+    LayerNode layer,
+    String outputPath,
+  ) async {
+    try {
+      print('[ImportExportService] Shapefileエクスポート開始: ${layer.layerName}');
+
+      // レイヤからフィーチャを取得
+      final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
+        layer.layerName,
+      );
+      final geometryType = await layer.geoPackageNode.geoPackageFile
+          .getGeometryType(layer.layerName);
+
+      if (features.isEmpty) {
+        return ImportExportResult.error(
+          'No features found in layer: ${layer.layerName}',
+        );
+      }
+
+      print(
+        '[ImportExportService] フィーチャ変換開始: ${features.length}個のフィーチャ (タイプ: ${geometryType?.value})',
+      );
+      // フィーチャサンプル情報（簡略化）
+      final sampleFeature = features.first;
+      final sampleId = sampleFeature['id'] ?? 'unknown';
+      final sampleName = sampleFeature['name']?.toString() ?? '';
+      print(
+        '[ImportExportService] 生フィーチャサンプル: ID=$sampleId, Name="$sampleName", Keys=${sampleFeature.keys.toList()}',
+      );
+
+      // フィーチャをGeoJSON形式に変換
+      final geoJsonFeatures = await convertFeaturesToGeoJson(
+        features,
+        geometryType,
+      );
+
+      print(
+        '[ImportExportService] GeoJSON変換完了: ${geoJsonFeatures.length}個のフィーチャ',
+      );
+      if (geoJsonFeatures.isNotEmpty) {
+        final sampleGeoJson = geoJsonFeatures.first;
+        final sampleGeometry =
+            sampleGeoJson['geometry'] as Map<String, dynamic>?;
+        if (sampleGeometry != null) {
+          final geometryType = sampleGeometry['type'] ?? 'unknown';
+          final coordinates = sampleGeometry['coordinates'];
+          final coordLength = coordinates is List ? coordinates.length : 0;
+          print(
+            '[ImportExportService] GeoJSONサンプル: $geometryType, 座標要素数=$coordLength',
+          );
+        } else {
+          print('[ImportExportService] GeoJSONサンプル: ジオメトリなし');
+        }
+      }
+
+      if (geoJsonFeatures.isEmpty) {
+        return ImportExportResult.error(
+          'No valid features could be converted for export',
+        );
+      }
+
+      // FeatureExportConverterを使用（元の形状を保持）
+      print('[ImportExportService] FeatureExportConverter初期化中...');
+      final converter = FeatureExportConverter(
+        exportFormat: FileFormat.shapefile,
+        outputPath: outputPath,
+        convertToPointCloud: false, // 元の形状を保持
+      );
+
+      print('[ImportExportService] 変換パラメータ作成中...');
+      final conversionParams = FeatureConversionParams(
+        targetLayer: layer,
+        features: geoJsonFeatures,
+      );
+
+      print('[ImportExportService] FeatureExportConverter実行中...');
+      final result = await converter.convert(conversionParams);
+
+      print(
+        '[ImportExportService] FeatureExportConverter結果: success=${result.success}',
+      );
+      if (!result.success) {
+        print('[ImportExportService] エラー詳細: ${result.errorMessage}');
+      }
+
+      if (result.success) {
+        print(
+          '[ImportExportService] Shapefileエクスポート完了: ${geoJsonFeatures.length}個のフィーチャ',
+        );
+
+        // ファイル存在確認
+        final outputFile = File(outputPath);
+        final fileExists = await outputFile.exists();
+        final fileSize = fileExists ? await outputFile.length() : 0;
+        print(
+          '[ImportExportService] 出力ファイル存在: $fileExists, サイズ: ${fileSize}バイト',
+        );
+
+        return ImportExportResult.success(
+          metadata: {
+            'outputPath': outputPath,
+            'featureCount': geoJsonFeatures.length,
+            'geometryType': geometryType?.value ?? 'Unknown',
+            'format': 'Shapefile',
+            'shapePreserved': true,
+            'fileSize': fileSize,
+          },
+        );
+      } else {
+        return ImportExportResult.error(
+          result.errorMessage ?? 'Shapefile export failed',
+        );
+      }
+    } catch (e, stackTrace) {
+      print('[ImportExportService] Shapefileエクスポートエラー: $e');
+      print('[ImportExportService] スタックトレース: $stackTrace');
+      return ImportExportResult.error('Shapefile export failed: $e');
+    }
+  }
+
+  /// フィーチャをGeoJSON形式に変換（FeatureExportConverter用） - 公開メソッド
+  Future<List<Map<String, dynamic>>> convertFeaturesToGeoJson(
+    List<Map<String, dynamic>> features,
+    GeometryType? geometryType,
+  ) async {
+    print('[ImportExportService] GeoJSON変換開始: ${features.length}個のフィーチャ');
+    final geoJsonFeatures = <Map<String, dynamic>>[];
+
+    for (int index = 0; index < features.length; index++) {
+      final feature = features[index];
+      final featureId = feature['id'] ?? 'unknown';
+      final featureName = feature['name']?.toString() ?? '';
+      final featureDescription = feature['description']?.toString() ?? '';
+
+      print(
+        '[ImportExportService] フィーチャ変換中[$index]: ID=$featureId, Name=$featureName',
+      );
+
+      // フィーチャ詳細（制限付きで出力）
+      final featureGeometry = feature['geometry'] as Map<String, dynamic>?;
+      final featureMetadata = feature['metadata'] as Map<String, dynamic>?;
+
+      if (featureGeometry != null) {
+        final geometryType = featureGeometry['type'] ?? 'unknown';
+        final coordinates = featureGeometry['coordinates'];
+        final coordCount = coordinates is List ? coordinates.length : 0;
+        print(
+          '[ImportExportService] フィーチャ詳細[$index]: $geometryType, 座標数=$coordCount',
+        );
+
+        // 座標データの構造を詳しく確認
+        if (coordinates is List && coordinates.isNotEmpty) {
+          if (coordinates.first is List) {
+            final firstRing = coordinates.first as List;
+            print('[ImportExportService] 最初のリング/線の点数: ${firstRing.length}');
+          } else {
+            print('[ImportExportService] 直接座標: $coordinates');
+          }
+        } else {
+          print('[ImportExportService] 座標データが空またはnull');
+        }
+      } else {
+        print('[ImportExportService] フィーチャ詳細[$index]: ジオメトリなし');
+      }
+
+      // メタデータの確認
+      if (featureMetadata != null) {
+        final hasGeom = featureMetadata.containsKey('geom');
+        final geomType =
+            featureMetadata['geom']?.runtimeType.toString() ?? 'null';
+        print(
+          '[ImportExportService] メタデータ詳細[$index]: geomフィールド=$hasGeom, 型=$geomType',
+        );
+      }
+
+      Map<String, dynamic>? geometry;
+      Map<String, dynamic> metadata = {
+        'name': featureName,
+        'description': featureDescription,
+      };
+
+      // 既存のGeoJSONデータがある場合は、それを優先的に使用
+      if (featureGeometry != null &&
+          featureGeometry['type'] != null &&
+          featureGeometry['coordinates'] != null) {
+        final coordinates = featureGeometry['coordinates'];
+
+        // 座標データが空でない場合は、既存のジオメトリを使用
+        if (coordinates is List && coordinates.isNotEmpty) {
+          bool hasValidCoordinates = false;
+
+          // 座標データの有効性を確認
+          if (coordinates.first is List) {
+            // 複数次元の場合（Polygon、LineString）
+            for (final coord in coordinates) {
+              if (coord is List && coord.isNotEmpty) {
+                hasValidCoordinates = true;
+                break;
+              }
+            }
+          } else {
+            // 単一次元の場合（Point）
+            hasValidCoordinates = coordinates.length >= 2;
+          }
+
+          if (hasValidCoordinates) {
+            geometry = featureGeometry;
+            print(
+              '[ImportExportService] 既存のGeoJSONジオメトリを使用: ${geometry!['type']}',
+            );
+          } else {
+            print('[ImportExportService] 既存のGeoJSONジオメトリが無効、WKB解析にフォールバック');
+          }
+        } else {
+          print('[ImportExportService] 既存のGeoJSONジオメトリが空、WKB解析にフォールバック');
+        }
+      }
+
+      // 既存のジオメトリが無効またはない場合は、WKBデータから解析
+      if (geometry == null) {
+        print('[ImportExportService] WKBデータから座標解析を開始');
+
+        switch (geometryType) {
+          case GeometryType.point:
+            // WKBデータから座標を解析
+            if (feature['metadata'] != null &&
+                feature['metadata']['geom'] != null) {
+              print('[ImportExportService] Point WKB解析開始');
+              try {
+                final wkbData = feature['metadata']['geom'] as List<int>;
+                final wkbBytes = Uint8List.fromList(wkbData);
+                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
+
+                // Point用のWKB解析（簡易実装）
+                final pureWkb =
+                    wkbBytes.length > 8 &&
+                            wkbBytes[0] == 0x47 &&
+                            wkbBytes[1] == 0x50
+                        ? wkbBytes.sublist(8)
+                        : wkbBytes;
+
+                if (pureWkb.length >= 21) {
+                  // WKB Point最小サイズ
+                  final lon = ByteData.sublistView(
+                    pureWkb,
+                    5,
+                    13,
+                  ).getFloat64(0, Endian.little);
+                  final lat = ByteData.sublistView(
+                    pureWkb,
+                    13,
+                    21,
+                  ).getFloat64(0, Endian.little);
+
+                  geometry = {
+                    'type': 'Point',
+                    'coordinates': [lon, lat],
+                  };
+                  print('[ImportExportService] Point geometry作成: [$lon, $lat]');
+                } else {
+                  print('[ImportExportService] Point WKBデータサイズ不足');
+                }
+              } catch (e) {
+                print('[ImportExportService] Point WKB解析エラー: $e');
+              }
+            } else {
+              print('[ImportExportService] Point WKBデータが見つかりません');
+            }
+            break;
+
+          case GeometryType.linestring:
+            // WKBデータから座標を解析
+            if (feature['metadata'] != null &&
+                feature['metadata']['geom'] != null) {
+              print('[ImportExportService] LineString WKB解析開始');
+              try {
+                final wkbData = feature['metadata']['geom'] as List<int>;
+                final wkbBytes = Uint8List.fromList(wkbData);
+                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
+
+                final linePoints = parseWkbLineString(wkbBytes);
+                print('[ImportExportService] WKB解析結果: ${linePoints.length}個の点');
+
+                if (linePoints.isNotEmpty) {
+                  final coordinates =
+                      linePoints
+                          .map((point) => [point.longitude, point.latitude])
+                          .toList();
+
+                  geometry = {'type': 'LineString', 'coordinates': coordinates};
+                  print(
+                    '[ImportExportService] LineString geometry作成: ${coordinates.length}個の座標',
+                  );
+                } else {
+                  print('[ImportExportService] WKB解析で点が見つかりません');
+                }
+              } catch (e) {
+                print('[ImportExportService] LineString WKB解析エラー: $e');
+              }
+            } else {
+              print('[ImportExportService] LineString WKBデータが見つかりません');
+            }
+            break;
+
+          case GeometryType.polygon:
+            // WKBデータから座標を解析
+            if (feature['metadata'] != null &&
+                feature['metadata']['geom'] != null) {
+              print('[ImportExportService] Polygon WKB解析開始');
+              try {
+                final wkbData = feature['metadata']['geom'] as List<int>;
+                final wkbBytes = Uint8List.fromList(wkbData);
+                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
+
+                final polygonRings = parseWkbPolygon(wkbBytes);
+                print(
+                  '[ImportExportService] WKB解析結果: ${polygonRings.length}個のリング',
+                );
+
+                if (polygonRings.isNotEmpty) {
+                  final coordinates =
+                      polygonRings.map((ring) {
+                        print('[ImportExportService] リング変換: ${ring.length}個の点');
+                        return ring
+                            .map((point) => [point.longitude, point.latitude])
+                            .toList();
+                      }).toList();
+
+                  geometry = {'type': 'Polygon', 'coordinates': coordinates};
+                  print(
+                    '[ImportExportService] Polygon geometry作成: ${coordinates.length}個のリング',
+                  );
+                } else {
+                  print('[ImportExportService] WKB解析でリングが見つかりません');
+                }
+              } catch (e) {
+                print('[ImportExportService] WKB解析エラー: $e');
+              }
+            } else {
+              print('[ImportExportService] WKBデータが見つかりません');
+            }
+            break;
+
+          default:
+            print(
+              '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
+            );
+            continue;
+        }
+      }
+
+      if (geometry != null) {
+        final geoJsonFeature = {
+          'id': featureId,
+          'geometry': geometry,
+          'metadata': metadata,
+        };
+        geoJsonFeatures.add(geoJsonFeature);
+        print(
+          '[ImportExportService] GeoJSONフィーチャ追加[$index]: ${geometry['type']}',
+        );
+      } else {
+        print('[ImportExportService] フィーチャ[$index]のジオメトリ変換に失敗');
+      }
+    }
+
+    print(
+      '[ImportExportService] GeoJSON変換完了: ${geoJsonFeatures.length}個のフィーチャが変換されました',
+    );
+    return geoJsonFeatures;
+  }
+
+  /// フィーチャを点群データに変換
+  Future<List<Map<String, dynamic>>> _convertFeaturesToPointCloud(
+    List<Map<String, dynamic>> features,
+    GeometryType? geometryType,
+  ) async {
+    final pointFeatures = <Map<String, dynamic>>[];
+    int pointId = 1;
+
+    print(
+      '[ImportExportService] 点群変換開始: ${features.length}個のフィーチャ (タイプ: ${geometryType?.value})',
+    );
+
+    for (final feature in features) {
+      final featureId = feature['id'] ?? 'unknown';
+      final featureName = feature['name']?.toString() ?? '';
+      final featureDescription = feature['description']?.toString() ?? '';
+
+      print('[ImportExportService] フィーチャ変換中: ID=$featureId, Name=$featureName');
+
+      switch (geometryType) {
+        case GeometryType.point:
+          // ポイントはそのまま追加
+          if (feature['points'] != null) {
+            final points = feature['points'] as List<LatLng>;
+            for (int i = 0; i < points.length; i++) {
+              final point = points[i];
+              pointFeatures.add({
+                'point_id': pointId++,
+                'source_id': featureId,
+                'source_type': 'Point',
+                'point_index': i,
+                'longitude': point.longitude,
+                'latitude': point.latitude,
+                'name': featureName,
+                'description': featureDescription,
+              });
+            }
+          }
+          break;
+
+        case GeometryType.linestring:
+          // ラインの各頂点を点として追加
+          if (feature['lines'] != null) {
+            final lines = feature['lines'] as List<LatLng>;
+            for (int i = 0; i < lines.length; i++) {
+              final point = lines[i];
+              pointFeatures.add({
+                'point_id': pointId++,
+                'source_id': featureId,
+                'source_type': 'LineString',
+                'point_index': i,
+                'longitude': point.longitude,
+                'latitude': point.latitude,
+                'name': featureName,
+                'description': featureDescription,
+                'line_segment':
+                    i < lines.length - 1 ? i + 1 : null, // 次の点へのセグメント番号
+              });
+            }
+            print('[ImportExportService] ライン変換完了: ${lines.length}個の点を生成');
+          }
+          break;
+
+        case GeometryType.polygon:
+          // ポリゴンの外輪郭の各頂点を点として追加
+          if (feature['polygons'] != null) {
+            final polygons = feature['polygons'] as List<List<LatLng>>;
+            for (int polyIndex = 0; polyIndex < polygons.length; polyIndex++) {
+              final polygon = polygons[polyIndex];
+              for (int i = 0; i < polygon.length; i++) {
+                final point = polygon[i];
+                pointFeatures.add({
+                  'point_id': pointId++,
+                  'source_id': featureId,
+                  'source_type': 'Polygon',
+                  'polygon_index': polyIndex,
+                  'point_index': i,
+                  'longitude': point.longitude,
+                  'latitude': point.latitude,
+                  'name': featureName,
+                  'description': featureDescription,
+                  'is_hole': polyIndex > 0, // 最初の輪郭以外は穴と仮定
+                });
+              }
+              print(
+                '[ImportExportService] ポリゴン変換完了: ${polygon.length}個の点を生成 (輪郭 $polyIndex)',
+              );
+            }
+          }
+          break;
+
+        default:
+          print(
+            '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
+          );
+          break;
+      }
+    }
+
+    print('[ImportExportService] 点群変換完了: ${pointFeatures.length}個の点データを生成');
+    return pointFeatures;
+  }
+
+  /// 点データからShapefileを作成
+  Future<void> _createShapefileFromPoints(
+    List<Map<String, dynamic>> pointFeatures,
+    String outputPath,
+    String layerName,
+  ) async {
+    print('[ImportExportService] Shapefile作成開始: $outputPath');
+
+    // .shpファイルのパス設定
+    final basePath = outputPath.replaceAll('.shp', '');
+    final shpPath = '$basePath.shp';
+    final shxPath = '$basePath.shx';
+    final dbfPath = '$basePath.dbf';
+
+    // 各ファイルを作成
+    await _createShpFile(pointFeatures, shpPath);
+    await _createShxFile(pointFeatures, shxPath);
+    await _createDbfFile(pointFeatures, dbfPath);
+
+    print('[ImportExportService] Shapefile作成完了: $shpPath, $shxPath, $dbfPath');
+  }
+
+  /// .shpファイルを作成（点データ）
+  Future<void> _createShpFile(
+    List<Map<String, dynamic>> pointFeatures,
+    String shpPath,
+  ) async {
+    print('[ImportExportService] .shpファイル作成開始: $shpPath');
+
+    final file = File(shpPath);
+    final buffer = BytesBuilder();
+
+    // Shapefileヘッダー（100バイト）
+    final header = ByteData(100);
+    header.setInt32(0, 9994, Endian.big); // File Code
+    header.setInt32(4, 0, Endian.big); // Unused
+    header.setInt32(8, 0, Endian.big); // Unused
+    header.setInt32(12, 0, Endian.big); // Unused
+    header.setInt32(16, 0, Endian.big); // Unused
+    header.setInt32(20, 0, Endian.big); // Unused
+
+    // File Length (ヘッダー + 全レコードのバイト数を16-bit words単位で)
+    final recordsLength = pointFeatures.length * 14; // 各点レコードは28バイト = 14 words
+    final totalLength = 50 + recordsLength; // ヘッダー50 words + レコード
+    header.setInt32(24, totalLength, Endian.big);
+
+    header.setInt32(28, 1000, Endian.little); // Version
+    header.setInt32(32, 1, Endian.little); // Shape Type (Point = 1)
+
+    // バウンディングボックス計算
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = -double.infinity, maxY = -double.infinity;
+
+    for (final feature in pointFeatures) {
+      final longitude = feature['longitude'] as double;
+      final latitude = feature['latitude'] as double;
+      minX = Math.min(minX, longitude);
+      minY = Math.min(minY, latitude);
+      maxX = Math.max(maxX, longitude);
+      maxY = Math.max(maxY, latitude);
+    }
+
+    header.setFloat64(36, minX, Endian.little); // Xmin
+    header.setFloat64(44, minY, Endian.little); // Ymin
+    header.setFloat64(52, maxX, Endian.little); // Xmax
+    header.setFloat64(60, maxY, Endian.little); // Ymax
+    header.setFloat64(68, 0.0, Endian.little); // Zmin
+    header.setFloat64(76, 0.0, Endian.little); // Zmax
+    header.setFloat64(84, 0.0, Endian.little); // Mmin
+    header.setFloat64(92, 0.0, Endian.little); // Mmax
+
+    buffer.add(header.buffer.asUint8List());
+
+    // レコード作成
+    int recordNumber = 1;
+    for (final feature in pointFeatures) {
+      final longitude = feature['longitude'] as double;
+      final latitude = feature['latitude'] as double;
+
+      // レコードヘッダー（8バイト）
+      final recordHeader = ByteData(8);
+      recordHeader.setInt32(0, recordNumber, Endian.big); // Record Number
+      recordHeader.setInt32(
+        4,
+        10,
+        Endian.big,
+      ); // Content Length (20バイト = 10 words)
+      buffer.add(recordHeader.buffer.asUint8List());
+
+      // ポイントデータ（20バイト）
+      final pointData = ByteData(20);
+      pointData.setInt32(0, 1, Endian.little); // Shape Type (Point = 1)
+      pointData.setFloat64(4, longitude, Endian.little); // X
+      pointData.setFloat64(12, latitude, Endian.little); // Y
+      buffer.add(pointData.buffer.asUint8List());
+
+      recordNumber++;
+    }
+
+    await file.writeAsBytes(buffer.toBytes());
+    print('[ImportExportService] .shpファイル作成完了: ${pointFeatures.length}個の点');
+  }
+
+  /// .shxファイルを作成（インデックスファイル）
+  Future<void> _createShxFile(
+    List<Map<String, dynamic>> pointFeatures,
+    String shxPath,
+  ) async {
+    print('[ImportExportService] .shxファイル作成開始: $shxPath');
+
+    final file = File(shxPath);
+    final buffer = BytesBuilder();
+
+    // ヘッダー（.shpと同じ100バイト）
+    final header = ByteData(100);
+    header.setInt32(0, 9994, Endian.big); // File Code
+    header.setInt32(4, 0, Endian.big); // Unused
+    header.setInt32(8, 0, Endian.big); // Unused
+    header.setInt32(12, 0, Endian.big); // Unused
+    header.setInt32(16, 0, Endian.big); // Unused
+    header.setInt32(20, 0, Endian.big); // Unused
+
+    // File Length (ヘッダー + インデックスレコード数)
+    final indexLength = pointFeatures.length * 4; // 各インデックスレコードは8バイト = 4 words
+    final totalLength = 50 + indexLength;
+    header.setInt32(24, totalLength, Endian.big);
+
+    header.setInt32(28, 1000, Endian.little); // Version
+    header.setInt32(32, 1, Endian.little); // Shape Type (Point = 1)
+
+    // バウンディングボックス（.shpと同じ）
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = -double.infinity, maxY = -double.infinity;
+
+    for (final feature in pointFeatures) {
+      final longitude = feature['longitude'] as double;
+      final latitude = feature['latitude'] as double;
+      minX = Math.min(minX, longitude);
+      minY = Math.min(minY, latitude);
+      maxX = Math.max(maxX, longitude);
+      maxY = Math.max(maxY, latitude);
+    }
+
+    header.setFloat64(36, minX, Endian.little); // Xmin
+    header.setFloat64(44, minY, Endian.little); // Ymin
+    header.setFloat64(52, maxX, Endian.little); // Xmax
+    header.setFloat64(60, maxY, Endian.little); // Ymax
+    header.setFloat64(68, 0.0, Endian.little); // Zmin
+    header.setFloat64(76, 0.0, Endian.little); // Zmax
+    header.setFloat64(84, 0.0, Endian.little); // Mmin
+    header.setFloat64(92, 0.0, Endian.little); // Mmax
+
+    buffer.add(header.buffer.asUint8List());
+
+    // インデックスレコード作成
+    int offset = 50; // ヘッダー後の開始位置（words単位）
+    for (int i = 0; i < pointFeatures.length; i++) {
+      final indexRecord = ByteData(8);
+      indexRecord.setInt32(0, offset, Endian.big); // Offset
+      indexRecord.setInt32(
+        4,
+        10,
+        Endian.big,
+      ); // Content Length (20バイト = 10 words)
+      buffer.add(indexRecord.buffer.asUint8List());
+
+      offset += 14; // 次のレコードのオフセット（レコードヘッダー4words + コンテンツ10words）
+    }
+
+    await file.writeAsBytes(buffer.toBytes());
+    print(
+      '[ImportExportService] .shxファイル作成完了: ${pointFeatures.length}個のインデックス',
+    );
+  }
+
+  /// .dbfファイルを作成（属性データ）
+  Future<void> _createDbfFile(
+    List<Map<String, dynamic>> pointFeatures,
+    String dbfPath,
+  ) async {
+    print('[ImportExportService] .dbfファイル作成開始: $dbfPath');
+
+    final file = File(dbfPath);
+    final buffer = BytesBuilder();
+
+    // フィールド定義
+    final fields = [
+      {'name': 'POINT_ID', 'type': 'N', 'length': 10, 'decimal': 0},
+      {'name': 'SOURCE_ID', 'type': 'C', 'length': 50, 'decimal': 0},
+      {'name': 'SRC_TYPE', 'type': 'C', 'length': 20, 'decimal': 0},
+      {'name': 'POINT_IDX', 'type': 'N', 'length': 10, 'decimal': 0},
+      {'name': 'LONGITUDE', 'type': 'N', 'length': 15, 'decimal': 8},
+      {'name': 'LATITUDE', 'type': 'N', 'length': 15, 'decimal': 8},
+      {'name': 'NAME', 'type': 'C', 'length': 100, 'decimal': 0},
+      {'name': 'DESC', 'type': 'C', 'length': 255, 'decimal': 0},
+    ];
+
+    // レコード長を計算
+    int recordLength = 1; // 削除フラグ
+    for (final field in fields) {
+      recordLength += field['length'] as int;
+    }
+
+    // DBFヘッダー（32バイト + フィールド記述子 + 終了マーカー）
+    final headerLength = 32 + (fields.length * 32) + 1;
+    final header = ByteData(headerLength);
+
+    header.setUint8(0, 0x03); // Version
+    header.setUint8(1, DateTime.now().year - 1900); // Year
+    header.setUint8(2, DateTime.now().month); // Month
+    header.setUint8(3, DateTime.now().day); // Day
+    header.setUint32(
+      4,
+      pointFeatures.length,
+      Endian.little,
+    ); // Number of records
+    header.setUint16(8, headerLength, Endian.little); // Header length
+    header.setUint16(10, recordLength, Endian.little); // Record length
+
+    // フィールド記述子
+    int fieldOffset = 32;
+    for (final field in fields) {
+      final fieldName = field['name'] as String;
+      final fieldType = field['type'] as String;
+      final fieldLength = field['length'] as int;
+      final fieldDecimal = field['decimal'] as int;
+
+      // フィールド名（11バイト、null-terminated）
+      final nameBytes = utf8.encode(fieldName);
+      for (int i = 0; i < 11; i++) {
+        header.setUint8(
+          fieldOffset + i,
+          i < nameBytes.length ? nameBytes[i] : 0,
+        );
+      }
+
+      header.setUint8(fieldOffset + 11, fieldType.codeUnitAt(0)); // Type
+      header.setUint8(fieldOffset + 16, fieldLength); // Length
+      header.setUint8(fieldOffset + 17, fieldDecimal); // Decimal count
+
+      fieldOffset += 32;
+    }
+
+    // 終了マーカー
+    header.setUint8(fieldOffset, 0x0D);
+
+    buffer.add(header.buffer.asUint8List());
+
+    // レコードデータ
+    for (final feature in pointFeatures) {
+      final record = ByteData(recordLength);
+      record.setUint8(0, 0x20); // 削除フラグ（スペース = 未削除）
+
+      int offset = 1;
+      for (final field in fields) {
+        final fieldName = field['name'] as String;
+        final fieldType = field['type'] as String;
+        final fieldLength = field['length'] as int;
+
+        String value = '';
+        switch (fieldName) {
+          case 'POINT_ID':
+            value = (feature['point_id'] ?? 0).toString();
+            break;
+          case 'SOURCE_ID':
+            value = (feature['source_id'] ?? '').toString();
+            break;
+          case 'SRC_TYPE':
+            value = (feature['source_type'] ?? '').toString();
+            break;
+          case 'POINT_IDX':
+            value = (feature['point_index'] ?? 0).toString();
+            break;
+          case 'LONGITUDE':
+            value = (feature['longitude'] ?? 0.0).toStringAsFixed(8);
+            break;
+          case 'LATITUDE':
+            value = (feature['latitude'] ?? 0.0).toStringAsFixed(8);
+            break;
+          case 'NAME':
+            value = (feature['name'] ?? '').toString();
+            break;
+          case 'DESC':
+            value = (feature['description'] ?? '').toString();
+            break;
+        }
+
+        // 値をフィールド長に合わせて調整
+        if (fieldType == 'N') {
+          // 数値フィールドは右詰め
+          value = value.padLeft(fieldLength, ' ');
+        } else {
+          // 文字フィールドは左詰め
+          value = value.padRight(fieldLength, ' ');
+        }
+
+        if (value.length > fieldLength) {
+          value = value.substring(0, fieldLength);
+        }
+
+        final valueBytes = utf8.encode(value);
+        for (int i = 0; i < fieldLength; i++) {
+          record.setUint8(
+            offset + i,
+            i < valueBytes.length ? valueBytes[i] : 0x20,
+          );
+        }
+
+        offset += fieldLength;
+      }
+
+      buffer.add(record.buffer.asUint8List());
+    }
+
+    // EOF マーカー
+    buffer.addByte(0x1A);
+
+    await file.writeAsBytes(buffer.toBytes());
+    print('[ImportExportService] .dbfファイル作成完了: ${pointFeatures.length}個のレコード');
   }
 
   /// GeoJSON形式でエクスポート
@@ -1098,31 +1902,38 @@ class ImportExportService {
         .toList();
   }
 
-  /// サポートされているファイル拡張子の文字列リストを取得
+  /// サポートされているインポート拡張子を取得
   List<String> getSupportedImportExtensions() {
-    final extensions = <String>[];
-    for (final format in getSupportedImportFormats()) {
-      switch (format) {
-        case FileFormat.shapefile:
-          extensions.add('.shp');
-          break;
-        case FileFormat.geojson:
-          extensions.addAll(['.geojson', '.json']);
-          break;
-        case FileFormat.kml:
-          extensions.add('.kml');
-          break;
-        case FileFormat.csv:
-          extensions.add('.csv');
-          break;
-        case FileFormat.gpx:
-          extensions.add('.gpx');
-          break;
-        default:
-          break;
-      }
+    return FileFormat.values
+        .where((format) => format.isImportSupported)
+        .map((format) => _getExtensionForFormat(format))
+        .toList();
+  }
+
+  /// サポートされているエクスポート拡張子を取得
+  List<String> getSupportedExportExtensions() {
+    return FileFormat.values
+        .where((format) => format.isExportSupported)
+        .map((format) => _getExtensionForFormat(format))
+        .toList();
+  }
+
+  /// 形式に対応する拡張子を取得
+  String _getExtensionForFormat(FileFormat format) {
+    switch (format) {
+      case FileFormat.shapefile:
+        return '.shp';
+      case FileFormat.geojson:
+        return '.geojson';
+      case FileFormat.kml:
+        return '.kml';
+      case FileFormat.csv:
+        return '.csv';
+      case FileFormat.gpx:
+        return '.gpx';
+      case FileFormat.unknown:
+        return '';
     }
-    return extensions;
   }
 
   /// 実際のシェープファイルデータを抽出（段階的実装）
@@ -1322,30 +2133,90 @@ class ImportExportService {
     List<Map<String, dynamic>> batchData,
   ) async {
     try {
-      switch (geometryType) {
+      if (batchData.isEmpty) return;
+
+      // バッチデータの内容から実際のジオメトリタイプを判定
+      final sampleData = batchData.first;
+      GeometryType actualGeometryType;
+
+      if (sampleData.containsKey('point')) {
+        actualGeometryType = GeometryType.point;
+      } else if (sampleData.containsKey('line')) {
+        actualGeometryType = GeometryType.linestring;
+      } else if (sampleData.containsKey('rings')) {
+        actualGeometryType = GeometryType.polygon;
+      } else {
+        print('[ImportExportService] 不明なバッチデータ形式: ${sampleData.keys}');
+        actualGeometryType = geometryType; // フォールバック
+      }
+
+      print(
+        '[ImportExportService] バッチ処理: ${actualGeometryType.value}, ${batchData.length}個のフィーチャ',
+      );
+
+      switch (actualGeometryType) {
         case GeometryType.point:
+          // Point用のデータ形式に変換
+          final pointBatchData =
+              batchData.map((data) {
+                return {
+                  'point': data['point'] as LatLng,
+                  'name': data['name'] ?? '',
+                  'description': data['description'] ?? '',
+                  'metadata': data['metadata'] ?? {},
+                };
+              }).toList();
+
           await targetGeoPackage.geoPackageFile.addPointsBatch(
             layerName,
-            batchData,
+            pointBatchData,
           );
           break;
+
         case GeometryType.linestring:
+          // LineString用のデータ形式に変換
+          final lineBatchData =
+              batchData.map((data) {
+                return {
+                  'line': data['line'] as List<LatLng>,
+                  'name': data['name'] ?? '',
+                  'description': data['description'] ?? '',
+                  'metadata': data['metadata'] ?? {},
+                };
+              }).toList();
+
           await targetGeoPackage.geoPackageFile.addLinesBatch(
             layerName,
-            batchData,
+            lineBatchData,
           );
           break;
+
         case GeometryType.polygon:
+          // Polygon用のデータ形式に変換
+          final polygonBatchData =
+              batchData.map((data) {
+                return {
+                  'rings': data['rings'] as List<List<LatLng>>,
+                  'name': data['name'] ?? '',
+                  'description': data['description'] ?? '',
+                  'metadata': data['metadata'] ?? {},
+                };
+              }).toList();
+
           await targetGeoPackage.geoPackageFile.addPolygonsBatch(
             layerName,
-            batchData,
+            polygonBatchData,
           );
           break;
+
         default:
-          print('[ImportExportService] 未対応のジオメトリタイプ: $geometryType');
+          print('[ImportExportService] 未対応のジオメトリタイプ: $actualGeometryType');
       }
     } catch (e) {
       print('[ImportExportService] バッチデータ処理エラー: $e');
+      print(
+        '[ImportExportService] エラーデータサンプル: ${batchData.isNotEmpty ? batchData.first.keys : 'empty'}',
+      );
     }
   }
 
@@ -1765,7 +2636,7 @@ class ImportExportService {
   }
 
   /// シェープファイルの基本情報を読み込み（改良版・段階的実装）
-  /// ファイルサイズとヘッダー情報から基本情報を推定
+  /// 実際のSHPヘッダーから正確なジオメトリタイプを判定
   Future<Map<String, dynamic>?> _readShapefileInfo(String shpFilePath) async {
     try {
       print('[ImportExportService] シェープファイル基本情報読み込み: $shpFilePath');
@@ -1778,23 +2649,88 @@ class ImportExportService {
       final fileSize = shpFile.lengthSync();
       print('[ImportExportService] SHPファイルサイズ: ${fileSize}bytes');
 
-      // ファイルサイズベースでジオメトリタイプを推定（改良版）
+      // SHPバイナリヘッダーから実際のシェープタイプを読み取り
       String geometryTypeString;
-      int estimatedFeatureCount;
+      int estimatedFeatureCount = 1;
 
-      if (fileSize < 5000) {
-        // 5KB未満
-        geometryTypeString = 'Point';
-        estimatedFeatureCount = (fileSize / 50).round();
-      } else if (fileSize < 50000) {
-        // 50KB未満
-        geometryTypeString = 'LineString';
-        estimatedFeatureCount = (fileSize / 200).round();
-      } else {
-        // 50KB以上
-        geometryTypeString = 'Polygon';
-        // より保守的な推定（複雑なポリゴンを考慮）
-        estimatedFeatureCount = (fileSize / 1000).round(); // より現実的な推定
+      try {
+        final bytes = await shpFile.readAsBytes();
+        if (bytes.length >= 100) {
+          // SHPヘッダーからシェープタイプを読み取り（オフセット32、リトルエンディアン）
+          final shapeType = ByteData.sublistView(
+            bytes,
+            32,
+            36,
+          ).getInt32(0, Endian.little);
+
+          print('[ImportExportService] SHPヘッダーからシェープタイプ読み取り: $shapeType');
+
+          // シェープタイプから正確なジオメトリタイプを判定
+          switch (shapeType) {
+            case 1: // Point
+              geometryTypeString = 'Point';
+              estimatedFeatureCount = (fileSize / 50).round().clamp(1, 1000);
+              break;
+            case 3: // PolyLine
+              geometryTypeString = 'LineString';
+              estimatedFeatureCount = (fileSize / 200).round().clamp(1, 100);
+              break;
+            case 5: // Polygon
+              geometryTypeString = 'Polygon';
+              estimatedFeatureCount = (fileSize / 500).round().clamp(1, 50);
+              break;
+            case 8: // MultiPoint
+              geometryTypeString = 'Point';
+              estimatedFeatureCount = (fileSize / 100).round().clamp(1, 500);
+              break;
+            case 11: // PointZ
+              geometryTypeString = 'Point';
+              estimatedFeatureCount = (fileSize / 60).round().clamp(1, 800);
+              break;
+            case 13: // PolyLineZ
+              geometryTypeString = 'LineString';
+              estimatedFeatureCount = (fileSize / 250).round().clamp(1, 80);
+              break;
+            case 15: // PolygonZ
+              geometryTypeString = 'Polygon';
+              estimatedFeatureCount = (fileSize / 600).round().clamp(1, 40);
+              break;
+            case 21: // PointM
+              geometryTypeString = 'Point';
+              estimatedFeatureCount = (fileSize / 55).round().clamp(1, 900);
+              break;
+            case 23: // PolyLineM
+              geometryTypeString = 'LineString';
+              estimatedFeatureCount = (fileSize / 220).round().clamp(1, 90);
+              break;
+            case 25: // PolygonM
+              geometryTypeString = 'Polygon';
+              estimatedFeatureCount = (fileSize / 550).round().clamp(1, 45);
+              break;
+            default:
+              print('[ImportExportService] 未知のシェープタイプ: $shapeType、Pointとして処理');
+              geometryTypeString = 'Point';
+              estimatedFeatureCount = (fileSize / 50).round().clamp(1, 1000);
+              break;
+          }
+        } else {
+          print('[ImportExportService] SHPファイルが小さすぎるため、デフォルト推定を使用');
+          geometryTypeString = 'Point';
+          estimatedFeatureCount = 1;
+        }
+      } catch (e) {
+        print('[ImportExportService] SHPヘッダー読み取りエラー、ファイルサイズで推定: $e');
+        // フォールバック：ファイルサイズベース推定
+        if (fileSize < 5000) {
+          geometryTypeString = 'Point';
+          estimatedFeatureCount = (fileSize / 50).round().clamp(1, 100);
+        } else if (fileSize < 50000) {
+          geometryTypeString = 'LineString';
+          estimatedFeatureCount = (fileSize / 200).round().clamp(1, 250);
+        } else {
+          geometryTypeString = 'Polygon';
+          estimatedFeatureCount = (fileSize / 1000).round().clamp(1, 50);
+        }
       }
 
       // 関連ファイルの存在確認
@@ -1803,7 +2739,7 @@ class ImportExportService {
       final shxExists = File('$basePath.shx').existsSync();
       final prjExists = File('$basePath.prj').existsSync();
 
-      print('[ImportExportService] 推定ジオメトリタイプ: $geometryTypeString');
+      print('[ImportExportService] 正確なジオメトリタイプ: $geometryTypeString');
       print('[ImportExportService] 推定フィーチャ数: $estimatedFeatureCount');
       print(
         '[ImportExportService] 関連ファイル - DBF: $dbfExists, SHX: $shxExists, PRJ: $prjExists',
@@ -1820,7 +2756,7 @@ class ImportExportService {
         'hasDBF': dbfExists,
         'hasSHX': shxExists,
         'hasPRJ': prjExists,
-        'estimationMethod': 'file_size_based',
+        'estimationMethod': 'shp_header_analysis',
       };
     } catch (e) {
       print('[ImportExportService] シェープファイル基本情報読み込みエラー: $e');

@@ -39,16 +39,11 @@ class GeoPackageFile {
   /// データベース初期化（遅延初期化）
   /// プライベートメソッドで、必要に応じて自動的に呼び出される
   Future<void> _initializeDatabase() async {
-    print('[GeoPackageFile] データベース初期化開始');
-    print('[GeoPackageFile] pathList: $pathList');
-
     if (_isInitialized && _database != null) {
-      print('[GeoPackageFile] 既に初期化済み');
       return;
     }
 
     final baseDir = GlobalConfig.instance.projectRootDir;
-    print('[GeoPackageFile] projectRootDir: $baseDir');
 
     if (baseDir == null) {
       print('[GeoPackageFile] 初期化失敗: projectRootDirが未設定');
@@ -56,35 +51,23 @@ class GeoPackageFile {
     }
 
     final absPath = p.joinAll([baseDir, ...pathList]);
-    print('[GeoPackageFile] 絶対パス: $absPath');
 
     final file = File(absPath);
     final dir = file.parent;
-    print('[GeoPackageFile] ファイル: ${file.path}');
-    print('[GeoPackageFile] 親ディレクトリ: ${dir.path}');
 
-    // 親ディレクトリの存在確認・作成
     if (!dir.existsSync()) {
-      print('[GeoPackageFile] 親ディレクトリが存在しません: ${dir.path}');
-      print('[GeoPackageFile] 親ディレクトリを作成中...');
+      print('[GeoPackageFile] 親ディレクトリを作成: ${dir.path}');
       try {
         dir.createSync(recursive: true);
-        print('[GeoPackageFile] 親ディレクトリ作成成功');
       } catch (e) {
         print('[GeoPackageFile] 初期化失敗: 親ディレクトリ作成エラー - $e');
         return;
       }
-    } else {
-      print('[GeoPackageFile] 親ディレクトリ存在確認: OK');
     }
 
     try {
-      // Flutter Widgetの初期化を確認
       WidgetsFlutterBinding.ensureInitialized();
 
-      print('[GeoPackageFile] データベースを開いています... $absPath');
-
-      // sqfliteでデータベースを開く（スキーマバージョン管理付き）
       _database = await openDatabase(
         absPath,
         version: 1,
@@ -92,14 +75,13 @@ class GeoPackageFile {
         onUpgrade: _upgradeDatabase,
       );
       _isInitialized = true;
-      print('[GeoPackageFile] 初期化成功: $absPath');
+      print('[GeoPackageFile] 初期化成功: ${p.basename(absPath)}');
     } catch (e, stack) {
       print('[GeoPackageFile] 初期化時にエラー発生:');
       print('  パス: $absPath');
       print('  エラー: $e');
       print('  スタックトレース: $stack');
 
-      // ファイルアクセス権限の詳細チェック
       try {
         final dirWritable = await Directory(dir.path).stat();
         print('  親ディレクトリ情報: ${dirWritable.type}');
@@ -209,11 +191,9 @@ class GeoPackageFile {
   /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
   /// GeoPackageNode作成時に呼び出す
   Future<bool> createEmptyDatabase() async {
-    print('[GeoPackageFile] 空のGeoPackageファイル作成開始');
     try {
       await _initializeDatabase();
       if (_database != null && _isInitialized) {
-        print('[GeoPackageFile] 空のGeoPackageファイル作成成功');
         return true;
       } else {
         print('[GeoPackageFile] 空のGeoPackageファイル作成失敗: 初期化未完了');
@@ -365,13 +345,9 @@ class GeoPackageFile {
         // メタデータをパース（JSONから辞書へ）
         Map<String, dynamic>? metadata;
         final metadataStr = row['kmaps_metadata'] as String?;
-        // print('[GeoPackageFile] getFeatures メタデータ読み込み:');
-        // print('  row id: $id');
-        // print('  metadataStr: $metadataStr');
         if (metadataStr != null && metadataStr.isNotEmpty) {
           try {
             metadata = jsonDecode(metadataStr) as Map<String, dynamic>;
-            // print('  parsed metadata: $metadata');
           } catch (e) {
             print('getFeatures: メタデータのJSONパースエラー - $e');
           }

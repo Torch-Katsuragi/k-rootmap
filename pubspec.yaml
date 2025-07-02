@@ -34,6 +34,7 @@ dependencies:
   latlong2: ^0.9.0 # 緯度経度座標型
   geolocator: ^10.1.0 # GPS位置情報取得
   file_picker: ^10.1.9 # ファイル・ディレクトリ選択用（最新版に更新）
+  file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   sqflite_common_ffi: ^2.3.0 # デスクトップ環境用sqfliteサポート
   path: ^1.8.3 # パス操作用

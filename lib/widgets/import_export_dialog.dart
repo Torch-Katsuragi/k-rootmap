@@ -1,5 +1,10 @@
-// K-MAPS: Import/Export Dialog Widget
+// K-MAPS: Import/Export Dialog Widget (DEPRECATED)
 // ファイルのインポート・エクスポート機能を提供するダイアログ
+//
+// ⚠️ DEPRECATED: このダイアログは非推奨です
+// 代わりに以下を使用してください:
+// - LayerImportExportDialog: レイヤー全体の操作用
+// - FeatureImportExportDialog: 個別フィーチャの操作用
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -326,13 +331,16 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
             ],
             const SizedBox(height: 8),
 
-            // エクスポートボタン（未実装）
+            // エクスポートボタン
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: null, // 未実装のため無効化
+                onPressed:
+                    widget.currentLayer != null && !_isProcessing
+                        ? _handleExport
+                        : null,
                 icon: const Icon(Icons.file_download),
-                label: const Text('Export Layer (Coming Soon)'),
+                label: const Text('Export Layer as Point Cloud Shapefile'),
               ),
             ),
             const SizedBox(height: 16),
@@ -598,6 +606,93 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
       }
     } catch (e) {
       print('[ImportExportDialog] マップ更新エラー: $e');
+    }
+  }
+
+  /// レイヤーエクスポート処理
+  Future<void> _handleExport() async {
+    if (widget.currentLayer == null) {
+      setState(() {
+        _statusMessage = 'No layer selected for export';
+      });
+      return;
+    }
+
+    try {
+      // 保存先ファイル選択
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export Layer as Shapefile',
+        fileName: '${widget.currentLayer!.name}_pointcloud.shp',
+        type: FileType.custom,
+        allowedExtensions: ['shp'],
+      );
+
+      if (result == null) {
+        return; // キャンセルされた場合
+      }
+
+      setState(() {
+        _isProcessing = true;
+        _statusMessage = null;
+        _lastResult = null;
+        _progressValue = 0.0;
+        _progressMessage = 'Starting export...';
+      });
+
+      // 進行状況の段階的更新
+      _updateProgress(0.1, 'Analyzing layer data...');
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      _updateProgress(0.3, 'Converting features to point cloud...');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      _updateProgress(0.5, 'Creating Shapefile...');
+
+      // LayerTreeNodeからLayerNodeへのキャスト確認
+      if (widget.currentLayer is! LayerNode) {
+        setState(() {
+          _statusMessage = 'Selected item is not a layer that can be exported';
+        });
+        return;
+      }
+
+      // エクスポート実行
+      final exportResult = await _importExportService.exportLayer(
+        widget.currentLayer! as LayerNode,
+        result,
+        FileFormat.shapefile,
+      );
+
+      _updateProgress(0.8, 'Finalizing export...');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      _updateProgress(1.0, 'Export completed!');
+
+      setState(() {
+        _isProcessing = false;
+        _lastResult = exportResult;
+        _statusMessage =
+            exportResult.success
+                ? 'Export completed successfully!'
+                : exportResult.errorMessage ?? 'Export failed';
+      });
+
+      // 成功時はダイアログを自動で閉じる（オプション）
+      if (exportResult.success && mounted) {
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      }
+    } catch (e, stack) {
+      print('[ImportExportDialog] Export error: $e');
+      print('Stack trace: $stack');
+
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = 'Export failed: $e';
+        _lastResult = ImportExportResult.error(e.toString());
+      });
     }
   }
 }

@@ -382,8 +382,13 @@ class FeatureExportConverter
             break;
 
           case 'Polygon':
-            // ポリゴンの各頂点をポイントに変換
+            // ポリゴンの各頂点をポイントに変換（重複点除去付き）
             if (coordinates is List && coordinates.isNotEmpty) {
+              print('=== [FeatureExportConverter] Polygon点群変換開始 ===');
+              print('[FeatureExportConverter] フィーチャID: ${feature['id']}');
+              print('[FeatureExportConverter] リング数: ${coordinates.length}');
+              print('[FeatureExportConverter] 重複点除去: ON (閉じたリングの最後の点をスキップ)');
+
               for (
                 int ringIndex = 0;
                 ringIndex < coordinates.length;
@@ -392,24 +397,80 @@ class FeatureExportConverter
                 final ring = coordinates[ringIndex];
                 if (ring is List) {
                   final ringType = ringIndex == 0 ? 'exterior' : 'hole';
+                  final originalRingSize = ring.length;
+                  int addedPointsCount = 0;
+
+                  print(
+                    '[FeatureExportConverter] リング $ringIndex 処理開始: ${ring.length}点 ($ringType)',
+                  );
+
                   for (int i = 0; i < ring.length; i++) {
                     final coord = ring[i];
                     if (coord is List && coord.length >= 2) {
+                      // 最後の点で、かつ最初の点と同じ場合はスキップ
+                      if (i == ring.length - 1 && ring.length > 1) {
+                        final firstCoord = ring[0] as List;
+                        final lastCoord = coord;
+                        const tolerance = 0.000001;
+
+                        print(
+                          '[FeatureExportConverter] 最後の点の重複チェック (リング $ringIndex):',
+                        );
+                        print(
+                          '[FeatureExportConverter]   最初の点: (${firstCoord[1]}, ${firstCoord[0]})',
+                        );
+                        print(
+                          '[FeatureExportConverter]   最後の点: (${lastCoord[1]}, ${lastCoord[0]})',
+                        );
+
+                        final latDiff = (firstCoord[1] - lastCoord[1]).abs();
+                        final lngDiff = (firstCoord[0] - lastCoord[0]).abs();
+                        print(
+                          '[FeatureExportConverter]   座標差分: 緯度=${latDiff.toStringAsFixed(8)}, 経度=${lngDiff.toStringAsFixed(8)}',
+                        );
+
+                        if (latDiff < tolerance && lngDiff < tolerance) {
+                          print(
+                            '[FeatureExportConverter] ✓ 重複する最後の点をスキップ (リング $ringIndex)',
+                          );
+                          continue; // 最後の重複点をスキップ
+                        } else {
+                          print(
+                            '[FeatureExportConverter] ✗ 最後の点は重複していない、追加します (リング $ringIndex)',
+                          );
+                        }
+                      }
+
                       final point = {
                         'POINT_ID': pointId++,
                         'SOURCE_ID': feature['id'] ?? 0,
                         'SRC_TYPE': 'Polygon',
                         'LONGITUDE': coord[0],
                         'LATITUDE': coord[1],
-                        'SEGMENT_ID': i,
+                        'SEGMENT_ID': addedPointsCount,
                         'RING_TYPE': ringType,
+                        'ORIG_RING': originalRingSize,
+                        'DEDUP_RING': addedPointsCount + 1,
                         ...metadata,
                       };
                       points.add(point);
+                      addedPointsCount++;
+
+                      if (addedPointsCount <= 3 || i == ring.length - 1) {
+                        print(
+                          '[FeatureExportConverter] 点追加[$addedPointsCount]: (${coord[1]}, ${coord[0]}) POINT_ID=${pointId - 1}',
+                        );
+                      }
                     }
                   }
+                  print(
+                    '[FeatureExportConverter] リング $ringIndex 完了: ${originalRingSize}点 -> ${addedPointsCount}点 (${originalRingSize - addedPointsCount}点除去)',
+                  );
                 }
               }
+              print(
+                '[FeatureExportConverter] Polygon変換完了: フィーチャID=${feature['id']}',
+              );
             }
             break;
         }

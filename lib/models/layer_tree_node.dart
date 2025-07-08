@@ -1250,11 +1250,12 @@ class PolygonFeatureNode extends FeatureNode {
     } else {
       areaStr = '${areaM2.toStringAsFixed(2)} m²';
     }
-    // 全リングの頂点数の合計を計算
-    final totalVertices = polygon.fold<int>(
-      0,
-      (sum, ring) => sum + ring.length,
-    );
+    // 全リングの頂点数の合計を計算（閉じたリングの最後の点を除く）
+    final totalVertices = polygon.fold<int>(0, (sum, ring) {
+      if (ring.isEmpty) return sum;
+      // 閉じたリングの場合は最後の点を除く（最初と最後が同じため）
+      return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
+    });
     return [
       ...super.detailEntries,
       MapEntry('area', areaStr),
@@ -1284,11 +1285,12 @@ class PolygonFeatureNode extends FeatureNode {
     }
     details['area'] = areaStr;
 
-    // 頂点数情報
-    final totalVertices = polygon.fold<int>(
-      0,
-      (sum, ring) => sum + ring.length,
-    );
+    // 頂点数情報（閉じたリングの最後の点を除く）
+    final totalVertices = polygon.fold<int>(0, (sum, ring) {
+      if (ring.isEmpty) return sum;
+      // 閉じたリングの場合は最後の点を除く（最初と最後が同じため）
+      return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
+    });
     details['vertex_count'] = '$totalVertices';
 
     return details;

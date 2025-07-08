@@ -536,6 +536,29 @@ class LineFeatureNode extends FeatureNode {
   }
 
   @override
+  Map<String, String> get infoMap {
+    final details = <String, String>{};
+
+    // 基底クラスの情報をコピー
+    details.addAll(super.infoMap);
+
+    // 線の長さ情報
+    final len = GeometryCalc.calcLineLength(line);
+    String lengthStr;
+    if (len >= 10000) {
+      lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
+    } else {
+      lengthStr = '${len.toStringAsFixed(2)} m';
+    }
+    details['length'] = lengthStr;
+
+    // 頂点数情報
+    details['vertex_count'] = '${line.length}';
+
+    return details;
+  }
+
+  @override
   Object get geometry => line;
 
   @override
@@ -903,6 +926,33 @@ abstract class FeatureNode extends LayerTreeNode {
     MapEntry('longitude', centroid.longitude.toStringAsFixed(6)),
   ];
 
+  /// 詳細情報をMap形式で返す（表示用）
+  Map<String, String> get infoMap {
+    final details = <String, String>{};
+
+    // 基本情報
+    details['name'] = name;
+    if (description != null && description!.isNotEmpty) {
+      details['description'] = description!;
+    }
+
+    // メタデータ
+    if (metadata != null && metadata!.isNotEmpty) {
+      for (final entry in metadata!.entries) {
+        details['metadata.${entry.key}'] = entry.value.toString();
+      }
+    }
+
+    // ID情報
+    details['id'] = rowId.toString();
+
+    // 座標情報
+    details['latitude'] = centroid.latitude.toStringAsFixed(6);
+    details['longitude'] = centroid.longitude.toStringAsFixed(6);
+
+    return details;
+  }
+
   /// 指定した属性名に対応する値をDBから取得
   Future<dynamic> getAttributeValue(String attributeName) async {
     // geoPackageFileから都度取得
@@ -1200,7 +1250,48 @@ class PolygonFeatureNode extends FeatureNode {
     } else {
       areaStr = '${areaM2.toStringAsFixed(2)} m²';
     }
-    return [...super.detailEntries, MapEntry('area', areaStr)];
+    // 全リングの頂点数の合計を計算
+    final totalVertices = polygon.fold<int>(
+      0,
+      (sum, ring) => sum + ring.length,
+    );
+    return [
+      ...super.detailEntries,
+      MapEntry('area', areaStr),
+      MapEntry('vertex_count', '$totalVertices'),
+    ];
+  }
+
+  @override
+  Map<String, String> get infoMap {
+    final details = <String, String>{};
+
+    // 基底クラスの情報をコピー
+    details.addAll(super.infoMap);
+
+    // 面積情報
+    final areaDeg2 = GeometryCalc.calcPolygonArea(polygon);
+    final centroid = this.centroid;
+    final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
+      areaDeg2,
+      centroid.latitude,
+    );
+    String areaStr;
+    if (areaM2 >= 10000) {
+      areaStr = '${(areaM2 / 10000).toStringAsFixed(2)} ha';
+    } else {
+      areaStr = '${areaM2.toStringAsFixed(2)} m²';
+    }
+    details['area'] = areaStr;
+
+    // 頂点数情報
+    final totalVertices = polygon.fold<int>(
+      0,
+      (sum, ring) => sum + ring.length,
+    );
+    details['vertex_count'] = '$totalVertices';
+
+    return details;
   }
 
   @override

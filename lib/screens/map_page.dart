@@ -1541,8 +1541,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 GlobalConfig.instance.selectedFeatures.contains(
                                       f,
                                     )
-                                    ? 5.0
-                                    : 3.0,
+                                    ? 2.5
+                                    : 1.5,
                           ),
                         // --- GPS survey line preview ---
                         if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1555,7 +1555,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             points:
                                 GlobalConfig.instance.drawingState.drawingLine,
                             color: Colors.purple,
-                            strokeWidth: 4.0,
+                            strokeWidth: 2.0,
                           ),
                         // --- Pen tool line preview ---
                         if (GlobalConfig.instance.currentTool is PenTool &&
@@ -1567,7 +1567,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 (GlobalConfig.instance.currentTool as PenTool)
                                     .drawingLine,
                             color: Colors.orange,
-                            strokeWidth: 3.0,
+                            strokeWidth: 1.5,
                           ),
                         // --- GPS survey polygon line preview (2点の場合) ---
                         if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1584,7 +1584,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     .drawingState
                                     .drawingPolygon,
                             color: Colors.purple,
-                            strokeWidth: 4.0,
+                            strokeWidth: 2.0,
                           ),
                         // --- Pen tool polygon line preview (2点の場合) ---
                         if (GlobalConfig.instance.currentTool is PenTool)
@@ -1596,7 +1596,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 Polyline(
                                   points: drawingState.drawingPolygon,
                                   color: Colors.orange,
-                                  strokeWidth: 3.0,
+                                  strokeWidth: 1.5,
                                 ),
                               ];
                             }
@@ -1610,7 +1610,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             points:
                                 GpsTrackManager().currentTrack!.toLatLngList(),
                             color: Colors.cyan,
-                            strokeWidth: 4.0,
+                            strokeWidth: 2.0,
                           ),
                       ],
                     ),
@@ -1633,8 +1633,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 GlobalConfig.instance.selectedFeatures.contains(
                                       f,
                                     )
-                                    ? 6.0
-                                    : 3.0,
+                                    ? 3.0
+                                    : 1.5,
                             borderColor:
                                 GlobalConfig.instance.selectedFeatures.contains(
                                       f,
@@ -1655,7 +1655,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                               GlobalConfig.instance.drawingState.drawingPolygon,
                             ),
                             color: Colors.purple.withOpacity(0.4),
-                            borderStrokeWidth: 4.0,
+                            borderStrokeWidth: 2.0,
                             borderColor: Colors.purple,
                           ),
                         // --- Pen tool polygon preview (3点以上の場合) ---
@@ -1672,7 +1672,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                   Polygon(
                                     points: previewPoints,
                                     color: Colors.orange.withOpacity(0.4),
-                                    borderStrokeWidth: 3.0,
+                                    borderStrokeWidth: 1.5,
                                     borderColor: Colors.orange,
                                   ),
                                 ];
@@ -1694,7 +1694,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                   .toList(),
                             ),
                             color: Colors.white.withOpacity(0.2),
-                            borderStrokeWidth: 2.0,
+                            borderStrokeWidth: 1.0,
                             borderColor: Colors.black,
                           ),
                       ],
@@ -1834,22 +1834,40 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           ...((f.geometry as List<LatLng>).map(
                             (pt) => Marker(
                               point: pt,
-                              width: 40,
-                              height: 40,
+                              width: 8,
+                              height: 8,
                               child: Tooltip(
                                 message: f.name,
-                                child: Icon(
-                                  Icons.location_on,
-                                  color:
+                                child: Container(
+                                  width:
                                       GlobalConfig.instance.selectedFeatures
                                               .contains(f)
-                                          ? Colors.yellow
-                                          : Colors.red,
-                                  size:
+                                          ? 4
+                                          : 3,
+                                  height:
                                       GlobalConfig.instance.selectedFeatures
                                               .contains(f)
-                                          ? 44
-                                          : 36,
+                                          ? 4
+                                          : 3,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        GlobalConfig.instance.selectedFeatures
+                                                .contains(f)
+                                            ? Colors.yellow
+                                            : Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 0.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 0.5,
+                                        offset: Offset(0, 0.25),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -2729,10 +2747,10 @@ class FeatureDetailPanel extends StatelessWidget {
 
     // 既存のFeatureNode用の処理
     if (feature is FeatureNode) {
-      final entries = feature.detailEntries;
+      final infoMap = feature.infoMap;
       // metadataを含む属性名の項目を除外
       final filteredEntries =
-          entries
+          infoMap.entries
               .where((entry) => !entry.key.toLowerCase().contains('metadata'))
               .toList();
 
@@ -2740,15 +2758,15 @@ class FeatureDetailPanel extends StatelessWidget {
         context,
         title: feature.runtimeType.toString(),
         children: [
-          for (final e in filteredEntries)
+          for (final entry in filteredEntries)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${e.key}: ',
+                  '${entry.key}: ',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                Expanded(child: Text(e.value)),
+                Expanded(child: Text(entry.value)),
               ],
             ),
         ],

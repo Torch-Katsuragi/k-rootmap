@@ -66,7 +66,6 @@ class FeatureImportConverter
           successfulImports.add(feature);
         } catch (e) {
           errors.add('Feature ${i + 1}: $e');
-          print('[FeatureImportConverter] Feature import error: $e');
         }
       }
 
@@ -109,31 +108,17 @@ class FeatureExportConverter
     try {
       // フィーチャデータ確認
       if (input.features.isEmpty) {
-        print(
-          '[FeatureExportConverter] Validation failed: No features to export',
-        );
         return false;
       }
 
       // 出力パス確認
       final outputDir = Directory(File(outputPath).parent.path);
-      print(
-        '[FeatureExportConverter] Checking output directory: ${outputDir.path}',
-      );
 
       if (!await outputDir.exists()) {
-        print(
-          '[FeatureExportConverter] Validation failed: Output directory does not exist: ${outputDir.path}',
-        );
         return false;
       }
-
-      print(
-        '[FeatureExportConverter] Validation successful: ${input.features.length} features, output directory exists',
-      );
       return true;
     } catch (e) {
-      print('[FeatureExportConverter] Validation error: $e');
       return false;
     }
   }
@@ -141,11 +126,6 @@ class FeatureExportConverter
   @override
   Future<ConversionResult> convert(FeatureConversionParams input) async {
     try {
-      print('[FeatureExportConverter] 変換開始: ${input.features.length}個のフィーチャ');
-      print('[FeatureExportConverter] 出力形式: ${exportFormat.value}');
-      print('[FeatureExportConverter] 出力パス: $outputPath');
-      print('[FeatureExportConverter] ポイントクラウド変換: $convertToPointCloud');
-
       notifyProgress(0.1, 'Validating features...');
 
       // 選択されたフィーチャのみエクスポート
@@ -158,31 +138,7 @@ class FeatureExportConverter
               : input.features;
 
       if (featuresToExport.isEmpty) {
-        print('[FeatureExportConverter] エラー: エクスポートするフィーチャがありません');
         return ConversionResult.error('No features selected for export');
-      }
-
-      print(
-        '[FeatureExportConverter] エクスポート対象: ${featuresToExport.length}個のフィーチャ',
-      );
-      // フィーチャサンプル情報（簡略化）
-      final sampleFeature = featuresToExport.first;
-      final sampleId = sampleFeature['id'] ?? 'unknown';
-      final sampleGeometry = sampleFeature['geometry'] as Map<String, dynamic>?;
-      final sampleGeometryType = sampleGeometry?['type'] ?? 'unknown';
-      print(
-        '[FeatureExportConverter] フィーチャサンプル: ID=$sampleId, GeometryType=$sampleGeometryType',
-      );
-
-      // 文字数制限付きでメタデータを出力
-      final sampleMetadata = sampleFeature['metadata'] as Map<String, dynamic>?;
-      if (sampleMetadata != null) {
-        final metadataStr = sampleMetadata.toString();
-        final limitedMetadata =
-            metadataStr.length > 200
-                ? '${metadataStr.substring(0, 200)}...'
-                : metadataStr;
-        print('[FeatureExportConverter] メタデータサンプル: $limitedMetadata');
       }
 
       notifyProgress(0.6, 'Converting to ${exportFormat.value} format...');
@@ -190,45 +146,27 @@ class FeatureExportConverter
       String exportData;
       switch (exportFormat) {
         case FileFormat.geojson:
-          print('[FeatureExportConverter] GeoJSONエクスポート開始');
           exportData = _convertToGeoJSON(featuresToExport);
           break;
         case FileFormat.csv:
-          print('[FeatureExportConverter] CSVエクスポート開始');
           exportData = _convertToCSV(featuresToExport);
           break;
         case FileFormat.kml:
-          print('[FeatureExportConverter] KMLエクスポート開始');
           exportData = _convertToKML(featuresToExport);
           break;
         case FileFormat.shapefile:
           // Shapefileは複数ファイル生成なので別処理
-          print('[FeatureExportConverter] Shapefileエクスポート開始');
           return await _exportToShapefile(featuresToExport);
         default:
-          print(
-            '[FeatureExportConverter] エラー: サポートされていない形式 ${exportFormat.value}',
-          );
           return ConversionResult.error(
             'Unsupported export format: ${exportFormat.value}',
           );
       }
 
       notifyProgress(0.8, 'Writing file...');
-      print('[FeatureExportConverter] ファイル書き込み開始: ${exportData.length}文字');
-
       // ファイル書き込み
       final file = File(outputPath);
       await file.writeAsString(exportData);
-
-      print('[FeatureExportConverter] ファイル書き込み完了');
-
-      print(
-        '[FeatureExportConverter] エクスポート成功: ${featuresToExport.length}個のフィーチャ',
-      );
-      print(
-        '[FeatureExportConverter] メタデータ: exportFormat=${exportFormat.value}, featureCount=${featuresToExport.length}',
-      );
       return ConversionResult.success(
         data: outputPath,
         metadata: {
@@ -237,9 +175,7 @@ class FeatureExportConverter
           'outputPath': outputPath,
         },
       );
-    } catch (e, stackTrace) {
-      print('[FeatureExportConverter] 変換エラー: $e');
-      print('[FeatureExportConverter] スタックトレース: $stackTrace');
+    } catch (e) {
       return ConversionResult.error('Feature export failed: $e');
     }
   }
@@ -346,22 +282,15 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
   ) async {
     try {
-      print(
-        '[FeatureExportConverter] Shapefile変換開始: ${features.length}個のフィーチャ',
-      );
       notifyProgress(0.5, 'Converting features to shapefile...');
 
       // convertToPointCloudオプションを確認
       if (convertToPointCloud) {
-        print('[FeatureExportConverter] ポイントクラウド変換を実行');
         return await _exportToPointCloudShapefile(features);
       } else {
-        print('[FeatureExportConverter] 元の形状を保持してエクスポート');
         return await _exportToNativeShapefile(features);
       }
-    } catch (e, stackTrace) {
-      print('[FeatureExportConverter] Shapefileエクスポートエラー: $e');
-      print('[FeatureExportConverter] スタックトレース: $stackTrace');
+    } catch (e) {
       return ConversionResult.error('Shapefile export failed: $e');
     }
   }
@@ -378,82 +307,38 @@ class FeatureExportConverter
       int pointId = 1;
 
       for (final feature in features) {
-        final featureStr = feature.toString();
-        final limitedFeatureStr =
-            featureStr.length > 300
-                ? '${featureStr.substring(0, 300)}...'
-                : featureStr;
-        print('[FeatureExportConverter] ポイントクラウド処理中のフィーチャ: $limitedFeatureStr');
-
         final geometry = feature['geometry'] as Map<String, dynamic>?;
         final metadata = feature['metadata'] as Map<String, dynamic>? ?? {};
 
-        final geometryStr = geometry.toString();
-        final limitedGeometryStr =
-            geometryStr.length > 200
-                ? '${geometryStr.substring(0, 200)}...'
-                : geometryStr;
-        print('[FeatureExportConverter] ジオメトリ: $limitedGeometryStr');
-
-        final metadataStr = metadata.toString();
-        final limitedMetadataStr =
-            metadataStr.length > 200
-                ? '${metadataStr.substring(0, 200)}...'
-                : metadataStr;
-        print('[FeatureExportConverter] メタデータ: $limitedMetadataStr');
-
         if (geometry == null) {
-          print('[FeatureExportConverter] ジオメトリがnullのためスキップ');
           continue;
         }
 
         var coordinates = geometry['coordinates'];
         final geometryType = geometry['type'] as String?;
 
-        print('[FeatureExportConverter] ジオメトリタイプ: $geometryType');
-        final coordinatesStr = coordinates.toString();
-        final limitedCoordinatesStr =
-            coordinatesStr.length > 200
-                ? '${coordinatesStr.substring(0, 200)}...'
-                : coordinatesStr;
-        print('[FeatureExportConverter] 座標データ: $limitedCoordinatesStr');
-
         // 座標データが空またはnullの場合、WKBデータから解析
         bool needWkbParsing = false;
         if (coordinates == null) {
           needWkbParsing = true;
-          print('[FeatureExportConverter] 座標データがnull、WKB解析を実行');
         } else if (coordinates is List) {
           if (coordinates.isEmpty) {
             needWkbParsing = true;
-            print('[FeatureExportConverter] 座標データが空、WKB解析を実行');
           } else if (coordinates.every(
             (coord) => coord is List && (coord as List).isEmpty,
           )) {
             needWkbParsing = true;
-            print('[FeatureExportConverter] 座標データがすべて空の配列、WKB解析を実行');
           }
         }
 
         if (needWkbParsing && metadata.containsKey('geom')) {
-          print('[FeatureExportConverter] WKBデータから座標を解析中...');
           final parsedCoordinates = await _parseWkbToCoordinates(
             metadata['geom'],
             geometryType,
           );
           if (parsedCoordinates != null) {
             coordinates = parsedCoordinates;
-            print('[FeatureExportConverter] WKB解析成功、座標データを更新');
-            final newCoordinatesStr = coordinates.toString();
-            final limitedNewCoordinatesStr =
-                newCoordinatesStr.length > 200
-                    ? '${newCoordinatesStr.substring(0, 200)}...'
-                    : newCoordinatesStr;
-            print(
-              '[FeatureExportConverter] 新しい座標データ: $limitedNewCoordinatesStr',
-            );
           } else {
-            print('[FeatureExportConverter] WKB解析失敗、スキップ');
             continue;
           }
         }
@@ -497,41 +382,18 @@ class FeatureExportConverter
             break;
 
           case 'Polygon':
-            print('[FeatureExportConverter] Polygon処理開始');
             // ポリゴンの各頂点をポイントに変換
             if (coordinates is List && coordinates.isNotEmpty) {
-              print(
-                '[FeatureExportConverter] Polygon座標配列長: ${coordinates.length}',
-              );
               for (
                 int ringIndex = 0;
                 ringIndex < coordinates.length;
                 ringIndex++
               ) {
                 final ring = coordinates[ringIndex];
-                final ringStr = ring.toString();
-                final limitedRingStr =
-                    ringStr.length > 150
-                        ? '${ringStr.substring(0, 150)}...'
-                        : ringStr;
-                print(
-                  '[FeatureExportConverter] リング[$ringIndex]: $limitedRingStr',
-                );
                 if (ring is List) {
                   final ringType = ringIndex == 0 ? 'exterior' : 'hole';
-                  print(
-                    '[FeatureExportConverter] リング[$ringIndex]タイプ: $ringType, 点数: ${ring.length}',
-                  );
                   for (int i = 0; i < ring.length; i++) {
                     final coord = ring[i];
-                    if (i < 3) {
-                      // 最初の3つの座標のみ出力
-                      print('[FeatureExportConverter] 座標[$i]: $coord');
-                    } else if (i == 3) {
-                      print(
-                        '[FeatureExportConverter] ...残り${ring.length - 3}個の座標',
-                      );
-                    }
                     if (coord is List && coord.length >= 2) {
                       final point = {
                         'POINT_ID': pointId++,
@@ -543,69 +405,24 @@ class FeatureExportConverter
                         'RING_TYPE': ringType,
                         ...metadata,
                       };
-                      if (points.length < 3) {
-                        // 最初の3つのポイントのみ出力（文字数制限付き）
-                        final pointStr = point.toString();
-                        final limitedPointStr =
-                            pointStr.length > 150
-                                ? '${pointStr.substring(0, 150)}...'
-                                : pointStr;
-                        print(
-                          '[FeatureExportConverter] 追加されたポイント: $limitedPointStr',
-                        );
-                      }
                       points.add(point);
-                    } else {
-                      print('[FeatureExportConverter] 無効な座標をスキップ: $coord');
                     }
                   }
-                } else {
-                  print('[FeatureExportConverter] 無効なリング構造をスキップ: $ring');
                 }
               }
-            } else {
-              print('[FeatureExportConverter] 無効なPolygon座標構造');
-              final coordinatesStr = coordinates.toString();
-              final limitedCoordinatesStr =
-                  coordinatesStr.length > 100
-                      ? '${coordinatesStr.substring(0, 100)}...'
-                      : coordinatesStr;
-              print('[FeatureExportConverter] 座標データ: $limitedCoordinatesStr');
             }
             break;
         }
       }
 
-      print('[FeatureExportConverter] ポイント抽出完了: ${points.length}個のポイント');
-      if (points.isNotEmpty) {
-        final firstPointStr = points.first.toString();
-        final limitedFirstPointStr =
-            firstPointStr.length > 150
-                ? '${firstPointStr.substring(0, 150)}...'
-                : firstPointStr;
-        print('[FeatureExportConverter] 最初のポイント: $limitedFirstPointStr');
-      }
-
       if (points.isEmpty) {
-        print('[FeatureExportConverter] エラー: ポイントが見つかりませんでした');
         return ConversionResult.error('No valid points found for export');
       }
-
-      print(
-        '[FeatureExportConverter] ポイントクラウドShapefile処理完了: 元フィーチャ数=${features.length}, 抽出ポイント数=${points.length}',
-      );
 
       notifyProgress(0.7, 'Creating Point Shapefile...');
 
       // Shapefile形式での直接ファイル出力
       await _writePointShapefileComponents(points, outputPath);
-
-      print(
-        '[FeatureExportConverter] ポイントクラウドShapefileエクスポート成功: 元フィーチャ数=${features.length}, ポイント数=${points.length}',
-      );
-      print(
-        '[FeatureExportConverter] メタデータ: featureCount=${features.length}, pointCount=${points.length}',
-      );
       return ConversionResult.success(
         data: outputPath,
         metadata: {
@@ -627,112 +444,47 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
   ) async {
     try {
-      print(
-        '[FeatureExportConverter] ネイティブShapefile変換開始: ${features.length}個のフィーチャ',
-      );
-
       if (features.isEmpty) {
-        print('[FeatureExportConverter] エラー: フィーチャが空です');
         return ConversionResult.error('No features to export');
-      }
-
-      // フィーチャサンプルを確認
-      // フィーチャ詳細サンプル（詳細版）
-      final sampleFeature = features.first;
-      final sampleGeometry = sampleFeature['geometry'] as Map<String, dynamic>?;
-      final sampleGeometryType = sampleGeometry?['type'] ?? 'unknown';
-      final coordinatesCount = sampleGeometry?['coordinates']?.length ?? 0;
-      print(
-        '[FeatureExportConverter] フィーチャ詳細サンプル: GeometryType=$sampleGeometryType, CoordinatesCount=$coordinatesCount',
-      );
-
-      // 最初のリングの最初の座標を表示（Polygonの場合）
-      if (sampleGeometryType == 'Polygon' &&
-          sampleGeometry?['coordinates'] is List) {
-        final coordinates = sampleGeometry!['coordinates'] as List;
-        if (coordinates.isNotEmpty && coordinates[0] is List) {
-          final firstRing = coordinates[0] as List;
-          if (firstRing.isNotEmpty && firstRing[0] is List) {
-            final firstCoord = firstRing[0] as List;
-            print(
-              '[FeatureExportConverter]   最初の座標: [${firstCoord[0]}, ${firstCoord[1]}]',
-            );
-          }
-          if (firstRing.length > 1 && firstRing[1] is List) {
-            final secondCoord = firstRing[1] as List;
-            print(
-              '[FeatureExportConverter]   2番目の座標: [${secondCoord[0]}, ${secondCoord[1]}]',
-            );
-          }
-        }
       }
 
       // 主要なジオメトリタイプを特定
       final geometryTypes = <String>{};
-      for (int i = 0; i < features.length; i++) {
-        final feature = features[i];
+      for (final feature in features) {
         final geometry = feature['geometry'] as Map<String, dynamic>?;
-
-        // ジオメトリ情報を制限付きで出力
         if (geometry != null) {
-          final geometryStr = geometry.toString();
-          final limitedGeometryStr =
-              geometryStr.length > 100
-                  ? '${geometryStr.substring(0, 100)}...'
-                  : geometryStr;
-          print(
-            '[FeatureExportConverter] フィーチャ[$i] geometry: $limitedGeometryStr',
-          );
-
           final type = geometry['type'] as String?;
           if (type != null) {
             geometryTypes.add(type);
-            print('[FeatureExportConverter] フィーチャ[$i] geometryタイプ: $type');
-          } else {
-            print('[FeatureExportConverter] フィーチャ[$i] geometryタイプがnull');
           }
-        } else {
-          print('[FeatureExportConverter] フィーチャ[$i] geometryがnull');
         }
       }
 
-      print('[FeatureExportConverter] 検出されたジオメトリタイプ: $geometryTypes');
-
       if (geometryTypes.isEmpty) {
-        print('[FeatureExportConverter] エラー: 有効なジオメトリが見つかりません');
         return ConversionResult.error('No valid geometries found');
       }
 
       // 複数のジオメトリタイプがある場合は、最初のタイプを使用
       final primaryGeometryType = geometryTypes.first;
-      print('[FeatureExportConverter] 使用するジオメトリタイプ: $primaryGeometryType');
 
       notifyProgress(0.6, 'Creating $primaryGeometryType Shapefile...');
 
       // ジオメトリタイプに応じてShapefileを生成
       switch (primaryGeometryType) {
         case 'Point':
-          print('[FeatureExportConverter] Point Shapefile作成開始');
           await _writeNativePointShapefile(features, outputPath);
           break;
         case 'LineString':
-          print('[FeatureExportConverter] LineString Shapefile作成開始');
           await _writeNativeLineShapefile(features, outputPath);
           break;
         case 'Polygon':
-          print('[FeatureExportConverter] Polygon Shapefile作成開始');
           await _writeNativePolygonShapefile(features, outputPath);
           break;
         default:
-          print(
-            '[FeatureExportConverter] エラー: サポートされていないジオメトリタイプ: $primaryGeometryType',
-          );
           return ConversionResult.error(
             'Unsupported geometry type: $primaryGeometryType',
           );
       }
-
-      print('[FeatureExportConverter] Shapefile作成完了');
 
       return ConversionResult.success(
         data: outputPath,
@@ -743,9 +495,7 @@ class FeatureExportConverter
           'outputPath': outputPath,
         },
       );
-    } catch (e, stackTrace) {
-      print('[FeatureExportConverter] ネイティブShapefileエクスポートエラー: $e');
-      print('[FeatureExportConverter] スタックトレース: $stackTrace');
+    } catch (e) {
       return ConversionResult.error('Native shapefile export failed: $e');
     }
   }
@@ -775,39 +525,19 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
     String outputPath,
   ) async {
-    print('[FeatureExportConverter] Polygon Shapefile書き込み開始');
-    print('[FeatureExportConverter] 出力パス: $outputPath');
-
     final basePath = outputPath.substring(0, outputPath.lastIndexOf('.'));
-    print('[FeatureExportConverter] ベースパス: $basePath');
 
-    try {
-      // .shpファイル（ジオメトリデータ）
-      print('[FeatureExportConverter] .shpファイル作成開始');
-      await _writeNativePolygonShpFile(features, '$basePath.shp');
-      print('[FeatureExportConverter] .shpファイル作成完了');
+    // .shpファイル（ジオメトリデータ）
+    await _writeNativePolygonShpFile(features, '$basePath.shp');
 
-      // .shxファイル（インデックス）
-      print('[FeatureExportConverter] .shxファイル作成開始');
-      await _writeNativePolygonShxFile(features, '$basePath.shx');
-      print('[FeatureExportConverter] .shxファイル作成完了');
+    // .shxファイル（インデックス）
+    await _writeNativePolygonShxFile(features, '$basePath.shx');
 
-      // .dbfファイル（属性データ）
-      print('[FeatureExportConverter] .dbfファイル作成開始');
-      await _writeNativePolygonDbfFile(features, '$basePath.dbf');
-      print('[FeatureExportConverter] .dbfファイル作成完了');
+    // .dbfファイル（属性データ）
+    await _writeNativePolygonDbfFile(features, '$basePath.dbf');
 
-      // .prjファイル（座標系定義）
-      print('[FeatureExportConverter] .prjファイル作成開始');
-      await _writePrjFile('$basePath.prj');
-      print('[FeatureExportConverter] .prjファイル作成完了');
-
-      print('[FeatureExportConverter] Polygon Shapefile書き込み完了');
-    } catch (e, stackTrace) {
-      print('[FeatureExportConverter] Polygon Shapefile書き込みエラー: $e');
-      print('[FeatureExportConverter] スタックトレース: $stackTrace');
-      rethrow;
-    }
+    // .prjファイル（座標系定義）
+    await _writePrjFile('$basePath.prj');
   }
 
   /// ネイティブLineString Shapefileの書き込み
@@ -899,10 +629,6 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
     String path,
   ) async {
-    print('[FeatureExportConverter] Polygon .shpファイル書き込み開始');
-    print('[FeatureExportConverter] パス: $path');
-    print('[FeatureExportConverter] 入力フィーチャ数: ${features.length}');
-
     final file = File(path);
     final bytes = <int>[];
 
@@ -916,27 +642,9 @@ class FeatureExportConverter
           return geometry != null && geometry['type'] == 'Polygon';
         }).toList();
 
-    print('[FeatureExportConverter] 有効なPolygonフィーチャ数: ${validFeatures.length}');
-
     if (validFeatures.isEmpty) {
-      print('[FeatureExportConverter] エラー: 有効なPolygonフィーチャがありません');
       throw Exception('No valid polygon features found');
     }
-
-    // 最初のフィーチャの構造情報を出力（簡略版）
-    final firstFeature = validFeatures.first;
-    final firstGeometry = firstFeature['geometry'] as Map<String, dynamic>;
-    final firstCoordinates = firstGeometry['coordinates'] as List;
-
-    int totalPointsInFirst = 0;
-    for (final ring in firstCoordinates) {
-      if (ring is List) totalPointsInFirst += ring.length;
-    }
-
-    print('[FeatureExportConverter] フィーチャ構造確認:');
-    print(
-      '[FeatureExportConverter]   タイプ: ${firstGeometry['type']}, リング数: ${firstCoordinates.length}, 総点数: $totalPointsInFirst',
-    );
 
     // 全体のバウンディングボックスとファイル長を正確に計算
     int totalFileLength = 50; // ヘッダーサイズ（16bit words単位）
@@ -980,14 +688,7 @@ class FeatureExportConverter
     if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
       // デフォルト値を設定（無効な座標の場合）
       minX = maxX = minY = maxY = 0.0;
-      print('[FeatureExportConverter] 警告: 有効な座標が見つからないため、デフォルトのバウンディングボックスを使用');
     }
-
-    print(
-      '[FeatureExportConverter] バウンディングボックス: ($minX, $minY) - ($maxX, $maxY)',
-    );
-    print('[FeatureExportConverter] 計算されたファイル長: $totalFileLength words');
-    print('[FeatureExportConverter] 推定ファイルサイズ: ${totalFileLength * 2}バイト');
 
     // SHPヘッダー（100バイト = 50 words）
     bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
@@ -1005,8 +706,6 @@ class FeatureExportConverter
     bytes.addAll(_writeFloat64(0.0)); // Zmax
     bytes.addAll(_writeFloat64(0.0)); // Mmin
     bytes.addAll(_writeFloat64(0.0)); // Mmax
-
-    print('[FeatureExportConverter] ヘッダー書き込み完了、レコード書き込み開始');
 
     // ポリゴンレコード
     for (int i = 0; i < validFeatures.length; i++) {
@@ -1027,10 +726,6 @@ class FeatureExportConverter
           4 + 32 + 4 + 4 + (4 * coordinates.length) + (16 * totalPoints);
       final contentLength =
           (contentSizeInBytes + 1) ~/ 2; // 16bit words単位（切り上げ）
-
-      print(
-        '[FeatureExportConverter] レコード${i + 1}: ${coordinates.length}パーツ, ${totalPoints}ポイント, ${contentLength} words',
-      );
 
       // レコードヘッダー（8バイト）
       bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
@@ -1101,21 +796,12 @@ class FeatureExportConverter
       }
 
       // ポイント配列（実際の座標データ）
-      int pointCounter = 0;
       for (final ring in coordinates) {
         if (ring is List) {
           for (final coord in ring) {
             if (coord is List && coord.length >= 2) {
               final x = (coord[0] as num).toDouble();
               final y = (coord[1] as num).toDouble();
-
-              // 最初の数個の座標をログ出力（デバッグ用）
-              if (pointCounter < 3) {
-                print(
-                  '[FeatureExportConverter] 座標[${pointCounter}]: x=$x, y=$y',
-                );
-              }
-              pointCounter++;
 
               // 有効な座標値のチェック
               final validX = x.isFinite ? x : 0.0;
@@ -1129,26 +815,7 @@ class FeatureExportConverter
       }
     }
 
-    print('[FeatureExportConverter] バイナリデータサイズ: ${bytes.length}バイト');
-    print('[FeatureExportConverter] ファイル書き込み実行中...');
-
     await file.writeAsBytes(bytes);
-
-    // ファイル書き込み確認
-    final fileExists = await file.exists();
-    final fileSize = fileExists ? await file.length() : 0;
-    print('[FeatureExportConverter] ファイル書き込み完了');
-    print('[FeatureExportConverter] ファイル存在: $fileExists, サイズ: ${fileSize}バイト');
-
-    // ファイルサイズ分析
-    if (fileSize < 200) {
-      print('[FeatureExportConverter] ⚠️ 警告: ファイルサイズが異常に小さいです');
-      print('[FeatureExportConverter] 最小期待サイズ: 100バイト（ヘッダー）+ レコードデータ');
-      print('[FeatureExportConverter] 書き込みデータサイズ: ${bytes.length}バイト');
-      print('[FeatureExportConverter] 有効フィーチャ数: ${validFeatures.length}');
-    } else {
-      print('[FeatureExportConverter] ✅ ファイルサイズ検証完了');
-    }
   }
 
   /// ネイティブLineString用.shpファイルを書き込み
@@ -1307,10 +974,6 @@ class FeatureExportConverter
           return geometry != null && geometry['type'] == 'Polygon';
         }).toList();
 
-    print(
-      '[FeatureExportConverter] Polygon .shxファイル作成: ${validFeatures.length}フィーチャ',
-    );
-
     // バウンディングボックス計算
     double minX = double.infinity, minY = double.infinity;
     double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
@@ -1395,7 +1058,6 @@ class FeatureExportConverter
     }
 
     await file.writeAsBytes(bytes);
-    print('[FeatureExportConverter] .shxファイル作成完了: ${bytes.length}バイト');
   }
 
   /// ネイティブLineString用.shxファイルを書き込み
@@ -1832,11 +1494,6 @@ class FeatureExportConverter
 
     final bytes = <int>[];
 
-    print('[FeatureExportConverter] Polygon DBF作成: ${features.length}レコード');
-    print(
-      '[FeatureExportConverter] レコード長: $recordLength, ヘッダー長: $headerLength',
-    );
-
     // DBFヘッダー（32バイト）
     bytes.add(0x03); // バージョン（dBASE III）
 
@@ -1945,7 +1602,6 @@ class FeatureExportConverter
     bytes.add(0x1A); // ファイル終了マーカー
 
     await file.writeAsBytes(bytes);
-    print('[FeatureExportConverter] Polygon .dbf作成完了: ${bytes.length}バイト');
   }
 
   /// 簡易ポリゴン面積計算（度数単位、測地面積ではない）
@@ -2024,14 +1680,10 @@ class FeatureExportConverter
       } else if (wkbData is List<dynamic>) {
         wkbBytes = wkbData.cast<int>();
       } else {
-        print('[FeatureExportConverter] WKBデータの型が不正: ${wkbData.runtimeType}');
         return null;
       }
 
       final wkbUint8List = Uint8List.fromList(wkbBytes);
-      print(
-        '[FeatureExportConverter] WKB解析開始: ${wkbUint8List.length}バイト, タイプ: $geometryType',
-      );
 
       switch (geometryType) {
         case 'Point':
@@ -2054,7 +1706,6 @@ class FeatureExportConverter
               13,
               21,
             ).getFloat64(0, Endian.little);
-            print('[FeatureExportConverter] Point WKB解析成功: [$lon, $lat]');
             return [lon, lat];
           }
           break;
@@ -2066,9 +1717,6 @@ class FeatureExportConverter
                 linePoints
                     .map((point) => [point.longitude, point.latitude])
                     .toList();
-            print(
-              '[FeatureExportConverter] LineString WKB解析成功: ${coordinates.length}個の点',
-            );
             return coordinates;
           }
           break;
@@ -2082,25 +1730,16 @@ class FeatureExportConverter
                       .map((point) => [point.longitude, point.latitude])
                       .toList();
                 }).toList();
-            print(
-              '[FeatureExportConverter] Polygon WKB解析成功: ${coordinates.length}個のリング',
-            );
             return coordinates;
           }
           break;
 
         default:
-          print(
-            '[FeatureExportConverter] サポートされていないWKBジオメトリタイプ: $geometryType',
-          );
           break;
       }
 
-      print('[FeatureExportConverter] WKB解析失敗');
       return null;
-    } catch (e, stackTrace) {
-      print('[FeatureExportConverter] WKB解析エラー: $e');
-      print('[FeatureExportConverter] スタックトレース: $stackTrace');
+    } catch (e) {
       return null;
     }
   }
@@ -2142,9 +1781,6 @@ class FeatureTransformConverter
 
           transformedFeatures.add(transformedFeature);
         } catch (e) {
-          print(
-            '[FeatureTransformConverter] Transform error for feature $i: $e',
-          );
           // エラーがあっても処理を続行
           transformedFeatures.add(input.features[i]);
         }

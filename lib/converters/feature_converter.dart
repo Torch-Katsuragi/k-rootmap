@@ -645,21 +645,38 @@ class FeatureExportConverter
       if (coordinates.length >= 2) {
         final x = (coordinates[0] as num).toDouble();
         final y = (coordinates[1] as num).toDouble();
-        minX = minX < x ? minX : x;
-        maxX = maxX > x ? maxX : x;
-        minY = minY < y ? minY : y;
-        maxY = maxY > y ? maxY : y;
+
+        // 有効な座標値のみでバウンディングボックスを計算
+        if (x.isFinite && y.isFinite) {
+          minX = minX.isFinite ? (minX < x ? minX : x) : x;
+          maxX = maxX.isFinite ? (maxX > x ? maxX : x) : x;
+          minY = minY.isFinite ? (minY < y ? minY : y) : y;
+          maxY = maxY.isFinite ? (maxY > y ? maxY : y) : y;
+        }
       }
     }
 
+    // バウンディングボックスの初期値チェック（Point用の重要な修正）
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      // デフォルト値を設定（無効な座標の場合）
+      minX = maxX = minY = maxY = 0.0;
+    }
+
+    // ファイル長を正確に計算（16bit words単位）
+    // ヘッダー: 100バイト = 50ワード
+    // 各Pointレコード: レコードヘッダー(8バイト) + シェープタイプ(4バイト) + X(8バイト) + Y(8バイト) = 28バイト = 14ワード
+    final fileLengthInWords = 50 + (validFeatures.length * 14);
+
     // SHPヘッダー（100バイト）
     bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
-    bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(50 + validFeatures.length * 14)); // ファイル長
+    bytes.addAll(List.filled(20, 0)); // 未使用（5 * 4バイト）
+    bytes.addAll(
+      _writeInt32BigEndian(fileLengthInWords),
+    ); // ファイル長（16bit words単位）
     bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
     bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
 
-    // バウンディングボックス
+    // バウンディングボックス（64バイト）
     bytes.addAll(_writeFloat64(minX));
     bytes.addAll(_writeFloat64(minY));
     bytes.addAll(_writeFloat64(maxX));
@@ -675,11 +692,14 @@ class FeatureExportConverter
       final geometry = feature['geometry'] as Map<String, dynamic>;
       final coordinates = geometry['coordinates'] as List;
 
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
-      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（Point=10ワード）
+      // レコードヘッダー（8バイト）
+      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
+      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（10ワード = 20バイト）
+
+      // レコードコンテンツ（20バイト）
       bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
-      bytes.addAll(_writeFloat64((coordinates[0] as num).toDouble()));
-      bytes.addAll(_writeFloat64((coordinates[1] as num).toDouble()));
+      bytes.addAll(_writeFloat64((coordinates[0] as num).toDouble())); // X座標
+      bytes.addAll(_writeFloat64((coordinates[1] as num).toDouble())); // Y座標
     }
 
     await file.writeAsBytes(bytes);
@@ -857,12 +877,34 @@ class FeatureExportConverter
       }
 
       // ポイント配列（実際の座標データ）
-      for (final ring in coordinates) {
-        if (ring is List) {
-          for (final coord in ring) {
-            if (coord is List && coord.length >= 2) {
-              final x = (coord[0] as num).toDouble();
-              final y = (coord[1] as num).toDouble();
+      for (int ringIndex = 0; ringIndex < coordinates.length; ringIndex++) {
+        final ring = coordinates[ringIndex] as List;
+        if (ring.isNotEmpty) {
+          // リングの順序をShapefile仕様に合わせて調整
+          final ringCoords = ring.cast<List<num>>();
+
+          print(
+            '[FeatureConverter] Polygon処理: フィーチャID=${feature['id']}, リング$ringIndex',
+          );
+          print('[FeatureConverter] 元のリング座標数: ${ringCoords.length}');
+          print(
+            '[FeatureConverter] リングタイプ: ${ringIndex == 0 ? "外側" : "内側（穴）"}',
+          );
+
+          final adjustedRing = _adjustPolygonRingOrientation(
+            ringCoords,
+            ringIndex == 0,
+          );
+
+          print('[FeatureConverter] 調整後のリング座標数: ${adjustedRing.length}');
+          print(
+            '[FeatureConverter] 座標調整: ${ringCoords.length != adjustedRing.length ? "エラー" : "正常"}',
+          );
+
+          for (final coord in adjustedRing) {
+            if (coord.length >= 2) {
+              final x = coord[0].toDouble();
+              final y = coord[1].toDouble();
 
               // 有効な座標値のチェック
               final validX = x.isFinite ? x : 0.0;
@@ -872,250 +914,10 @@ class FeatureExportConverter
               bytes.addAll(_writeFloat64(validY));
             }
           }
+
+          print('[FeatureConverter] リング$ringIndex 書き込み完了');
         }
       }
-    }
-
-    await file.writeAsBytes(bytes);
-  }
-
-  /// ネイティブLineString用.shpファイルを書き込み
-  Future<void> _writeNativeLineShpFile(
-    List<Map<String, dynamic>> features,
-    String path,
-  ) async {
-    final file = File(path);
-    final bytes = <int>[];
-
-    // バウンディングボックス計算
-    double minX = double.infinity, minY = double.infinity;
-    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
-
-    final validFeatures =
-        features.where((feature) {
-          final geometry = feature['geometry'] as Map<String, dynamic>?;
-          return geometry != null && geometry['type'] == 'LineString';
-        }).toList();
-
-    int totalFileLength = 50; // ヘッダーサイズ
-
-    for (final feature in validFeatures) {
-      final geometry = feature['geometry'] as Map<String, dynamic>;
-      final coordinates = geometry['coordinates'] as List;
-
-      for (final coord in coordinates) {
-        if (coord is List && coord.length >= 2) {
-          final x = (coord[0] as num).toDouble();
-          final y = (coord[1] as num).toDouble();
-          minX = minX < x ? minX : x;
-          maxX = maxX > x ? maxX : x;
-          minY = minY < y ? minY : y;
-          maxY = maxY > y ? maxY : y;
-        }
-      }
-
-      // レコードサイズ = ヘッダー(4) + シェープタイプ(4) + バウンディングボックス(32) + パーツ数(4) + ポイント数(4) + パーツ配列(4*1) + ポイント配列(16*ポイント数)
-      final recordSize = 4 + 4 + 32 + 4 + 4 + 4 + (16 * coordinates.length);
-      totalFileLength += (recordSize + 8) ~/ 2; // レコードヘッダー(8バイト)を含む、ワード単位
-    }
-
-    // SHPヘッダー（100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
-    bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
-
-    // バウンディングボックス
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
-
-    // ラインストリングレコード
-    for (int i = 0; i < validFeatures.length; i++) {
-      final feature = validFeatures[i];
-      final geometry = feature['geometry'] as Map<String, dynamic>;
-      final coordinates = geometry['coordinates'] as List;
-
-      final contentLength = (44 + 4 + (16 * coordinates.length)) ~/ 2; // ワード単位
-
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
-      bytes.addAll(_writeInt32BigEndian(contentLength)); // コンテンツ長
-      bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
-
-      // ラインのバウンディングボックス
-      double lineMinX = double.infinity, lineMinY = double.infinity;
-      double lineMaxX = double.negativeInfinity,
-          lineMaxY = double.negativeInfinity;
-
-      for (final coord in coordinates) {
-        if (coord is List && coord.length >= 2) {
-          final x = (coord[0] as num).toDouble();
-          final y = (coord[1] as num).toDouble();
-          lineMinX = lineMinX < x ? lineMinX : x;
-          lineMaxX = lineMaxX > x ? lineMaxX : x;
-          lineMinY = lineMinY < y ? lineMinY : y;
-          lineMaxY = lineMaxY > y ? lineMaxY : y;
-        }
-      }
-
-      bytes.addAll(_writeFloat64(lineMinX));
-      bytes.addAll(_writeFloat64(lineMinY));
-      bytes.addAll(_writeFloat64(lineMaxX));
-      bytes.addAll(_writeFloat64(lineMaxY));
-
-      // パーツ数とポイント数
-      bytes.addAll(_writeInt32LittleEndian(1)); // パーツ数（LineStringは1つのパート）
-      bytes.addAll(_writeInt32LittleEndian(coordinates.length)); // ポイント数
-
-      // パーツ配列（開始ポイントインデックス）
-      bytes.addAll(_writeInt32LittleEndian(0)); // 開始インデックス0
-
-      // ポイント配列
-      for (final coord in coordinates) {
-        if (coord is List && coord.length >= 2) {
-          bytes.addAll(_writeFloat64((coord[0] as num).toDouble()));
-          bytes.addAll(_writeFloat64((coord[1] as num).toDouble()));
-        }
-      }
-    }
-
-    await file.writeAsBytes(bytes);
-  }
-
-  /// ネイティブPoint用.shxファイルを書き込み
-  Future<void> _writeNativePointShxFile(
-    List<Map<String, dynamic>> features,
-    String path,
-  ) async {
-    final file = File(path);
-    final bytes = <int>[];
-
-    final validFeatures =
-        features.where((feature) {
-          final geometry = feature['geometry'] as Map<String, dynamic>?;
-          return geometry != null && geometry['type'] == 'Point';
-        }).toList();
-
-    // SHXヘッダー（.shpと同じ最初の100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
-    bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(50 + validFeatures.length * 4)); // ファイル長
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ
-    bytes.addAll(List.filled(64, 0)); // バウンディングボックス（簡略）
-
-    // インデックスレコード
-    int offset = 50; // ヘッダー後の開始位置
-    for (int i = 0; i < validFeatures.length; i++) {
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット
-      bytes.addAll(_writeInt32BigEndian(14)); // レコード長
-      offset += 14;
-    }
-
-    await file.writeAsBytes(bytes);
-  }
-
-  /// ネイティブPolygon用.shxファイルを書き込み
-  Future<void> _writeNativePolygonShxFile(
-    List<Map<String, dynamic>> features,
-    String path,
-  ) async {
-    final file = File(path);
-    final bytes = <int>[];
-
-    final validFeatures =
-        features.where((feature) {
-          final geometry = feature['geometry'] as Map<String, dynamic>?;
-          return geometry != null && geometry['type'] == 'Polygon';
-        }).toList();
-
-    // バウンディングボックス計算
-    double minX = double.infinity, minY = double.infinity;
-    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
-
-    for (final feature in validFeatures) {
-      final geometry = feature['geometry'] as Map<String, dynamic>;
-      final coordinates = geometry['coordinates'] as List;
-
-      for (final ring in coordinates) {
-        if (ring is List) {
-          for (final coord in ring) {
-            if (coord is List && coord.length >= 2) {
-              final x = (coord[0] as num).toDouble();
-              final y = (coord[1] as num).toDouble();
-
-              if (x.isFinite && y.isFinite) {
-                minX = minX.isFinite ? (minX < x ? minX : x) : x;
-                maxX = maxX.isFinite ? (maxX > x ? maxX : x) : x;
-                minY = minY.isFinite ? (minY < y ? minY : y) : y;
-                maxY = maxY.isFinite ? (maxY > y ? maxY : y) : y;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // バウンディングボックスの妥当性チェック
-    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
-      minX = maxX = minY = maxY = 0.0;
-    }
-
-    // SHXファイル長を計算（16bit words単位）
-    final totalFileLength =
-        50 +
-        (validFeatures.length *
-            4); // ヘッダー50 words + インデックスレコード(4 words/feature)
-
-    // SHXヘッダー（SHPと同じ最初の100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
-    bytes.addAll(List.filled(20, 0)); // 未使用フィールド
-    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長（16bit words単位）
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
-
-    // バウンディングボックス（SHPファイルと同じ）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
-
-    // インデックスレコード作成
-    int offset = 50; // ヘッダー後の開始位置（16bit words単位）
-
-    for (final feature in validFeatures) {
-      final geometry = feature['geometry'] as Map<String, dynamic>;
-      final coordinates = geometry['coordinates'] as List;
-
-      // レコードのトータルポイント数を計算
-      int totalPoints = 0;
-      for (final ring in coordinates) {
-        if (ring is List) {
-          totalPoints += ring.length;
-        }
-      }
-
-      // レコード長を正確に計算（16bit words単位）
-      final contentSizeInBytes =
-          4 + 32 + 4 + 4 + (4 * coordinates.length) + (16 * totalPoints);
-      final recordLength = (contentSizeInBytes + 1) ~/ 2; // 16bit words単位（切り上げ）
-
-      // インデックスレコード（8バイト = 4 words）
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット（16bit words単位）
-      bytes.addAll(_writeInt32BigEndian(recordLength)); // レコード長（16bit words単位）
-
-      // 次のレコードのオフセットを計算
-      offset += 4 + recordLength; // レコードヘッダー(4 words) + レコード長
     }
 
     await file.writeAsBytes(bytes);
@@ -1803,6 +1605,367 @@ class FeatureExportConverter
     } catch (e) {
       return null;
     }
+  }
+
+  /// Polygonのリング向きを調整（ESRI Shapefile仕様準拠）
+  /// 外側のリング: 時計回り（負の面積）
+  /// 内側の穴: 反時計回り（正の面積）
+  List<List<num>> _adjustPolygonRingOrientation(
+    List<List<num>> ring,
+    bool isExterior,
+  ) {
+    if (ring.length < 3) return ring; // 最低3点必要
+
+    // Shoelace公式でリングの符号付き面積を計算
+    double signedArea = 0.0;
+    final ringLength = ring.length;
+
+    for (int i = 0; i < ringLength; i++) {
+      final current = ring[i];
+      final next = ring[(i + 1) % ringLength];
+
+      if (current.length >= 2 && next.length >= 2) {
+        final x1 = current[0].toDouble();
+        final y1 = current[1].toDouble();
+        final x2 = next[0].toDouble();
+        final y2 = next[1].toDouble();
+
+        signedArea += (x1 * y2) - (x2 * y1);
+      }
+    }
+
+    signedArea = signedArea / 2.0;
+
+    // 符号で向きを判定（正：反時計回り、負：時計回り）
+    final isCounterClockwise = signedArea > 0;
+
+    print(
+      '[FeatureConverter] リング向き分析: 面積=$signedArea, 反時計回り=$isCounterClockwise',
+    );
+
+    if (isExterior) {
+      // ESRI仕様: 外側のリングは時計回り（負の面積）であるべき
+      print('[FeatureConverter] 外側リング調整: ${!isCounterClockwise ? "維持" : "反転"}');
+      return isCounterClockwise ? ring.reversed.toList() : ring;
+    } else {
+      // ESRI仕様: 内側の穴は反時計回り（正の面積）であるべき
+      print('[FeatureConverter] 内側リング調整: ${isCounterClockwise ? "維持" : "反転"}');
+      return isCounterClockwise ? ring : ring.reversed.toList();
+    }
+  }
+
+  /// ネイティブPolygon用.shxファイルを書き込み
+  Future<void> _writeNativePolygonShxFile(
+    List<Map<String, dynamic>> features,
+    String path,
+  ) async {
+    final file = File(path);
+    final bytes = <int>[];
+
+    final validFeatures =
+        features.where((feature) {
+          final geometry = feature['geometry'] as Map<String, dynamic>?;
+          return geometry != null && geometry['type'] == 'Polygon';
+        }).toList();
+
+    print('[FeatureConverter] PolygonSHX: 有効なフィーチャ数 = ${validFeatures.length}');
+
+    // バウンディングボックス計算（SHPファイルと同じ）
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+
+    for (final feature in validFeatures) {
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      for (final ring in coordinates) {
+        if (ring is List) {
+          for (final coord in ring) {
+            if (coord is List && coord.length >= 2) {
+              final x = (coord[0] as num).toDouble();
+              final y = (coord[1] as num).toDouble();
+
+              if (x.isFinite && y.isFinite) {
+                minX = minX.isFinite ? (minX < x ? minX : x) : x;
+                maxX = maxX.isFinite ? (maxX > x ? maxX : x) : x;
+                minY = minY.isFinite ? (minY < y ? minY : y) : y;
+                maxY = maxY.isFinite ? (maxY > y ? maxY : y) : y;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // バウンディングボックスの妥当性チェック
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      minX = maxX = minY = maxY = 0.0;
+    }
+
+    print(
+      '[FeatureConverter] PolygonSHX: バウンディングボックス = ($minX, $minY) to ($maxX, $maxY)',
+    );
+
+    // SHXファイル長とレコード情報を事前計算
+    final List<int> recordLengths = [];
+    int totalFileLengthWords = 50; // ヘッダー部分
+
+    for (int i = 0; i < validFeatures.length; i++) {
+      final feature = validFeatures[i];
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      // このポリゴンの総ポイント数を計算
+      int totalPoints = 0;
+      for (final ring in coordinates) {
+        if (ring is List) {
+          totalPoints += ring.length;
+        }
+      }
+
+      print(
+        '[FeatureConverter] PolygonSHX: フィーチャ$i - リング数=${coordinates.length}, 総ポイント数=$totalPoints',
+      );
+
+      // レコード長を正確に計算（16bit words単位）
+      // レコードコンテンツ = シェープタイプ(4) + バウンディングボックス(32) + パーツ数(4) + ポイント数(4) + パーツ配列(4*パーツ数) + ポイント配列(16*ポイント数)
+      final contentSizeBytes =
+          4 + 32 + 4 + 4 + (4 * coordinates.length) + (16 * totalPoints);
+      final recordLengthWords = (contentSizeBytes + 1) ~/ 2; // バイトをワードに変換（切り上げ）
+
+      recordLengths.add(recordLengthWords);
+      totalFileLengthWords += 4 + recordLengthWords; // レコードヘッダー(4ワード) + コンテンツ
+
+      print(
+        '[FeatureConverter] PolygonSHX: フィーチャ$i - レコード長=${recordLengthWords}ワード',
+      );
+    }
+
+    // SHXヘッダー（SHPファイルと同じ構造の100バイト）
+    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(List.filled(20, 0)); // 未使用フィールド（5 * 4バイト）
+    bytes.addAll(
+      _writeInt32BigEndian(50 + validFeatures.length * 4),
+    ); // SHXファイル長（ヘッダー + インデックスレコード数）
+    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(_writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
+
+    // バウンディングボックス（SHPファイルと同じ64バイト）
+    bytes.addAll(_writeFloat64(minX));
+    bytes.addAll(_writeFloat64(minY));
+    bytes.addAll(_writeFloat64(maxX));
+    bytes.addAll(_writeFloat64(maxY));
+    bytes.addAll(_writeFloat64(0.0)); // Zmin
+    bytes.addAll(_writeFloat64(0.0)); // Zmax
+    bytes.addAll(_writeFloat64(0.0)); // Mmin
+    bytes.addAll(_writeFloat64(0.0)); // Mmax
+
+    // インデックスレコード作成（各8バイト）
+    int offset = 50; // ヘッダー後の開始位置（16bit words単位）
+
+    for (int i = 0; i < validFeatures.length; i++) {
+      final recordLength = recordLengths[i];
+
+      print(
+        '[FeatureConverter] PolygonSHX: フィーチャ$i - オフセット=${offset}ワード, 長さ=${recordLength}ワード',
+      );
+
+      // インデックスレコード（8バイト = 4ワード）
+      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット（16bit words単位）
+      bytes.addAll(_writeInt32BigEndian(recordLength)); // レコード長（16bit words単位）
+
+      // 次のレコードのオフセットを計算
+      offset += 4 + recordLength; // レコードヘッダー(4ワード) + レコード長
+    }
+
+    print(
+      '[FeatureConverter] PolygonSHX: 書き込み完了 - SHXファイルサイズ=${bytes.length}バイト',
+    );
+
+    await file.writeAsBytes(bytes);
+  }
+
+  /// ネイティブPoint用.shxファイルを書き込み
+  Future<void> _writeNativePointShxFile(
+    List<Map<String, dynamic>> features,
+    String path,
+  ) async {
+    final file = File(path);
+    final bytes = <int>[];
+
+    final validFeatures =
+        features.where((feature) {
+          final geometry = feature['geometry'] as Map<String, dynamic>?;
+          return geometry != null && geometry['type'] == 'Point';
+        }).toList();
+
+    // バウンディングボックス計算（SHPファイルと同じ）
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+
+    for (final feature in validFeatures) {
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+      if (coordinates.length >= 2) {
+        final x = (coordinates[0] as num).toDouble();
+        final y = (coordinates[1] as num).toDouble();
+
+        if (x.isFinite && y.isFinite) {
+          minX = minX.isFinite ? (minX < x ? minX : x) : x;
+          maxX = maxX.isFinite ? (maxX > x ? maxX : x) : x;
+          minY = minY.isFinite ? (minY < y ? minY : y) : y;
+          maxY = maxY.isFinite ? (maxY > y ? maxY : y) : y;
+        }
+      }
+    }
+
+    // バウンディングボックスの初期値チェック
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      minX = maxX = minY = maxY = 0.0;
+    }
+
+    // SHXファイル長を正確に計算（16bit words単位）
+    // ヘッダー: 100バイト = 50ワード
+    // 各インデックスレコード: 8バイト = 4ワード
+    final fileLengthInWords = 50 + (validFeatures.length * 4);
+
+    // SHXヘッダー（SHPファイルと同じ構造の100バイト）
+    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(List.filled(20, 0)); // 未使用（5 * 4バイト）
+    bytes.addAll(
+      _writeInt32BigEndian(fileLengthInWords),
+    ); // ファイル長（16bit words単位）
+    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
+
+    // バウンディングボックス（SHPファイルと同じ64バイト）
+    bytes.addAll(_writeFloat64(minX));
+    bytes.addAll(_writeFloat64(minY));
+    bytes.addAll(_writeFloat64(maxX));
+    bytes.addAll(_writeFloat64(maxY));
+    bytes.addAll(_writeFloat64(0.0)); // Zmin
+    bytes.addAll(_writeFloat64(0.0)); // Zmax
+    bytes.addAll(_writeFloat64(0.0)); // Mmin
+    bytes.addAll(_writeFloat64(0.0)); // Mmax
+
+    // インデックスレコード（各8バイト）
+    int offset = 50; // ヘッダー後の開始位置（16bit words単位）
+    for (int i = 0; i < validFeatures.length; i++) {
+      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット（16bit words単位）
+      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（10ワード = 20バイト）
+      offset += 14; // 次のレコードへ（レコードヘッダー4ワード + コンテンツ10ワード）
+    }
+
+    await file.writeAsBytes(bytes);
+  }
+
+  /// ネイティブLineString用.shpファイルを書き込み
+  Future<void> _writeNativeLineShpFile(
+    List<Map<String, dynamic>> features,
+    String path,
+  ) async {
+    final file = File(path);
+    final bytes = <int>[];
+
+    // バウンディングボックス計算
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+
+    final validFeatures =
+        features.where((feature) {
+          final geometry = feature['geometry'] as Map<String, dynamic>?;
+          return geometry != null && geometry['type'] == 'LineString';
+        }).toList();
+
+    int totalFileLength = 50; // ヘッダーサイズ
+
+    for (final feature in validFeatures) {
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      for (final coord in coordinates) {
+        if (coord is List && coord.length >= 2) {
+          final x = (coord[0] as num).toDouble();
+          final y = (coord[1] as num).toDouble();
+          minX = minX < x ? minX : x;
+          maxX = maxX > x ? maxX : x;
+          minY = minY < y ? minY : y;
+          maxY = maxY > y ? maxY : y;
+        }
+      }
+
+      // レコードサイズ = ヘッダー(4) + シェープタイプ(4) + バウンディングボックス(32) + パーツ数(4) + ポイント数(4) + パーツ配列(4*1) + ポイント配列(16*ポイント数)
+      final recordSize = 4 + 4 + 32 + 4 + 4 + 4 + (16 * coordinates.length);
+      totalFileLength += (recordSize + 8) ~/ 2; // レコードヘッダー(8バイト)を含む、ワード単位
+    }
+
+    // SHPヘッダー（100バイト）
+    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(List.filled(20, 0)); // 未使用
+    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長
+    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
+
+    // バウンディングボックス
+    bytes.addAll(_writeFloat64(minX));
+    bytes.addAll(_writeFloat64(minY));
+    bytes.addAll(_writeFloat64(maxX));
+    bytes.addAll(_writeFloat64(maxY));
+    bytes.addAll(_writeFloat64(0.0)); // Zmin
+    bytes.addAll(_writeFloat64(0.0)); // Zmax
+    bytes.addAll(_writeFloat64(0.0)); // Mmin
+    bytes.addAll(_writeFloat64(0.0)); // Mmax
+
+    // ラインストリングレコード
+    for (int i = 0; i < validFeatures.length; i++) {
+      final feature = validFeatures[i];
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      final contentLength = (44 + 4 + (16 * coordinates.length)) ~/ 2; // ワード単位
+
+      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
+      bytes.addAll(_writeInt32BigEndian(contentLength)); // コンテンツ長
+      bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
+
+      // ラインのバウンディングボックス
+      double lineMinX = double.infinity, lineMinY = double.infinity;
+      double lineMaxX = double.negativeInfinity,
+          lineMaxY = double.negativeInfinity;
+
+      for (final coord in coordinates) {
+        if (coord is List && coord.length >= 2) {
+          final x = (coord[0] as num).toDouble();
+          final y = (coord[1] as num).toDouble();
+          lineMinX = lineMinX < x ? lineMinX : x;
+          lineMaxX = lineMaxX > x ? lineMaxX : x;
+          lineMinY = lineMinY < y ? lineMinY : y;
+          lineMaxY = lineMaxY > y ? lineMaxY : y;
+        }
+      }
+
+      bytes.addAll(_writeFloat64(lineMinX));
+      bytes.addAll(_writeFloat64(lineMinY));
+      bytes.addAll(_writeFloat64(lineMaxX));
+      bytes.addAll(_writeFloat64(lineMaxY));
+
+      // パーツ数とポイント数
+      bytes.addAll(_writeInt32LittleEndian(1)); // パーツ数（LineStringは1つのパート）
+      bytes.addAll(_writeInt32LittleEndian(coordinates.length)); // ポイント数
+
+      // パーツ配列（開始ポイントインデックス）
+      bytes.addAll(_writeInt32LittleEndian(0)); // 開始インデックス0
+
+      // ポイント配列
+      for (final coord in coordinates) {
+        if (coord is List && coord.length >= 2) {
+          bytes.addAll(_writeFloat64((coord[0] as num).toDouble()));
+          bytes.addAll(_writeFloat64((coord[1] as num).toDouble()));
+        }
+      }
+    }
+
+    await file.writeAsBytes(bytes);
   }
 }
 

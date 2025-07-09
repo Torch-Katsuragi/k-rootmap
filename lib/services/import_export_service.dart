@@ -928,217 +928,96 @@ class ImportExportService {
         '[ImportExportService] フィーチャ変換中[$index]: ID=$featureId, Name=$featureName',
       );
 
-      // フィーチャ詳細（制限付きで出力）
-      final featureGeometry = feature['geometry'] as Map<String, dynamic>?;
-      final featureMetadata = feature['metadata'] as Map<String, dynamic>?;
-
-      if (featureGeometry != null) {
-        final geometryType = featureGeometry['type'] ?? 'unknown';
-        final coordinates = featureGeometry['coordinates'];
-        final coordCount = coordinates is List ? coordinates.length : 0;
-        print(
-          '[ImportExportService] フィーチャ詳細[$index]: $geometryType, 座標数=$coordCount',
-        );
-
-        // 座標データの構造を詳しく確認
-        if (coordinates is List && coordinates.isNotEmpty) {
-          if (coordinates.first is List) {
-            final firstRing = coordinates.first as List;
-            print('[ImportExportService] 最初のリング/線の点数: ${firstRing.length}');
-          } else {
-            print('[ImportExportService] 直接座標: $coordinates');
-          }
-        } else {
-          print('[ImportExportService] 座標データが空またはnull');
-        }
-      } else {
-        print('[ImportExportService] フィーチャ詳細[$index]: ジオメトリなし');
-      }
-
-      // メタデータの確認
-      if (featureMetadata != null) {
-        final hasGeom = featureMetadata.containsKey('geom');
-        final geomType =
-            featureMetadata['geom']?.runtimeType.toString() ?? 'null';
-        print(
-          '[ImportExportService] メタデータ詳細[$index]: geomフィールド=$hasGeom, 型=$geomType',
-        );
-      }
-
       Map<String, dynamic>? geometry;
       Map<String, dynamic> metadata = {
         'name': featureName,
         'description': featureDescription,
       };
 
-      // 既存のGeoJSONデータがある場合は、それを優先的に使用
-      if (featureGeometry != null &&
-          featureGeometry['type'] != null &&
-          featureGeometry['coordinates'] != null) {
-        final coordinates = featureGeometry['coordinates'];
-
-        // 座標データが空でない場合は、既存のジオメトリを使用
-        if (coordinates is List && coordinates.isNotEmpty) {
-          bool hasValidCoordinates = false;
-
-          // 座標データの有効性を確認
-          if (coordinates.first is List) {
-            // 複数次元の場合（Polygon、LineString）
-            for (final coord in coordinates) {
-              if (coord is List && coord.isNotEmpty) {
-                hasValidCoordinates = true;
-                break;
-              }
-            }
-          } else {
-            // 単一次元の場合（Point）
-            hasValidCoordinates = coordinates.length >= 2;
-          }
-
-          if (hasValidCoordinates) {
-            geometry = featureGeometry;
+      // 既存の解析済み座標データを直接使用（points/lines/polygons）
+      switch (geometryType) {
+        case GeometryType.point:
+          final points = feature['points'] as List<LatLng>?;
+          if (points != null && points.isNotEmpty) {
+            final point = points.first;
+            geometry = {
+              'type': 'Point',
+              'coordinates': [point.longitude, point.latitude],
+            };
             print(
-              '[ImportExportService] 既存のGeoJSONジオメトリを使用: ${geometry!['type']}',
+              '[ImportExportService] Point geometry作成: [${point.longitude}, ${point.latitude}]',
             );
           } else {
-            print('[ImportExportService] 既存のGeoJSONジオメトリが無効、WKB解析にフォールバック');
+            print('[ImportExportService] フィーチャ[$index]: pointsデータが見つかりません');
           }
-        } else {
-          print('[ImportExportService] 既存のGeoJSONジオメトリが空、WKB解析にフォールバック');
-        }
-      }
+          break;
 
-      // 既存のジオメトリが無効またはない場合は、WKBデータから解析
-      if (geometry == null) {
-        print('[ImportExportService] WKBデータから座標解析を開始');
+        case GeometryType.linestring:
+          final lines = feature['lines'] as List<List<LatLng>>?;
+          if (lines != null && lines.isNotEmpty) {
+            // 最初の線分を使用（複数の線分がある場合は最初のもの）
+            final linePoints = lines.first;
+            final coordinates =
+                linePoints
+                    .map((point) => [point.longitude, point.latitude])
+                    .toList();
 
-        switch (geometryType) {
-          case GeometryType.point:
-            // WKBデータから座標を解析
-            if (feature['metadata'] != null &&
-                feature['metadata']['geom'] != null) {
-              print('[ImportExportService] Point WKB解析開始');
-              try {
-                final wkbData = feature['metadata']['geom'] as List<int>;
-                final wkbBytes = Uint8List.fromList(wkbData);
-                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
-
-                // Point用のWKB解析（簡易実装）
-                final pureWkb =
-                    wkbBytes.length > 8 &&
-                            wkbBytes[0] == 0x47 &&
-                            wkbBytes[1] == 0x50
-                        ? wkbBytes.sublist(8)
-                        : wkbBytes;
-
-                if (pureWkb.length >= 21) {
-                  // WKB Point最小サイズ
-                  final lon = ByteData.sublistView(
-                    pureWkb,
-                    5,
-                    13,
-                  ).getFloat64(0, Endian.little);
-                  final lat = ByteData.sublistView(
-                    pureWkb,
-                    13,
-                    21,
-                  ).getFloat64(0, Endian.little);
-
-                  geometry = {
-                    'type': 'Point',
-                    'coordinates': [lon, lat],
-                  };
-                  print('[ImportExportService] Point geometry作成: [$lon, $lat]');
-                } else {
-                  print('[ImportExportService] Point WKBデータサイズ不足');
-                }
-              } catch (e) {
-                print('[ImportExportService] Point WKB解析エラー: $e');
-              }
-            } else {
-              print('[ImportExportService] Point WKBデータが見つかりません');
-            }
-            break;
-
-          case GeometryType.linestring:
-            // WKBデータから座標を解析
-            if (feature['metadata'] != null &&
-                feature['metadata']['geom'] != null) {
-              print('[ImportExportService] LineString WKB解析開始');
-              try {
-                final wkbData = feature['metadata']['geom'] as List<int>;
-                final wkbBytes = Uint8List.fromList(wkbData);
-                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
-
-                final linePoints = parseWkbLineString(wkbBytes);
-                print('[ImportExportService] WKB解析結果: ${linePoints.length}個の点');
-
-                if (linePoints.isNotEmpty) {
-                  final coordinates =
-                      linePoints
-                          .map((point) => [point.longitude, point.latitude])
-                          .toList();
-
-                  geometry = {'type': 'LineString', 'coordinates': coordinates};
-                  print(
-                    '[ImportExportService] LineString geometry作成: ${coordinates.length}個の座標',
-                  );
-                } else {
-                  print('[ImportExportService] WKB解析で点が見つかりません');
-                }
-              } catch (e) {
-                print('[ImportExportService] LineString WKB解析エラー: $e');
-              }
-            } else {
-              print('[ImportExportService] LineString WKBデータが見つかりません');
-            }
-            break;
-
-          case GeometryType.polygon:
-            // WKBデータから座標を解析
-            if (feature['metadata'] != null &&
-                feature['metadata']['geom'] != null) {
-              print('[ImportExportService] Polygon WKB解析開始');
-              try {
-                final wkbData = feature['metadata']['geom'] as List<int>;
-                final wkbBytes = Uint8List.fromList(wkbData);
-                print('[ImportExportService] WKBデータサイズ: ${wkbBytes.length}バイト');
-
-                final polygonRings = parseWkbPolygon(wkbBytes);
-                print(
-                  '[ImportExportService] WKB解析結果: ${polygonRings.length}個のリング',
-                );
-
-                if (polygonRings.isNotEmpty) {
-                  final coordinates =
-                      polygonRings.map((ring) {
-                        print('[ImportExportService] リング変換: ${ring.length}個の点');
-                        return ring
-                            .map((point) => [point.longitude, point.latitude])
-                            .toList();
-                      }).toList();
-
-                  geometry = {'type': 'Polygon', 'coordinates': coordinates};
-                  print(
-                    '[ImportExportService] Polygon geometry作成: ${coordinates.length}個のリング',
-                  );
-                } else {
-                  print('[ImportExportService] WKB解析でリングが見つかりません');
-                }
-              } catch (e) {
-                print('[ImportExportService] WKB解析エラー: $e');
-              }
-            } else {
-              print('[ImportExportService] WKBデータが見つかりません');
-            }
-            break;
-
-          default:
+            geometry = {'type': 'LineString', 'coordinates': coordinates};
             print(
-              '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
+              '[ImportExportService] LineString geometry作成: ${coordinates.length}個の座標',
             );
-            continue;
-        }
+          } else {
+            print('[ImportExportService] フィーチャ[$index]: linesデータが見つかりません');
+          }
+          break;
+
+        case GeometryType.polygon:
+          final polygons = feature['polygons'] as List<List<LatLng>>?;
+          if (polygons != null && polygons.isNotEmpty) {
+            // 全てのリングを処理（外側リング + 穴）
+            final List<List<List<double>>> allRings = [];
+
+            print(
+              '[ImportExportService] Polygon処理: ${polygons.length}個のリングを検出',
+            );
+
+            for (int ringIndex = 0; ringIndex < polygons.length; ringIndex++) {
+              final ring = polygons[ringIndex];
+              final ringCoordinates =
+                  ring
+                      .map((point) => [point.longitude, point.latitude])
+                      .toList();
+
+              // ポリゴンは閉じている必要がある
+              if (ringCoordinates.isNotEmpty) {
+                final firstPoint = ringCoordinates.first;
+                final lastPoint = ringCoordinates.last;
+                if (firstPoint[0] != lastPoint[0] ||
+                    firstPoint[1] != lastPoint[1]) {
+                  ringCoordinates.add(firstPoint); // リングを閉じる
+                }
+              }
+
+              allRings.add(ringCoordinates);
+              print(
+                '[ImportExportService] リング$ringIndex処理完了: ${ringCoordinates.length}個の座標 (${ringIndex == 0 ? "外側" : "穴"})',
+              );
+            }
+
+            geometry = {'type': 'Polygon', 'coordinates': allRings};
+            print(
+              '[ImportExportService] Polygon geometry作成: ${allRings.length}個のリング（外側1 + 穴${allRings.length - 1}）',
+            );
+          } else {
+            print('[ImportExportService] フィーチャ[$index]: polygonsデータが見つかりません');
+          }
+          break;
+
+        default:
+          print(
+            '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
+          );
+          continue;
       }
 
       if (geometry != null) {
@@ -3065,20 +2944,37 @@ class ImportExportService {
         case GeometryType.polygon:
           final polygons = feature['polygons'] as List<List<LatLng>>?;
           if (polygons != null && polygons.isNotEmpty) {
-            return {
-              'type': 'Polygon',
-              'coordinates':
-                  polygons
-                      .map(
-                        (ring) =>
-                            ring
-                                .map(
-                                  (point) => [point.longitude, point.latitude],
-                                )
-                                .toList(),
-                      )
-                      .toList(),
-            };
+            // 全てのリングを処理（外側リング + 穴）
+            final List<List<List<double>>> allRings = [];
+
+            print(
+              '[ImportExportService] Polygon処理: ${polygons.length}個のリングを検出',
+            );
+
+            for (int ringIndex = 0; ringIndex < polygons.length; ringIndex++) {
+              final ring = polygons[ringIndex];
+              final ringCoordinates =
+                  ring
+                      .map((point) => [point.longitude, point.latitude])
+                      .toList();
+
+              // ポリゴンは閉じている必要がある
+              if (ringCoordinates.isNotEmpty) {
+                final firstPoint = ringCoordinates.first;
+                final lastPoint = ringCoordinates.last;
+                if (firstPoint[0] != lastPoint[0] ||
+                    firstPoint[1] != lastPoint[1]) {
+                  ringCoordinates.add(firstPoint); // リングを閉じる
+                }
+              }
+
+              allRings.add(ringCoordinates);
+              print(
+                '[ImportExportService] リング$ringIndex処理完了: ${ringCoordinates.length}個の座標 (${ringIndex == 0 ? "外側" : "穴"})',
+              );
+            }
+
+            return {'type': 'Polygon', 'coordinates': allRings};
           }
           break;
         default:

@@ -1246,9 +1246,9 @@ class PolygonFeatureNode extends FeatureNode {
     );
     String areaStr;
     if (areaM2 >= 10000) {
-      areaStr = '${(areaM2 / 10000).toStringAsFixed(2)} ha';
+      areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
     } else {
-      areaStr = '${areaM2.toStringAsFixed(2)} m²';
+      areaStr = '${areaM2.toStringAsFixed(3)} m²';
     }
     // 全リングの頂点数の合計を計算（閉じたリングの最後の点を除く）
     final totalVertices = polygon.fold<int>(0, (sum, ring) {
@@ -1279,9 +1279,9 @@ class PolygonFeatureNode extends FeatureNode {
     );
     String areaStr;
     if (areaM2 >= 10000) {
-      areaStr = '${(areaM2 / 10000).toStringAsFixed(2)} ha';
+      areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
     } else {
-      areaStr = '${areaM2.toStringAsFixed(2)} m²';
+      areaStr = '${areaM2.toStringAsFixed(3)} m²';
     }
     details['area'] = areaStr;
 

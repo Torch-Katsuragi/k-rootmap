@@ -2069,9 +2069,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             );
                         if (areaM2 >= 10000) {
                           previewText =
-                              'Area: ${(areaM2 / 10000).toStringAsFixed(1)} ha';
+                              'Area: ${(areaM2 / 10000).toStringAsFixed(3)} ha';
                         } else {
-                          previewText = 'Area: ${areaM2.toStringAsFixed(2)} m?';
+                          previewText = 'Area: ${areaM2.toStringAsFixed(3)} m?';
                         }
                         previewOffset = latLngToOffset(centroid);
                       }

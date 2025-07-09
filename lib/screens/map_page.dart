@@ -1195,6 +1195,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _updateFeatures();
   }
 
+  /// マップの強制更新処理（外部から呼び出し可能）
+  /// フィーチャの追加・更新・削除後にマップ表示を強制的にリフレッシュ
+  void forceMapRefresh() {
+    _forceMapRefresh();
+  }
+
   /// コンパス方向付きの現在位置マーカーを構築
   Widget _buildLocationMarkerWithCompass() {
     return Stack(

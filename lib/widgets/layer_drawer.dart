@@ -112,9 +112,9 @@ class _LayerDrawerState extends State<LayerDrawer> {
       // GlobalConfigを通じてマップページの更新をトリガー
       final mapState = GlobalConfig.instance.mapState;
       if (mapState != null && mapState.mounted) {
-        // マップページのrefreshFeaturesメソッドを呼び出し
-        (mapState as dynamic).refreshFeatures();
-        print('[LayerDrawer] マップフィーチャ更新をトリガーしました');
+        // レイヤ削除時は強制的にマップを更新（フィーチャキャッシュクリア）
+        (mapState as dynamic).forceMapRefresh();
+        print('[LayerDrawer] マップ強制更新をトリガーしました');
       } else {
         print('[LayerDrawer] マップページが見つからないか、マウントされていません');
       }
@@ -448,7 +448,14 @@ class _LayerDrawerState extends State<LayerDrawer> {
                 ),
           );
           if (confirm == true) {
+            // 削除されるPhotoNodeが選択されている場合は選択状態をクリア
+            GlobalConfig.instance.selectedFeatures.remove(node);
+
             await node.dispose();
+
+            // マップのフィーチャキャッシュを更新
+            _triggerMapRefresh();
+
             widget.setStateCallback(() {});
           }
         } else if (value == 'details') {
@@ -582,8 +589,31 @@ class _LayerDrawerState extends State<LayerDrawer> {
                         );
                         if (confirm == true) {
                           try {
+                            // GeoPackageが削除されるとそのレイヤも削除される
+                            // 削除されるGeoPackageのレイヤが選択されている場合は選択状態をクリア
+                            final layersToRemove =
+                                node.children.whereType<LayerNode>().toList();
+                            for (final layer in layersToRemove) {
+                              if (GlobalConfig.instance.selectedLayerNode ==
+                                  layer) {
+                                GlobalConfig.instance.selectedLayerNode = null;
+                              }
+                              // そのレイヤのフィーチャが選択されている場合も選択状態をクリア
+                              GlobalConfig.instance.selectedFeatures
+                                  .removeWhere((feature) {
+                                    if (feature is FeatureNode) {
+                                      return feature.parent == layer;
+                                    }
+                                    return false;
+                                  });
+                            }
+
                             // geopackageノード削除（ファイルも含めて削除）
                             await node.dispose();
+
+                            // マップのフィーチャキャッシュを更新
+                            _triggerMapRefresh();
+
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('${node.name} を削除しました')),
@@ -707,7 +737,26 @@ class _LayerDrawerState extends State<LayerDrawer> {
                   ),
             );
             if (confirm == true) {
+              // 削除されるレイヤが選択されている場合は選択状態をクリア
+              if (GlobalConfig.instance.selectedLayerNode == node) {
+                GlobalConfig.instance.selectedLayerNode = null;
+              }
+
+              // 削除されるレイヤのフィーチャが選択されている場合は選択状態をクリア
+              GlobalConfig.instance.selectedFeatures.removeWhere((feature) {
+                if (feature is FeatureNode) {
+                  return feature.parent == node;
+                }
+                return false;
+              });
+
+              // レイヤを削除
               node.dispose();
+
+              // マップのフィーチャキャッシュを更新
+              _triggerMapRefresh();
+
+              // UI更新
               widget.setStateCallback(() {});
             }
           } else if (value == 'attributes') {

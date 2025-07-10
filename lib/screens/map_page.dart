@@ -16,6 +16,8 @@ import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer/layer_drawer.dart';
+import '../widgets/resizable_side_panel.dart';
+import '../widgets/attribute_table_widget.dart';
 import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
 import '../widgets/compass_fan_painter.dart'; // コンパス扇形描画用
 import '../utils/global_config.dart';
@@ -93,6 +95,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   final ForegroundServiceManager _serviceManager = ForegroundServiceManager();
   bool _isGpsTrackingServiceRunning = false;
   LatLng? _lastTrackedPosition; // フォアグラウンドサービスからの最新位置
+
+  // 属性テーブル表示状態
+  bool _showAttributeTable = false;
+  double _attributeTableWidth = 400;
+  LayerNode? _attributeTableLayer;
+  List<Map<String, dynamic>> _attributeTableFeatures = [];
   Timer? _serviceStatusUpdateTimer;
 
   // GPS追跡アニメーション用変数
@@ -1305,6 +1313,145 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         });
   }
 
+  /// 属性テーブルを開く
+  Future<void> _openAttributeTable([LayerNode? targetLayer]) async {
+    try {
+      // ターゲットレイヤーが指定されていない場合は選択中のレイヤーを使用
+      final layer = targetLayer ?? GlobalConfig.instance.selectedLayerNode;
+
+      if (layer == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('レイヤーが選択されていません'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      print('[MAP] 属性テーブルを開く: ${layer.name}');
+
+      // フィーチャデータを取得
+      final features = await _loadAttributeTableFeatures(layer);
+
+      setState(() {
+        _attributeTableLayer = layer;
+        _attributeTableFeatures = features;
+        _showAttributeTable = true;
+        // レイヤドロワーを閉じる（属性テーブルと併用しない）
+        drawerOpen = false;
+      });
+
+      print('[MAP] 属性テーブル表示開始: ${features.length}件のフィーチャ');
+    } catch (e) {
+      print('[MAP] 属性テーブル表示エラー: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('属性テーブルの表示に失敗しました: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// 属性テーブルを閉じる
+  void _closeAttributeTable() {
+    setState(() {
+      _showAttributeTable = false;
+      _attributeTableLayer = null;
+      _attributeTableFeatures = [];
+    });
+    print('[MAP] 属性テーブル表示終了');
+  }
+
+  /// 属性テーブル用のフィーチャデータを読み込み
+  Future<List<Map<String, dynamic>>> _loadAttributeTableFeatures(
+    LayerNode layer,
+  ) async {
+    try {
+      print('[MAP] フィーチャデータ読み込み開始: ${layer.name}');
+
+      // レイヤーからフィーチャノードを取得
+      final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+      List<FeatureNode> features;
+
+      if (layerFeatures.isNotEmpty) {
+        // childrenにFeatureNodeがある場合は直接使用
+        features = layerFeatures;
+        print('[MAP] キャッシュから${features.length}件のフィーチャを取得');
+      } else {
+        // childrenが空の場合はDBから読み込み
+        final dbFeatures = await layer.features;
+        features = dbFeatures.whereType<FeatureNode>().toList();
+        print('[MAP] DBから${features.length}件のフィーチャを読み込み');
+
+        // DBから読み込んだFeatureNodeをlayerのchildrenに追加
+        for (final feature in features) {
+          layer.addChild(feature);
+        }
+      }
+
+      // フィーチャデータをMap形式に変換
+      final featureList = <Map<String, dynamic>>[];
+      for (final feature in features) {
+        final featureMap = <String, dynamic>{
+          'id': feature.rowId,
+          'geometry': {
+            'type': feature.runtimeType
+                .toString()
+                .replaceAll('Node', '')
+                .replaceAll('Layer', '')
+                .replaceAll('Feature', ''),
+            'coordinates': [], // 座標は簡略化
+          },
+          'metadata': feature.metadata,
+        };
+        featureList.add(featureMap);
+      }
+
+      print('[MAP] フィーチャデータ変換完了: ${featureList.length}件');
+      return featureList;
+    } catch (e) {
+      print('[MAP] フィーチャデータ読み込みエラー: $e');
+      return [];
+    }
+  }
+
+  /// 属性テーブルでフィーチャが選択されたときの処理
+  void _onAttributeTableFeatureSelected(Map<String, dynamic> feature) {
+    try {
+      print('[MAP] 属性テーブルでフィーチャ選択: ${feature['id']}');
+
+      final featureId = feature['id'] as int;
+      if (_attributeTableLayer == null) return;
+
+      // 対応するFeatureNodeを検索
+      final featureNode = _attributeTableLayer!.children
+          .whereType<FeatureNode>()
+          .firstWhere(
+            (f) => f.rowId == featureId,
+            orElse:
+                () =>
+                    _attributeTableLayer!.children
+                        .whereType<FeatureNode>()
+                        .first,
+          );
+
+      // 地図上でフィーチャを選択状態にする
+      GlobalConfig.instance.selectedFeatures = [featureNode];
+
+      // 地図を更新
+      setState(() {});
+
+      // 地図をフィーチャの位置にジャンプ
+      _mapController.move(featureNode.centroid, _mapController.camera.zoom);
+
+      print('[MAP] フィーチャ選択とマップジャンプ完了');
+    } catch (e) {
+      print('[MAP] フィーチャ選択処理エラー: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final folderTree = GlobalConfig.instance.folderTree;
@@ -1346,6 +1493,21 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   builder: (context) => const GpsSettingsScreen(),
                 ),
               );
+            },
+          ),
+          // 属性テーブルボタン
+          IconButton(
+            icon: Icon(
+              Icons.table_view,
+              color: _showAttributeTable ? Colors.blue : null,
+            ),
+            tooltip: _showAttributeTable ? '属性テーブルを閉じる' : '属性テーブルを開く',
+            onPressed: () {
+              if (_showAttributeTable) {
+                _closeAttributeTable();
+              } else {
+                _openAttributeTable();
+              }
             },
           ),
           IconButton(
@@ -2200,69 +2362,122 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             ),
           ),
           // --- Custom Drawer ---
+          // Layer Drawer Panel
           if (drawerOpen)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: drawerWidth.clamp(200, maxDrawerWidth),
-              child: Material(
-                elevation: 0,
-                color: Colors.transparent,
-                child: Row(
-                  children: [
-                    // Left drag handle (resizable)
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: (details) {
-                        setState(() {
-                          drawerWidth -= details.delta.dx;
-                          if (drawerWidth < minDrawerWidth) {
-                            drawerOpen = false;
-                          } else if (drawerWidth > maxDrawerWidth) {
-                            drawerWidth = maxDrawerWidth;
-                          }
-                        });
-                      },
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.resizeColumn,
-                        child: Container(
-                          width: 28,
-                          color: Colors.black12, // Semi-transparent black
-                          child: const Center(
-                            child: VerticalDivider(width: 2, thickness: 2),
-                          ),
+            ResizableSidePanel(
+              initialWidth: drawerWidth,
+              minWidth: minDrawerWidth,
+              maxWidthRatio: 0.67,
+              initiallyOpen: drawerOpen,
+              onOpenChanged: (isOpen) {
+                setState(() {
+                  drawerOpen = isOpen;
+                });
+              },
+              onWidthChanged: (width) {
+                setState(() {
+                  drawerWidth = width;
+                });
+              },
+              child: LayerDrawer(
+                currentNode: _currentNode,
+                onDirChanged: (node) {
+                  setState(() {
+                    _currentNode = node;
+                  });
+                },
+                setStateCallback: (fn) => setState(fn),
+                onJumpTo: (latLng) {
+                  // Maintain current zoom level and move center
+                  _mapController.move(latLng, _mapController.camera.zoom);
+                },
+                onStartAppendMode: (feature) {
+                  // 追記モード開始処理
+                  _startAppendMode(feature);
+                },
+              ),
+            ),
+
+          // Attribute Table Panel
+          if (_showAttributeTable && _attributeTableLayer != null)
+            ResizableSidePanel(
+              initialWidth: _attributeTableWidth,
+              minWidth: 300,
+              maxWidthRatio: 0.8,
+              initiallyOpen: _showAttributeTable,
+              onOpenChanged: (isOpen) {
+                if (!isOpen) {
+                  _closeAttributeTable();
+                }
+              },
+              onWidthChanged: (width) {
+                setState(() {
+                  _attributeTableWidth = width;
+                });
+              },
+              child: AttributeTableSidePanel(
+                layer: _attributeTableLayer!,
+                features: _attributeTableFeatures,
+                onFeatureSelected: _onAttributeTableFeatureSelected,
+                onAttributeChanged: (feature, field, value) {
+                  // 属性変更時の処理（必要に応じて追加）
+                  print('[MAP] 属性変更: $field = $value');
+                },
+                onFeatureDeleted: (feature) async {
+                  // フィーチャ削除時の処理
+                  try {
+                    final featureId = feature['id'] as int;
+                    final layerNode = _attributeTableLayer! as LayerNode;
+
+                    // 対応するFeatureNodeを検索
+                    FeatureNode? featureNode;
+                    try {
+                      featureNode = layerNode.children
+                          .whereType<FeatureNode>()
+                          .firstWhere((f) => f.rowId == featureId);
+                    } catch (e) {
+                      featureNode = null;
+                    }
+
+                    if (featureNode != null) {
+                      // フィーチャを削除（データベースからも削除される）
+                      await featureNode.dispose();
+
+                      // レイヤーノードから削除
+                      layerNode.children.remove(featureNode);
+
+                      // 成功メッセージ
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('フィーチャが削除されました: ID $featureId'),
+                          backgroundColor: Colors.green,
                         ),
-                      ),
-                    ),
-                    // Right side: LayerDrawer main body with white background
-                    Expanded(
-                      child: Container(
-                        color: Colors.white,
-                        child: LayerDrawer(
-                          currentNode: _currentNode,
-                          onDirChanged: (node) {
-                            setState(() {
-                              _currentNode = node;
-                            });
-                          },
-                          setStateCallback: (fn) => setState(fn),
-                          onJumpTo: (latLng) {
-                            // Maintain current zoom level and move center
-                            _mapController.move(
-                              latLng,
-                              _mapController.camera.zoom,
-                            );
-                          },
-                          onStartAppendMode: (feature) {
-                            // 追記モード開始処理
-                            _startAppendMode(feature);
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                      );
+                    }
+
+                    // 属性テーブルの表示を更新
+                    final updatedFeatures = await _loadAttributeTableFeatures(
+                      layerNode,
+                    );
+                    setState(() {
+                      _attributeTableFeatures = updatedFeatures;
+                    });
+
+                    // マップを更新
+                    _forceMapRefresh();
+
+                    print('[MAP] フィーチャ削除完了: $featureId');
+                  } catch (e) {
+                    print('[MAP] フィーチャ削除エラー: $e');
+                  }
+                },
+                onAddFeature: () {
+                  // 新規フィーチャ追加時の処理（将来実装）
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')),
+                  );
+                },
+                onClose: _closeAttributeTable,
               ),
             ),
           // --- Feature detail panel ---

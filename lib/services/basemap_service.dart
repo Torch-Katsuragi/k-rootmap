@@ -78,7 +78,7 @@ class BaseMapService extends ChangeNotifier {
 
   /// サービス初期化
   Future<void> initialize() async {
-    print('[DEBUG] BaseMapService: 初期化開始');
+    // print('[DEBUG] BaseMapService: 初期化開始');
 
     try {
       // キャッシュディレクトリの設定
@@ -90,11 +90,11 @@ class BaseMapService extends ChangeNotifier {
       // キャッシュインデックスの読み込み
       await _loadCacheIndex();
 
-      print(
-        '[DEBUG] BaseMapService: 初期化完了 - provider: ${_currentProvider.name}',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: 初期化完了 - provider: ${_currentProvider.name}',
+      // );
     } catch (e) {
-      print('[ERROR] BaseMapService: 初期化エラー: $e');
+      // print('[ERROR] BaseMapService: 初期化エラー: $e');
       // エラーでもデフォルト設定で続行
       _currentProvider = BaseMapProvider.defaultProvider;
     }
@@ -109,10 +109,10 @@ class BaseMapService extends ChangeNotifier {
       final cacheDir = Directory(_cacheDirectory!);
       if (!cacheDir.existsSync()) {
         cacheDir.createSync(recursive: true);
-        print('[DEBUG] BaseMapService: キャッシュディレクトリ作成: $_cacheDirectory');
+        // print('[DEBUG] BaseMapService: キャッシュディレクトリ作成: $_cacheDirectory');
       }
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュディレクトリ初期化エラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュディレクトリ初期化エラー: $e');
       rethrow;
     }
   }
@@ -131,11 +131,11 @@ class BaseMapService extends ChangeNotifier {
         }
       }
 
-      print(
-        '[DEBUG] BaseMapService: 設定読み込み完了 - provider: $providerId, offline: $_isOfflineMode',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: 設定読み込み完了 - provider: $providerId, offline: $_isOfflineMode',
+      // );
     } catch (e) {
-      print('[ERROR] BaseMapService: 設定読み込みエラー: $e');
+      // print('[ERROR] BaseMapService: 設定読み込みエラー: $e');
     }
   }
 
@@ -146,9 +146,9 @@ class BaseMapService extends ChangeNotifier {
       await prefs.setString('basemap_provider_id', _currentProvider.id);
       await prefs.setBool('basemap_offline_mode', _isOfflineMode);
 
-      print('[DEBUG] BaseMapService: 設定保存完了');
+      // print('[DEBUG] BaseMapService: 設定保存完了');
     } catch (e) {
-      print('[ERROR] BaseMapService: 設定保存エラー: $e');
+      // print('[ERROR] BaseMapService: 設定保存エラー: $e');
     }
   }
 
@@ -166,12 +166,12 @@ class BaseMapService extends ChangeNotifier {
           _tileCache[entry.key] = cachedTile;
         }
 
-        print(
-          '[DEBUG] BaseMapService: キャッシュインデックス読み込み完了 (${_tileCache.length}タイル)',
-        );
+        // print(
+        //   '[DEBUG] BaseMapService: キャッシュインデックス読み込み完了 (${_tileCache.length}タイル)',
+        // );
       }
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュインデックス読み込みエラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュインデックス読み込みエラー: $e');
       _tileCache.clear();
     }
   }
@@ -187,9 +187,9 @@ class BaseMapService extends ChangeNotifier {
       }
 
       await indexFile.writeAsString(json.encode(indexData));
-      print('[DEBUG] BaseMapService: キャッシュインデックス保存完了');
+      // print('[DEBUG] BaseMapService: キャッシュインデックス保存完了');
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュインデックス保存エラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュインデックス保存エラー: $e');
     }
   }
 
@@ -199,7 +199,7 @@ class BaseMapService extends ChangeNotifier {
       _currentProvider = provider;
       await _saveSettings();
       notifyListeners();
-      print('[DEBUG] BaseMapService: プロバイダー変更: ${provider.name}');
+      // print('[DEBUG] BaseMapService: プロバイダー変更: ${provider.name}');
     }
   }
 
@@ -209,7 +209,7 @@ class BaseMapService extends ChangeNotifier {
       _isOfflineMode = offline;
       await _saveSettings();
       notifyListeners();
-      print('[DEBUG] BaseMapService: オフラインモード変更: $offline');
+      // print('[DEBUG] BaseMapService: オフラインモード変更: $offline');
     }
   }
 
@@ -259,7 +259,7 @@ class BaseMapService extends ChangeNotifier {
         await _saveCacheIndex();
       }
     } catch (e) {
-      print('[ERROR] BaseMapService: タイルキャッシュ保存エラー: $e');
+      // print('[ERROR] BaseMapService: タイルキャッシュ保存エラー: $e');
     }
   }
 
@@ -279,18 +279,18 @@ class BaseMapService extends ChangeNotifier {
       if (cachedTile != null) {
         final file = File(cachedTile.filePath);
         if (file.existsSync()) {
-          print('[DEBUG] BaseMapService: 指定プロバイダーキャッシュヒット - $cacheKey');
+          // print('[DEBUG] BaseMapService: 指定プロバイダーキャッシュヒット - $cacheKey');
           return await file.readAsBytes();
         } else {
           // ファイルが存在しない場合はキャッシュから削除
-          print('[WARN] BaseMapService: キャッシュファイル不存在のため削除 - $cacheKey');
+          // print('[WARN] BaseMapService: キャッシュファイル不存在のため削除 - $cacheKey');
           _tileCache.remove(cacheKey);
         }
       }
 
       // クロスプラットフォームキャッシュ検索（他プロバイダーの同座標タイル）
       if (allowCrossPlatformCache) {
-        print('[DEBUG] BaseMapService: クロスプラットフォームキャッシュ検索 - z=$z, x=$x, y=$y');
+        // print('[DEBUG] BaseMapService: クロスプラットフォームキャッシュ検索 - z=$z, x=$x, y=$y');
         for (final entry in _tileCache.entries) {
           final tile = entry.value;
           if (tile.z == z &&
@@ -299,9 +299,9 @@ class BaseMapService extends ChangeNotifier {
               tile.providerId != providerId) {
             final file = File(tile.filePath);
             if (file.existsSync()) {
-              print(
-                '[SUCCESS] BaseMapService: クロスプラットフォームキャッシュヒット - ${tile.providerId} -> $providerId',
-              );
+              // print(
+              //   '[SUCCESS] BaseMapService: クロスプラットフォームキャッシュヒット - ${tile.providerId} -> $providerId',
+              // );
               return await file.readAsBytes();
             }
           }
@@ -310,7 +310,7 @@ class BaseMapService extends ChangeNotifier {
 
       return null;
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュタイル取得エラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュタイル取得エラー: $e');
       return null;
     }
   }
@@ -322,15 +322,15 @@ class BaseMapService extends ChangeNotifier {
     int x,
     int y,
   ) async {
-    print(
-      '[DEBUG] BaseMapService.getTile: 要求 z=$z, x=$x, y=$y (プロバイダー: ${provider.name}, maxZoom: ${provider.maxZoom})',
-    );
+    // print(
+    //   '[DEBUG] BaseMapService.getTile: 要求 z=$z, x=$x, y=$y (プロバイダー: ${provider.name}, maxZoom: ${provider.maxZoom})',
+    // );
 
     // プロバイダーの最大ズームレベルを超えている場合は直接フォールバック
     if (z > provider.maxZoom) {
-      print(
-        '[DEBUG] BaseMapService.getTile: z=$z はプロバイダーの最大ズーム ${provider.maxZoom} を超えているため、フォールバック実行',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService.getTile: z=$z はプロバイダーの最大ズーム ${provider.maxZoom} を超えているため、フォールバック実行',
+      // );
       return await _getTileWithFallback(provider, z, x, y);
     }
 
@@ -341,7 +341,7 @@ class BaseMapService extends ChangeNotifier {
     }
 
     // 通常のタイル取得に失敗した場合、フォールバック機能を使用
-    print('[DEBUG] BaseMapService.getTile: 通常のタイル取得失敗、フォールバック試行');
+    // print('[DEBUG] BaseMapService.getTile: 通常のタイル取得失敗、フォールバック試行');
     return await _getTileWithFallback(provider, z, x, y);
   }
 
@@ -356,19 +356,19 @@ class BaseMapService extends ChangeNotifier {
   }) async {
     try {
       // まずキャッシュから取得を試行
-      print('[DEBUG] BaseMapService: キャッシュからタイル取得を試行 - z=$z, x=$x, y=$y');
+      // print('[DEBUG] BaseMapService: キャッシュからタイル取得を試行 - z=$z, x=$x, y=$y');
       final cachedData = await _getCachedTile(provider.id, z, x, y);
       if (cachedData != null) {
-        print(
-          '[SUCCESS] BaseMapService: キャッシュからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${cachedData.length}バイト)',
-        );
+        // print(
+        //   '[SUCCESS] BaseMapService: キャッシュからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${cachedData.length}バイト)',
+        // );
         return cachedData;
       }
-      print('[DEBUG] BaseMapService: キャッシュにタイルなし - z=$z, x=$x, y=$y');
+      // print('[DEBUG] BaseMapService: キャッシュにタイルなし - z=$z, x=$x, y=$y');
 
       // オフラインモードまたはネットワークアクセス禁止の場合はここで終了
       if (_isOfflineMode || !allowNetworkAccess) {
-        print('[DEBUG] BaseMapService: オフラインモード/ネットワークアクセス禁止のため、ネットワーク取得をスキップ');
+        // print('[DEBUG] BaseMapService: オフラインモード/ネットワークアクセス禁止のため、ネットワーク取得をスキップ');
         return null;
       }
 
@@ -378,9 +378,9 @@ class BaseMapService extends ChangeNotifier {
           .replaceAll('{x}', x.toString())
           .replaceAll('{y}', y.toString());
 
-      print(
-        '[DEBUG] BaseMapService: ネットワークからタイル取得を試行 - URL: $url (試行回数: ${retryCount + 1})',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: ネットワークからタイル取得を試行 - URL: $url (試行回数: ${retryCount + 1})',
+      // );
 
       final response = await http
           .get(
@@ -394,21 +394,21 @@ class BaseMapService extends ChangeNotifier {
 
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         final data = response.bodyBytes;
-        print(
-          '[SUCCESS] BaseMapService: ネットワークからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${data.length}バイト)',
-        );
+        // print(
+        //   '[SUCCESS] BaseMapService: ネットワークからタイル取得成功 - z=$z, x=$x, y=$y (サイズ: ${data.length}バイト)',
+        // );
 
         // キャッシュに保存
         await _cacheTile(provider.id, z, x, y, data);
 
         return data;
       } else {
-        print(
-          '[WARN] BaseMapService: ネットワークタイル取得失敗 - z=$z, x=$x, y=$y (ステータス: ${response.statusCode}, サイズ: ${response.bodyBytes.length})',
-        );
+        // print(
+        //   '[WARN] BaseMapService: ネットワークタイル取得失敗 - z=$z, x=$x, y=$y (ステータス: ${response.statusCode}, サイズ: ${response.bodyBytes.length})',
+        // );
 
         // ネットワーク取得失敗時にキャッシュを再確認（別プロバイダーや古いキャッシュの可能性）
-        print('[DEBUG] BaseMapService: ネットワーク失敗後のキャッシュ再確認 - z=$z, x=$x, y=$y');
+        // print('[DEBUG] BaseMapService: ネットワーク失敗後のキャッシュ再確認 - z=$z, x=$x, y=$y');
         final fallbackCachedData = await _getCachedTile(
           provider.id,
           z,
@@ -417,17 +417,17 @@ class BaseMapService extends ChangeNotifier {
           allowCrossPlatformCache: true,
         );
         if (fallbackCachedData != null) {
-          print(
-            '[SUCCESS] BaseMapService: フォールバックキャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
-          );
+          // print(
+          //   '[SUCCESS] BaseMapService: フォールバックキャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
+          // );
           return fallbackCachedData;
         }
 
         // リトライ機能（最大2回）
         if (retryCount < 2) {
-          print(
-            '[DEBUG] BaseMapService: リトライ実行 - z=$z, x=$x, y=$y (${retryCount + 1}/2)',
-          );
+          // print(
+          //   '[DEBUG] BaseMapService: リトライ実行 - z=$z, x=$x, y=$y (${retryCount + 1}/2)',
+          // );
           await Future.delayed(
             Duration(milliseconds: 500 * (retryCount + 1)),
           ); // 徐々に遅延を増加
@@ -444,10 +444,10 @@ class BaseMapService extends ChangeNotifier {
         return null;
       }
     } catch (e) {
-      print('[ERROR] BaseMapService: タイル取得エラー - z=$z, x=$x, y=$y - $e');
+      // print('[ERROR] BaseMapService: タイル取得エラー - z=$z, x=$x, y=$y - $e');
 
       // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
-      print('[DEBUG] BaseMapService: エラー後のキャッシュ確認 - z=$z, x=$x, y=$y');
+      // print('[DEBUG] BaseMapService: エラー後のキャッシュ確認 - z=$z, x=$x, y=$y');
       final errorFallbackData = await _getCachedTile(
         provider.id,
         z,
@@ -456,16 +456,16 @@ class BaseMapService extends ChangeNotifier {
         allowCrossPlatformCache: true,
       );
       if (errorFallbackData != null) {
-        print(
-          '[SUCCESS] BaseMapService: エラー後キャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
-        );
+        // print(
+        //   '[SUCCESS] BaseMapService: エラー後キャッシュからタイル取得成功 - z=$z, x=$x, y=$y',
+        // );
         return errorFallbackData;
       }
 
       // リトライ機能（エラー時も適用）
       if (retryCount < 1 && allowNetworkAccess) {
         // エラー時はリトライ回数を減らす
-        print('[DEBUG] BaseMapService: エラー後リトライ実行 - z=$z, x=$x, y=$y');
+        // print('[DEBUG] BaseMapService: エラー後リトライ実行 - z=$z, x=$x, y=$y');
         await Future.delayed(Duration(milliseconds: 1000));
         return await _getTileInternal(
           provider,
@@ -491,27 +491,27 @@ class BaseMapService extends ChangeNotifier {
   }) async {
     // 最小ズームレベルまで下がった場合、または最大フォールバック回数に達した場合は諦める
     if (z <= provider.minZoom || maxFallbackLevels <= 0) {
-      print(
-        '[DEBUG] BaseMapService: フォールバック終了 - '
-        'z=$z, minZoom=${provider.minZoom}, 残り試行回数:$maxFallbackLevels',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: フォールバック終了 - '
+      //   'z=$z, minZoom=${provider.minZoom}, 残り試行回数:$maxFallbackLevels',
+      // );
       return null;
     }
 
     // フォールバック条件の確認（この条件は削除し、常にフォールバックを試行）
-    print(
-      '[DEBUG] BaseMapService: フォールバック開始 - z=$z (プロバイダー最大: ${provider.maxZoom})',
-    );
+    // print(
+    //   '[DEBUG] BaseMapService: フォールバック開始 - z=$z (プロバイダー最大: ${provider.maxZoom})',
+    // );
 
     // 1段階下のズームレベルを計算
     final parentZ = z - 1;
     final parentX = x ~/ 2;
     final parentY = y ~/ 2;
 
-    print(
-      '[DEBUG] BaseMapService: フォールバック試行 (残り${maxFallbackLevels}回): '
-      'z=$z->$parentZ, x=$x->$parentX, y=$y->$parentY',
-    );
+    // print(
+    //   '[DEBUG] BaseMapService: フォールバック試行 (残り${maxFallbackLevels}回): '
+    //   'z=$z->$parentZ, x=$x->$parentX, y=$y->$parentY',
+    // );
 
     // 下位ズームレベルのタイルを取得
     final parentTileData = await _getTileInternal(
@@ -537,10 +537,10 @@ class BaseMapService extends ChangeNotifier {
       if (scaledTile != null) {
         // スケールアップしたタイルをキャッシュに保存
         await _cacheTile(provider.id, z, x, y, scaledTile);
-        print(
-          '[SUCCESS] BaseMapService: フォールバック成功 - '
-          'z=$z, x=$x, y=$y (親タイル: z=$parentZ)',
-        );
+        // print(
+        //   '[SUCCESS] BaseMapService: フォールバック成功 - '
+        //   'z=$z, x=$x, y=$y (親タイル: z=$parentZ)',
+        // );
         return scaledTile;
       }
     }
@@ -569,7 +569,7 @@ class BaseMapService extends ChangeNotifier {
       // 親タイル画像をデコード
       final parentImage = img.decodeImage(parentTileData);
       if (parentImage == null) {
-        print('[ERROR] BaseMapService: 親タイル画像のデコードに失敗');
+        // print('[ERROR] BaseMapService: 親タイル画像のデコードに失敗');
         return null;
       }
 
@@ -587,18 +587,18 @@ class BaseMapService extends ChangeNotifier {
       final cropX = relativeX * cropSize;
       final cropY = relativeY * cropSize;
 
-      print(
-        '[DEBUG] BaseMapService: タイル切り出し - '
-        'zoom差:$zoomDiff, scale:$scale, '
-        'crop位置:($cropX,$cropY), cropサイズ:$cropSize',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: タイル切り出し - '
+      //   'zoom差:$zoomDiff, scale:$scale, '
+      //   'crop位置:($cropX,$cropY), cropサイズ:$cropSize',
+      // );
 
       // 範囲チェック
       if (cropX < 0 ||
           cropY < 0 ||
           cropX + cropSize > parentTileSize ||
           cropY + cropSize > parentTileSize) {
-        print('[WARN] BaseMapService: 切り出し範囲が親タイルを超えています');
+        // print('[WARN] BaseMapService: 切り出し範囲が親タイルを超えています');
         // 範囲外の場合は親タイル全体をスケールして返す
         final resizedImage = img.copyResize(
           parentImage,
@@ -628,16 +628,16 @@ class BaseMapService extends ChangeNotifier {
       // PNG形式でエンコード
       final resultData = Uint8List.fromList(img.encodePng(resizedImage));
 
-      print(
-        '[DEBUG] BaseMapService: タイル変換完了 - '
-        '元サイズ:${parentTileSize}x${parentTileSize}, '
-        '切り出し:${cropSize}x${cropSize}, '
-        '結果:256x256, データサイズ:${resultData.length}バイト',
-      );
+      // print(
+      //   '[DEBUG] BaseMapService: タイル変換完了 - '
+      //   '元サイズ:${parentTileSize}x${parentTileSize}, '
+      //   '切り出し:${cropSize}x${cropSize}, '
+      //   '結果:256x256, データサイズ:${resultData.length}バイト',
+      // );
 
       return resultData;
     } catch (e) {
-      print('[ERROR] BaseMapService: タイル変換エラー: $e');
+      // print('[ERROR] BaseMapService: タイル変換エラー: $e');
       return null;
     }
   }
@@ -660,7 +660,7 @@ class BaseMapService extends ChangeNotifier {
 
       return totalSize / (1024 * 1024); // MB変換
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュサイズ取得エラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュサイズ取得エラー: $e');
       return 0.0;
     }
   }
@@ -691,9 +691,9 @@ class BaseMapService extends ChangeNotifier {
       }
 
       await _saveCacheIndex();
-      print('[DEBUG] BaseMapService: キャッシュクリア完了');
+      // print('[DEBUG] BaseMapService: キャッシュクリア完了');
     } catch (e) {
-      print('[ERROR] BaseMapService: キャッシュクリアエラー: $e');
+      // print('[ERROR] BaseMapService: キャッシュクリアエラー: $e');
     }
   }
 
@@ -785,17 +785,17 @@ class BaseMapService extends ChangeNotifier {
           if (fileSize > 0) {
             result['validTiles'] = (result['validTiles'] as int) + 1;
           } else {
-            print('[WARN] BaseMapService: 空のキャッシュファイル検出 - $cacheKey');
+            // print('[WARN] BaseMapService: 空のキャッシュファイル検出 - $cacheKey');
             tilesToRemove.add(cacheKey);
             result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
           }
         } else {
-          print('[WARN] BaseMapService: 存在しないキャッシュファイル検出 - $cacheKey');
+          // print('[WARN] BaseMapService: 存在しないキャッシュファイル検出 - $cacheKey');
           tilesToRemove.add(cacheKey);
           result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
         }
       } catch (e) {
-        print('[ERROR] BaseMapService: キャッシュ検証エラー - $cacheKey: $e');
+        // print('[ERROR] BaseMapService: キャッシュ検証エラー - $cacheKey: $e');
         tilesToRemove.add(cacheKey);
         result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
       }
@@ -821,9 +821,9 @@ class BaseMapService extends ChangeNotifier {
               : null,
     };
 
-    print(
-      '[INFO] BaseMapService: キャッシュ検証完了 - 有効:${result['validTiles']}, 無効:${result['invalidTiles']}, 削除:${result['removedTiles']}',
-    );
+    // print(
+    //   '[INFO] BaseMapService: キャッシュ検証完了 - 有効:${result['validTiles']}, 無効:${result['invalidTiles']}, 削除:${result['removedTiles']}',
+    // );
 
     return result;
   }

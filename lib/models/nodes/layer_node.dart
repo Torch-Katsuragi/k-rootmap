@@ -121,20 +121,22 @@ class PointLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final feats = await geoPackageFile.getFeatures(layerName);
-    return feats.where((f) => (f)["points"] != null && (f)["name"] != null).map(
-      (f) {
-        final map = f;
-        return PointFeatureNode(
-          map["points"] as List<LatLng>,
-          map["name"] as String,
-          parent: this,
-          rowId: map["id"] ?? 0,
-          description: map["description"] as String?,
-          metadata: map["metadata"] as Map<String, dynamic>?,
-        );
-      },
-    ).toList();
+    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    final features = <FeatureNode>[];
+
+    for (final rawRow in rawFeatures) {
+      final rowId = rawRow['id'] as int?;
+      if (rowId == null) continue;
+
+      // getFeatureを使用してgeometry変換済みのrowデータを取得
+      final row = await geoPackageFile.getFeature(layerName, rowId);
+      if (row == null || row['geometry'] == null) continue;
+
+      final featureNode = PointFeatureNode(row, this);
+      features.add(featureNode);
+    }
+
+    return features;
   }
 
   @override
@@ -165,20 +167,22 @@ class LineLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final feats = await geoPackageFile.getFeatures(layerName);
-    return feats.where((f) => (f)["lines"] != null && (f)["name"] != null).map((
-      f,
-    ) {
-      final map = f;
-      return LineFeatureNode(
-        map["lines"] as List<LatLng>,
-        map["name"] as String,
-        parent: this,
-        rowId: map["id"] ?? 0,
-        description: map["description"] as String?,
-        metadata: map["metadata"] as Map<String, dynamic>?,
-      );
-    }).toList();
+    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    final features = <FeatureNode>[];
+
+    for (final rawRow in rawFeatures) {
+      final rowId = rawRow['id'] as int?;
+      if (rowId == null) continue;
+
+      // getFeatureを使用してgeometry変換済みのrowデータを取得
+      final row = await geoPackageFile.getFeature(layerName, rowId);
+      if (row == null || row['geometry'] == null) continue;
+
+      final featureNode = LineFeatureNode(row, this);
+      features.add(featureNode);
+    }
+
+    return features;
   }
 
   @override
@@ -209,21 +213,22 @@ class PolygonLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final feats = await geoPackageFile.getFeatures(layerName);
-    return feats
-        .where((f) => (f)["polygons"] != null && (f)["name"] != null)
-        .map((f) {
-          final map = f;
-          return PolygonFeatureNode(
-            map["polygons"] as List<List<LatLng>>,
-            map["name"] as String,
-            parent: this,
-            rowId: map["id"] ?? 0,
-            description: map["description"] as String?,
-            metadata: map["metadata"] as Map<String, dynamic>?,
-          );
-        })
-        .toList();
+    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    final features = <FeatureNode>[];
+
+    for (final rawRow in rawFeatures) {
+      final rowId = rawRow['id'] as int?;
+      if (rowId == null) continue;
+
+      // getFeatureを使用してgeometry変換済みのrowデータを取得
+      final row = await geoPackageFile.getFeature(layerName, rowId);
+      if (row == null || row['geometry'] == null) continue;
+
+      final featureNode = PolygonFeatureNode(row, this);
+      features.add(featureNode);
+    }
+
+    return features;
   }
 
   @override

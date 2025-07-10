@@ -1109,17 +1109,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = layer.features;
+          await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbPointFeatures =
-              dbFeatures.whereType<PointFeatureNode>().toList();
+              layer.features.whereType<PointFeatureNode>().toList();
           print(
             '[DEBUG] _updateFeatures: loaded ${dbPointFeatures.length} point features from DB for ${layer.name}',
           );
           pointFeatures.addAll(dbPointFeatures);
-          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
-          for (final feature in dbPointFeatures) {
-            layer.addChild(feature);
-          }
         }
       } else if (layer is LineLayerNode) {
         final layerLineFeatures =
@@ -1131,17 +1127,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = layer.features;
+          await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbLineFeatures =
-              dbFeatures.whereType<LineFeatureNode>().toList();
+              layer.features.whereType<LineFeatureNode>().toList();
           print(
             '[DEBUG] _updateFeatures: loaded ${dbLineFeatures.length} line features from DB for ${layer.name}',
           );
           lineFeatures.addAll(dbLineFeatures);
-          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
-          for (final feature in dbLineFeatures) {
-            layer.addChild(feature);
-          }
         }
       } else if (layer is PolygonLayerNode) {
         final layerPolygonFeatures =
@@ -1153,17 +1145,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = layer.features;
+          await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbPolygonFeatures =
-              dbFeatures.whereType<PolygonFeatureNode>().toList();
+              layer.features.whereType<PolygonFeatureNode>().toList();
           print(
             '[DEBUG] _updateFeatures: loaded ${dbPolygonFeatures.length} polygon features from DB for ${layer.name}',
           );
           polygonFeatures.addAll(dbPolygonFeatures);
-          // DBから読み込んだFeatureNodeをlayerのchildrenに追加
-          for (final feature in dbPolygonFeatures) {
-            layer.addChild(feature);
-          }
         }
       }
     }

@@ -14,27 +14,30 @@ import '../../utils/feature_calc_utils.dart';
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
 abstract class FeatureNode extends LayerTreeNode {
-  /// DB上のrowId（主キー）
-  final int rowId;
-
-  /// フィーチャの重心座標
-  final LatLng centroid;
-
   /// 属性値キャッシュ（DBから読み込んだ全属性値を保持）
   Map<String, dynamic> _cachedAttributes = {};
 
   /// 属性値の読み込み状態
-  bool _attributesLoaded = false;
+  bool _attributesLoaded = true; // rowから初期化済み
+
+  /// DB上のrowId（主キー）
+  int get rowId => _getAttributeSync('id') as int? ?? 0;
+
+  /// フィーチャの重心座標
+  LatLng get centroid => _calculateCentroid();
+
+  /// ジオメトリデータ
+  dynamic get geometry => _getAttributeSync('geometry');
 
   /// 名前のgetter（辞書から取得）
   @override
-  String get name => _getAttributeSync('name') ?? 'Unnamed Feature';
+  String get name => _getAttributeSync('name') as String? ?? 'Unnamed Feature';
 
   /// 名前のsetter（辞書に設定）
   set name(String value) => _setAttributeSync('name', value);
 
   /// 説明のgetter（辞書から取得）
-  String? get description => _getAttributeSync('description');
+  String? get description => _getAttributeSync('description') as String?;
 
   /// 説明のsetter（辞書に設定）
   set description(String? value) => _setAttributeSync('description', value);
@@ -60,8 +63,23 @@ abstract class FeatureNode extends LayerTreeNode {
     if (value == null) {
       _setAttributeSync('kmaps_metadata', null);
     } else {
-      _setAttributeSync('kmaps_metadata', json.encode(value));
+      _setAttributeSync('kmaps_metadata', value);
     }
+  }
+
+  /// 重心座標を計算（サブクラスでオーバーライド）
+  LatLng _calculateCentroid() {
+    final geom = geometry;
+    if (geom is List<LatLng> && geom.isNotEmpty) {
+      return GeometryCalc.calcPointsCentroid(geom);
+    } else if (geom is List<LatLng> && geom.isNotEmpty) {
+      return GeometryCalc.calcLineCentroid(geom);
+    } else if (geom is List<List<LatLng>> &&
+        geom.isNotEmpty &&
+        geom[0].isNotEmpty) {
+      return GeometryCalc.calcPolygonCentroid(geom);
+    }
+    return LatLng(0, 0);
   }
 
   /// 属性値の同期取得（内部用）
@@ -88,13 +106,10 @@ abstract class FeatureNode extends LayerTreeNode {
       );
 
       // DBから全属性値を取得
-      final attributes = await geoPackageFile.getFeatureAttributes(
-        layerName,
-        rowId,
-      );
+      final row = await geoPackageFile.getFeature(layerName, rowId);
 
-      if (attributes != null) {
-        _cachedAttributes = Map<String, dynamic>.from(attributes);
+      if (row != null) {
+        _cachedAttributes = Map<String, dynamic>.from(row);
         print(
           '[DEBUG] FeatureNode: Loaded ${_cachedAttributes.length} attributes',
         );
@@ -253,34 +268,22 @@ abstract class FeatureNode extends LayerTreeNode {
     await super.dispose();
   }
 
-  /// ジオメトリ型ごとのデータ参照（点・線・面）
-  Object get geometry;
-
   /// 親LayerNode
   @override
   final LayerNode parent;
 
-  FeatureNode({
-    required String name,
-    String? description,
-    Map<String, dynamic>? metadata,
-    required this.parent,
-    required this.rowId,
-    required this.centroid,
-  }) : super(
-         name,
-         visible: parent.visible,
-         parent: parent,
-         children: [],
-         nodeType: 'feature',
-       ) {
-    // 初期属性値を辞書に設定
-    _cachedAttributes = {
-      'name': name,
-      'description': description,
-      'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
-    };
-    _attributesLoaded = false; // DBから再読み込みが必要
+  /// rowデータを基にFeatureNodeを作成
+  FeatureNode(Map<String, dynamic> row, this.parent)
+    : super(
+        row['name'] as String? ?? 'Unnamed Feature',
+        visible: parent.visible,
+        parent: parent,
+        children: [],
+        nodeType: 'feature',
+      ) {
+    // rowデータをそのまま_cachedAttributesに格納
+    _cachedAttributes = Map<String, dynamic>.from(row);
+    _attributesLoaded = true; // rowから初期化済み
   }
 
   /// GeoPackageFile参照
@@ -316,23 +319,24 @@ abstract class FeatureNode extends LayerTreeNode {
 
 /// PointFeatureNode: 点フィーチャ用
 class PointFeatureNode extends FeatureNode {
-  final List<LatLng> points;
-  PointFeatureNode(
-    this.points,
-    String name, {
-    required super.parent,
-    required super.rowId,
-    super.description,
-    super.metadata,
-  }) : super(name: name, centroid: GeometryCalc.calcPointsCentroid(points));
+  /// rowデータから点フィーチャノードを作成
+  PointFeatureNode(Map<String, dynamic> row, LayerNode parent)
+    : super(row, parent);
+
+  /// 点座標リスト（geometryから取得）
+  List<LatLng> get points => geometry as List<LatLng>? ?? <LatLng>[];
+
+  @override
+  LatLng _calculateCentroid() {
+    return points.isNotEmpty
+        ? GeometryCalc.calcPointsCentroid(points)
+        : LatLng(0, 0);
+  }
 
   @override
   List<MapEntry<String, String>> get detailEntries {
     return [...super.detailEntries];
   }
-
-  @override
-  Object get geometry => points;
 
   @override
   IconData get baseIcon => Icons.location_on;
@@ -363,7 +367,7 @@ class PointFeatureNode extends FeatureNode {
     };
 
     if (metadata != null) {
-      attributes['kmaps_metadata'] = json.encode(metadata);
+      attributes['kmaps_metadata'] = metadata;
     }
 
     // 新しい辞書ベースAPIを使用してDBへの保存を実行
@@ -378,15 +382,15 @@ class PointFeatureNode extends FeatureNode {
       return null;
     }
 
-    // 実際のrowIdを使用してFeatureNodeを作成
-    final node = PointFeatureNode(
-      [point],
-      name,
-      parent: parent,
-      rowId: actualRowId,
-      description: description,
-      metadata: metadata,
-    );
+    // DBから実際のrowデータを取得
+    final row = await gpkgFile.getFeature(layerName, actualRowId);
+    if (row == null) {
+      print('[ERROR] PointFeatureNode: 作成後のrow取得に失敗しました - $name');
+      return null;
+    }
+
+    // rowデータを使用してFeatureNodeを作成
+    final node = PointFeatureNode(row, parent);
     parent.addChild(node);
 
     print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -421,15 +425,9 @@ class PointFeatureNode extends FeatureNode {
       await setAttributeValues({
         'name': name,
         'description': description,
-        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+        'kmaps_metadata': metadata,
+        'geometry': [geometryToUpdate],
       });
-
-      // 新しいジオメトリが渡された場合はローカル変数も更新
-      if (newGeometry != null) {
-        points.clear();
-        points.add(geometryToUpdate);
-        print('[DEBUG] PointFeatureNode: ジオメトリ位置更新 - $geometryToUpdate');
-      }
 
       print('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -451,9 +449,8 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新（mutableリストなので直接変更）
-      points.clear();
-      points.add(newLocation);
+      // ローカルのジオメトリも更新
+      await setAttributeValue('geometry', [newLocation]);
       print('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
     } else {
       print('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
@@ -465,22 +462,17 @@ class PointFeatureNode extends FeatureNode {
 
 /// LineFeatureNode: 線フィーチャ用
 class LineFeatureNode extends FeatureNode {
+  /// rowデータから線フィーチャノードを作成
+  LineFeatureNode(Map<String, dynamic> row, LayerNode parent)
+    : super(row, parent);
+
   /// 単一の線分（頂点リスト）
-  List<LatLng> line;
-  LineFeatureNode(
-    this.line,
-    String name, {
-    required super.parent,
-    required super.rowId,
-    super.description,
-    super.metadata,
-  }) : super(
-         name: name,
-         centroid:
-             line.isNotEmpty
-                 ? GeometryCalc.calcLineCentroid(line)
-                 : LatLng(0, 0),
-       );
+  List<LatLng> get line => geometry as List<LatLng>? ?? <LatLng>[];
+
+  @override
+  LatLng _calculateCentroid() {
+    return line.isNotEmpty ? GeometryCalc.calcLineCentroid(line) : LatLng(0, 0);
+  }
 
   @override
   List<MapEntry<String, String>> get detailEntries {
@@ -522,9 +514,6 @@ class LineFeatureNode extends FeatureNode {
   }
 
   @override
-  Object get geometry => line;
-
-  @override
   IconData get baseIcon => Icons.timeline;
   @override
   Color get baseIconColor => Colors.blueGrey;
@@ -553,7 +542,7 @@ class LineFeatureNode extends FeatureNode {
     };
 
     if (metadata != null) {
-      attributes['kmaps_metadata'] = json.encode(metadata);
+      attributes['kmaps_metadata'] = metadata;
     }
 
     // 新しい辞書ベースAPIを使用してDBへの保存を実行
@@ -568,15 +557,15 @@ class LineFeatureNode extends FeatureNode {
       return null;
     }
 
-    // 実際のrowIdを使用してFeatureNodeを作成
-    final node = LineFeatureNode(
-      line,
-      name,
-      parent: parent,
-      rowId: actualRowId,
-      description: description,
-      metadata: metadata,
-    );
+    // DBから実際のrowデータを取得
+    final row = await gpkgFile.getFeature(layerName, actualRowId);
+    if (row == null) {
+      print('[ERROR] LineFeatureNode: 作成後のrow取得に失敗しました - $name');
+      return null;
+    }
+
+    // rowデータを使用してFeatureNodeを作成
+    final node = LineFeatureNode(row, parent);
     parent.addChild(node);
 
     print('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -608,17 +597,9 @@ class LineFeatureNode extends FeatureNode {
       await setAttributeValues({
         'name': name,
         'description': description,
-        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+        'kmaps_metadata': metadata,
+        'geometry': geometryToUpdate,
       });
-
-      // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
-      if (newGeometry != null) {
-        line.clear();
-        line.addAll(geometryToUpdate);
-        print(
-          '[DEBUG] LineFeatureNode: ジオメトリ形状更新 - ${geometryToUpdate.length} vertices',
-        );
-      }
 
       print('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -640,9 +621,8 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新（mutableリストなので直接変更）
-      line.clear();
-      line.addAll(newLine);
+      // ローカルのジオメトリも更新
+      await setAttributeValue('geometry', newLine);
       print(
         '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
       );
@@ -656,22 +636,20 @@ class LineFeatureNode extends FeatureNode {
 
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
+  /// rowデータから面フィーチャノードを作成
+  PolygonFeatureNode(Map<String, dynamic> row, LayerNode parent)
+    : super(row, parent);
+
   /// 単一のポリゴン（外環＋穴リスト）
-  List<List<LatLng>> polygon;
-  PolygonFeatureNode(
-    this.polygon,
-    String name, {
-    required super.parent,
-    required super.rowId,
-    super.description,
-    super.metadata,
-  }) : super(
-         name: name,
-         centroid:
-             (polygon.isNotEmpty && polygon[0].isNotEmpty)
-                 ? GeometryCalc.calcPolygonCentroid(polygon)
-                 : LatLng(0, 0),
-       );
+  List<List<LatLng>> get polygon =>
+      geometry as List<List<LatLng>>? ?? <List<LatLng>>[];
+
+  @override
+  LatLng _calculateCentroid() {
+    return (polygon.isNotEmpty && polygon[0].isNotEmpty)
+        ? GeometryCalc.calcPolygonCentroid(polygon)
+        : LatLng(0, 0);
+  }
 
   @override
   List<MapEntry<String, String>> get detailEntries {
@@ -734,9 +712,6 @@ class PolygonFeatureNode extends FeatureNode {
   }
 
   @override
-  Object get geometry => polygon;
-
-  @override
   IconData get baseIcon => Icons.crop_square;
   @override
   Color get baseIconColor => Colors.orange;
@@ -766,7 +741,7 @@ class PolygonFeatureNode extends FeatureNode {
     };
 
     if (metadata != null) {
-      attributes['kmaps_metadata'] = json.encode(metadata);
+      attributes['kmaps_metadata'] = metadata;
     }
 
     // 新しい辞書ベースAPIを使用してDBへの保存を実行
@@ -781,15 +756,15 @@ class PolygonFeatureNode extends FeatureNode {
       return null;
     }
 
-    // 実際のrowIdを使用してFeatureNodeを作成
-    final node = PolygonFeatureNode(
-      polygon,
-      name,
-      parent: parent,
-      rowId: actualRowId,
-      description: description,
-      metadata: metadata,
-    );
+    // DBから実際のrowデータを取得
+    final row = await gpkgFile.getFeature(layerName, actualRowId);
+    if (row == null) {
+      print('[ERROR] PolygonFeatureNode: 作成後のrow取得に失敗しました - $name');
+      return null;
+    }
+
+    // rowデータを使用してFeatureNodeを作成
+    final node = PolygonFeatureNode(row, parent);
     parent.addChild(node);
 
     print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -821,17 +796,9 @@ class PolygonFeatureNode extends FeatureNode {
       await setAttributeValues({
         'name': name,
         'description': description,
-        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+        'kmaps_metadata': metadata,
+        'geometry': geometryToUpdate,
       });
-
-      // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
-      if (newGeometry != null) {
-        polygon.clear();
-        polygon.addAll(geometryToUpdate);
-        print(
-          '[DEBUG] PolygonFeatureNode: ジオメトリ形状更新 - ${geometryToUpdate.length} rings',
-        );
-      }
 
       print('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -853,9 +820,8 @@ class PolygonFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新（mutableリストなので直接変更）
-      polygon.clear();
-      polygon.addAll(newPolygon);
+      // ローカルのジオメトリも更新
+      await setAttributeValue('geometry', newPolygon);
       print(
         '[DEBUG] PolygonFeatureNode: ポリゴン更新成功 - $name (${newPolygon.length} rings)',
       );

@@ -417,8 +417,8 @@ class GeoPackageFile {
     }
   }
 
-  /// 指定レイヤの全フィーチャ（点・線・面すべて対応、属性も取得）
-  Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
+  /// 単一フィーチャを取得（geom列をgeometry typeに応じて変換）
+  Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async {
     try {
       // name/description/metadataカラムがなければ自動追加
       await ensureNameDescriptionColumns(tableName);
@@ -427,26 +427,19 @@ class GeoPackageFile {
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
 
-      final rows = await db.query(tableName);
-      final features = <Map<String, dynamic>>[];
+      final rows = await db.query(
+        tableName,
+        where: 'id = ?',
+        whereArgs: [rowId],
+      );
 
-      for (final row in rows) {
-        final id = row['id'] as int? ?? 0;
-        final geom = row['geom'] as Uint8List;
-        final name = row['name'] as String? ?? '';
-        final description = row['description'] as String? ?? '';
+      if (rows.isEmpty) return null;
 
-        // メタデータをパース（JSONから辞書へ）
-        Map<String, dynamic>? metadata;
-        final metadataStr = row['kmaps_metadata'] as String?;
-        if (metadataStr != null && metadataStr.isNotEmpty) {
-          try {
-            metadata = jsonDecode(metadataStr) as Map<String, dynamic>;
-          } catch (e) {
-            print('getFeatures: メタデータのJSONパースエラー - $e');
-          }
-        }
+      final row = Map<String, dynamic>.from(rows.first);
+      final geom = row['geom'] as Uint8List?;
 
+      // geom列をgeometry typeに応じて変換
+      if (geom != null && geomType != null) {
         if (geomType == GeometryType.point) {
           // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
           Uint8List pureWkb = geom;
@@ -465,39 +458,51 @@ class GeoPackageFile {
               13,
               21,
             ).getFloat64(0, Endian.little);
-            features.add({
-              'id': id,
-              'points': [LatLng(lat, lon)],
-              'name': name,
-              'description': description,
-              'metadata': metadata,
-            });
+            row['geometry'] = [LatLng(lat, lon)];
           }
         } else if (geomType == GeometryType.linestring) {
           final lines = parseWkbLineString(geom);
           if (lines.isNotEmpty) {
-            features.add({
-              'id': id,
-              'lines': lines,
-              'name': name,
-              'description': description,
-              'metadata': metadata,
-            });
+            row['geometry'] = lines;
           }
         } else if (geomType == GeometryType.polygon) {
           final polygons = parseWkbPolygon(geom);
           if (polygons.isNotEmpty) {
-            features.add({
-              'id': id,
-              'polygons': polygons,
-              'name': name,
-              'description': description,
-              'metadata': metadata,
-            });
+            row['geometry'] = polygons;
           }
         }
       }
-      return features;
+
+      // kmaps_metadataをパース
+      final metadataStr = row['kmaps_metadata'] as String?;
+      if (metadataStr != null && metadataStr.isNotEmpty) {
+        try {
+          row['kmaps_metadata'] =
+              jsonDecode(metadataStr) as Map<String, dynamic>;
+        } catch (e) {
+          print('getFeature: メタデータのJSONパースエラー - $e');
+        }
+      }
+
+      return row;
+    } catch (e) {
+      print('getFeature: エラー発生 - $e');
+      return null;
+    }
+  }
+
+  /// 指定レイヤの全フィーチャ（rawデータをそのまま返す）
+  Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
+    try {
+      // name/description/metadataカラムがなければ自動追加
+      await ensureNameDescriptionColumns(tableName);
+      await ensureMetadataColumn(tableName);
+
+      final db = await _getDatabase();
+      final rows = await db.query(tableName);
+
+      // rawデータをそのまま返す（geometry変換は行わない）
+      return rows.map((row) => Map<String, dynamic>.from(row)).toList();
     } catch (e) {
       print('getFeatures: エラー発生 - $e');
       return [];

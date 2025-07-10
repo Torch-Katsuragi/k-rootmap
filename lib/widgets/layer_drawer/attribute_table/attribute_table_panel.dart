@@ -163,17 +163,14 @@ class _AttributeTablePanelState extends State<AttributeTablePanel> {
     try {
       print('[AttributeTable] 最適化データ読み込み開始');
 
-      // カラム名と基本データを並行取得
-      final results = await Future.wait([
-        widget.layerNode.geoPackageFile.getColumnNames(
-          widget.layerNode.layerName,
-          getAll: showAllColumns,
-        ),
-        widget.layerNode.features,
-      ]);
+      // カラム名を取得
+      final columns = await widget.layerNode.geoPackageFile.getColumnNames(
+        widget.layerNode.layerName,
+        getAll: showAllColumns,
+      );
 
-      final columns = results[0] as List<String>;
-      final features = results[1] as List<FeatureNode>;
+      // 基本データを取得（同期的）
+      final features = widget.layerNode.features;
 
       print(
         '[AttributeTable] カラム数: ${columns.length}, フィーチャ数: ${features.length}',

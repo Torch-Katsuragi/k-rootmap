@@ -83,7 +83,7 @@ class SelectTool extends MapTool {
       );
     } else {
       // childrenが空の場合のみDBから読み込み（初回読み込み時）
-      final dbFeatures = await layer.features;
+      final dbFeatures = layer.features;
       features = dbFeatures.whereType<FeatureNode>().toList();
       print(
         '[DEBUG] SelectTool.selectFeatureAtLatLng: loaded ${features.length} features from DB',
@@ -216,7 +216,7 @@ class SelectTool extends MapTool {
             '[DEBUG] SelectTool.onScaleEnd: using ${features.length} features from children',
           );
         } else {
-          final dbFeatures = await layer.features;
+          final dbFeatures = layer.features;
           features = dbFeatures.whereType<FeatureNode>().toList();
           print(
             '[DEBUG] SelectTool.onScaleEnd: loaded ${features.length} features from DB',

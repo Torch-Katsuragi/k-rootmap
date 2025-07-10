@@ -29,9 +29,24 @@ abstract class LayerNode extends LayerTreeNode {
     throw StateError('LayerNode must have a GeoPackageNode parent');
   }
 
-  /// このレイヤに含まれるFeatureNodeリスト（非同期取得）
-  Future<List<FeatureNode>> get features async {
+  /// このレイヤに含まれるFeatureNodeリスト（型安全なchildren）
+  List<FeatureNode> get features =>
+      super.children.whereType<FeatureNode>().toList();
+
+  /// データベースからFeatureNodeを非同期で読み込み（プライベートメソッド）
+  /// サブクラスでoverrideして具体的な実装を提供する
+  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
     return <FeatureNode>[];
+  }
+
+  /// FeatureNodeを安全に追加するメソッド
+  void addFeature(FeatureNode feature) {
+    super.addChild(feature);
+  }
+
+  /// FeatureNodeを安全に削除するメソッド
+  void removeFeature(FeatureNode feature) {
+    super.removeChild(feature);
   }
 
   /// コンストラクタ
@@ -92,8 +107,8 @@ abstract class LayerNode extends LayerTreeNode {
   @override
   Future<void> updateChildren() async {
     children.clear();
-    // featuresからFeatureNodeをchildrenに追加
-    final featureList = await features;
+    // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
+    final featureList = await _loadFeaturesFromDB();
     for (final node in featureList) {
       addChild(node);
     }
@@ -105,7 +120,7 @@ class PointLayerNode extends LayerNode {
   PointLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> get features async {
+  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
     final feats = await geoPackageFile.getFeatures(layerName);
     return feats.where((f) => (f)["points"] != null && (f)["name"] != null).map(
       (f) {
@@ -149,7 +164,7 @@ class LineLayerNode extends LayerNode {
   LineLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> get features async {
+  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
     final feats = await geoPackageFile.getFeatures(layerName);
     return feats.where((f) => (f)["lines"] != null && (f)["name"] != null).map((
       f,
@@ -193,7 +208,7 @@ class PolygonLayerNode extends LayerNode {
   PolygonLayerNode(super.file, super.name, {super.visible, super.parent});
 
   @override
-  Future<List<FeatureNode>> get features async {
+  Future<List<FeatureNode>> _loadFeaturesFromDB() async {
     final feats = await geoPackageFile.getFeatures(layerName);
     return feats
         .where((f) => (f)["polygons"] != null && (f)["name"] != null)

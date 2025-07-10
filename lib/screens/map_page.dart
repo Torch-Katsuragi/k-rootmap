@@ -1109,7 +1109,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = await layer.features;
+          final dbFeatures = layer.features;
           final dbPointFeatures =
               dbFeatures.whereType<PointFeatureNode>().toList();
           print(
@@ -1131,7 +1131,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = await layer.features;
+          final dbFeatures = layer.features;
           final dbLineFeatures =
               dbFeatures.whereType<LineFeatureNode>().toList();
           print(
@@ -1153,7 +1153,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
         // childrenが空の場合のみDBから読み込み（初回読み込み時）
         if (layerFeatures.isEmpty) {
-          final dbFeatures = await layer.features;
+          final dbFeatures = layer.features;
           final dbPolygonFeatures =
               dbFeatures.whereType<PolygonFeatureNode>().toList();
           print(
@@ -1386,7 +1386,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         print('[MAP] キャッシュから${features.length}件のフィーチャを取得');
       } else {
         // childrenが空の場合はDBから読み込み
-        final dbFeatures = await layer.features;
+        final dbFeatures = layer.features;
         features = dbFeatures.whereType<FeatureNode>().toList();
         print('[MAP] DBから${features.length}件のフィーチャを読み込み');
 

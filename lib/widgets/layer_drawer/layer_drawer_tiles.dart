@@ -740,7 +740,7 @@ mixin LayerDrawerTiles {
   ) async {
     try {
       // フィーチャデータを取得
-      final features = await node.features;
+      final features = node.features;
 
       // フィーチャデータをMap形式に変換
       final featureList = <Map<String, dynamic>>[];
@@ -1025,7 +1025,7 @@ mixin LayerDrawerTiles {
           await result.createdLayer!.updateChildren();
 
           // デバッグ：フィーチャが正しく読み込まれたかを確認
-          final features = await result.createdLayer!.features;
+          final features = result.createdLayer!.features;
           print(
             '[LayerDrawer] レイヤー「${result.createdLayer!.layerName}」のフィーチャ数: ${features.length}',
           );

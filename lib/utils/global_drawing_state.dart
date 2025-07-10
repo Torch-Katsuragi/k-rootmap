@@ -645,7 +645,7 @@ class GlobalDrawingState {
 
         // 作成されたフィーチャを取得
         if (success) {
-          final features = await selectedLayer.features;
+          final features = selectedLayer.features;
           if (features.isNotEmpty) {
             savedFeature = features.last;
             print(
@@ -670,7 +670,7 @@ class GlobalDrawingState {
 
         // 作成されたフィーチャを取得
         if (success) {
-          final features = await selectedLayer.features;
+          final features = selectedLayer.features;
           if (features.isNotEmpty) {
             savedFeature = features.last;
             print(

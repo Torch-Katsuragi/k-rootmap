@@ -15,7 +15,7 @@ import '../utils/wkb_utils.dart';
 import '../models/layer_tree_node.dart';
 import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
 import '../widgets/inline_edit.dart';
-import '../widgets/layer_drawer.dart';
+import '../widgets/layer_drawer/layer_drawer.dart';
 import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
 import '../widgets/compass_fan_painter.dart'; // コンパス扇形描画用
 import '../utils/global_config.dart';

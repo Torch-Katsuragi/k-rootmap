@@ -64,6 +64,9 @@ dependencies:
   # 属性テーブル表示・編集用パッケージ
   pluto_grid: ^8.0.0                  # 高機能データグリッド（属性テーブル用）
 
+  # コレクション操作用パッケージ
+  collection: ^1.18.0                 # 高度なコレクション操作用
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

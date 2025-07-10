@@ -23,6 +23,7 @@ import '../services/import_export_service.dart'; // インポート機能用
 import '../converters/feature_converter.dart'; // フィーチャエクスポート機能用
 import '../converters/base_converter.dart'; // ConversionResultとパラメータクラス用
 import 'dialog_manager.dart'; // ダイアログ管理用
+import 'attribute_table_widget.dart'; // PlutoGrid属性テーブル用
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -72,6 +73,157 @@ class _LayerDrawerState extends State<LayerDrawer> {
 
   /// ImportExportServiceのインスタンス
   ImportExportService get _importExportService => ImportExportService();
+
+  /// PlutoGrid属性テーブルを表示
+  void _showPlutoAttributeTable(BuildContext context, LayerNode node) async {
+    try {
+      // フィーチャデータを取得
+      final features = await node.features;
+
+      // フィーチャデータをMap形式に変換
+      final featureList = <Map<String, dynamic>>[];
+      for (final feature in features) {
+        final featureMap = <String, dynamic>{
+          'id': feature.rowId,
+          'geometry': {
+            'type': feature.runtimeType
+                .toString()
+                .replaceAll('Node', '')
+                .replaceAll('Layer', '')
+                .replaceAll('Feature', ''),
+            'coordinates': [], // 座標は簡略化
+          },
+          'metadata': feature.metadata,
+        };
+        featureList.add(featureMap);
+      }
+
+      // ダイアログで属性テーブルを表示
+      showDialog(
+        context: context,
+        builder:
+            (context) => AttributeTableDialog(
+              layer: node,
+              features: featureList,
+              onFeatureSelected: (feature) {
+                // フィーチャが選択された時の処理
+                print('Feature selected: ${feature['id']}');
+                final featureId = feature['id'] as int;
+                final featureNode = features.firstWhere(
+                  (f) => f.rowId == featureId,
+                  orElse: () => features.first,
+                );
+
+                // 地図上でフィーチャを選択状態にする
+                GlobalConfig.instance.selectedFeatures = [featureNode];
+
+                // 地図を更新
+                if (GlobalConfig.instance.mapState != null) {
+                  GlobalConfig.instance.mapState.setState(() {});
+                }
+
+                // 地図をフィーチャの位置にジャンプ
+                if (widget.onJumpTo != null) {
+                  widget.onJumpTo!(featureNode.centroid);
+                }
+              },
+              onAttributeChanged: (feature, field, value) {
+                // 属性が変更された時の処理
+                print(
+                  'Attribute changed: Feature ${feature['id']}, Field: $field, Value: $value',
+                );
+                // 注意: データベースへの保存は AttributeTableWidget 内で自動実行される
+                // ここでは追加的な処理のみ実行
+              },
+              onFeatureDeleted: (feature) async {
+                // フィーチャが削除された時の処理
+                print('Feature deleted: ${feature['id']}');
+                try {
+                  final featureId = feature['id'] as int;
+                  FeatureNode? featureNode;
+                  try {
+                    featureNode = features.firstWhere(
+                      (f) => f.rowId == featureId,
+                    );
+                  } catch (e) {
+                    featureNode = null;
+                  }
+
+                  if (featureNode != null) {
+                    // フィーチャを削除
+                    await featureNode.dispose();
+
+                    // レイヤーノードから削除
+                    node.children.remove(featureNode);
+
+                    // 地図を更新
+                    _triggerMapRefresh();
+
+                    // 成功メッセージ
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('フィーチャが削除されました: ID ${featureId}'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print('Error deleting feature: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('フィーチャの削除に失敗しました: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              onAddFeature: () {
+                // 新しいフィーチャを追加する時の処理
+                print('Add new feature');
+                Navigator.pop(context); // 属性テーブルを閉じる
+
+                // 地図編集モードに切り替え
+                if (node is PointLayerNode) {
+                  // 点レイヤーの場合 - 地図をタップしてポイントを追加
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('地図上をタップして新しいポイントを追加してください'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                } else if (node is LineLayerNode) {
+                  // 線レイヤーの場合 - 線描画モードに切り替え
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('線描画モードに切り替えて新しい線を追加してください'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                } else if (node is PolygonLayerNode) {
+                  // 面レイヤーの場合 - 面描画モードに切り替え
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('面描画モードに切り替えて新しい面を追加してください'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+
+                // 選択されたレイヤーを設定
+                GlobalConfig.instance.selectedLayerNode = node;
+              },
+            ),
+      );
+    } catch (e) {
+      print('Error showing pluto attribute table: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('属性テーブルの表示に失敗しました: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   /// インポート成功メッセージを表示
   void _showImportSuccess(ImportExportResult result) {
@@ -763,6 +915,8 @@ class _LayerDrawerState extends State<LayerDrawer> {
             setState(() {
               attributeTableLayerNode = node;
             });
+          } else if (value == 'pluto_attributes') {
+            _showPlutoAttributeTable(context, node);
           } else if (value == 'export') {
             // DialogManagerを使用してレイヤーエクスポートダイアログを表示
             await DialogManager.showLayerExportDialog(
@@ -776,6 +930,16 @@ class _LayerDrawerState extends State<LayerDrawer> {
         itemBuilder:
             (context) => [
               const PopupMenuItem(value: 'attributes', child: Text('属性テーブル')),
+              const PopupMenuItem(
+                value: 'pluto_attributes',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_chart, size: 16),
+                    SizedBox(width: 8),
+                    Text('高機能属性テーブル'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'export',
                 child: Row(

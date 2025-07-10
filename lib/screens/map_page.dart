@@ -1348,17 +1348,20 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               );
             },
           ),
-          if (!drawerOpen)
-            IconButton(
-              icon: Icon(Icons.layers),
-              tooltip: 'Open Layer Drawer',
-              onPressed: () {
-                setState(() {
+          IconButton(
+            icon: Icon(Icons.layers),
+            tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',
+            onPressed: () {
+              setState(() {
+                if (drawerOpen) {
+                  drawerOpen = false;
+                } else {
                   drawerOpen = true;
                   drawerWidth = 320;
-                });
-              },
-            ),
+                }
+              });
+            },
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: Size.fromHeight(36),

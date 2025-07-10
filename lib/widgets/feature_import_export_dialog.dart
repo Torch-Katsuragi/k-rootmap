@@ -4,7 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/import_export_service.dart';
-import '../models/layer_tree_node.dart';
+import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/folder_node.dart';
+import '../models/nodes/geopackage_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/photo_node.dart';
 
 /// 個別フィーチャのImport/Export機能を提供するダイアログ
 class FeatureImportExportDialog extends StatefulWidget {

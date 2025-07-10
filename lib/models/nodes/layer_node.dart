@@ -1,0 +1,234 @@
+// K-MAPS: レイヤノードクラス
+// GeoPackage内のレイヤに対応するレイヤツリーノード
+
+import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+import 'layer_tree_node.dart';
+import 'geopackage_node.dart';
+import 'feature_node.dart';
+import '../geopackage_file.dart';
+import '../geometry_type.dart';
+
+/// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション
+abstract class LayerNode extends LayerTreeNode {
+  /// GeoPackageファイル管理クラスへの参照
+  final GeoPackageFile geoPackageFile;
+
+  /// レイヤ名（DBテーブル名）
+  final String layerName;
+
+  /// 親のGeoPackageNodeを取得
+  GeoPackageNode get geoPackageNode {
+    LayerTreeNode? current = parent;
+    while (current != null) {
+      if (current is GeoPackageNode) {
+        return current;
+      }
+      current = current.parent;
+    }
+    throw StateError('LayerNode must have a GeoPackageNode parent');
+  }
+
+  /// このレイヤに含まれるFeatureNodeリスト（非同期取得）
+  Future<List<FeatureNode>> get features async {
+    return <FeatureNode>[];
+  }
+
+  /// コンストラクタ
+  LayerNode(
+    this.geoPackageFile,
+    this.layerName, {
+    bool visible = true,
+    LayerTreeNode? parent,
+  }) : super(layerName, visible: visible, parent: parent, nodeType: "layer");
+
+  /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
+  static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
+    final nodes = <LayerTreeNode>[];
+    if (parent is! GeoPackageNode) return nodes;
+    final gpkgNode = parent;
+    final tableNames = await gpkgNode.geoPackageFile.getLayerNames();
+    for (final tableName in tableNames) {
+      final type = await gpkgNode.geoPackageFile.getGeometryType(tableName);
+      if (type == GeometryType.point) {
+        nodes.add(
+          PointLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      } else if (type == GeometryType.linestring) {
+        nodes.add(
+          LineLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      } else if (type == GeometryType.polygon) {
+        nodes.add(
+          PolygonLayerNode(
+            gpkgNode.geoPackageFile,
+            tableName,
+            visible: true,
+            parent: parent,
+          ),
+        );
+      }
+    }
+    return nodes;
+  }
+
+  @override
+  Future<void> dispose() async {
+    // レイヤ（DBテーブル）削除
+    await geoPackageFile.removeLayer(layerName);
+    await super.dispose();
+  }
+
+  @override
+  Future<void> updateChildren() async {
+    children.clear();
+    // featuresからFeatureNodeをchildrenに追加
+    final featureList = await features;
+    for (final node in featureList) {
+      addChild(node);
+    }
+  }
+}
+
+/// ポイントレイヤノード
+class PointLayerNode extends LayerNode {
+  PointLayerNode(super.file, super.name, {super.visible, super.parent});
+
+  @override
+  Future<List<FeatureNode>> get features async {
+    final feats = await geoPackageFile.getFeatures(layerName);
+    return feats.where((f) => (f)["points"] != null && (f)["name"] != null).map(
+      (f) {
+        final map = f;
+        return PointFeatureNode(
+          map["points"] as List<LatLng>,
+          map["name"] as String,
+          parent: this,
+          rowId: map["id"] ?? 0,
+          description: map["description"] as String?,
+          metadata: map["metadata"] as Map<String, dynamic>?,
+        );
+      },
+    ).toList();
+  }
+
+  @override
+  IconData get baseIcon => Icons.scatter_plot;
+  @override
+  Color get baseIconColor => Colors.blue;
+
+  /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
+  static Future<PointLayerNode?> createIn(
+    LayerTreeNode parent,
+    String name,
+  ) async {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final existingLayers = await gpkgFile.getLayerNames();
+    final exists = existingLayers.contains(name);
+    if (exists) return null;
+    await gpkgFile.addLayer(name, GeometryType.point);
+    final node = PointLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
+}
+
+/// ラインレイヤノード
+class LineLayerNode extends LayerNode {
+  LineLayerNode(super.file, super.name, {super.visible, super.parent});
+
+  @override
+  Future<List<FeatureNode>> get features async {
+    final feats = await geoPackageFile.getFeatures(layerName);
+    return feats.where((f) => (f)["lines"] != null && (f)["name"] != null).map((
+      f,
+    ) {
+      final map = f;
+      return LineFeatureNode(
+        map["lines"] as List<LatLng>,
+        map["name"] as String,
+        parent: this,
+        rowId: map["id"] ?? 0,
+        description: map["description"] as String?,
+        metadata: map["metadata"] as Map<String, dynamic>?,
+      );
+    }).toList();
+  }
+
+  @override
+  IconData get baseIcon => Icons.show_chart;
+  @override
+  Color get baseIconColor => Colors.green;
+
+  /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
+  static Future<LineLayerNode?> createIn(
+    LayerTreeNode parent,
+    String name,
+  ) async {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final existingLayers = await gpkgFile.getLayerNames();
+    final exists = existingLayers.contains(name);
+    if (exists) return null;
+    await gpkgFile.addLayer(name, GeometryType.linestring);
+    final node = LineLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
+}
+
+/// ポリゴンレイヤノード
+class PolygonLayerNode extends LayerNode {
+  PolygonLayerNode(super.file, super.name, {super.visible, super.parent});
+
+  @override
+  Future<List<FeatureNode>> get features async {
+    final feats = await geoPackageFile.getFeatures(layerName);
+    return feats
+        .where((f) => (f)["polygons"] != null && (f)["name"] != null)
+        .map((f) {
+          final map = f;
+          return PolygonFeatureNode(
+            map["polygons"] as List<List<LatLng>>,
+            map["name"] as String,
+            parent: this,
+            rowId: map["id"] ?? 0,
+            description: map["description"] as String?,
+            metadata: map["metadata"] as Map<String, dynamic>?,
+          );
+        })
+        .toList();
+  }
+
+  @override
+  IconData get baseIcon => Icons.terrain;
+  @override
+  Color get baseIconColor => Colors.deepOrange;
+
+  /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
+  static Future<PolygonLayerNode?> createIn(
+    LayerTreeNode parent,
+    String name,
+  ) async {
+    if (parent is! GeoPackageNode) return null;
+    final gpkgFile = parent.geoPackageFile;
+    final existingLayers = await gpkgFile.getLayerNames();
+    final exists = existingLayers.contains(name);
+    if (exists) return null;
+    await gpkgFile.addLayer(name, GeometryType.polygon);
+    final node = PolygonLayerNode(gpkgFile, name, parent: parent);
+    parent.addChild(node);
+    return node;
+  }
+}

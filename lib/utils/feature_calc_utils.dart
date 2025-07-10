@@ -7,7 +7,12 @@
 
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
-import '../models/layer_tree_node.dart'; // FeatureNode型利用のため
+import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/folder_node.dart';
+import '../models/nodes/geopackage_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/photo_node.dart';
 
 /// degree・metre変換系
 class DegreeMeterConverter {

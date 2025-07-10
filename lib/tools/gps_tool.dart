@@ -8,7 +8,12 @@ import 'pan_tool.dart';
 import '../utils/global_config.dart';
 import '../utils/global_drawing_state.dart';
 import '../services/gps_manager_service.dart';
-import '../models/layer_tree_node.dart';
+import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/folder_node.dart';
+import '../models/nodes/geopackage_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/photo_node.dart';
 import 'package:latlong2/latlong.dart';
 
 /// GPS関連機能を扱うツール

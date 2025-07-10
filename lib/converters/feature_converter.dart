@@ -6,7 +6,12 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'base_converter.dart';
 import '../services/import_export_service.dart';
-import '../models/layer_tree_node.dart';
+import '../models/nodes/layer_tree_node.dart';
+import '../models/nodes/folder_node.dart';
+import '../models/nodes/geopackage_node.dart';
+import '../models/nodes/layer_node.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/photo_node.dart';
 import '../models/geometry_type.dart';
 import '../utils/wkb_utils.dart';
 

@@ -211,7 +211,7 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// フィーチャ削除（親子関係切断・UI更新の最適化）
-  /// DBからの削除は各サブクラスで実装（ジオメトリ型に応じた適切な削除処理）
+  /// DBからの削除も基底クラスで統一処理
   @override
   Future<void> dispose() async {
     print('[DEBUG] FeatureNode.dispose: disposing ${name} (${runtimeType})');
@@ -220,10 +220,8 @@ abstract class FeatureNode extends LayerTreeNode {
     await flushChanges();
 
     // 即座に親子関係を切断（UI更新を優先）
-    if (parent != null) {
-      parent!.children.remove(this);
-      print('[DEBUG] FeatureNode.dispose: removed from parent children');
-    }
+    parent.children.remove(this);
+    print('[DEBUG] FeatureNode.dispose: removed from parent children');
 
     // 選択状態からも除去
     final globalConfig = GlobalConfig.instance;
@@ -232,13 +230,27 @@ abstract class FeatureNode extends LayerTreeNode {
       print('[DEBUG] FeatureNode.dispose: removed from selected features');
     }
 
-    // parentを切断
-    parent = null;
-
     // 子ノードはFeatureNodeにはないが、安全のためクリア
     children.clear();
 
+    // DBからID指定で削除を非同期で実行（UIには影響させない）
+    geoPackageFile
+        .removeFeature(layerName, rowId)
+        .then((_) {
+          print(
+            '[DEBUG] FeatureNode.dispose: DB deletion completed for ${name}',
+          );
+        })
+        .catchError((e) {
+          print(
+            '[ERROR] FeatureNode.dispose: DB deletion failed for ${name}: $e',
+          );
+        });
+
     print('[DEBUG] FeatureNode.dispose: base dispose completed for ${name}');
+
+    // 基底クラスのdisposeを呼び出し
+    await super.dispose();
   }
 
   /// ジオメトリ型ごとのデータ参照（点・線・面）
@@ -321,30 +333,6 @@ class PointFeatureNode extends FeatureNode {
 
   @override
   Object get geometry => points;
-
-  @override
-  Future<void> dispose() async {
-    print('[DEBUG] PointFeatureNode.dispose: disposing point feature ${name}');
-
-    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
-    await super.dispose();
-
-    // DBからID指定で削除を非同期で実行（UIには影響させない）
-    geoPackageFile
-        .removePoint(layerName, rowId)
-        .then((_) {
-          print(
-            '[DEBUG] PointFeatureNode.dispose: DB deletion completed for ${name}',
-          );
-        })
-        .catchError((e) {
-          print(
-            '[ERROR] PointFeatureNode.dispose: DB deletion failed for ${name}: $e',
-          );
-        });
-
-    print('[DEBUG] PointFeatureNode.dispose: point feature dispose completed');
-  }
 
   @override
   IconData get baseIcon => Icons.location_on;
@@ -535,30 +523,6 @@ class LineFeatureNode extends FeatureNode {
 
   @override
   Object get geometry => line;
-
-  @override
-  Future<void> dispose() async {
-    print('[DEBUG] LineFeatureNode.dispose: disposing line feature ${name}');
-
-    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
-    await super.dispose();
-
-    // DBから該当線を削除（非同期で実行、UIには影響させない）
-    geoPackageFile
-        .removeLine(layerName, rowId)
-        .then((_) {
-          print(
-            '[DEBUG] LineFeatureNode.dispose: DB deletion completed for ${name}',
-          );
-        })
-        .catchError((e) {
-          print(
-            '[ERROR] LineFeatureNode.dispose: DB deletion failed for ${name}: $e',
-          );
-        });
-
-    print('[DEBUG] LineFeatureNode.dispose: line feature dispose completed');
-  }
 
   @override
   IconData get baseIcon => Icons.timeline;
@@ -771,34 +735,6 @@ class PolygonFeatureNode extends FeatureNode {
 
   @override
   Object get geometry => polygon;
-
-  @override
-  Future<void> dispose() async {
-    print(
-      '[DEBUG] PolygonFeatureNode.dispose: disposing polygon feature ${name}',
-    );
-
-    // 基底クラスの処理（親子関係切断・選択状態クリア）を先に実行
-    await super.dispose();
-
-    // DBから該当ポリゴンを削除（非同期で実行、UIには影響させない）
-    geoPackageFile
-        .removePolygon(layerName, rowId)
-        .then((_) {
-          print(
-            '[DEBUG] PolygonFeatureNode.dispose: DB deletion completed for ${name}',
-          );
-        })
-        .catchError((e) {
-          print(
-            '[ERROR] PolygonFeatureNode.dispose: DB deletion failed for ${name}: $e',
-          );
-        });
-
-    print(
-      '[DEBUG] PolygonFeatureNode.dispose: polygon feature dispose completed',
-    );
-  }
 
   @override
   IconData get baseIcon => Icons.crop_square;

@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
 import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
+import '../utils/background_save_manager.dart'; // バックグラウンド保存管理クラスをインポート
 import 'package:flutter/widgets.dart';
 import 'geometry_type.dart'; // ジオメトリタイプenumをインポート
 
@@ -33,118 +34,38 @@ class GeoPackageFile {
     "kmaps_metadata",
   ];
 
-  /// バックグラウンド保存用の変更キュー
-  /// Key: "tableName:rowId:columnName", Value: 変更値
-  final Map<String, dynamic> _pendingChanges = {};
-
-  /// バックグラウンド保存用のタイマー
-  Timer? _saveTimer;
-
-  /// 属性値の遅延保存間隔（ミリ秒）
-  static const int _saveDelayMs = 1000;
-
   /// コンストラクタ
   /// pathList: ルートからのサブディレクトリ＋ファイル名のリスト
   GeoPackageFile(this.pathList);
 
-  /// 属性値の遅延更新をキューに追加
+  /// 属性値の遅延更新をキューに追加（BackgroundSaveManagerに移譲）
   void queueAttributeUpdate(
     String tableName,
     int rowId,
     String attributeName,
     dynamic value,
   ) {
-    final key = '$tableName:$rowId:$attributeName';
-    _pendingChanges[key] = value;
-    _scheduleSave();
+    BackgroundSaveManager.instance.queueAttributeUpdate(
+      this,
+      tableName,
+      rowId,
+      attributeName,
+      value,
+    );
   }
 
-  /// 複数の属性値を一括で遅延更新キューに追加
+  /// 複数の属性値を一括で遅延更新キューに追加（BackgroundSaveManagerに移譲）
   void queueAttributeUpdates(
     String tableName,
     int rowId,
     Map<String, dynamic> attributes,
   ) {
-    for (final entry in attributes.entries) {
-      final key = '$tableName:$rowId:${entry.key}';
-      _pendingChanges[key] = entry.value;
-    }
-    _scheduleSave();
-  }
-
-  /// 遅延保存のスケジュール
-  void _scheduleSave() {
-    // 既存のタイマーをキャンセル
-    _saveTimer?.cancel();
-
-    // 新しいタイマーを設定
-    _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
-      // 非同期関数を呼び出し（戻り値は無視）
-      unawaited(_saveChangesToDB());
-    });
-  }
-
-  /// 変更をDBに保存
-  Future<void> _saveChangesToDB() async {
-    if (_pendingChanges.isEmpty) return;
-
-    try {
-      print(
-        '[DEBUG] GeoPackageFile: Saving ${_pendingChanges.length} pending changes to DB',
-      );
-
-      // 変更を一時的に保存
-      final changesToSave = Map<String, dynamic>.from(_pendingChanges);
-      _pendingChanges.clear();
-
-      // テーブル別にグループ化して効率的に保存
-      final Map<String, Map<int, Map<String, dynamic>>> groupedChanges = {};
-
-      for (final entry in changesToSave.entries) {
-        final keyParts = entry.key.split(':');
-        if (keyParts.length != 3) continue;
-
-        final tableName = keyParts[0];
-        final rowId = int.tryParse(keyParts[1]);
-        final columnName = keyParts[2];
-
-        if (rowId == null) continue;
-
-        groupedChanges.putIfAbsent(tableName, () => {});
-        groupedChanges[tableName]!.putIfAbsent(rowId, () => {});
-        groupedChanges[tableName]![rowId]![columnName] = entry.value;
-      }
-
-      // テーブル別・行別に一括更新
-      for (final tableEntry in groupedChanges.entries) {
-        final tableName = tableEntry.key;
-        for (final rowEntry in tableEntry.value.entries) {
-          final rowId = rowEntry.key;
-          final attributes = rowEntry.value;
-
-          final success = await _updateFeatureAttributes(
-            tableName,
-            rowId,
-            attributes,
-          );
-
-          if (!success) {
-            print(
-              '[ERROR] GeoPackageFile: Failed to save attributes for $tableName:$rowId',
-            );
-            // 失敗した場合は変更キューに戻す
-            for (final attrEntry in attributes.entries) {
-              final key = '$tableName:$rowId:${attrEntry.key}';
-              _pendingChanges[key] = attrEntry.value;
-            }
-          }
-        }
-      }
-
-      print('[DEBUG] GeoPackageFile: Attribute save completed');
-    } catch (e) {
-      print('[ERROR] GeoPackageFile: Failed to save attributes: $e');
-    }
+    BackgroundSaveManager.instance.queueAttributeUpdates(
+      this,
+      tableName,
+      rowId,
+      attributes,
+    );
   }
 
   /// 複数の属性値を一括更新（内部用）
@@ -168,10 +89,18 @@ class GeoPackageFile {
     }
   }
 
-  /// 即座に全ての変更をDBに保存
+  /// 複数の属性値を一括更新（BackgroundSaveManager用パブリックメソッド）
+  Future<bool> updateFeatureAttributes(
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) async {
+    return await _updateFeatureAttributes(tableName, rowId, attributes);
+  }
+
+  /// 即座に全ての変更をDBに保存（BackgroundSaveManagerに移譲）
   Future<void> flushChanges() async {
-    _saveTimer?.cancel();
-    await _saveChangesToDB();
+    await BackgroundSaveManager.instance.flushChanges(this);
   }
 
   /// 辞書ベースの点フィーチャ追加
@@ -312,8 +241,8 @@ class GeoPackageFile {
     // 保留中の変更を全て保存
     await flushChanges();
 
-    // タイマーをキャンセル
-    _saveTimer?.cancel();
+    // BackgroundSaveManagerから変更キューをクリア
+    BackgroundSaveManager.instance.clearPendingChanges(this);
 
     // データベースを閉じる
     if (_database != null) {
@@ -460,13 +389,13 @@ class GeoPackageFile {
     return await addPointWithAttributes(tableName, pt, attributes);
   }
 
-  /// 指定IDの点フィーチャを削除
-  Future<void> removePoint(String tableName, int id) async {
+  /// 指定IDのフィーチャを削除
+  Future<void> removeFeature(String tableName, int id) async {
     try {
       final db = await _getDatabase();
       await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
     } catch (e) {
-      print('removePoint: エラー発生 - $e');
+      print('removeFeature: エラー発生 - $e');
     }
   }
 
@@ -964,36 +893,6 @@ class GeoPackageFile {
     } catch (e) {
       print('[GeoPackageFile] getAttributeColumnInfo エラー発生 - $e');
       return [];
-    }
-  }
-
-  /// 線フィーチャをidで削除
-  Future<void> removeLine(String tableName, int id) async {
-    try {
-      final db = await _getDatabase();
-      await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
-    } catch (e) {
-      print('removeLine: エラー発生 - $e');
-    }
-  }
-
-  /// ポリゴンフィーチャをidで削除
-  Future<void> removePolygon(String tableName, int id) async {
-    try {
-      final db = await _getDatabase();
-      await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
-    } catch (e) {
-      print('removePolygon: エラー発生 - $e');
-    }
-  }
-
-  /// データベース接続を閉じる（旧バージョン）
-  /// 注意: このメソッドは非推奨です。代わりに新しいdisposeメソッドを使用してください
-  Future<void> _disposeOld() async {
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
-      _isInitialized = false;
     }
   }
 

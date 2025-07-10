@@ -1,0 +1,214 @@
+// K-MAPS: バックグラウンド保存管理クラス（シングルトン）
+// 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
+import 'dart:async';
+import '../models/geopackage_file.dart';
+
+/// バックグラウンド保存を一元管理するシングルトンクラス
+class BackgroundSaveManager {
+  static final BackgroundSaveManager _instance =
+      BackgroundSaveManager._internal();
+  factory BackgroundSaveManager() => _instance;
+  static BackgroundSaveManager get instance => _instance;
+
+  BackgroundSaveManager._internal();
+
+  /// 保存対象のGeoPackageFileとその変更キュー
+  /// Key: GeoPackageFileインスタンス, Value: 変更キュー
+  final Map<GeoPackageFile, Map<String, dynamic>> _pendingChanges = {};
+
+  /// バックグラウンド保存用のタイマー
+  Timer? _saveTimer;
+
+  /// 属性値の遅延保存間隔（ミリ秒）
+  static const int _saveDelayMs = 1000;
+
+  /// 単一の属性値の遅延更新をキューに追加
+  void queueAttributeUpdate(
+    GeoPackageFile geoPackageFile,
+    String tableName,
+    int rowId,
+    String attributeName,
+    dynamic value,
+  ) {
+    final key = '$tableName:$rowId:$attributeName';
+
+    // GeoPackageFileごとの変更キューを取得または作成
+    _pendingChanges.putIfAbsent(geoPackageFile, () => {});
+    _pendingChanges[geoPackageFile]![key] = value;
+
+    _scheduleSave();
+  }
+
+  /// 複数の属性値を一括で遅延更新キューに追加
+  void queueAttributeUpdates(
+    GeoPackageFile geoPackageFile,
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) {
+    // GeoPackageFileごとの変更キューを取得または作成
+    _pendingChanges.putIfAbsent(geoPackageFile, () => {});
+
+    for (final entry in attributes.entries) {
+      final key = '$tableName:$rowId:${entry.key}';
+      _pendingChanges[geoPackageFile]![key] = entry.value;
+    }
+    _scheduleSave();
+  }
+
+  /// 遅延保存のスケジュール
+  void _scheduleSave() {
+    // 既存のタイマーをキャンセル
+    _saveTimer?.cancel();
+
+    // 新しいタイマーを設定
+    _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
+      // 非同期関数を呼び出し（戻り値は無視）
+      _saveChangesToDB();
+    });
+  }
+
+  /// 変更をDBに保存
+  Future<void> _saveChangesToDB() async {
+    if (_pendingChanges.isEmpty) return;
+
+    final totalChanges = _pendingChanges.values.fold<int>(
+      0,
+      (sum, changes) => sum + changes.length,
+    );
+
+    print(
+      '[DEBUG] BackgroundSaveManager: Saving $totalChanges pending changes across ${_pendingChanges.length} GeoPackage files',
+    );
+
+    // 変更を一時的に保存
+    final changesToSave = Map<GeoPackageFile, Map<String, dynamic>>.from(
+      _pendingChanges.map(
+        (gpkg, changes) => MapEntry(gpkg, Map<String, dynamic>.from(changes)),
+      ),
+    );
+    _pendingChanges.clear();
+
+    // GeoPackageFileごとに変更を保存
+    for (final entry in changesToSave.entries) {
+      final geoPackageFile = entry.key;
+      final changes = entry.value;
+
+      try {
+        await _saveChangesForGeoPackage(geoPackageFile, changes);
+      } catch (e) {
+        print(
+          '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
+        );
+        // 失敗した場合は変更キューに戻す
+        _pendingChanges.putIfAbsent(geoPackageFile, () => {});
+        _pendingChanges[geoPackageFile]!.addAll(changes);
+      }
+    }
+
+    print('[DEBUG] BackgroundSaveManager: Background save completed');
+  }
+
+  /// 特定のGeoPackageFileの変更を保存
+  Future<void> _saveChangesForGeoPackage(
+    GeoPackageFile geoPackageFile,
+    Map<String, dynamic> changes,
+  ) async {
+    if (changes.isEmpty) return;
+
+    try {
+      print(
+        '[DEBUG] BackgroundSaveManager: Saving ${changes.length} changes for GeoPackage',
+      );
+
+      // テーブル別にグループ化して効率的に保存
+      final Map<String, Map<int, Map<String, dynamic>>> groupedChanges = {};
+
+      for (final entry in changes.entries) {
+        final keyParts = entry.key.split(':');
+        if (keyParts.length != 3) continue;
+
+        final tableName = keyParts[0];
+        final rowId = int.tryParse(keyParts[1]);
+        final columnName = keyParts[2];
+
+        if (rowId == null) continue;
+
+        groupedChanges.putIfAbsent(tableName, () => {});
+        groupedChanges[tableName]!.putIfAbsent(rowId, () => {});
+        groupedChanges[tableName]![rowId]![columnName] = entry.value;
+      }
+
+      // テーブル別・行別に一括更新
+      for (final tableEntry in groupedChanges.entries) {
+        final tableName = tableEntry.key;
+        for (final rowEntry in tableEntry.value.entries) {
+          final rowId = rowEntry.key;
+          final attributes = rowEntry.value;
+
+          final success = await geoPackageFile.updateFeatureAttributes(
+            tableName,
+            rowId,
+            attributes,
+          );
+
+          if (!success) {
+            print(
+              '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
+            );
+            throw Exception('Failed to save attributes for $tableName:$rowId');
+          }
+        }
+      }
+
+      print(
+        '[DEBUG] BackgroundSaveManager: Successfully saved changes for GeoPackage',
+      );
+    } catch (e) {
+      print(
+        '[ERROR] BackgroundSaveManager: _saveChangesForGeoPackage failed: $e',
+      );
+      rethrow;
+    }
+  }
+
+  /// 指定されたGeoPackageFileの即座に全ての変更をDBに保存
+  Future<void> flushChanges(GeoPackageFile geoPackageFile) async {
+    _saveTimer?.cancel();
+
+    final changes = _pendingChanges[geoPackageFile];
+    if (changes != null && changes.isNotEmpty) {
+      final changesToSave = Map<String, dynamic>.from(changes);
+      _pendingChanges[geoPackageFile]!.clear();
+
+      try {
+        await _saveChangesForGeoPackage(geoPackageFile, changesToSave);
+      } catch (e) {
+        print('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
+        // 失敗した場合は変更キューに戻す
+        _pendingChanges[geoPackageFile]!.addAll(changesToSave);
+      }
+    }
+  }
+
+  /// 全てのGeoPackageFileの変更を即座に保存
+  Future<void> flushAllChanges() async {
+    _saveTimer?.cancel();
+    await _saveChangesToDB();
+  }
+
+  /// 指定されたGeoPackageFileの変更キューをクリア（dispose時）
+  void clearPendingChanges(GeoPackageFile geoPackageFile) {
+    _pendingChanges.remove(geoPackageFile);
+    print(
+      '[DEBUG] BackgroundSaveManager: Cleared pending changes for GeoPackage',
+    );
+  }
+
+  /// デバッグ用：現在の変更キューの状態を取得
+  Map<GeoPackageFile, int> getPendingChangesStatus() {
+    return _pendingChanges.map(
+      (gpkg, changes) => MapEntry(gpkg, changes.length),
+    );
+  }
+}

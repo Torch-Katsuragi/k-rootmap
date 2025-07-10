@@ -22,7 +22,6 @@ import 'layer_drawer_tiles.dart';
 import 'layer_drawer_utils.dart';
 import 'layer_drawer_import_export.dart';
 import 'layer_drawer_extensions.dart';
-import 'attribute_table/attribute_table_panel.dart';
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
@@ -57,10 +56,6 @@ class _LayerDrawerState extends State<LayerDrawer>
   @override
   final Set<String> expandedGpkgPaths = {};
 
-  /// 属性テーブル表示中のレイヤノード
-  @override
-  LayerNode? attributeTableLayerNode;
-
   /// 初回の自動展開が完了したかを追跡
   bool _hasPerformedInitialExpansion = false;
 
@@ -72,17 +67,6 @@ class _LayerDrawerState extends State<LayerDrawer>
   String? _draggedFilePath;
   GeoPackageNode? _dragTargetGeoPackageNode;
   int? _dragInsertIndex;
-
-  /// LayerDrawerTilesミックスイン用のゲッター・セッター
-  @override
-  LayerNode? get attributeTableLayerNodeGetter => attributeTableLayerNode;
-
-  @override
-  void setAttributeTableLayerNode(LayerNode? node) {
-    setState(() {
-      attributeTableLayerNode = node;
-    });
-  }
 
   @override
   void Function(void Function()) get setStateCallback =>
@@ -149,20 +133,6 @@ class _LayerDrawerState extends State<LayerDrawer>
       expandedGpkgPaths,
       _userClosedGpkgPaths,
     );
-
-    // 属性テーブル表示中ならそちらを表示
-    if (attributeTableLayerNode != null) {
-      return AttributeTablePanel(
-        layerNode: attributeTableLayerNode!,
-        onBack: () {
-          setState(() {
-            attributeTableLayerNode = null;
-          });
-        },
-        onJumpTo: widget.onJumpTo,
-        onStartAppendMode: widget.onStartAppendMode,
-      );
-    }
 
     return Container(
       decoration:

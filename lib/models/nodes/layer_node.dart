@@ -33,6 +33,25 @@ abstract class LayerNode extends LayerTreeNode {
   List<FeatureNode> get features =>
       super.children.whereType<FeatureNode>().toList();
 
+  /// 属性テーブルのカラム名キャッシュ
+  List<String>? _cachedColumnNames;
+
+  /// 属性テーブルのカラム名を取得（キャッシュ機能付き）
+  Future<List<String>> getAttributeColumnNames({bool getAll = false}) async {
+    if (_cachedColumnNames == null) {
+      _cachedColumnNames = await geoPackageFile.getColumnNames(
+        layerName,
+        getAll: getAll,
+      );
+    }
+    return _cachedColumnNames!;
+  }
+
+  /// 属性テーブルのカラム名キャッシュをクリア
+  void clearColumnNamesCache() {
+    _cachedColumnNames = null;
+  }
+
   /// データベースからFeatureNodeを非同期で読み込み（プライベートメソッド）
   /// サブクラスでoverrideして具体的な実装を提供する
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
@@ -47,6 +66,73 @@ abstract class LayerNode extends LayerTreeNode {
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
     super.removeChild(feature);
+  }
+
+  /// rowIdに該当するFeatureNodeを検索
+  FeatureNode? findFeatureByRowId(int rowId) {
+    for (final feature in features) {
+      if (feature.rowId == rowId) {
+        return feature;
+      }
+    }
+    return null;
+  }
+
+  /// childrenから属性値辞書を取得し、属性テーブルの2次元配列を返す
+  /// [columns] 取得するカラム名のリスト（nullの場合は全カラム取得）
+  /// 戻り値: List<List<dynamic>> - [ヘッダー行, データ行1, データ行2, ...]
+  Future<List<List<dynamic>>> getAttributeTableData({
+    List<String>? columns,
+    bool getAll = false,
+  }) async {
+    // カラム名を取得
+    final columnNames =
+        columns ?? await getAttributeColumnNames(getAll: getAll);
+
+    // ヘッダー行
+    final table = <List<dynamic>>[columnNames];
+
+    // 各FeatureNodeから属性値を取得してデータ行を作成
+    for (final feature in features) {
+      final row = <dynamic>[];
+
+      for (final columnName in columnNames) {
+        // FeatureNodeのcachedAttributesから値を取得
+        final value = await feature.getAttributeValue(columnName);
+        row.add(value);
+      }
+
+      table.add(row);
+    }
+
+    return table;
+  }
+
+  /// 属性テーブルデータを辞書形式で取得（UI表示用）
+  /// 戻り値: Map<String, List<dynamic>> - カラム名をキーとした列データのマップ
+  Future<Map<String, List<dynamic>>> getAttributeTableMap({
+    List<String>? columns,
+    bool getAll = false,
+  }) async {
+    // カラム名を取得
+    final columnNames =
+        columns ?? await getAttributeColumnNames(getAll: getAll);
+
+    // 各カラムの値リストを初期化
+    final tableMap = <String, List<dynamic>>{};
+    for (final columnName in columnNames) {
+      tableMap[columnName] = <dynamic>[];
+    }
+
+    // 各FeatureNodeから属性値を取得
+    for (final feature in features) {
+      for (final columnName in columnNames) {
+        final value = await feature.getAttributeValue(columnName);
+        tableMap[columnName]!.add(value);
+      }
+    }
+
+    return tableMap;
   }
 
   /// コンストラクタ
@@ -112,6 +198,8 @@ abstract class LayerNode extends LayerTreeNode {
     for (final node in featureList) {
       addChild(node);
     }
+    // 子ノードの変更があったためカラム名キャッシュをクリア
+    clearColumnNamesCache();
   }
 }
 

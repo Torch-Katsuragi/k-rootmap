@@ -3,6 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage_file.dart';
@@ -12,19 +14,160 @@ import '../../utils/feature_calc_utils.dart';
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
 abstract class FeatureNode extends LayerTreeNode {
-  /// 属性値
-  @override
-  String name;
-  String? description;
-
-  /// メタデータ（構造化されたデータ）
-  Map<String, dynamic>? metadata;
-
   /// DB上のrowId（主キー）
   final int rowId;
 
   /// フィーチャの重心座標
   final LatLng centroid;
+
+  /// 属性値キャッシュ（DBから読み込んだ全属性値を保持）
+  Map<String, dynamic> _cachedAttributes = {};
+
+  /// 属性値の読み込み状態
+  bool _attributesLoaded = false;
+
+  /// 名前のgetter（辞書から取得）
+  @override
+  String get name => _getAttributeSync('name') ?? 'Unnamed Feature';
+
+  /// 名前のsetter（辞書に設定）
+  set name(String value) => _setAttributeSync('name', value);
+
+  /// 説明のgetter（辞書から取得）
+  String? get description => _getAttributeSync('description');
+
+  /// 説明のsetter（辞書に設定）
+  set description(String? value) => _setAttributeSync('description', value);
+
+  /// メタデータのgetter（辞書から取得）
+  Map<String, dynamic>? get metadata {
+    final value = _getAttributeSync('kmaps_metadata');
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is String) {
+      try {
+        return Map<String, dynamic>.from(json.decode(value));
+      } catch (e) {
+        print('[WARNING] FeatureNode: Failed to parse metadata JSON: $e');
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// メタデータのsetter（辞書に設定）
+  set metadata(Map<String, dynamic>? value) {
+    if (value == null) {
+      _setAttributeSync('kmaps_metadata', null);
+    } else {
+      _setAttributeSync('kmaps_metadata', json.encode(value));
+    }
+  }
+
+  /// 属性値の同期取得（内部用）
+  dynamic _getAttributeSync(String attributeName) {
+    return _cachedAttributes[attributeName];
+  }
+
+  /// 属性値の同期設定（内部用）
+  void _setAttributeSync(String attributeName, dynamic value) {
+    // キャッシュに即座に反映（UI表示用）
+    _cachedAttributes[attributeName] = value;
+
+    // GeoPackageFileの遅延保存キューに追加
+    geoPackageFile.queueAttributeUpdate(layerName, rowId, attributeName, value);
+  }
+
+  /// 属性値キャッシュの初期化（DBから全属性値を読み込み）
+  Future<void> _loadAttributesFromDB() async {
+    if (_attributesLoaded) return;
+
+    try {
+      print(
+        '[DEBUG] FeatureNode: Loading attributes from DB for ${name} (rowId: $rowId)',
+      );
+
+      // DBから全属性値を取得
+      final attributes = await geoPackageFile.getFeatureAttributes(
+        layerName,
+        rowId,
+      );
+
+      if (attributes != null) {
+        _cachedAttributes = Map<String, dynamic>.from(attributes);
+        print(
+          '[DEBUG] FeatureNode: Loaded ${_cachedAttributes.length} attributes',
+        );
+      } else {
+        print('[WARNING] FeatureNode: No attributes found for ${name}');
+        _cachedAttributes = {};
+      }
+
+      _attributesLoaded = true;
+    } catch (e) {
+      print('[ERROR] FeatureNode: Failed to load attributes for ${name}: $e');
+      _cachedAttributes = {};
+    }
+  }
+
+  /// 属性値の取得（キャッシュから）
+  Future<dynamic> getAttributeValue(String attributeName) async {
+    // 属性値が未読み込みの場合は読み込み
+    if (!_attributesLoaded) {
+      await _loadAttributesFromDB();
+    }
+
+    return _getAttributeSync(attributeName);
+  }
+
+  /// 属性値の設定（キャッシュに保存し、バックグラウンドでDB書き込み）
+  Future<void> setAttributeValue(String attributeName, dynamic value) async {
+    print('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
+
+    // 属性値が未読み込みの場合は読み込み
+    if (!_attributesLoaded) {
+      await _loadAttributesFromDB();
+    }
+
+    _setAttributeSync(attributeName, value);
+  }
+
+  /// 複数の属性値を一括設定
+  Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
+    print('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
+
+    // 属性値が未読み込みの場合は読み込み
+    if (!_attributesLoaded) {
+      await _loadAttributesFromDB();
+    }
+
+    // キャッシュに即座に反映
+    _cachedAttributes.addAll(attributes);
+
+    // GeoPackageFileの遅延保存キューに一括追加
+    geoPackageFile.queueAttributeUpdates(layerName, rowId, attributes);
+  }
+
+  /// 全属性値を取得
+  Future<Map<String, dynamic>> getAllAttributes() async {
+    // 属性値が未読み込みの場合は読み込み
+    if (!_attributesLoaded) {
+      await _loadAttributesFromDB();
+    }
+
+    return Map<String, dynamic>.from(_cachedAttributes);
+  }
+
+  /// 即座に全ての変更をDBに保存
+  Future<void> flushChanges() async {
+    await geoPackageFile.flushChanges();
+  }
+
+  /// 属性値の直接編集（レガシー互換用）
+  @Deprecated('Use setAttributeValue instead')
+  Future<void> editAttribute(String attributeName, dynamic newValue) async {
+    await setAttributeValue(attributeName, newValue);
+  }
 
   /// 詳細情報（項目名と値のペア、順序付き）
   List<MapEntry<String, String>> get detailEntries => [
@@ -67,21 +210,14 @@ abstract class FeatureNode extends LayerTreeNode {
     return details;
   }
 
-  /// 指定した属性名に対応する値をDBから取得
-  Future<dynamic> getAttributeValue(String attributeName) async {
-    // geoPackageFileから都度取得
-    return await geoPackageFile.getFeatureAttribute(
-      layerName,
-      rowId,
-      attributeName,
-    );
-  }
-
   /// フィーチャ削除（親子関係切断・UI更新の最適化）
   /// DBからの削除は各サブクラスで実装（ジオメトリ型に応じた適切な削除処理）
   @override
   Future<void> dispose() async {
     print('[DEBUG] FeatureNode.dispose: disposing ${name} (${runtimeType})');
+
+    // 保留中の変更を即座に保存
+    await flushChanges();
 
     // 即座に親子関係を切断（UI更新を優先）
     if (parent != null) {
@@ -113,9 +249,9 @@ abstract class FeatureNode extends LayerTreeNode {
   final LayerNode parent;
 
   FeatureNode({
-    required this.name,
-    this.description,
-    this.metadata,
+    required String name,
+    String? description,
+    Map<String, dynamic>? metadata,
     required this.parent,
     required this.rowId,
     required this.centroid,
@@ -125,23 +261,21 @@ abstract class FeatureNode extends LayerTreeNode {
          parent: parent,
          children: [],
          nodeType: 'feature',
-       );
+       ) {
+    // 初期属性値を辞書に設定
+    _cachedAttributes = {
+      'name': name,
+      'description': description,
+      'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+    };
+    _attributesLoaded = false; // DBから再読み込みが必要
+  }
 
   /// GeoPackageFile参照
   GeoPackageFile get geoPackageFile => parent.geoPackageFile;
 
   /// レイヤ名
   String get layerName => parent.layerName;
-
-  /// 指定した属性名の値をDB上で編集
-  Future<void> editAttribute(String attributeName, dynamic newValue) async {
-    await geoPackageFile.updateFeatureAttribute(
-      layerName,
-      rowId,
-      attributeName,
-      newValue,
-    );
-  }
 
   /// ジオメトリと属性を更新する抽象メソッド
   /// サブクラスでジオメトリ型に応じた具体的な実装を行う
@@ -234,13 +368,21 @@ class PointFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // DBへの保存を実行して実際のrowIdを取得
-    final actualRowId = await gpkgFile.addPoint(
+    // 属性値を辞書として準備
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
+
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = json.encode(metadata);
+    }
+
+    // 新しい辞書ベースAPIを使用してDBへの保存を実行
+    final actualRowId = await gpkgFile.addPointWithAttributes(
       layerName,
       point,
-      name: name ?? '',
-      description: description ?? '',
-      metadata: metadata,
+      attributes,
     );
 
     if (actualRowId == null) {
@@ -287,10 +429,12 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを更新
-      this.name = name;
-      this.description = description;
-      this.metadata = metadata;
+      // ローカルのプロパティを一括更新
+      await setAttributeValues({
+        'name': name,
+        'description': description,
+        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+      });
 
       // 新しいジオメトリが渡された場合はローカル変数も更新
       if (newGeometry != null) {
@@ -438,13 +582,21 @@ class LineFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // DBへの保存を実行して実際のrowIdを取得
-    final actualRowId = await gpkgFile.addLine(
+    // 属性値を辞書として準備
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
+
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = json.encode(metadata);
+    }
+
+    // 新しい辞書ベースAPIを使用してDBへの保存を実行
+    final actualRowId = await gpkgFile.addLineWithAttributes(
       layerName,
       line,
-      name: name ?? '',
-      description: description ?? '',
-      metadata: metadata,
+      attributes,
     );
 
     if (actualRowId == null) {
@@ -488,10 +640,12 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを更新
-      this.name = name;
-      this.description = description;
-      this.metadata = metadata;
+      // ローカルのプロパティを一括更新
+      await setAttributeValues({
+        'name': name,
+        'description': description,
+        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+      });
 
       // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
       if (newGeometry != null) {
@@ -669,13 +823,21 @@ class PolygonFeatureNode extends FeatureNode {
     final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
 
-    // DBへの保存を実行して実際のrowIdを取得
-    final actualRowId = await gpkgFile.addPolygon(
+    // 属性値を辞書として準備
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
+
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = json.encode(metadata);
+    }
+
+    // 新しい辞書ベースAPIを使用してDBへの保存を実行
+    final actualRowId = await gpkgFile.addPolygonWithAttributes(
       layerName,
       polygon,
-      name: name ?? '',
-      description: description ?? '',
-      metadata: metadata,
+      attributes,
     );
 
     if (actualRowId == null) {
@@ -719,10 +881,12 @@ class PolygonFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを更新
-      this.name = name;
-      this.description = description;
-      this.metadata = metadata;
+      // ローカルのプロパティを一括更新
+      await setAttributeValues({
+        'name': name,
+        'description': description,
+        'kmaps_metadata': metadata != null ? json.encode(metadata) : null,
+      });
 
       // 新しいジオメトリが渡された場合はローカル変数も更新（追記機能で重要！）
       if (newGeometry != null) {

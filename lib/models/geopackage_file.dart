@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert'; // JSON処理のため追加
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
@@ -32,9 +33,224 @@ class GeoPackageFile {
     "kmaps_metadata",
   ];
 
+  /// バックグラウンド保存用の変更キュー
+  /// Key: "tableName:rowId:columnName", Value: 変更値
+  final Map<String, dynamic> _pendingChanges = {};
+
+  /// バックグラウンド保存用のタイマー
+  Timer? _saveTimer;
+
+  /// 属性値の遅延保存間隔（ミリ秒）
+  static const int _saveDelayMs = 1000;
+
   /// コンストラクタ
   /// pathList: ルートからのサブディレクトリ＋ファイル名のリスト
   GeoPackageFile(this.pathList);
+
+  /// 属性値の遅延更新をキューに追加
+  void queueAttributeUpdate(
+    String tableName,
+    int rowId,
+    String attributeName,
+    dynamic value,
+  ) {
+    final key = '$tableName:$rowId:$attributeName';
+    _pendingChanges[key] = value;
+    _scheduleSave();
+  }
+
+  /// 複数の属性値を一括で遅延更新キューに追加
+  void queueAttributeUpdates(
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) {
+    for (final entry in attributes.entries) {
+      final key = '$tableName:$rowId:${entry.key}';
+      _pendingChanges[key] = entry.value;
+    }
+    _scheduleSave();
+  }
+
+  /// 遅延保存のスケジュール
+  void _scheduleSave() {
+    // 既存のタイマーをキャンセル
+    _saveTimer?.cancel();
+
+    // 新しいタイマーを設定
+    _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
+      // 非同期関数を呼び出し（戻り値は無視）
+      unawaited(_saveChangesToDB());
+    });
+  }
+
+  /// 変更をDBに保存
+  Future<void> _saveChangesToDB() async {
+    if (_pendingChanges.isEmpty) return;
+
+    try {
+      print(
+        '[DEBUG] GeoPackageFile: Saving ${_pendingChanges.length} pending changes to DB',
+      );
+
+      // 変更を一時的に保存
+      final changesToSave = Map<String, dynamic>.from(_pendingChanges);
+      _pendingChanges.clear();
+
+      // テーブル別にグループ化して効率的に保存
+      final Map<String, Map<int, Map<String, dynamic>>> groupedChanges = {};
+
+      for (final entry in changesToSave.entries) {
+        final keyParts = entry.key.split(':');
+        if (keyParts.length != 3) continue;
+
+        final tableName = keyParts[0];
+        final rowId = int.tryParse(keyParts[1]);
+        final columnName = keyParts[2];
+
+        if (rowId == null) continue;
+
+        groupedChanges.putIfAbsent(tableName, () => {});
+        groupedChanges[tableName]!.putIfAbsent(rowId, () => {});
+        groupedChanges[tableName]![rowId]![columnName] = entry.value;
+      }
+
+      // テーブル別・行別に一括更新
+      for (final tableEntry in groupedChanges.entries) {
+        final tableName = tableEntry.key;
+        for (final rowEntry in tableEntry.value.entries) {
+          final rowId = rowEntry.key;
+          final attributes = rowEntry.value;
+
+          final success = await _updateFeatureAttributes(
+            tableName,
+            rowId,
+            attributes,
+          );
+
+          if (!success) {
+            print(
+              '[ERROR] GeoPackageFile: Failed to save attributes for $tableName:$rowId',
+            );
+            // 失敗した場合は変更キューに戻す
+            for (final attrEntry in attributes.entries) {
+              final key = '$tableName:$rowId:${attrEntry.key}';
+              _pendingChanges[key] = attrEntry.value;
+            }
+          }
+        }
+      }
+
+      print('[DEBUG] GeoPackageFile: Attribute save completed');
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: Failed to save attributes: $e');
+    }
+  }
+
+  /// 複数の属性値を一括更新（内部用）
+  Future<bool> _updateFeatureAttributes(
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      final db = await _getDatabase();
+      final rowsUpdated = await db.update(
+        tableName,
+        attributes,
+        where: 'id = ?',
+        whereArgs: [rowId],
+      );
+      return rowsUpdated > 0;
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: _updateFeatureAttributes failed: $e');
+      return false;
+    }
+  }
+
+  /// 即座に全ての変更をDBに保存
+  Future<void> flushChanges() async {
+    _saveTimer?.cancel();
+    await _saveChangesToDB();
+  }
+
+  /// 辞書ベースの点フィーチャ追加
+  Future<int?> addPointWithAttributes(
+    String tableName,
+    LatLng point,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbPoint(point.longitude, point.latitude);
+
+      // WKBデータの妥当性チェック（デバッグ）
+      if (!validateWkbData(wkb)) {
+        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
+        debugWkbData(
+          wkb,
+          'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
+        );
+      }
+
+      final data = <String, dynamic>{'geom': wkb};
+      data.addAll(attributes);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: addPointWithAttributes failed: $e');
+      return null;
+    }
+  }
+
+  /// 辞書ベースの線フィーチャ追加
+  Future<int?> addLineWithAttributes(
+    String tableName,
+    List<LatLng> line,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbLineString(line);
+
+      final data = <String, dynamic>{'geom': wkb};
+      data.addAll(attributes);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: addLineWithAttributes failed: $e');
+      return null;
+    }
+  }
+
+  /// 辞書ベースの面フィーチャ追加
+  Future<int?> addPolygonWithAttributes(
+    String tableName,
+    List<List<LatLng>> polygon,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      await ensureMetadataColumn(tableName);
+      final db = await _getDatabase();
+      final wkb = createWkbPolygon(polygon);
+
+      final data = <String, dynamic>{'geom': wkb};
+      data.addAll(attributes);
+
+      // insertして実際のrowIdを取得
+      final rowId = await db.insert(tableName, data);
+      return rowId;
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: addPolygonWithAttributes failed: $e');
+      return null;
+    }
+  }
 
   /// データベース初期化（遅延初期化）
   /// プライベートメソッドで、必要に応じて自動的に呼び出される
@@ -89,6 +305,24 @@ class GeoPackageFile {
         print('  親ディレクトリアクセスエラー: $dirError');
       }
     }
+  }
+
+  /// データベースのクローズ処理
+  Future<void> dispose() async {
+    // 保留中の変更を全て保存
+    await flushChanges();
+
+    // タイマーをキャンセル
+    _saveTimer?.cancel();
+
+    // データベースを閉じる
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    _isInitialized = false;
+    print('[DEBUG] GeoPackageFile: Disposed database connection');
   }
 
   /// データベース作成時のコールバック（OGC GeoPackage仕様準拠）
@@ -199,62 +433,9 @@ class GeoPackageFile {
         print('[GeoPackageFile] 空のGeoPackageファイル作成失敗: 初期化未完了');
         return false;
       }
-    } catch (e, stack) {
+    } catch (e) {
       print('[GeoPackageFile] 空のGeoPackageファイル作成エラー: $e');
-      print('スタックトレース: $stack');
       return false;
-    }
-  }
-
-  /// DBからレイヤ（フィーチャテーブル）名一覧を取得
-  Future<List<String>> getLayerNames() async {
-    try {
-      final db = await _getDatabase();
-      final contents = await db.query(
-        'gpkg_contents',
-        where: 'data_type = ?',
-        whereArgs: ['features'],
-      );
-      return contents.map((row) => row['table_name'] as String).toList();
-    } catch (e) {
-      print('getLayerNames: エラー発生 - $e');
-      return [];
-    }
-  }
-
-  /// DBから指定レイヤの点フィーチャ一覧を取得
-  Future<List<LatLng>> getPoints(String tableName) async {
-    try {
-      final db = await _getDatabase();
-      final rows = await db.query(tableName);
-      final points = <LatLng>[];
-
-      for (final row in rows) {
-        final geom = row['geom'] as Uint8List;
-        // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
-        Uint8List pureWkb = geom;
-        if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
-          pureWkb = geom.sublist(8);
-        }
-
-        if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
-          final lon = ByteData.sublistView(
-            pureWkb,
-            5,
-            13,
-          ).getFloat64(0, Endian.little);
-          final lat = ByteData.sublistView(
-            pureWkb,
-            13,
-            21,
-          ).getFloat64(0, Endian.little);
-          points.add(LatLng(lat, lon));
-        }
-      }
-      return points;
-    } catch (e) {
-      print('getPoints: エラー発生 - $e');
-      return [];
     }
   }
 
@@ -266,33 +447,17 @@ class GeoPackageFile {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    try {
-      await ensureMetadataColumn(tableName);
-      final db = await _getDatabase();
-      final wkb = createWkbPoint(pt.longitude, pt.latitude);
+    // 新しい辞書ベースAPIを使用
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
 
-      // WKBデータの妥当性チェック（デバッグ）
-      if (!validateWkbData(wkb)) {
-        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
-        debugWkbData(wkb, 'addPoint - ${pt.latitude}, ${pt.longitude}');
-      }
-
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] addPoint メタデータ保存:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
-
-      // insertして実際のrowIdを取得
-      final rowId = await db.insert(tableName, data);
-      return rowId;
-    } catch (e) {
-      print('addPoint: エラー発生 - $e');
-      return null;
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = jsonEncode(metadata);
     }
+
+    return await addPointWithAttributes(tableName, pt, attributes);
   }
 
   /// 指定IDの点フィーチャを削除
@@ -410,6 +575,22 @@ class GeoPackageFile {
     }
   }
 
+  /// DBからレイヤ（フィーチャテーブル）名一覧を取得
+  Future<List<String>> getLayerNames() async {
+    try {
+      final db = await _getDatabase();
+      final contents = await db.query(
+        'gpkg_contents',
+        where: 'data_type = ?',
+        whereArgs: ['features'],
+      );
+      return contents.map((row) => row['table_name'] as String).toList();
+    } catch (e) {
+      print('getLayerNames: エラー発生 - $e');
+      return [];
+    }
+  }
+
   /// レイヤ追加（DBにテーブル作成）
   Future<void> addLayer(String name, GeometryType geomType) async {
     try {
@@ -502,26 +683,17 @@ class GeoPackageFile {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    try {
-      await ensureMetadataColumn(tableName);
-      final db = await _getDatabase();
-      final wkb = createWkbLineString(line);
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] addLine メタデータ保存:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
+    // 新しい辞書ベースAPIを使用
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
 
-      // insertして実際のrowIdを取得
-      final rowId = await db.insert(tableName, data);
-      return rowId;
-    } catch (e) {
-      print('addLine: エラー発生 - $e');
-      return null;
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = jsonEncode(metadata);
     }
+
+    return await addLineWithAttributes(tableName, line, attributes);
   }
 
   /// ポリゴンフィーチャを追加（属性付き、外環＋穴リスト対応）
@@ -532,26 +704,17 @@ class GeoPackageFile {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    try {
-      await ensureMetadataColumn(tableName);
-      final db = await _getDatabase();
-      final wkb = createWkbPolygon(rings);
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] addPolygon メタデータ保存:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
+    // 新しい辞書ベースAPIを使用
+    final attributes = <String, dynamic>{
+      'name': name,
+      'description': description,
+    };
 
-      // insertして実際のrowIdを取得
-      final rowId = await db.insert(tableName, data);
-      return rowId;
-    } catch (e) {
-      print('addPolygon: エラー発生 - $e');
-      return null;
+    if (metadata != null) {
+      attributes['kmaps_metadata'] = jsonEncode(metadata);
     }
+
+    return await addPolygonWithAttributes(tableName, rings, attributes);
   }
 
   /// 指定テーブルのカラム名一覧を返す（getAll=trueなら全カラム、falseならsupportedAttributesのみ）
@@ -596,8 +759,30 @@ class GeoPackageFile {
     }
   }
 
+  /// 指定テーブル・rowIdの全属性値を取得
+  Future<Map<String, dynamic>?> getFeatureAttributes(
+    String tableName,
+    int rowId,
+  ) async {
+    try {
+      final db = await _getDatabase();
+      final result = await db.query(
+        tableName,
+        where: 'id = ?',
+        whereArgs: [rowId],
+      );
+      if (result.isNotEmpty) {
+        return Map<String, dynamic>.from(result.first);
+      }
+      return null;
+    } catch (e) {
+      print('getFeatureAttributes: エラー発生 - $e');
+      return null;
+    }
+  }
+
   /// 指定テーブル・rowId・カラム名の属性値を更新
-  Future<void> updateFeatureAttribute(
+  Future<bool> updateFeatureAttribute(
     String tableName,
     int rowId,
     String attributeName,
@@ -605,14 +790,16 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
-      await db.update(
+      final rowsUpdated = await db.update(
         tableName,
         {attributeName: newValue},
         where: 'id = ?',
         whereArgs: [rowId],
       );
+      return rowsUpdated > 0;
     } catch (e) {
       print('updateFeatureAttribute: エラー発生 - $e');
+      return false;
     }
   }
 
@@ -800,8 +987,9 @@ class GeoPackageFile {
     }
   }
 
-  /// データベース接続を閉じる
-  Future<void> dispose() async {
+  /// データベース接続を閉じる（旧バージョン）
+  /// 注意: このメソッドは非推奨です。代わりに新しいdisposeメソッドを使用してください
+  Future<void> _disposeOld() async {
     if (_database != null) {
       await _database!.close();
       _database = null;

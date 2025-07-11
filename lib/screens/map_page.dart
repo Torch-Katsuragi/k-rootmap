@@ -37,6 +37,7 @@ import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
 import '../models/gps_track.dart';
 import '../widgets/track_save_dialog.dart';
+import '../widgets/line_simplification_dialog.dart';
 import '../tools/gps_utils.dart'; // Added GPS utility
 import '../screens/gps_settings_screen.dart'; // GPS設定画面
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
@@ -2971,25 +2972,97 @@ class FeatureDetailPanel extends StatelessWidget {
               .where((entry) => !entry.key.toLowerCase().contains('metadata'))
               .toList();
 
+      final children = <Widget>[
+        for (final entry in filteredEntries)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${entry.key}: ',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Expanded(child: Text(entry.value)),
+            ],
+          ),
+      ];
+
+      // LineFeatureNodeの場合は簡略化ボタンを追加
+      if (feature is LineFeatureNode) {
+        children.addAll([
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _showLineSimplificationDialog(context, feature),
+              icon: const Icon(Icons.timeline, size: 16),
+              label: const Text('ライン簡略化'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade50,
+                foregroundColor: Colors.blue.shade700,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ]);
+      }
+
       return _buildPanel(
         context,
         title: feature.runtimeType.toString(),
-        children: [
-          for (final entry in filteredEntries)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${entry.key}: ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Expanded(child: Text(entry.value)),
-              ],
-            ),
-        ],
+        children: children,
       );
     }
     return const SizedBox.shrink();
+  }
+
+  /// ライン簡略化ダイアログを表示
+  Future<void> _showLineSimplificationDialog(
+    BuildContext context,
+    LineFeatureNode lineFeature,
+  ) async {
+    final result = await showDialog<List<LatLng>?>(
+      context: context,
+      builder: (context) => LineSimplificationDialog(lineFeature: lineFeature),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      // 簡略化を適用
+      try {
+        // LineFeatureNodeのupdateLineメソッドを使用してDBまで確実に保存
+        final success = await lineFeature.updateLine(result);
+
+        if (!success) {
+          throw Exception('ジオメトリの更新に失敗しました');
+        }
+
+        print('[LineSimplification] 簡略化適用完了: ${lineFeature.name}');
+        print('[LineSimplification] 点数: ${result.length}点');
+
+        // マップを更新
+        if (context.mounted) {
+          final mapState = GlobalConfig.instance.mapState;
+          if (mapState != null) {
+            mapState.refreshFeatures();
+            mapState.setState(() {});
+          }
+        }
+
+        // 成功メッセージ
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('ライン簡略化が適用されました')));
+        }
+      } catch (e) {
+        print('[ERROR] ライン簡略化適用失敗: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('ライン簡略化の適用に失敗しました: $e')));
+        }
+      }
+    }
   }
 
   Widget _buildPanel(

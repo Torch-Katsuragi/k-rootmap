@@ -152,7 +152,7 @@ class GeometryCalc {
   static double calcPointToLineDistance(LatLng pt, List<LatLng> line) {
     double minDist = double.infinity;
     for (int i = 1; i < line.length; i++) {
-      final d = _distancePointToSegment(pt, line[i - 1], line[i]);
+      final d = distancePointToSegment(pt, line[i - 1], line[i]);
       if (d < minDist) minDist = d;
     }
     return minDist;
@@ -171,7 +171,7 @@ class GeometryCalc {
     double minDist = double.infinity;
     for (final ring in polygon) {
       for (int i = 1; i < ring.length; i++) {
-        final d = _distancePointToSegment(pt, ring[i - 1], ring[i]);
+        final d = distancePointToSegment(pt, ring[i - 1], ring[i]);
         if (d < minDist) minDist = d;
       }
     }
@@ -208,18 +208,51 @@ class GeometryCalc {
   }
 
   /// 点と線分の最短距離（メートル）
-  static double _distancePointToSegment(LatLng p, LatLng a, LatLng b) {
-    // 緯度経度を平面直交座標に近似
-    final x0 = p.longitude, y0 = p.latitude;
-    final x1 = a.longitude, y1 = a.latitude;
-    final x2 = b.longitude, y2 = b.latitude;
-    final dx = x2 - x1, dy = y2 - y1;
-    if (dx == 0 && dy == 0) return calcDistance(p, a);
-    final t = ((x0 - x1) * dx + (y0 - y1) * dy) / (dx * dx + dy * dy);
-    if (t < 0) return calcDistance(p, a);
-    if (t > 1) return calcDistance(p, b);
-    final proj = LatLng(y1 + t * dy, x1 + t * dx);
-    return calcDistance(p, proj);
+  static double distancePointToSegment(LatLng p, LatLng a, LatLng b) {
+    // 線分が点の場合
+    if (a.latitude == b.latitude && a.longitude == b.longitude) {
+      return calcDistance(p, a);
+    }
+
+    // 緯度経度をメートル単位の平面座標に変換して計算
+    final centerLat = (a.latitude + b.latitude) / 2;
+    final mPerDegLat = DegreeMeterConverter.metersPerDegreeLat();
+    final mPerDegLng = DegreeMeterConverter.metersPerDegreeLng(centerLat);
+
+    // メートル単位の座標に変換
+    final x0 = p.longitude * mPerDegLng;
+    final y0 = p.latitude * mPerDegLat;
+    final x1 = a.longitude * mPerDegLng;
+    final y1 = a.latitude * mPerDegLat;
+    final x2 = b.longitude * mPerDegLng;
+    final y2 = b.latitude * mPerDegLat;
+
+    final dx = x2 - x1;
+    final dy = y2 - y1;
+
+    // 線分の長さの二乗
+    final lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared == 0) return calcDistance(p, a);
+
+    // 線分上の最近点を求める
+    final t = ((x0 - x1) * dx + (y0 - y1) * dy) / lengthSquared;
+
+    if (t < 0) {
+      // 最近点が線分の開始点側
+      return calcDistance(p, a);
+    } else if (t > 1) {
+      // 最近点が線分の終了点側
+      return calcDistance(p, b);
+    } else {
+      // 最近点が線分上にある
+      final projX = x1 + t * dx;
+      final projY = y1 + t * dy;
+
+      // メートル単位での距離を直接計算
+      final distX = x0 - projX;
+      final distY = y0 - projY;
+      return math.sqrt(distX * distX + distY * distY);
+    }
   }
 
   /// Shoelace formula for a single ring（絶対値で返す）
@@ -374,5 +407,149 @@ class PolygonMerge {
       }
     }
     return count;
+  }
+}
+
+/// ライン簡略化処理
+class LineSimplification {
+  /// Douglas-Peucker アルゴリズムによるライン簡略化
+  /// [line]: 簡略化対象のライン座標リスト
+  /// [tolerance]: 許容誤差（メートル）
+  /// 戻り値: 簡略化されたライン座標リスト
+  static List<LatLng> simplifyLineDouglasPeucker(
+    List<LatLng> line,
+    double tolerance,
+  ) {
+    if (line.length <= 2) {
+      return List.from(line);
+    }
+
+    final simplified = _douglasPeuckerRecursive(line, tolerance);
+
+    print(
+      '[LineSimplification] 簡略化完了: ${line.length}点 → ${simplified.length}点 (許容誤差: ${tolerance}m)',
+    );
+
+    return simplified;
+  }
+
+  /// Douglas-Peucker アルゴリズムの再帰実装（標準的な実装）
+  static List<LatLng> _douglasPeuckerRecursive(
+    List<LatLng> points,
+    double tolerance,
+  ) {
+    if (points.length < 3) {
+      return List.from(points);
+    }
+
+    // 開始点と終了点を結ぶ線分を作成
+    final startPoint = points.first;
+    final endPoint = points.last;
+
+    // 中間点の中で線分から最も離れた点を探す
+    double maxDistance = 0.0;
+    int maxDistanceIndex = 0;
+
+    for (int i = 1; i < points.length - 1; i++) {
+      final distance = _distancePointToSegment(points[i], startPoint, endPoint);
+
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        maxDistanceIndex = i;
+      }
+    }
+
+    // 最大距離が許容誤差より大きい場合は分割して再帰処理
+    if (maxDistance > tolerance) {
+      // 前半部分を再帰的に処理（最大距離の点を含む）
+      final leftPart = _douglasPeuckerRecursive(
+        points.sublist(0, maxDistanceIndex + 1),
+        tolerance,
+      );
+
+      // 後半部分を再帰的に処理（最大距離の点から終了まで）
+      final rightPart = _douglasPeuckerRecursive(
+        points.sublist(maxDistanceIndex),
+        tolerance,
+      );
+
+      // 結果を結合（重複する分岐点を除く）
+      final result = <LatLng>[];
+      result.addAll(leftPart);
+      // 重複する中間点（maxDistanceIndex）を除いて結合
+      result.addAll(rightPart.skip(1));
+
+      return result;
+    } else {
+      // 許容誤差以下なら開始点と終了点のみ
+      return [startPoint, endPoint];
+    }
+  }
+
+  /// 点と線分の最短距離（メートル）を計算
+  /// Douglas-Peucker専用の高速版
+  static double _distancePointToSegment(LatLng point, LatLng a, LatLng b) {
+    // 既存のGeometryCalcの実装を活用
+    return GeometryCalc.distancePointToSegment(point, a, b);
+  }
+
+  /// ライン簡略化の統計情報を取得
+  /// [originalLine]: 元のライン
+  /// [simplifiedLine]: 簡略化後のライン
+  /// 戻り値: 簡略化統計のMap
+  static Map<String, dynamic> getSimplificationStats(
+    List<LatLng> originalLine,
+    List<LatLng> simplifiedLine,
+  ) {
+    final originalLength = GeometryCalc.calcLineLength(originalLine);
+    final simplifiedLength = GeometryCalc.calcLineLength(simplifiedLine);
+    final pointReduction = originalLine.length - simplifiedLine.length;
+    final pointReductionPercent = (pointReduction / originalLine.length * 100)
+        .toStringAsFixed(1);
+    final lengthError = (originalLength - simplifiedLength).abs();
+    final lengthErrorPercent = (lengthError / originalLength * 100)
+        .toStringAsFixed(1);
+
+    return {
+      'originalPoints': originalLine.length,
+      'simplifiedPoints': simplifiedLine.length,
+      'pointReduction': pointReduction,
+      'pointReductionPercent': '$pointReductionPercent%',
+      'originalLength': originalLength,
+      'simplifiedLength': simplifiedLength,
+      'lengthError': lengthError,
+      'lengthErrorPercent': '$lengthErrorPercent%',
+    };
+  }
+
+  /// 適応的簡略化（段階的に許容誤差を調整）
+  /// [line]: 簡略化対象のライン
+  /// [targetPointCount]: 目標点数
+  /// [maxTolerance]: 最大許容誤差（メートル）
+  /// 戻り値: 簡略化されたライン
+  static List<LatLng> simplifyLineAdaptive(
+    List<LatLng> line,
+    int targetPointCount, {
+    double maxTolerance = 100.0,
+  }) {
+    if (line.length <= targetPointCount) {
+      return List.from(line);
+    }
+
+    double tolerance = 1.0; // 初期値1メートル
+    List<LatLng> result = line;
+
+    // 目標点数になるまで許容誤差を段階的に増加
+    while (result.length > targetPointCount && tolerance <= maxTolerance) {
+      result = simplifyLineDouglasPeucker(line, tolerance);
+      tolerance *= 1.5; // 1.5倍ずつ増加
+    }
+
+    print(
+      '[LineSimplification] 適応的簡略化完了: '
+      '${line.length}点 → ${result.length}点 (許容誤差: ${tolerance.toStringAsFixed(1)}m)',
+    );
+
+    return result;
   }
 }

@@ -2041,8 +2041,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         for (final photo in photoNodes)
                           Marker(
                             point: photo.location,
-                            width: 40,
-                            height: 40,
+                            width: 20,
+                            height: 20,
                             child: GestureDetector(
                               onTap: () {
                                 // PhotoNode選択処理
@@ -2071,13 +2071,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                                   .contains(photo)
                                               ? Colors.orange
                                               : Colors.purple,
-                                      width: 2,
+                                      width: 1,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black26,
-                                        blurRadius: 3,
-                                        offset: Offset(0, 2),
+                                        blurRadius: 2,
+                                        offset: Offset(0, 1),
                                       ),
                                     ],
                                   ),
@@ -2091,8 +2091,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     size:
                                         GlobalConfig.instance.selectedFeatures
                                                 .contains(photo)
-                                            ? 28
-                                            : 24,
+                                            ? 14
+                                            : 12,
                                   ),
                                 ),
                               ),

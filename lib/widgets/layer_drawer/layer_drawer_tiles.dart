@@ -4,7 +4,7 @@ library;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:path/path.dart' as p;
+
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -133,15 +133,206 @@ mixin LayerDrawerTiles {
     final isExpanded = absPath != null && expandedGpkgPaths.contains(absPath);
     final isDropTarget = isDragging && dragTargetGeoPackageNode == node;
 
+    // レイヤドロップターゲットの内容を構築
+    final geoPackageContent = Column(
+      children: [
+        ListTile(
+          leading: _buildIconWithVisibility(node),
+          title: Row(
+            children: [
+              Expanded(child: Text(node.name)),
+              if (isDropTarget)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'DROP LAYER HERE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          onTap: () {
+            if (isExpanded) {
+              // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
+              expandedGpkgPaths.remove(absPath);
+              userClosedGpkgPaths.add(absPath);
+            } else {
+              // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
+              if (absPath != null) {
+                expandedGpkgPaths.add(absPath);
+                userClosedGpkgPaths.remove(absPath);
+              }
+            }
+            setStateCallback(() {});
+          },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'delete') {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('GeoPackage削除'),
+                            content: Text(
+                              '${node.name} を本当に削除しますか？\nファイルも完全に削除されます。',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('キャンセル'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('削除'),
+                              ),
+                            ],
+                          ),
+                    );
+                    if (confirm == true) {
+                      try {
+                        // GeoPackageが削除されるとそのレイヤも削除される
+                        // 削除されるGeoPackageのレイヤが選択されている場合は選択状態をクリア
+                        final layersToRemove =
+                            node.children.whereType<LayerNode>().toList();
+                        for (final layer in layersToRemove) {
+                          if (GlobalConfig.instance.selectedLayerNode ==
+                              layer) {
+                            GlobalConfig.instance.selectedLayerNode = null;
+                          }
+                          // そのレイヤのフィーチャが選択されている場合も選択状態をクリア
+                          GlobalConfig.instance.selectedFeatures.removeWhere((
+                            feature,
+                          ) {
+                            if (feature is FeatureNode) {
+                              return feature.parent == layer;
+                            }
+                            return false;
+                          });
+                        }
+
+                        // geopackageノード削除（ファイルも含めて削除）
+                        await node.dispose();
+
+                        // マップのフィーチャキャッシュを更新
+                        triggerMapRefresh();
+
+                        setStateCallback(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('${node.name} を削除しました')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('削除に失敗しました: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+                itemBuilder:
+                    (context) => [
+                      const PopupMenuItem(value: 'delete', child: Text('削除')),
+                    ],
+              ),
+            ],
+          ),
+        ),
+        if (isExpanded) ...[
+          ...node.children.map(
+            (layerNode) => buildLayerTile(context, layerNode as LayerNode),
+          ),
+          // レイヤリストの最下部にレイヤ追加ボタンを表示
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 32, top: 4, bottom: 4),
+              child: buildAddLayerButton(context, node),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    // レイヤドロップ対応のDragTargetでラップ
+    final layerDragTarget = DragTarget<LayerNode>(
+      onAcceptWithDetails: (details) async {
+        final sourceLayer = details.data;
+        await _handleLayerDrop(context, sourceLayer, node);
+
+        // ドロップ完了後にフラグをリセット
+        isDragging = false;
+        dragTargetGeoPackageNode = null;
+        setStateCallback(() {});
+      },
+      onWillAcceptWithDetails: (details) {
+        // レイヤドロップを受け入れるかどうかの判定
+        final sourceLayer = details.data;
+
+        // 自分自身の親GeoPackageには移植できない
+        if (sourceLayer.geoPackageNode == node) {
+          return false;
+        }
+
+        return true;
+      },
+      onMove: (details) {
+        // ドラッグがこのターゲット上に移動した時
+        if (!isDragging || dragTargetGeoPackageNode != node) {
+          isDragging = true;
+          dragTargetGeoPackageNode = node;
+          setStateCallback(() {});
+        }
+      },
+      onLeave: (data) {
+        // ドラッグがこのターゲットから離れた時
+        if (dragTargetGeoPackageNode == node) {
+          dragTargetGeoPackageNode = null;
+          setStateCallback(() {});
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Container(
+          decoration:
+              isDropTarget
+                  ? BoxDecoration(
+                    border: Border.all(color: Colors.blue, width: 2),
+                    borderRadius: BorderRadius.circular(4),
+                    color: Colors.blue.withValues(alpha: 0.1),
+                  )
+                  : null,
+          child: geoPackageContent,
+        );
+      },
+    );
+
+    // ファイルドロップ対応のDropTargetでラップ（外側）
     return DropTarget(
       onDragEntered: (details) {
-        isDragging = true;
-        dragTargetGeoPackageNode = node;
+        // ファイルドラッグの場合のみ処理
+        if (!isDragging || dragTargetGeoPackageNode != node) {
+          isDragging = true;
+          dragTargetGeoPackageNode = node;
+          setStateCallback(() {});
+        }
       },
       onDragExited: (details) {
         if (dragTargetGeoPackageNode == node) {
           dragTargetGeoPackageNode = null;
           isDragging = false;
+          setStateCallback(() {});
         }
       },
       onDragDone: (details) async {
@@ -152,160 +343,19 @@ mixin LayerDrawerTiles {
           // 処理完了後にフラグをリセット
           isDragging = false;
           dragTargetGeoPackageNode = null;
+          setStateCallback(() {});
         }
       },
-      child: Container(
-        decoration:
-            isDropTarget
-                ? BoxDecoration(
-                  border: Border.all(color: Colors.green, width: 2),
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.green.withValues(alpha: 0.1),
-                )
-                : null,
-        child: Column(
-          children: [
-            ListTile(
-              leading: _buildIconWithVisibility(node),
-              title: Row(
-                children: [
-                  Expanded(child: Text(node.name)),
-                  if (isDropTarget)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'DROP HERE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              onTap: () {
-                if (isExpanded) {
-                  // 閉じる場合：展開リストから削除し、ユーザーが閉じたことを記録
-                  expandedGpkgPaths.remove(absPath);
-                  userClosedGpkgPaths.add(absPath);
-                } else {
-                  // 展開する場合：展開リストに追加し、ユーザーが閉じた記録を削除
-                  if (absPath != null) {
-                    expandedGpkgPaths.add(absPath);
-                    userClosedGpkgPaths.remove(absPath);
-                  }
-                }
-                setStateCallback(() {});
-              },
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'delete') {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder:
-                              (context) => AlertDialog(
-                                title: const Text('GeoPackage削除'),
-                                content: Text(
-                                  '${node.name} を本当に削除しますか？\nファイルも完全に削除されます。',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed:
-                                        () => Navigator.pop(context, false),
-                                    child: const Text('キャンセル'),
-                                  ),
-                                  TextButton(
-                                    onPressed:
-                                        () => Navigator.pop(context, true),
-                                    child: const Text('削除'),
-                                  ),
-                                ],
-                              ),
-                        );
-                        if (confirm == true) {
-                          try {
-                            // GeoPackageが削除されるとそのレイヤも削除される
-                            // 削除されるGeoPackageのレイヤが選択されている場合は選択状態をクリア
-                            final layersToRemove =
-                                node.children.whereType<LayerNode>().toList();
-                            for (final layer in layersToRemove) {
-                              if (GlobalConfig.instance.selectedLayerNode ==
-                                  layer) {
-                                GlobalConfig.instance.selectedLayerNode = null;
-                              }
-                              // そのレイヤのフィーチャが選択されている場合も選択状態をクリア
-                              GlobalConfig.instance.selectedFeatures
-                                  .removeWhere((feature) {
-                                    if (feature is FeatureNode) {
-                                      return feature.parent == layer;
-                                    }
-                                    return false;
-                                  });
-                            }
-
-                            // geopackageノード削除（ファイルも含めて削除）
-                            await node.dispose();
-
-                            // マップのフィーチャキャッシュを更新
-                            triggerMapRefresh();
-
-                            setStateCallback(() {});
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${node.name} を削除しました')),
-                            );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('削除に失敗しました: $e')),
-                            );
-                          }
-                        }
-                      }
-                    },
-                    itemBuilder:
-                        (context) => [
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('削除'),
-                          ),
-                        ],
-                  ),
-                ],
-              ),
-            ),
-            if (isExpanded) ...[
-              ...node.children.map(
-                (layerNode) => buildLayerTile(context, layerNode as LayerNode),
-              ),
-              // レイヤリストの最下部にレイヤ追加ボタンを表示
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 32, top: 4, bottom: 4),
-                  child: buildAddLayerButton(context, node),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+      child: layerDragTarget,
     );
   }
 
-  /// レイヤタイルを構築（可視切り替え・選択・削除）
+  /// レイヤタイルを構築（可視切り替え・選択・削除・ドラッグアンドドロップ）
   Widget buildLayerTile(BuildContext context, LayerNode node) {
     final isSelected = GlobalConfig.instance.selectedLayerNode == node;
-    return ListTile(
+
+    // レイヤタイルの内容を構築
+    final layerTileContent = ListTile(
       // GeoPackageノード配下のレイヤはインデントして階層感を出す
       contentPadding: const EdgeInsets.only(left: 32, right: 16),
       leading: GestureDetector(
@@ -433,6 +483,73 @@ mixin LayerDrawerTiles {
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
+    );
+
+    // LongPressDraggableでラップしてドラッグ機能を追加
+    return LongPressDraggable<LayerNode>(
+      data: node,
+      dragAnchorStrategy:
+          (draggable, context, position) => const Offset(0, 0), // ドラッグ開始位置を調整
+      feedback: Material(
+        elevation: 8.0,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 280, // フィードバックの幅を固定
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(node.baseIcon, color: node.baseIconColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    node.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.drag_indicator, color: Colors.grey),
+              ],
+            ),
+          ),
+        ),
+      ),
+      childWhenDragging: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Opacity(opacity: 0.5, child: layerTileContent),
+      ),
+      onDragStarted: () {
+        print('[LayerDrawer] レイヤドラッグ開始: ${node.name}');
+        // ドラッグ状態をONにして視覚的フィードバックを開始
+        isDragging = true;
+        setStateCallback(() {});
+      },
+      onDragEnd: (details) {
+        print('[LayerDrawer] レイヤドラッグ終了: ${node.name}');
+        // ドラッグ状態をOFFにする
+        isDragging = false;
+        dragTargetGeoPackageNode = null;
+        setStateCallback(() {});
+      },
+      child: layerTileContent,
     );
   }
 
@@ -898,24 +1015,109 @@ mixin LayerDrawerTiles {
 
   /// インポート成功メッセージを表示
   void _showImportSuccess(ImportExportResult result) {
-    String message = 'Import completed successfully!';
-    if (result.metadata != null) {
-      final metadata = result.metadata!;
-      if (metadata['layerName'] != null) {
-        message += '\nLayer: ${metadata['layerName']}';
-      }
-      if (metadata['featureCount'] != null) {
-        message += '\nFeatures: ${metadata['featureCount']}';
-      }
-    }
-
     // ScaffoldMessengerを使用するにはBuildContextが必要
     // このメソッドは呼び出し側でcontextを渡すように変更する必要がある
+    print('[LayerDrawer] インポート成功: ${result.metadata}');
   }
 
   /// インポートエラーメッセージを表示
   void _showImportError(String errorMessage) {
     // ScaffoldMessengerを使用するにはBuildContextが必要
     // このメソッドは呼び出し側でcontextを渡すように変更する必要がある
+  }
+
+  /// レイヤドロップ処理
+  Future<void> _handleLayerDrop(
+    BuildContext context,
+    LayerNode sourceLayer,
+    GeoPackageNode targetGeoPackage,
+  ) async {
+    try {
+      print(
+        '[LayerDrawer] レイヤドロップ処理開始: ${sourceLayer.name} → ${targetGeoPackage.name}',
+      );
+
+      // ユーザーに移植確認を表示
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('レイヤ移植'),
+              content: Text(
+                '「${sourceLayer.name}」を「${targetGeoPackage.name}」に移植しますか？\n\n'
+                '移植により、元のGeoPackageからこのレイヤは削除されます。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('キャンセル'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('移植'),
+                ),
+              ],
+            ),
+      );
+
+      if (confirm != true) {
+        print('[LayerDrawer] レイヤ移植がキャンセルされました');
+        return;
+      }
+
+      // 移植処理を実行
+      print('[LayerDrawer] レイヤ移植実行中...');
+      final migratedLayer = await sourceLayer.migrateToGeoPackage(
+        targetGeoPackage,
+        moveLayer: true, // 移動モード
+      );
+
+      if (migratedLayer != null) {
+        // 移植成功
+        print('[LayerDrawer] レイヤ移植成功: ${migratedLayer.name}');
+
+        // UI更新
+        triggerMapRefresh();
+        setStateCallback(() {});
+
+        // 移植されたレイヤを選択状態にする
+        GlobalConfig.instance.selectedLayerNode = migratedLayer;
+
+        // 成功メッセージを表示
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '「${sourceLayer.name}」を「${targetGeoPackage.name}」に移植しました',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // 移植失敗
+        print('[LayerDrawer] レイヤ移植失敗');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('レイヤ移植に失敗しました'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e, stack) {
+      print('[LayerDrawer] レイヤドロップ処理エラー: $e');
+      print('スタックトレース: $stack');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('レイヤ移植中にエラーが発生しました: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

@@ -1675,11 +1675,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   options: MapOptions(
                     initialCenter: _center,
                     initialZoom: 16.0,
+                    // マウスホイール拡大制限をPanToolの設定に合わせる
+                    maxZoom: PanTool.maxZoom,
                     interactionOptions: InteractionOptions(
                       flags:
                           isPanTool
                               ? InteractiveFlag.all
-                              : InteractiveFlag.pinchZoom,
+                              : (InteractiveFlag.pinchZoom |
+                                  InteractiveFlag.scrollWheelZoom),
                     ),
                     // Windows環境での安定性向上設定
                     keepAlive: true,

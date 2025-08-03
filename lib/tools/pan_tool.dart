@@ -17,6 +17,9 @@ class PanTool extends MapTool {
   @override
   IconData get icon => Icons.pan_tool_alt;
 
+  // マウスホイールズームの最大倍率設定
+  static const double maxZoom = 25.0;
+
   // ピンチ・回転用状態
   Offset? _lastFocalPoint;
   double? _startZoom, _startRotation;
@@ -90,7 +93,7 @@ class PanTool extends MapTool {
 
     final mapController = mapState.mapController;
     final double currentZoom = mapController.camera.zoom;
-    final double newZoom = (currentZoom + zoomDelta).clamp(1.0, 18.0);
+    final double newZoom = (currentZoom + zoomDelta).clamp(1.0, maxZoom);
 
     if (newZoom != currentZoom) {
       // マウス位置を中心にズーム

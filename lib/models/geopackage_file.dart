@@ -76,11 +76,14 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
-      final rowsUpdated = await db.update(
-        tableName,
-        attributes,
-        where: 'id = ?',
-        whereArgs: [rowId],
+      // テーブル名をエスケープしてUPDATE文を実行
+      final columnAssignments = attributes.keys
+          .map((key) => '"$key" = ?')
+          .join(', ');
+      final values = [...attributes.values, rowId];
+      final rowsUpdated = await db.rawUpdate(
+        'UPDATE "$tableName" SET $columnAssignments WHERE id = ?',
+        values,
       );
       return rowsUpdated > 0;
     } catch (e) {
@@ -427,10 +430,9 @@ class GeoPackageFile {
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
 
-      final rows = await db.query(
-        tableName,
-        where: 'id = ?',
-        whereArgs: [rowId],
+      final rows = await db.rawQuery(
+        'SELECT * FROM "$tableName" WHERE id = ?',
+        [rowId],
       );
 
       if (rows.isEmpty) return null;
@@ -499,7 +501,7 @@ class GeoPackageFile {
       await ensureMetadataColumn(tableName);
 
       final db = await _getDatabase();
-      final rows = await db.query(tableName);
+      final rows = await db.rawQuery('SELECT * FROM "$tableName"');
 
       // rawデータをそのまま返す（geometry変換は行わない）
       return rows.map((row) => Map<String, dynamic>.from(row)).toList();
@@ -724,11 +726,9 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
-      final rowsUpdated = await db.update(
-        tableName,
-        {attributeName: newValue},
-        where: 'id = ?',
-        whereArgs: [rowId],
+      final rowsUpdated = await db.rawUpdate(
+        'UPDATE "$tableName" SET "$attributeName" = ? WHERE id = ?',
+        [newValue, rowId],
       );
       return rowsUpdated > 0;
     } catch (e) {
@@ -961,11 +961,15 @@ class GeoPackageFile {
       }
       // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
 
-      final affectedRows = await db.update(
-        tableName,
-        data,
-        where: 'id = ?',
-        whereArgs: [id],
+      final affectedRows = await db.rawUpdate(
+        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
+        [
+          data['geom'],
+          data['name'],
+          data['description'],
+          data['kmaps_metadata'],
+          id,
+        ],
       );
 
       return affectedRows > 0;
@@ -999,11 +1003,15 @@ class GeoPackageFile {
       }
       // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
 
-      final affectedRows = await db.update(
-        tableName,
-        data,
-        where: 'id = ?',
-        whereArgs: [id],
+      final affectedRows = await db.rawUpdate(
+        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
+        [
+          data['geom'],
+          data['name'],
+          data['description'],
+          data['kmaps_metadata'],
+          id,
+        ],
       );
 
       return affectedRows > 0;
@@ -1037,11 +1045,15 @@ class GeoPackageFile {
       }
       // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
 
-      final affectedRows = await db.update(
-        tableName,
-        data,
-        where: 'id = ?',
-        whereArgs: [id],
+      final affectedRows = await db.rawUpdate(
+        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
+        [
+          data['geom'],
+          data['name'],
+          data['description'],
+          data['kmaps_metadata'],
+          id,
+        ],
       );
 
       return affectedRows > 0;
@@ -1087,7 +1099,16 @@ class GeoPackageFile {
           insertData['kmaps_metadata'] = jsonEncode(metadata);
         }
 
-        batch.insert(tableName, insertData);
+        // テーブル名を適切にエスケープしてINSERT文を実行
+        batch.rawInsert(
+          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
+          [
+            insertData['geom'],
+            insertData['name'],
+            insertData['description'],
+            insertData['kmaps_metadata'],
+          ],
+        );
       }
 
       // バッチ実行
@@ -1145,7 +1166,16 @@ class GeoPackageFile {
           insertData['kmaps_metadata'] = jsonEncode(metadata);
         }
 
-        batch.insert(tableName, insertData);
+        // テーブル名を適切にエスケープしてINSERT文を実行
+        batch.rawInsert(
+          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
+          [
+            insertData['geom'],
+            insertData['name'],
+            insertData['description'],
+            insertData['kmaps_metadata'],
+          ],
+        );
       }
 
       // バッチ実行
@@ -1201,7 +1231,16 @@ class GeoPackageFile {
           insertData['kmaps_metadata'] = jsonEncode(metadata);
         }
 
-        batch.insert(tableName, insertData);
+        // テーブル名を適切にエスケープしてINSERT文を実行
+        batch.rawInsert(
+          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
+          [
+            insertData['geom'],
+            insertData['name'],
+            insertData['description'],
+            insertData['kmaps_metadata'],
+          ],
+        );
       }
 
       // バッチ実行

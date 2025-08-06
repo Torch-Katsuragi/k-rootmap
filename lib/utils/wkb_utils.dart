@@ -13,23 +13,45 @@ Uint8List _createGpbHeader({
 }) {
   final header = BytesBuilder();
 
-  // GPBHeader
+  // GPBHeader (GeoPackage仕様準拠)
   header.addByte(0x47); // G
   header.addByte(0x50); // P
   header.addByte(0x00); // Version (0)
-  header.addByte(0x01); // Flags (little endian, no envelope)
+
+  // Flags: エンディアン(1=little)、エンベロープタイプ、空(0)、バイナリタイプ(0=standard WKB)
+  int flags = 0x01; // little endian
+  if (minX != null && maxX != null && minY != null && maxY != null) {
+    flags |= (1 << 1); // XY envelope present (envelope type = 1, bits 1-3)
+  }
+  header.addByte(flags);
 
   // SRS ID (4326 for WGS84)
   final srsBytes = ByteData(4)..setUint32(0, 4326, Endian.little);
   header.add(srsBytes.buffer.asUint8List());
+
+  // エンベロープが指定されている場合は追加
+  if (minX != null && maxX != null && minY != null && maxY != null) {
+    final envelopeBytes = ByteData(32);
+    envelopeBytes.setFloat64(0, minX, Endian.little);
+    envelopeBytes.setFloat64(8, maxX, Endian.little);
+    envelopeBytes.setFloat64(16, minY, Endian.little);
+    envelopeBytes.setFloat64(24, maxY, Endian.little);
+    header.add(envelopeBytes.buffer.asUint8List());
+  }
 
   return header.toBytes();
 }
 
 /// WKB(Point)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbPoint(double lon, double lat) {
-  // GPBinaryヘッダー
-  final gpbHeader = _createGpbHeader(wkbType: 1);
+  // GPBinaryヘッダー（エンベロープ付き）
+  final gpbHeader = _createGpbHeader(
+    wkbType: 1,
+    minX: lon,
+    maxX: lon,
+    minY: lat,
+    maxY: lat,
+  );
 
   // 標準WKBデータ
   final bytes = BytesBuilder();
@@ -49,8 +71,29 @@ Uint8List createWkbPoint(double lon, double lat) {
 
 /// WKB(LineString)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbLineString(List<LatLng> line) {
-  // GPBinaryヘッダー
-  final gpbHeader = _createGpbHeader(wkbType: 2);
+  if (line.isEmpty) return Uint8List(0);
+
+  // エンベロープ計算
+  double minX = line.first.longitude;
+  double maxX = line.first.longitude;
+  double minY = line.first.latitude;
+  double maxY = line.first.latitude;
+
+  for (final pt in line) {
+    minX = minX < pt.longitude ? minX : pt.longitude;
+    maxX = maxX > pt.longitude ? maxX : pt.longitude;
+    minY = minY < pt.latitude ? minY : pt.latitude;
+    maxY = maxY > pt.latitude ? maxY : pt.latitude;
+  }
+
+  // GPBinaryヘッダー（エンベロープ付き）
+  final gpbHeader = _createGpbHeader(
+    wkbType: 2,
+    minX: minX,
+    maxX: maxX,
+    minY: minY,
+    maxY: maxY,
+  );
 
   final bytes = BytesBuilder();
   bytes.addByte(0x01); // little endian
@@ -74,8 +117,31 @@ Uint8List createWkbLineString(List<LatLng> line) {
 
 /// WKB(Polygon)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbPolygon(List<List<LatLng>> rings) {
-  // GPBinaryヘッダー
-  final gpbHeader = _createGpbHeader(wkbType: 3);
+  if (rings.isEmpty || rings.first.isEmpty) return Uint8List(0);
+
+  // エンベロープ計算（全てのリングの全ての点から）
+  double minX = rings.first.first.longitude;
+  double maxX = rings.first.first.longitude;
+  double minY = rings.first.first.latitude;
+  double maxY = rings.first.first.latitude;
+
+  for (final ring in rings) {
+    for (final pt in ring) {
+      minX = minX < pt.longitude ? minX : pt.longitude;
+      maxX = maxX > pt.longitude ? maxX : pt.longitude;
+      minY = minY < pt.latitude ? minY : pt.latitude;
+      maxY = maxY > pt.latitude ? maxY : pt.latitude;
+    }
+  }
+
+  // GPBinaryヘッダー（エンベロープ付き）
+  final gpbHeader = _createGpbHeader(
+    wkbType: 3,
+    minX: minX,
+    maxX: maxX,
+    minY: minY,
+    maxY: maxY,
+  );
 
   final bytes = BytesBuilder();
   bytes.addByte(0x01); // little endian
@@ -104,9 +170,32 @@ Uint8List createWkbPolygon(List<List<LatLng>> rings) {
 
 /// GPBinaryヘッダーをスキップしてWKBデータを取得
 Uint8List _skipGpbHeader(Uint8List data) {
-  // GPBinaryヘッダーは8バイト（GP + Version + Flags + SRS ID）
+  // GPBinaryヘッダーの検証
   if (data.length > 8 && data[0] == 0x47 && data[1] == 0x50) {
-    return data.sublist(8);
+    final flags = data[3];
+    final envelopeType = (flags >> 1) & 0x07; // bits 1-3
+
+    int headerSize = 8; // 基本サイズ（GP + Version + Flags + SRS ID）
+
+    // エンベロープサイズを計算
+    switch (envelopeType) {
+      case 1: // XY
+        headerSize += 32; // 4 doubles
+        break;
+      case 2: // XYZ
+        headerSize += 48; // 6 doubles
+        break;
+      case 3: // XYM
+        headerSize += 48; // 6 doubles
+        break;
+      case 4: // XYZM
+        headerSize += 64; // 8 doubles
+        break;
+    }
+
+    if (data.length > headerSize) {
+      return data.sublist(headerSize);
+    }
   }
   return data; // 既に純粋なWKBの場合
 }

@@ -56,9 +56,9 @@
 
 #### ジオメトリタイプ仕様
 OGC Simple Features準拠で以下の3種類をサポート：
-- **MultiPoint**: 複数の点の集合
-- **MultiLineString**: 複数の線分の集合  
-- **MultiPolygon**: 複数のポリゴンの集合
+- **Point**: 点の集合
+- **LineString**: 線分の集合  
+- **Polygon**: ポリゴンの集合
 
 #### 描画機能
 - **フリーハンド描画**: ペン入力（スタイラス）対応

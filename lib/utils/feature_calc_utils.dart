@@ -2,17 +2,14 @@
 // 点・線・面の重心、距離、長さ、面積、最近傍feature取得など
 //
 // 本ファイルの関数は全て静的関数として利用可能
+// 主要な地理空間計算はturf_dartライブラリを使用して高精度化
 //
-// 依存: latlong2
+// 依存: latlong2, turf
 
 import 'package:latlong2/latlong.dart';
+import 'package:turf/turf.dart';
 import 'dart:math' as math;
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
-import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 
 /// degree・metre変換系
 class DegreeMeterConverter {
@@ -76,31 +73,46 @@ class GeometryCalc {
   /// [a], [b]: LatLng
   /// 戻り値: 距離（m）
   static double calcDistance(LatLng a, LatLng b) {
-    final Distance distance = const Distance();
-    return distance(a, b);
+    // turf_dartを使用した高精度な距離計算
+    final pointA = Point(coordinates: Position(a.longitude, a.latitude));
+    final pointB = Point(coordinates: Position(b.longitude, b.latitude));
+    return distance(pointA, pointB, Unit.meters).toDouble();
   }
 
   /// 線分（List<LatLng>）の長さ（メートル）を計算
   /// [line]: 線分の座標リスト
   /// 戻り値: 総距離（m）
   static double calcLineLength(List<LatLng> line) {
-    double sum = 0.0;
-    for (int i = 1; i < line.length; i++) {
-      sum += calcDistance(line[i - 1], line[i]);
-    }
-    return sum;
+    if (line.length < 2) return 0.0;
+
+    // turf_dartのLineStringとlength関数を使用
+    final coordinates =
+        line.map((ll) => Position(ll.longitude, ll.latitude)).toList();
+    final lineString = LineString(coordinates: coordinates);
+    final feature = Feature(geometry: lineString);
+    return length(feature, Unit.meters).toDouble();
   }
 
-  /// ポリゴン（外環＋穴リスト）の面積（degree^2, 穴も加算）
+  /// ポリゴン（外環＋穴リスト）の面積（m^2）
   /// [polygon]: 外環＋穴リスト（List<List<LatLng>>）
-  /// 戻り値: 面積（degree^2）
+  /// 戻り値: 面積（m^2）
   static double calcPolygonArea(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].length < 3) return 0.0;
-    double area = _ringArea(polygon[0]);
-    for (final ring in polygon.skip(1)) {
-      area -= _ringArea(ring);
-    }
-    return area;
+
+    // turf_dartのPolygonとarea関数を使用
+    final coordinates =
+        polygon
+            .map(
+              (ring) =>
+                  ring
+                      .map((ll) => Position(ll.longitude, ll.latitude))
+                      .toList(),
+            )
+            .toList();
+
+    final polygonGeometry = Polygon(coordinates: coordinates);
+    final feature = Feature(geometry: polygonGeometry);
+    return area(feature)?.toDouble() ?? 0.0; // デフォルトで平方メートル
   }
 
   /// 線分（List<LatLng>）の重心（中点）を計算
@@ -108,41 +120,58 @@ class GeometryCalc {
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcLineCentroid(List<LatLng> line) {
     if (line.isEmpty) return LatLng(0, 0);
-    double sumLat = 0.0, sumLng = 0.0;
-    for (final pt in line) {
-      sumLat += pt.latitude;
-      sumLng += pt.longitude;
-    }
-    return LatLng(sumLat / line.length, sumLng / line.length);
+    if (line.length == 1) return line.first;
+
+    // turf_dartのLineStringとcentroid関数を使用
+    final coordinates =
+        line.map((ll) => Position(ll.longitude, ll.latitude)).toList();
+    final lineString = LineString(coordinates: coordinates);
+    final feature = Feature(geometry: lineString);
+    final center = centroid(feature);
+
+    final centerCoords = center.geometry!.coordinates;
+    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
   }
 
   /// ポリゴン（外環＋穴リスト）の重心を計算
   /// [polygon]: 外環＋穴リスト（List<List<LatLng>>）
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
-    // 全ての頂点（外環＋穴）を合算して重心を計算
-    int count = 0;
-    double sumLat = 0.0, sumLng = 0.0;
-    for (final ring in polygon) {
-      for (final pt in ring) {
-        sumLat += pt.latitude;
-        sumLng += pt.longitude;
-        count++;
-      }
-    }
-    if (count == 0) return LatLng(0, 0);
-    return LatLng(sumLat / count, sumLng / count);
+    if (polygon.isEmpty || polygon[0].isEmpty) return LatLng(0, 0);
+
+    // turf_dartのPolygonとcentroid関数を使用
+    final coordinates =
+        polygon
+            .map(
+              (ring) =>
+                  ring
+                      .map((ll) => Position(ll.longitude, ll.latitude))
+                      .toList(),
+            )
+            .toList();
+
+    final polygonGeometry = Polygon(coordinates: coordinates);
+    final feature = Feature(geometry: polygonGeometry);
+    final center = centroid(feature);
+
+    final centerCoords = center.geometry!.coordinates;
+    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
   }
 
   /// 点集合（List<LatLng>）の重心を計算
   static LatLng calcPointsCentroid(List<LatLng> points) {
     if (points.isEmpty) return LatLng(0, 0);
-    double sumLat = 0.0, sumLng = 0.0;
-    for (final pt in points) {
-      sumLat += pt.latitude;
-      sumLng += pt.longitude;
-    }
-    return LatLng(sumLat / points.length, sumLng / points.length);
+    if (points.length == 1) return points.first;
+
+    // turf_dartのMultiPointとcentroid関数を使用
+    final coordinates =
+        points.map((ll) => Position(ll.longitude, ll.latitude)).toList();
+    final multiPoint = MultiPoint(coordinates: coordinates);
+    final feature = Feature(geometry: multiPoint);
+    final center = centroid(feature);
+
+    final centerCoords = center.geometry!.coordinates;
+    return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
   }
 
   /// 点と線分（List<LatLng>）の最短距離（メートル）を計算
@@ -183,28 +212,22 @@ class GeometryCalc {
   /// 点が外環＋穴リストのポリゴン内にあるか判定
   static bool pointInPolygonWithHoles(LatLng pt, List<List<LatLng>> polygon) {
     if (polygon.isEmpty) return false;
-    if (!_pointInRing(pt, polygon[0])) return false; // 外環外
-    for (int i = 1; i < polygon.length; i++) {
-      if (_pointInRing(pt, polygon[i])) return false; // 穴内
-    }
-    return true;
-  }
 
-  // 1つのリング内判定
-  static bool _pointInRing(LatLng pt, List<LatLng> ring) {
-    int cnt = 0;
-    for (int i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      if (((ring[i].latitude > pt.latitude) !=
-              (ring[j].latitude > pt.latitude)) &&
-          (pt.longitude <
-              (ring[j].longitude - ring[i].longitude) *
-                      (pt.latitude - ring[i].latitude) /
-                      (ring[j].latitude - ring[i].latitude) +
-                  ring[i].longitude)) {
-        cnt++;
-      }
-    }
-    return cnt % 2 == 1;
+    // turf_dartのbooleanPointInPolygon関数を使用
+    final pointPos = Position(pt.longitude, pt.latitude);
+    final coordinates =
+        polygon
+            .map(
+              (ring) =>
+                  ring
+                      .map((ll) => Position(ll.longitude, ll.latitude))
+                      .toList(),
+            )
+            .toList();
+    final polygonGeometry = Polygon(coordinates: coordinates);
+    final feature = Feature(geometry: polygonGeometry);
+
+    return booleanPointInPolygon(pointPos, feature);
   }
 
   /// 点と線分の最短距離（メートル）
@@ -253,18 +276,6 @@ class GeometryCalc {
       final distY = y0 - projY;
       return math.sqrt(distX * distX + distY * distY);
     }
-  }
-
-  /// Shoelace formula for a single ring（絶対値で返す）
-  /// [ring]: List<LatLng>
-  static double _ringArea(List<LatLng> ring) {
-    double area = 0.0;
-    for (int i = 0; i < ring.length; i++) {
-      final j = (i + 1) % ring.length;
-      area += ring[i].longitude * ring[j].latitude;
-      area -= ring[j].longitude * ring[i].latitude;
-    }
-    return area.abs() / 2.0;
   }
 }
 
@@ -424,13 +435,14 @@ class LineSimplification {
       return List.from(line);
     }
 
-    final simplified = _douglasPeuckerRecursive(line, tolerance);
+    // 現在は元の実装を使用（turf_dartのsimplifyは後で実装）
+    final result = _douglasPeuckerRecursive(line, tolerance);
 
     print(
-      '[LineSimplification] 簡略化完了: ${line.length}点 → ${simplified.length}点 (許容誤差: ${tolerance}m)',
+      '[LineSimplification] 簡略化完了: ${line.length}点 → ${result.length}点 (許容誤差: ${tolerance}m)',
     );
 
-    return simplified;
+    return result;
   }
 
   /// Douglas-Peucker アルゴリズムの再帰実装（標準的な実装）

@@ -1,21 +1,31 @@
 // K-MAPS: レイヤノードクラス
 // GeoPackage内のレイヤに対応するレイヤツリーノード
+// turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:turf/turf.dart' as turf;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'feature_node.dart';
 import '../geopackage_file.dart';
 import '../geometry_type.dart';
+import '../../converters/turf_converter.dart';
 
 /// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション
+/// turf_dartのFeatureCollectionオブジェクトをメインデータとして内部的に保持
 abstract class LayerNode extends LayerTreeNode {
   /// GeoPackageファイル管理クラスへの参照
   final GeoPackageFile geoPackageFile;
 
   /// レイヤ名（DBテーブル名）
   final String layerName;
+
+  /// turf_dartのFeatureCollectionオブジェクト（メインデータ）
+  turf.FeatureCollection? _turfFeatureCollection;
+
+  /// 変更の追跡フラグ
+  bool _isDirty = false;
 
   /// 親のGeoPackageNodeを取得
   GeoPackageNode get geoPackageNode {
@@ -29,9 +39,33 @@ abstract class LayerNode extends LayerTreeNode {
     throw StateError('LayerNode must have a GeoPackageNode parent');
   }
 
+  /// turf_dartのFeatureCollectionオブジェクトを取得
+  turf.FeatureCollection get turfFeatureCollection {
+    if (_turfFeatureCollection == null) {
+      // childrenからturf_dartのFeatureリストを作成
+      final turfFeatures =
+          features.map((feature) => feature.turfFeature).toList();
+      _turfFeatureCollection = TurfConverter.createFeatureCollection(
+        turfFeatures,
+      );
+    }
+    return _turfFeatureCollection!;
+  }
+
   /// このレイヤに含まれるFeatureNodeリスト（型安全なchildren）
   List<FeatureNode> get features =>
       super.children.whereType<FeatureNode>().toList();
+
+  /// position型の座標データを取得（全フィーチャの重心座標リスト）
+  List<List<double>> get positions {
+    return features.map((feature) => feature.position).toList();
+  }
+
+  /// 変更フラグをセット
+  void _markDirty() {
+    _isDirty = true;
+    _turfFeatureCollection = null; // キャッシュをクリア
+  }
 
   /// 属性テーブルのカラム名キャッシュ
   List<String>? _cachedColumnNames;
@@ -61,11 +95,13 @@ abstract class LayerNode extends LayerTreeNode {
   /// FeatureNodeを安全に追加するメソッド
   void addFeature(FeatureNode feature) {
     super.addChild(feature);
+    _markDirty(); // FeatureCollectionキャッシュをクリア
   }
 
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
     super.removeChild(feature);
+    _markDirty(); // FeatureCollectionキャッシュをクリア
   }
 
   /// rowIdに該当するFeatureNodeを検索
@@ -198,8 +234,9 @@ abstract class LayerNode extends LayerTreeNode {
     for (final node in featureList) {
       addChild(node);
     }
-    // 子ノードの変更があったためカラム名キャッシュをクリア
+    // 子ノードの変更があったためキャッシュをクリア
     clearColumnNamesCache();
+    _markDirty(); // FeatureCollectionキャッシュもクリア
   }
 
   /// レイヤを別のGeoPackageに移植

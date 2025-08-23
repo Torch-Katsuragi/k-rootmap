@@ -1,50 +1,107 @@
 // K-MAPS: フィーチャノードクラス
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
+// turf_dartのFeatureオブジェクトをメインデータとして使用
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:turf/turf.dart' as turf;
 import 'dart:async';
 import 'dart:convert';
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage_file.dart';
 import '../../utils/global_config.dart';
-import '../../utils/feature_calc_utils.dart';
+import '../../converters/turf_converter.dart';
 
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
+/// turf_dartのFeatureオブジェクトをメインデータとして内部的に保持
 abstract class FeatureNode extends LayerTreeNode {
-  /// 属性値キャッシュ（DBから読み込んだ全属性値を保持）
-  Map<String, dynamic> _cachedAttributes = {};
+  /// turf_dartのFeatureオブジェクト（メインデータ）
+  turf.Feature _turfFeature;
 
-  /// 属性値の読み込み状態
-  bool _attributesLoaded = true; // rowから初期化済み
+  /// 変更の追跡フラグ
+  bool _isDirty = false;
+
+  /// turf_dartのFeatureオブジェクトを取得
+  turf.Feature get turfFeature => _turfFeature;
 
   /// DB上のrowId（主キー）
-  int get rowId => _getAttributeSync('id') as int? ?? 0;
+  int get rowId => _turfFeature.properties?['id'] as int? ?? 0;
 
-  /// フィーチャの重心座標
-  LatLng get centroid => _calculateCentroid();
+  /// フィーチャの重心座標（turf_dartで計算）
+  LatLng get centroid {
+    final calculatedCentroid = TurfConverter.calculateCentroid(_turfFeature);
+    return calculatedCentroid ?? LatLng(0, 0);
+  }
 
-  /// ジオメトリデータ
-  dynamic get geometry => _getAttributeSync('geometry');
+  /// 座標データをposition型で取得（turf_dart形式）
+  List<double> get position {
+    final geometry = _turfFeature.geometry;
+    if (geometry is turf.Point) {
+      return TurfConverter.latlngToPosition(
+        TurfConverter.pointToLatlng(geometry),
+      );
+    }
+    // Point以外の場合は重心のpositionを返す
+    return TurfConverter.latlngToPosition(centroid);
+  }
 
-  /// 名前のgetter（辞書から取得）
+  /// 複数座標データをpositionリストで取得
+  List<List<double>> get positions {
+    final geometry = _turfFeature.geometry;
+    if (geometry is turf.LineString) {
+      return TurfConverter.latlngsToPositions(
+        TurfConverter.lineStringToLatlngs(geometry),
+      );
+    } else if (geometry is turf.Polygon) {
+      // 外環のみを返す（最初のリング）
+      final rings = TurfConverter.polygonToLatlngs(geometry);
+      if (rings.isNotEmpty) {
+        return TurfConverter.latlngsToPositions(rings.first);
+      }
+    }
+    return [];
+  }
+
+  /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
+  dynamic get geometry {
+    final geom = _turfFeature.geometry;
+    if (geom is turf.Point) {
+      return [TurfConverter.pointToLatlng(geom)];
+    } else if (geom is turf.LineString) {
+      return TurfConverter.lineStringToLatlngs(geom);
+    } else if (geom is turf.Polygon) {
+      return TurfConverter.polygonToLatlngs(geom);
+    }
+    return null;
+  }
+
+  /// 名前のgetter（turf_dartのpropertiesから取得）
   @override
-  String get name => _getAttributeSync('name') as String? ?? 'Unnamed Feature';
+  String get name =>
+      _turfFeature.properties?['name'] as String? ?? 'Unnamed Feature';
 
-  /// 名前のsetter（辞書に設定）
-  set name(String value) => _setAttributeSync('name', value);
+  /// 名前のsetter（turf_dartのpropertiesに設定）
+  set name(String value) {
+    _turfFeature.properties ??= {};
+    _turfFeature.properties!['name'] = value;
+    _markDirty();
+  }
 
-  /// 説明のgetter（辞書から取得）
-  String? get description => _getAttributeSync('description') as String?;
+  /// 説明のgetter（turf_dartのpropertiesから取得）
+  String? get description => _turfFeature.properties?['description'] as String?;
 
-  /// 説明のsetter（辞書に設定）
-  set description(String? value) => _setAttributeSync('description', value);
+  /// 説明のsetter（turf_dartのpropertiesに設定）
+  set description(String? value) {
+    _turfFeature.properties ??= {};
+    _turfFeature.properties!['description'] = value;
+    _markDirty();
+  }
 
-  /// メタデータのgetter（辞書から取得）
+  /// メタデータのgetter（turf_dartのpropertiesから取得）
   Map<String, dynamic>? get metadata {
-    final value = _getAttributeSync('kmaps_metadata');
+    final value = _turfFeature.properties?['kmaps_metadata'];
     if (value == null) return null;
     if (value is Map<String, dynamic>) return value;
     if (value is String) {
@@ -58,119 +115,49 @@ abstract class FeatureNode extends LayerTreeNode {
     return null;
   }
 
-  /// メタデータのsetter（辞書に設定）
+  /// メタデータのsetter（turf_dartのpropertiesに設定）
   set metadata(Map<String, dynamic>? value) {
-    if (value == null) {
-      _setAttributeSync('kmaps_metadata', null);
-    } else {
-      _setAttributeSync('kmaps_metadata', value);
-    }
+    _turfFeature.properties ??= {};
+    _turfFeature.properties!['kmaps_metadata'] = value;
+    _markDirty();
   }
 
-  /// 重心座標を計算（サブクラスでオーバーライド）
-  LatLng _calculateCentroid() {
-    final geom = geometry;
-    if (geom is List<LatLng> && geom.isNotEmpty) {
-      return GeometryCalc.calcPointsCentroid(geom);
-    } else if (geom is List<LatLng> && geom.isNotEmpty) {
-      return GeometryCalc.calcLineCentroid(geom);
-    } else if (geom is List<List<LatLng>> &&
-        geom.isNotEmpty &&
-        geom[0].isNotEmpty) {
-      return GeometryCalc.calcPolygonCentroid(geom);
-    }
-    return LatLng(0, 0);
-  }
-
-  /// 属性値の同期取得（内部用）
-  dynamic _getAttributeSync(String attributeName) {
-    return _cachedAttributes[attributeName];
-  }
-
-  /// 属性値の同期設定（内部用）
-  void _setAttributeSync(String attributeName, dynamic value) {
-    // キャッシュに即座に反映（UI表示用）
-    _cachedAttributes[attributeName] = value;
-
+  /// 変更フラグをセット
+  void _markDirty() {
+    _isDirty = true;
     // GeoPackageFileの遅延保存キューに追加
-    geoPackageFile.queueAttributeUpdate(layerName, rowId, attributeName, value);
-  }
-
-  /// 属性値キャッシュの初期化（DBから全属性値を読み込み）
-  Future<void> _loadAttributesFromDB() async {
-    if (_attributesLoaded) return;
-
-    try {
-      print(
-        '[DEBUG] FeatureNode: Loading attributes from DB for ${name} (rowId: $rowId)',
-      );
-
-      // DBから全属性値を取得
-      final row = await geoPackageFile.getFeature(layerName, rowId);
-
-      if (row != null) {
-        _cachedAttributes = Map<String, dynamic>.from(row);
-        print(
-          '[DEBUG] FeatureNode: Loaded ${_cachedAttributes.length} attributes',
-        );
-      } else {
-        print('[WARNING] FeatureNode: No attributes found for ${name}');
-        _cachedAttributes = {};
-      }
-
-      _attributesLoaded = true;
-    } catch (e) {
-      print('[ERROR] FeatureNode: Failed to load attributes for ${name}: $e');
-      _cachedAttributes = {};
+    final rowData = TurfConverter.featureToRowData(_turfFeature);
+    if (rowData != null) {
+      geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
     }
   }
 
-  /// 属性値の取得（キャッシュから）
+  /// 属性値の取得（turf_dartのpropertiesから）
   Future<dynamic> getAttributeValue(String attributeName) async {
-    // 属性値が未読み込みの場合は読み込み
-    if (!_attributesLoaded) {
-      await _loadAttributesFromDB();
-    }
-
-    return _getAttributeSync(attributeName);
+    return _turfFeature.properties?[attributeName];
   }
 
-  /// 属性値の設定（キャッシュに保存し、バックグラウンドでDB書き込み）
+  /// 属性値の設定（turf_dartのpropertiesに設定し、バックグラウンドでDB書き込み）
   Future<void> setAttributeValue(String attributeName, dynamic value) async {
     print('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
 
-    // 属性値が未読み込みの場合は読み込み
-    if (!_attributesLoaded) {
-      await _loadAttributesFromDB();
-    }
-
-    _setAttributeSync(attributeName, value);
+    _turfFeature.properties ??= {};
+    _turfFeature.properties![attributeName] = value;
+    _markDirty();
   }
 
   /// 複数の属性値を一括設定
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
     print('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
 
-    // 属性値が未読み込みの場合は読み込み
-    if (!_attributesLoaded) {
-      await _loadAttributesFromDB();
-    }
-
-    // キャッシュに即座に反映
-    _cachedAttributes.addAll(attributes);
-
-    // GeoPackageFileの遅延保存キューに一括追加
-    geoPackageFile.queueAttributeUpdates(layerName, rowId, attributes);
+    _turfFeature.properties ??= {};
+    _turfFeature.properties!.addAll(attributes);
+    _markDirty();
   }
 
   /// 全属性値を取得
   Future<Map<String, dynamic>> getAllAttributes() async {
-    // 属性値が未読み込みの場合は読み込み
-    if (!_attributesLoaded) {
-      await _loadAttributesFromDB();
-    }
-
-    return Map<String, dynamic>.from(_cachedAttributes);
+    return Map<String, dynamic>.from(_turfFeature.properties ?? {});
   }
 
   /// 即座に全ての変更をDBに保存
@@ -272,19 +259,31 @@ abstract class FeatureNode extends LayerTreeNode {
   @override
   final LayerNode parent;
 
-  /// rowデータを基にFeatureNodeを作成
-  FeatureNode(Map<String, dynamic> row, this.parent)
-    : super(
+  /// rowデータとジオメトリタイプを基にFeatureNodeを作成
+  FeatureNode(Map<String, dynamic> row, this.parent, String geometryType)
+    : _turfFeature =
+          TurfConverter.createFeatureFromRow(row, geometryType) ??
+          turf.Feature(
+            geometry: turf.Point(coordinates: turf.Position.of([0, 0])),
+            properties: row,
+          ),
+      super(
         row['name'] as String? ?? 'Unnamed Feature',
         visible: parent.visible,
         parent: parent,
         children: [],
         nodeType: 'feature',
-      ) {
-    // rowデータをそのまま_cachedAttributesに格納
-    _cachedAttributes = Map<String, dynamic>.from(row);
-    _attributesLoaded = true; // rowから初期化済み
-  }
+      );
+
+  /// turf_dartのFeatureオブジェクトから直接FeatureNodeを作成
+  FeatureNode.fromTurfFeature(this._turfFeature, this.parent)
+    : super(
+        _turfFeature.properties?['name'] as String? ?? 'Unnamed Feature',
+        visible: parent.visible,
+        parent: parent,
+        children: [],
+        nodeType: 'feature',
+      );
 
   /// GeoPackageFile参照
   GeoPackageFile get geoPackageFile => parent.geoPackageFile;
@@ -321,17 +320,29 @@ abstract class FeatureNode extends LayerTreeNode {
 class PointFeatureNode extends FeatureNode {
   /// rowデータから点フィーチャノードを作成
   PointFeatureNode(Map<String, dynamic> row, LayerNode parent)
-    : super(row, parent);
+    : super(row, parent, 'Point');
 
-  /// 点座標リスト（geometryから取得）
-  List<LatLng> get points => geometry as List<LatLng>? ?? <LatLng>[];
+  /// turf_dartのFeatureから点フィーチャノードを作成
+  PointFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
+    : super.fromTurfFeature(feature, parent);
 
-  @override
-  LatLng _calculateCentroid() {
-    return points.isNotEmpty
-        ? GeometryCalc.calcPointsCentroid(points)
-        : LatLng(0, 0);
+  /// 点座標（単一座標）
+  LatLng get point {
+    final geometry = turfFeature.geometry;
+    if (geometry is turf.Point) {
+      return TurfConverter.pointToLatlng(geometry);
+    }
+    return LatLng(0, 0);
   }
+
+  /// 点座標をposition形式で取得
+  @override
+  List<double> get position {
+    return TurfConverter.latlngToPosition(point);
+  }
+
+  /// 点座標リスト（レガシー互換用）
+  List<LatLng> get points => [point];
 
   @override
   List<MapEntry<String, String>> get detailEntries {
@@ -348,7 +359,7 @@ class PointFeatureNode extends FeatureNode {
   }
 
   /// 指定したPointLayerNodeの下に新しい点フィーチャを作成し、PointFeatureNodeインスタンスを返す
-  /// DBへの保存は非同期で実行し、FeatureNodeは即座に作成・追加される
+  /// turf_dartのFeatureオブジェクトを作成してからDBに保存
   static Future<PointFeatureNode?> createIn(
     LayerNode parent,
     LatLng point,
@@ -360,21 +371,28 @@ class PointFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // 属性値を辞書として準備
-    final attributes = <String, dynamic>{
+    // turf_dartのFeatureオブジェクトを作成
+    final properties = <String, dynamic>{
       'name': name,
       'description': description,
     };
-
     if (metadata != null) {
-      attributes['kmaps_metadata'] = metadata;
+      properties['kmaps_metadata'] = metadata;
     }
 
-    // 新しい辞書ベースAPIを使用してDBへの保存を実行
+    final turfFeature = turf.Feature(
+      geometry: TurfConverter.createPoint(point),
+      properties: properties,
+    );
+
+    // FeatureNodeを先に作成
+    final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
+
+    // DBへの保存を実行
     final actualRowId = await gpkgFile.addPointWithAttributes(
       layerName,
       point,
-      attributes,
+      properties,
     );
 
     if (actualRowId == null) {
@@ -382,15 +400,8 @@ class PointFeatureNode extends FeatureNode {
       return null;
     }
 
-    // DBから実際のrowデータを取得
-    final row = await gpkgFile.getFeature(layerName, actualRowId);
-    if (row == null) {
-      print('[ERROR] PointFeatureNode: 作成後のrow取得に失敗しました - $name');
-      return null;
-    }
-
-    // rowデータを使用してFeatureNodeを作成
-    final node = PointFeatureNode(row, parent);
+    // DBから実際のrowIdをturf_dartのpropertiesに設定
+    node._turfFeature.properties!['id'] = actualRowId;
     parent.addChild(node);
 
     print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -405,11 +416,8 @@ class PointFeatureNode extends FeatureNode {
     Map<String, dynamic>? metadata,
     dynamic newGeometry,
   }) async {
-    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpointsを使用
-    final geometryToUpdate =
-        newGeometry as LatLng? ?? (points.isNotEmpty ? points.first : null);
-
-    if (geometryToUpdate == null) return false;
+    // 新しいジオメトリが渡された場合はそれを使用、なければ現在のpointを使用
+    final geometryToUpdate = newGeometry as LatLng? ?? point;
 
     final success = await geoPackageFile.updatePoint(
       layerName,
@@ -421,13 +429,17 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを一括更新
-      await setAttributeValues({
-        'name': name,
-        'description': description,
-        'kmaps_metadata': metadata,
-        'geometry': [geometryToUpdate],
-      });
+      // turf_dartのFeatureオブジェクトを更新
+      _turfFeature = turf.Feature(
+        geometry: TurfConverter.createPoint(geometryToUpdate),
+        properties: {
+          ..._turfFeature.properties ?? {},
+          'name': name,
+          'description': description,
+          'kmaps_metadata': metadata,
+        },
+      );
+      _markDirty();
 
       print('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -449,8 +461,12 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新
-      await setAttributeValue('geometry', [newLocation]);
+      // turf_dartのジオメトリを更新
+      _turfFeature = turf.Feature(
+        geometry: TurfConverter.createPoint(newLocation),
+        properties: _turfFeature.properties,
+      );
+      _markDirty();
       print('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
     } else {
       print('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
@@ -464,19 +480,36 @@ class PointFeatureNode extends FeatureNode {
 class LineFeatureNode extends FeatureNode {
   /// rowデータから線フィーチャノードを作成
   LineFeatureNode(Map<String, dynamic> row, LayerNode parent)
-    : super(row, parent);
+    : super(row, parent, 'LineString');
+
+  /// turf_dartのFeatureから線フィーチャノードを作成
+  LineFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
+    : super.fromTurfFeature(feature, parent);
 
   /// 単一の線分（頂点リスト）
-  List<LatLng> get line => geometry as List<LatLng>? ?? <LatLng>[];
+  List<LatLng> get line {
+    final geometry = turfFeature.geometry;
+    if (geometry is turf.LineString) {
+      return TurfConverter.lineStringToLatlngs(geometry);
+    }
+    return [];
+  }
 
+  /// 線の座標をpositionリストで取得
   @override
-  LatLng _calculateCentroid() {
-    return line.isNotEmpty ? GeometryCalc.calcLineCentroid(line) : LatLng(0, 0);
+  List<List<double>> get positions {
+    return TurfConverter.latlngsToPositions(line);
+  }
+
+  /// 線の長さを計算（turf_dartで計算）
+  double get length {
+    final calculatedLength = TurfConverter.calculateLength(turfFeature);
+    return calculatedLength ?? 0.0;
   }
 
   @override
   List<MapEntry<String, String>> get detailEntries {
-    final len = GeometryCalc.calcLineLength(line);
+    final len = length;
     String lengthStr;
     if (len >= 10000) {
       lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
@@ -498,7 +531,7 @@ class LineFeatureNode extends FeatureNode {
     details.addAll(super.infoMap);
 
     // 線の長さ情報
-    final len = GeometryCalc.calcLineLength(line);
+    final len = length;
     String lengthStr;
     if (len >= 10000) {
       lengthStr = '${(len / 1000).toStringAsFixed(2)} km';
@@ -523,7 +556,7 @@ class LineFeatureNode extends FeatureNode {
   }
 
   /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
-  /// DBへの保存を同期で実行し、実際のrowIdを取得してからFeatureNodeを作成
+  /// turf_dartのFeatureオブジェクトを作成してからDBに保存
   static Future<LineFeatureNode?> createIn(
     LayerNode parent,
     List<LatLng> line,
@@ -535,21 +568,28 @@ class LineFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // 属性値を辞書として準備
-    final attributes = <String, dynamic>{
+    // turf_dartのFeatureオブジェクトを作成
+    final properties = <String, dynamic>{
       'name': name,
       'description': description,
     };
-
     if (metadata != null) {
-      attributes['kmaps_metadata'] = metadata;
+      properties['kmaps_metadata'] = metadata;
     }
 
-    // 新しい辞書ベースAPIを使用してDBへの保存を実行
+    final turfFeature = turf.Feature(
+      geometry: TurfConverter.createLineString(line),
+      properties: properties,
+    );
+
+    // FeatureNodeを先に作成
+    final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
+
+    // DBへの保存を実行
     final actualRowId = await gpkgFile.addLineWithAttributes(
       layerName,
       line,
-      attributes,
+      properties,
     );
 
     if (actualRowId == null) {
@@ -557,15 +597,8 @@ class LineFeatureNode extends FeatureNode {
       return null;
     }
 
-    // DBから実際のrowデータを取得
-    final row = await gpkgFile.getFeature(layerName, actualRowId);
-    if (row == null) {
-      print('[ERROR] LineFeatureNode: 作成後のrow取得に失敗しました - $name');
-      return null;
-    }
-
-    // rowデータを使用してFeatureNodeを作成
-    final node = LineFeatureNode(row, parent);
+    // DBから実際のrowIdをturf_dartのpropertiesに設定
+    node._turfFeature.properties!['id'] = actualRowId;
     parent.addChild(node);
 
     print('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -593,13 +626,17 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを一括更新
-      await setAttributeValues({
-        'name': name,
-        'description': description,
-        'kmaps_metadata': metadata,
-        'geometry': geometryToUpdate,
-      });
+      // turf_dartのFeatureオブジェクトを更新
+      _turfFeature = turf.Feature(
+        geometry: TurfConverter.createLineString(geometryToUpdate),
+        properties: {
+          ..._turfFeature.properties ?? {},
+          'name': name,
+          'description': description,
+          'kmaps_metadata': metadata,
+        },
+      );
+      _markDirty();
 
       print('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -621,8 +658,12 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新
-      await setAttributeValue('geometry', newLine);
+      // turf_dartのジオメトリを更新
+      _turfFeature = turf.Feature(
+        geometry: TurfConverter.createLineString(newLine),
+        properties: _turfFeature.properties,
+      );
+      _markDirty();
       print(
         '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
       );
@@ -638,27 +679,40 @@ class LineFeatureNode extends FeatureNode {
 class PolygonFeatureNode extends FeatureNode {
   /// rowデータから面フィーチャノードを作成
   PolygonFeatureNode(Map<String, dynamic> row, LayerNode parent)
-    : super(row, parent);
+    : super(row, parent, 'Polygon');
+
+  /// turf_dartのFeatureから面フィーチャノードを作成
+  PolygonFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
+    : super.fromTurfFeature(feature, parent);
 
   /// 単一のポリゴン（外環＋穴リスト）
-  List<List<LatLng>> get polygon =>
-      geometry as List<List<LatLng>>? ?? <List<LatLng>>[];
+  List<List<LatLng>> get polygon {
+    final geometry = turfFeature.geometry;
+    if (geometry is turf.Polygon) {
+      return TurfConverter.polygonToLatlngs(geometry);
+    }
+    return [];
+  }
 
+  /// ポリゴンの座標をpositionリストで取得（外環のみ）
   @override
-  LatLng _calculateCentroid() {
-    return (polygon.isNotEmpty && polygon[0].isNotEmpty)
-        ? GeometryCalc.calcPolygonCentroid(polygon)
-        : LatLng(0, 0);
+  List<List<double>> get positions {
+    final rings = polygon;
+    if (rings.isNotEmpty) {
+      return TurfConverter.latlngsToPositions(rings.first);
+    }
+    return [];
+  }
+
+  /// ポリゴンの面積を計算（turf_dartで計算）
+  double get area {
+    final calculatedArea = TurfConverter.calculateArea(turfFeature);
+    return calculatedArea ?? 0.0;
   }
 
   @override
   List<MapEntry<String, String>> get detailEntries {
-    final areaDeg2 = GeometryCalc.calcPolygonArea(polygon);
-    final centroid = this.centroid;
-    final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
-      areaDeg2,
-      centroid.latitude,
-    );
+    final areaM2 = area; // turf_dartで計算された面積（平方メートル）
     String areaStr;
     if (areaM2 >= 10000) {
       areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';
@@ -686,12 +740,7 @@ class PolygonFeatureNode extends FeatureNode {
     details.addAll(super.infoMap);
 
     // 面積情報
-    final areaDeg2 = GeometryCalc.calcPolygonArea(polygon);
-    final centroid = this.centroid;
-    final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
-      areaDeg2,
-      centroid.latitude,
-    );
+    final areaM2 = area; // turf_dartで計算された面積（平方メートル）
     String areaStr;
     if (areaM2 >= 10000) {
       areaStr = '${(areaM2 / 10000).toStringAsFixed(3)} ha';

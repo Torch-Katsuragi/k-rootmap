@@ -377,7 +377,7 @@ class PointFeatureNode extends FeatureNode {
       'description': description,
     };
     if (metadata != null) {
-      properties['kmaps_metadata'] = metadata;
+      properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
     final turfFeature = turf.Feature(
@@ -574,7 +574,7 @@ class LineFeatureNode extends FeatureNode {
       'description': description,
     };
     if (metadata != null) {
-      properties['kmaps_metadata'] = metadata;
+      properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
     final turfFeature = turf.Feature(
@@ -790,7 +790,7 @@ class PolygonFeatureNode extends FeatureNode {
     };
 
     if (metadata != null) {
-      attributes['kmaps_metadata'] = metadata;
+      attributes['kmaps_metadata'] = jsonEncode(metadata);
     }
 
     // 新しい辞書ベースAPIを使用してDBへの保存を実行

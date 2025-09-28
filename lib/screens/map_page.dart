@@ -1727,13 +1727,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           ),
                         // --- Pen tool line preview ---
                         if (GlobalConfig.instance.currentTool is PenTool &&
-                            (GlobalConfig.instance.currentTool as PenTool)
+                            GlobalConfig
+                                .instance
+                                .drawingState
                                 .drawingLine
                                 .isNotEmpty)
                           Polyline(
                             points:
-                                (GlobalConfig.instance.currentTool as PenTool)
-                                    .drawingLine,
+                                GlobalConfig.instance.drawingState.drawingLine,
                             color: Colors.orange,
                             strokeWidth: 1.5,
                           ),
@@ -2634,11 +2635,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             final isLineDrawing =
                 selected is LineLayerNode &&
                 currentTool is PenTool &&
-                (currentTool).drawingLine.isNotEmpty;
+                GlobalConfig.instance.drawingState.drawingLine.isNotEmpty;
             final isPolygonDrawing =
                 selected is PolygonLayerNode &&
                 currentTool is PenTool &&
-                (currentTool).drawingPolygon.isNotEmpty;
+                GlobalConfig.instance.drawingState.drawingPolygon.isNotEmpty;
 
             // GPS測量中は専用のボタンを表示
             if (isGpsSurveyLine || isGpsSurveyPolygon) {

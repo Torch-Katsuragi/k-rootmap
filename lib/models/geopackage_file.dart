@@ -131,6 +131,16 @@ class GeoPackageFile {
 
       // insertして実際のrowIdを取得
       final rowId = await db.insert(tableName, data);
+
+      // gpkg_contentsテーブルのエンベロープを更新
+      await _updateLayerEnvelope(
+        tableName,
+        point.longitude,
+        point.latitude,
+        point.longitude,
+        point.latitude,
+      );
+
       return rowId;
     } catch (e) {
       print('[ERROR] GeoPackageFile: addPointWithAttributes failed: $e');
@@ -154,6 +164,24 @@ class GeoPackageFile {
 
       // insertして実際のrowIdを取得
       final rowId = await db.insert(tableName, data);
+
+      // エンベロープを計算して更新
+      if (line.isNotEmpty) {
+        double minX = line.first.longitude;
+        double maxX = line.first.longitude;
+        double minY = line.first.latitude;
+        double maxY = line.first.latitude;
+
+        for (final pt in line) {
+          minX = minX < pt.longitude ? minX : pt.longitude;
+          maxX = maxX > pt.longitude ? maxX : pt.longitude;
+          minY = minY < pt.latitude ? minY : pt.latitude;
+          maxY = maxY > pt.latitude ? maxY : pt.latitude;
+        }
+
+        await _updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
+      }
+
       return rowId;
     } catch (e) {
       print('[ERROR] GeoPackageFile: addLineWithAttributes failed: $e');
@@ -177,6 +205,26 @@ class GeoPackageFile {
 
       // insertして実際のrowIdを取得
       final rowId = await db.insert(tableName, data);
+
+      // エンベロープを計算して更新
+      if (polygon.isNotEmpty && polygon.first.isNotEmpty) {
+        double minX = polygon.first.first.longitude;
+        double maxX = polygon.first.first.longitude;
+        double minY = polygon.first.first.latitude;
+        double maxY = polygon.first.first.latitude;
+
+        for (final ring in polygon) {
+          for (final pt in ring) {
+            minX = minX < pt.longitude ? minX : pt.longitude;
+            maxX = maxX > pt.longitude ? maxX : pt.longitude;
+            minY = minY < pt.latitude ? minY : pt.latitude;
+            maxY = maxY > pt.latitude ? maxY : pt.latitude;
+          }
+        }
+
+        await _updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
+      }
+
       return rowId;
     } catch (e) {
       print('[ERROR] GeoPackageFile: addPolygonWithAttributes failed: $e');
@@ -446,7 +494,30 @@ class GeoPackageFile {
           // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
           Uint8List pureWkb = geom;
           if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
-            pureWkb = geom.sublist(8);
+            // GPBinaryヘッダーのサイズを正確に計算
+            final flags = geom[3];
+            final envelopeType = (flags >> 1) & 0x07; // bits 1-3
+            int headerSize = 8; // 基本サイズ（GP + Version + Flags + SRS ID）
+
+            // エンベロープサイズを計算
+            switch (envelopeType) {
+              case 1: // XY
+                headerSize += 32; // 4 doubles
+                break;
+              case 2: // XYZ
+                headerSize += 48; // 6 doubles
+                break;
+              case 3: // XYM
+                headerSize += 48; // 6 doubles
+                break;
+              case 4: // XYZM
+                headerSize += 64; // 8 doubles
+                break;
+            }
+
+            if (geom.length > headerSize) {
+              pureWkb = geom.sublist(headerSize);
+            }
           }
 
           if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
@@ -543,13 +614,17 @@ class GeoPackageFile {
 				);
 			''');
 
-      // gpkg_contentsに登録
+      // gpkg_contentsに登録（初期エンベロープは未設定、後でフィーチャー追加時に更新）
       await db.insert('gpkg_contents', {
         'table_name': name,
         'data_type': 'features',
         'identifier': name,
         'description': '',
         'srs_id': 4326,
+        'min_x': null,
+        'min_y': null,
+        'max_x': null,
+        'max_y': null,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
       // gpkg_geometry_columnsに登録
@@ -584,6 +659,73 @@ class GeoPackageFile {
       print('[GeoPackageFile] 空間インデックス作成完了: $tableName');
     } catch (e) {
       print('[GeoPackageFile] 空間インデックス作成エラー: $e');
+    }
+  }
+
+  /// gpkg_contentsテーブルのエンベロープを更新
+  Future<void> _updateLayerEnvelope(
+    String tableName,
+    double minX,
+    double minY,
+    double maxX,
+    double maxY,
+  ) async {
+    try {
+      final db = await _getDatabase();
+
+      // 現在のエンベロープを取得
+      final currentEnvelope = await db.query(
+        'gpkg_contents',
+        columns: ['min_x', 'min_y', 'max_x', 'max_y'],
+        where: 'table_name = ?',
+        whereArgs: [tableName],
+      );
+
+      double? currentMinX, currentMinY, currentMaxX, currentMaxY;
+      if (currentEnvelope.isNotEmpty) {
+        final row = currentEnvelope.first;
+        currentMinX = row['min_x'] as double?;
+        currentMinY = row['min_y'] as double?;
+        currentMaxX = row['max_x'] as double?;
+        currentMaxY = row['max_y'] as double?;
+      }
+
+      // エンベロープを拡張
+      final newMinX =
+          currentMinX != null
+              ? (currentMinX < minX ? currentMinX : minX)
+              : minX;
+      final newMinY =
+          currentMinY != null
+              ? (currentMinY < minY ? currentMinY : minY)
+              : minY;
+      final newMaxX =
+          currentMaxX != null
+              ? (currentMaxX > maxX ? currentMaxX : maxX)
+              : maxX;
+      final newMaxY =
+          currentMaxY != null
+              ? (currentMaxY > maxY ? currentMaxY : maxY)
+              : maxY;
+
+      // エンベロープを更新
+      await db.update(
+        'gpkg_contents',
+        {
+          'min_x': newMinX,
+          'min_y': newMinY,
+          'max_x': newMaxX,
+          'max_y': newMaxY,
+        },
+        where: 'table_name = ?',
+        whereArgs: [tableName],
+      );
+
+      print(
+        '[GeoPackageFile] Layer envelope updated: $tableName ($newMinX, $newMinY, $newMaxX, $newMaxY)',
+      );
+    } catch (e) {
+      print('[GeoPackageFile] エンベロープ更新エラー: $e');
     }
   }
 

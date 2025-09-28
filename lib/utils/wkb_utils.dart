@@ -31,12 +31,18 @@ Uint8List _createGpbHeader({
 
   // エンベロープが指定されている場合は追加
   if (minX != null && maxX != null && minY != null && maxY != null) {
+    print(
+      '[GPB] Adding envelope: minX=$minX, maxX=$maxX, minY=$minY, maxY=$maxY',
+    );
     final envelopeBytes = ByteData(32);
     envelopeBytes.setFloat64(0, minX, Endian.little);
     envelopeBytes.setFloat64(8, maxX, Endian.little);
     envelopeBytes.setFloat64(16, minY, Endian.little);
     envelopeBytes.setFloat64(24, maxY, Endian.little);
     header.add(envelopeBytes.buffer.asUint8List());
+    print(
+      '[GPB] Envelope bytes added, total header size: ${header.length + 32}',
+    );
   }
 
   return header.toBytes();
@@ -44,6 +50,9 @@ Uint8List _createGpbHeader({
 
 /// WKB(Point)生成ユーティリティ - GeoPackage対応
 Uint8List createWkbPoint(double lon, double lat) {
+  // デバッグ出力でエンベロープ値を確認
+  print('[WKB] Point envelope: minX=$lon, maxX=$lon, minY=$lat, maxY=$lat');
+
   // GPBinaryヘッダー（エンベロープ付き）
   final gpbHeader = _createGpbHeader(
     wkbType: 1,

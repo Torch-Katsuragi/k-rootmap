@@ -75,16 +75,53 @@ class GeoPackageFile {
     Map<String, dynamic> attributes,
   ) async {
     try {
+      print('[DEBUG] GeoPackageFile: 属性更新開始 - テーブル:$tableName, 行ID:$rowId');
+      
+      // SQLiteでサポートされていない型を除外
+      final filteredAttributes = <String, dynamic>{};
+      for (final entry in attributes.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        
+        // ジオメトリ関連フィールドとidフィールドは属性更新対象から除外
+        if (key == 'geometry' || key == 'geom' || key == 'id') {
+          print('[DEBUG] GeoPackageFile: スキップするフィールド: $key');
+          continue;
+        }
+        
+        // SQLiteでサポートされている型のみを含める
+        if (value == null || 
+            value is String || 
+            value is num || 
+            value is bool ||
+            value is Uint8List) {
+          filteredAttributes[key] = value;
+        } else {
+          print('[DEBUG] GeoPackageFile: サポートされていない型のためスキップ: $key = $value (${value.runtimeType})');
+        }
+      }
+      
+      if (filteredAttributes.isEmpty) {
+        print('[DEBUG] GeoPackageFile: 更新対象の属性がありません');
+        return true; // 更新対象がない場合は成功とみなす
+      }
+      
+      print('[DEBUG] GeoPackageFile: 更新する属性: $filteredAttributes');
+      
       final db = await _getDatabase();
       // テーブル名をエスケープしてUPDATE文を実行
-      final columnAssignments = attributes.keys
+      final columnAssignments = filteredAttributes.keys
           .map((key) => '"$key" = ?')
           .join(', ');
-      final values = [...attributes.values, rowId];
-      final rowsUpdated = await db.rawUpdate(
-        'UPDATE "$tableName" SET $columnAssignments WHERE id = ?',
-        values,
-      );
+      final values = [...filteredAttributes.values, rowId];
+      
+      final sql = 'UPDATE "$tableName" SET $columnAssignments WHERE id = ?';
+      print('[DEBUG] GeoPackageFile: 実行SQL: $sql');
+      print('[DEBUG] GeoPackageFile: 実行値: $values');
+      
+      final rowsUpdated = await db.rawUpdate(sql, values);
+      
+      print('[DEBUG] GeoPackageFile: 更新された行数: $rowsUpdated');
       return rowsUpdated > 0;
     } catch (e) {
       print('[ERROR] GeoPackageFile: _updateFeatureAttributes failed: $e');

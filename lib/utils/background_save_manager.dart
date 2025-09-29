@@ -46,23 +46,31 @@ class BackgroundSaveManager {
     int rowId,
     Map<String, dynamic> attributes,
   ) {
+    print('[DEBUG] BackgroundSaveManager: キューに追加 - テーブル:$tableName, 行ID:$rowId, 属性数:${attributes.length}');
+    
     // GeoPackageFileごとの変更キューを取得または作成
     _pendingChanges.putIfAbsent(geoPackageFile, () => {});
 
     for (final entry in attributes.entries) {
       final key = '$tableName:$rowId:${entry.key}';
       _pendingChanges[geoPackageFile]![key] = entry.value;
+      print('[DEBUG] BackgroundSaveManager: キューエントリ追加 - $key = ${entry.value}');
     }
+    
+    print('[DEBUG] BackgroundSaveManager: 現在のキューサイズ: ${_pendingChanges[geoPackageFile]?.length ?? 0}');
     _scheduleSave();
   }
 
   /// 遅延保存のスケジュール
   void _scheduleSave() {
+    print('[DEBUG] BackgroundSaveManager: 保存タイマーをスケジュール ($_saveDelayMs ms後)');
+    
     // 既存のタイマーをキャンセル
     _saveTimer?.cancel();
 
     // 新しいタイマーを設定
     _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
+      print('[DEBUG] BackgroundSaveManager: タイマー満了 - 保存処理開始');
       // 非同期関数を呼び出し（戻り値は無視）
       _saveChangesToDB();
     });

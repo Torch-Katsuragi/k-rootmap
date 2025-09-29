@@ -10,35 +10,28 @@ import 'package:flutter_compass/flutter_compass.dart'; // コンパス機能用
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'package:path/path.dart' as p;
-import '../utils/wkb_utils.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/photo_node.dart';
-import '../models/geometry_type.dart'; // ジオメトリタイプenumをインポート
-import '../widgets/inline_edit.dart';
 import '../widgets/layer_drawer/layer_drawer.dart';
 import '../widgets/resizable_side_panel.dart';
-import '../widgets/attribute_table_widget.dart';
+import '../widgets/dynamic_attribute_table_widget.dart';
 import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
 import '../widgets/compass_fan_painter.dart'; // コンパス扇形描画用
 import '../utils/global_config.dart';
-import '../models/basemap_provider.dart';
 import '../screens/basemap_settings_screen.dart';
 // import 'package:sqlite3/sqlite3.dart' as sql; // sqflite移行により削除
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
-import '../utils/global_config.dart' show LayerTreeNodeUtils;
 import '../utils/feature_calc_utils.dart';
 import '../models/gps_track.dart';
 import '../widgets/track_save_dialog.dart';
 import '../widgets/line_simplification_dialog.dart';
-import '../tools/gps_utils.dart'; // Added GPS utility
 import '../screens/gps_settings_screen.dart'; // GPS設定画面
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
 import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
@@ -54,13 +47,6 @@ class KMapsHomePage extends StatefulWidget {
 /// Tool types
 enum ToolType { pen, eraser, gps }
 
-// --- Drawer use: Name edit state management ---
-class _EditState {
-  String? editingFolderPath;
-  String? editingGpkgPath;
-  int? editingLayerGpIndex;
-  int? editingLayerIndex;
-}
 
 class _KMapsHomePageState extends State<KMapsHomePage>
     with TickerProviderStateMixin {
@@ -73,8 +59,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   double? _currentHeading; // 現在の方角（度数）
   StreamSubscription<CompassEvent>? _compassSubscription;
   final MapController _mapController = MapController();
-  ToolType _selectedTool = ToolType.pen;
-  int _selectedBottomIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late LayerTreeNode? _currentNode;
   bool _movedToCurrentLocationOnce = false;
@@ -83,10 +67,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   bool _isLongPressing = false;
   int _longPressGpsCount = 0;
   Timer? _longPressCountUpdateTimer;
-  int? _editingLayerIndex;
-  String? _editingFolderPath;
-  String? _editingGpkgPath;
-  final _editState = _EditState();
   double drawerWidth = 320;
   bool drawerOpen = true;
   final double minDrawerWidth = 200;
@@ -106,7 +86,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   bool _showAttributeTable = false;
   double _attributeTableWidth = 400;
   LayerNode? _attributeTableLayer;
-  List<Map<String, dynamic>> _attributeTableFeatures = [];
   Timer? _serviceStatusUpdateTimer;
 
   // GPS追跡アニメーション用変数
@@ -357,11 +336,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     super.dispose();
   }
 
-  void _moveToCurrentLocation() {
-    if (_currentLocation != null) {
-      _mapController.move(_currentLocation!, 16.0);
-    }
-  }
 
   /// GPS追跡サービス状態を更新（画面表示に影響がある変化のみUIを更新）
   void _updateGpsTrackingServiceStatus() {
@@ -976,70 +950,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
-  void _onBottomNavTapped(int index) async {
-    setState(() {
-      _selectedBottomIndex = index;
-    });
-    if (index == 0) {
-      final selected = await showMenu<ToolType>(
-        context: context,
-        position: RelativeRect.fromLTRB(100, 600, 100, 0),
-        items: [
-          PopupMenuItem(
-            value: ToolType.pen,
-            child: Row(
-              children: [
-                Icon(Icons.brush, color: Colors.black),
-                SizedBox(width: 8),
-                Text('Pen'),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: ToolType.eraser,
-            child: Row(
-              children: [
-                Icon(Icons.auto_fix_normal, color: Colors.black),
-                SizedBox(width: 8),
-                Text('Eraser'),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: ToolType.gps,
-            child: Row(
-              children: [
-                Icon(Icons.gps_fixed, color: Colors.black),
-                SizedBox(width: 8),
-                Text('GPS Tool'),
-              ],
-            ),
-          ),
-        ],
-      );
-      if (selected != null) {
-        setState(() {
-          _selectedTool = selected;
-          // 選択されたツールに基づいてGlobalConfigのcurrentToolを更新
-          switch (selected) {
-            case ToolType.pen:
-              GlobalConfig.instance.currentTool = GlobalConfig.instance.penTool;
-              break;
-            case ToolType.eraser:
-              // エラーザーは将来実装予定
-              break;
-            case ToolType.gps:
-              GlobalConfig.instance.currentTool = GlobalConfig.instance.gpsTool;
-              break;
-          }
-        });
-      }
-    } else if (index == 1) {
-      // GPS icon: add something here if needed
-    } else if (index == 2) {
-      _scaffoldKey.currentState?.openEndDrawer();
-    }
-  }
 
   // --- Screen coordinates to map coordinates conversion ---
   LatLng offsetToLatLng(Offset offset) {
@@ -1325,18 +1235,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
       print('[MAP] 属性テーブルを開く: ${layer.name}');
 
-      // フィーチャデータを取得
-      final features = await _loadAttributeTableFeatures(layer);
-
       setState(() {
         _attributeTableLayer = layer;
-        _attributeTableFeatures = features;
         _showAttributeTable = true;
         // レイヤドロワーを閉じる（属性テーブルと併用しない）
         drawerOpen = false;
       });
 
-      print('[MAP] 属性テーブル表示開始: ${features.length}件のフィーチャ');
+      print('[MAP] 属性テーブル表示開始');
     } catch (e) {
       print('[MAP] 属性テーブル表示エラー: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1353,92 +1259,24 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     setState(() {
       _showAttributeTable = false;
       _attributeTableLayer = null;
-      _attributeTableFeatures = [];
     });
     print('[MAP] 属性テーブル表示終了');
   }
 
-  /// 属性テーブル用のフィーチャデータを読み込み
-  Future<List<Map<String, dynamic>>> _loadAttributeTableFeatures(
-    LayerNode layer,
-  ) async {
-    try {
-      print('[MAP] フィーチャデータ読み込み開始: ${layer.name}');
-
-      // レイヤーからフィーチャノードを取得
-      final layerFeatures = layer.children.whereType<FeatureNode>().toList();
-      List<FeatureNode> features;
-
-      if (layerFeatures.isNotEmpty) {
-        // childrenにFeatureNodeがある場合は直接使用
-        features = layerFeatures;
-        print('[MAP] キャッシュから${features.length}件のフィーチャを取得');
-      } else {
-        // childrenが空の場合はDBから読み込み
-        final dbFeatures = layer.features;
-        features = dbFeatures.whereType<FeatureNode>().toList();
-        print('[MAP] DBから${features.length}件のフィーチャを読み込み');
-
-        // DBから読み込んだFeatureNodeをlayerのchildrenに追加
-        for (final feature in features) {
-          layer.addChild(feature);
-        }
-      }
-
-      // フィーチャデータをMap形式に変換
-      final featureList = <Map<String, dynamic>>[];
-      for (final feature in features) {
-        final featureMap = <String, dynamic>{
-          'id': feature.rowId,
-          'geometry': {
-            'type': feature.runtimeType
-                .toString()
-                .replaceAll('Node', '')
-                .replaceAll('Layer', '')
-                .replaceAll('Feature', ''),
-            'coordinates': [], // 座標は簡略化
-          },
-          'metadata': feature.metadata,
-        };
-        featureList.add(featureMap);
-      }
-
-      print('[MAP] フィーチャデータ変換完了: ${featureList.length}件');
-      return featureList;
-    } catch (e) {
-      print('[MAP] フィーチャデータ読み込みエラー: $e');
-      return [];
-    }
-  }
 
   /// 属性テーブルでフィーチャが選択されたときの処理
-  void _onAttributeTableFeatureSelected(Map<String, dynamic> feature) {
+  void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
-      print('[MAP] 属性テーブルでフィーチャ選択: ${feature['id']}');
-
-      final featureId = feature['id'] as int;
-      if (_attributeTableLayer == null) return;
-
-      // 対応するFeatureNodeを検索
-      final featureNode = _attributeTableLayer!.children
-          .whereType<FeatureNode>()
-          .firstWhere(
-            (f) => f.rowId == featureId,
-            orElse:
-                () =>
-                    _attributeTableLayer!.children
-                        .whereType<FeatureNode>()
-                        .first,
-          );
+      print('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
 
       // 地図上でフィーチャを選択状態にする
-      GlobalConfig.instance.selectedFeatures = [featureNode];
+      GlobalConfig.instance.selectedFeatures = [feature];
 
       // 地図を更新
       setState(() {});
 
       // 地図をフィーチャの位置にジャンプ
-      _mapController.move(featureNode.centroid, _mapController.camera.zoom);
+      _mapController.move(feature.centroid, _mapController.camera.zoom);
 
       print('[MAP] フィーチャ選択とマップジャンプ完了');
     } catch (e) {
@@ -1448,7 +1286,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   @override
   Widget build(BuildContext context) {
-    final folderTree = GlobalConfig.instance.folderTree;
     // キャッシュされたフィーチャデータを使用（非同期処理は _updateFeatures で実行）
     final pointFeatures = _pointFeatures;
     final lineFeatures = _lineFeatures;
@@ -1457,8 +1294,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
-    final screenWidth = MediaQuery.of(context).size.width;
-    final maxDrawerWidth = screenWidth * 2 / 3;
     return Scaffold(
       appBar: AppBar(
         title: const Text('K-MAPS GIS'),
@@ -1505,7 +1340,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             },
           ),
           IconButton(
-            icon: Icon(Icons.layers),
+            icon: Icon(
+              Icons.layers,
+              color: drawerOpen ? Colors.blue : null,
+            ),
             tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',
             onPressed: () {
               setState(() {
@@ -1514,6 +1352,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 } else {
                   drawerOpen = true;
                   drawerWidth = 320;
+                  // 属性テーブルを閉じる（layer drawerと併用しない）
+                  _showAttributeTable = false;
+                  _attributeTableLayer = null;
                 }
               });
             },
@@ -2413,69 +2254,46 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   _attributeTableWidth = width;
                 });
               },
-              child: AttributeTableSidePanel(
+              child: DynamicAttributeTableWidget(
                 layer: _attributeTableLayer!,
-                features: _attributeTableFeatures,
                 onFeatureSelected: _onAttributeTableFeatureSelected,
-                onAttributeChanged: (feature, field, value) {
-                  // 属性変更時の処理（必要に応じて追加）
-                  print('[MAP] 属性変更: $field = $value');
-                },
                 onFeatureDeleted: (feature) async {
                   // フィーチャ削除時の処理
                   try {
-                    final featureId = feature['id'] as int;
-                    final layerNode = _attributeTableLayer! as LayerNode;
+                    final layerNode = _attributeTableLayer!;
 
-                    // 対応するFeatureNodeを検索
-                    FeatureNode? featureNode;
-                    try {
-                      featureNode = layerNode.children
-                          .whereType<FeatureNode>()
-                          .firstWhere((f) => f.rowId == featureId);
-                    } catch (e) {
-                      featureNode = null;
-                    }
+                    // フィーチャを削除（データベースからも削除される）
+                    await feature.dispose();
 
-                    if (featureNode != null) {
-                      // フィーチャを削除（データベースからも削除される）
-                      await featureNode.dispose();
+                    // レイヤーノードから削除
+                    layerNode.children.remove(feature);
 
-                      // レイヤーノードから削除
-                      layerNode.children.remove(featureNode);
-
-                      // 成功メッセージ
+                    // 成功メッセージ
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('フィーチャが削除されました: ID $featureId'),
+                          content: Text('フィーチャが削除されました: ID ${feature.rowId}'),
                           backgroundColor: Colors.green,
                         ),
                       );
                     }
 
-                    // 属性テーブルの表示を更新
-                    final updatedFeatures = await _loadAttributeTableFeatures(
-                      layerNode,
-                    );
-                    setState(() {
-                      _attributeTableFeatures = updatedFeatures;
-                    });
-
                     // マップを更新
                     _forceMapRefresh();
 
-                    print('[MAP] フィーチャ削除完了: $featureId');
+                    print('[MAP] フィーチャ削除完了: ${feature.rowId}');
                   } catch (e) {
                     print('[MAP] フィーチャ削除エラー: $e');
                   }
                 },
                 onAddFeature: () {
                   // 新規フィーチャ追加時の処理（将来実装）
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')),
+                    );
+                  }
                 },
-                onClose: _closeAttributeTable,
               ),
             ),
           // --- Feature detail panel ---

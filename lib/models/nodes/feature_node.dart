@@ -124,11 +124,17 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 変更フラグをセット
   void _markDirty() {
+    print('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
     _isDirty = true;
+    
     // GeoPackageFileの遅延保存キューに追加
     final rowData = TurfConverter.featureToRowData(_turfFeature);
     if (rowData != null) {
+      print('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
+      print('[DEBUG] FeatureNode: rowData内容: $rowData');
       geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
+    } else {
+      print('[ERROR] FeatureNode: rowData変換に失敗しました');
     }
   }
 

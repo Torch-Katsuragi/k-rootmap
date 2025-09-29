@@ -1,6 +1,7 @@
 // K-MAPS: turf_dartオブジェクトとGeoPackageデータ間の変換ユーティリティ
 // turf_dartのFeature/FeatureCollectionとLatLng座標データ間の相互変換を行う
 
+import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -141,29 +142,35 @@ class TurfConverter {
 
   /// turf_dartのFeatureからGeoPackage保存用のデータを生成
   /// [feature] turf_dartのFeatureオブジェクト
-  /// 戻り値: GeoPackage保存用のMap（geometry, properties含む）
+  /// 戻り値: GeoPackage保存用のMap（属性のみ、ジオメトリは除外）
   static Map<String, dynamic>? featureToRowData(turf.Feature feature) {
     try {
       final rowData = <String, dynamic>{};
 
-      // プロパティをコピー
+      // プロパティをコピー（属性データのみ）
       if (feature.properties != null) {
-        rowData.addAll(feature.properties!);
-      }
-
-      // ジオメトリデータを変換
-      final geometry = feature.geometry;
-      if (geometry is turf.Point) {
-        rowData['geometry'] = [pointToLatlng(geometry)];
-      } else if (geometry is turf.LineString) {
-        rowData['geometry'] = lineStringToLatlngs(geometry);
-      } else if (geometry is turf.Polygon) {
-        rowData['geometry'] = polygonToLatlngs(geometry);
-      } else {
-        print(
-          '[WARNING] TurfConverter.featureToRowData: Unsupported geometry type: ${geometry.runtimeType}',
-        );
-        return null;
+        for (final entry in feature.properties!.entries) {
+          final key = entry.key;
+          final value = entry.value;
+          
+          // ジオメトリ関連のキーは除外
+          if (key == 'geometry' || key == 'geom') {
+            continue;
+          }
+          
+          // SQLiteでサポートされている型のみを含める
+          if (value == null || 
+              value is String || 
+              value is num || 
+              value is bool) {
+            rowData[key] = value;
+          } else if (value is Map) {
+            // メタデータなどのMapはJSON文字列として保存
+            rowData[key] = jsonEncode(value);
+          } else {
+            print('[WARNING] TurfConverter.featureToRowData: Unsupported property type: $key = $value (${value.runtimeType})');
+          }
+        }
       }
 
       return rowData;

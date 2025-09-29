@@ -12,6 +12,28 @@ import '../geopackage_file.dart';
 import '../geometry_type.dart';
 import '../../converters/turf_converter.dart';
 
+/// 重複レイヤ名のナンバリング処理ユーティリティ
+class LayerNameUtils {
+  /// 重複しない新しいレイヤ名を生成する
+  /// 例: "道路" が既存の場合 → "道路_2"
+  /// "道路_2" も既存の場合 → "道路_3" と番号を増やしていく
+  static String generateUniqueLayerName(String baseName, List<String> existingNames) {
+    if (!existingNames.contains(baseName)) {
+      return baseName;
+    }
+
+    int number = 2;
+    String candidateName;
+    
+    do {
+      candidateName = '${baseName}_$number';
+      number++;
+    } while (existingNames.contains(candidateName));
+    
+    return candidateName;
+  }
+}
+
 /// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション
 /// turf_dartのFeatureCollectionオブジェクトをメインデータとして内部的に保持
 abstract class LayerNode extends LayerTreeNode {
@@ -652,6 +674,7 @@ class PointLayerNode extends LayerNode {
   Color get baseIconColor => Colors.blue;
 
   /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
+  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
   static Future<PointLayerNode?> createIn(
     LayerTreeNode parent,
     String name,
@@ -659,10 +682,12 @@ class PointLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    final exists = existingLayers.contains(name);
-    if (exists) return null;
-    await gpkgFile.addLayer(name, GeometryType.point);
-    final node = PointLayerNode(gpkgFile, name, parent: parent);
+    
+    // 重複しない名前を生成
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
+    
+    await gpkgFile.addLayer(uniqueName, GeometryType.point);
+    final node = PointLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
     return node;
   }
@@ -698,6 +723,7 @@ class LineLayerNode extends LayerNode {
   Color get baseIconColor => Colors.green;
 
   /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
+  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
   static Future<LineLayerNode?> createIn(
     LayerTreeNode parent,
     String name,
@@ -705,10 +731,12 @@ class LineLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    final exists = existingLayers.contains(name);
-    if (exists) return null;
-    await gpkgFile.addLayer(name, GeometryType.linestring);
-    final node = LineLayerNode(gpkgFile, name, parent: parent);
+    
+    // 重複しない名前を生成
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
+    
+    await gpkgFile.addLayer(uniqueName, GeometryType.linestring);
+    final node = LineLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
     return node;
   }
@@ -744,6 +772,7 @@ class PolygonLayerNode extends LayerNode {
   Color get baseIconColor => Colors.deepOrange;
 
   /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
+  /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
   static Future<PolygonLayerNode?> createIn(
     LayerTreeNode parent,
     String name,
@@ -751,10 +780,12 @@ class PolygonLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    final exists = existingLayers.contains(name);
-    if (exists) return null;
-    await gpkgFile.addLayer(name, GeometryType.polygon);
-    final node = PolygonLayerNode(gpkgFile, name, parent: parent);
+    
+    // 重複しない名前を生成
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
+    
+    await gpkgFile.addLayer(uniqueName, GeometryType.polygon);
+    final node = PolygonLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
     return node;
   }

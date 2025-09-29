@@ -42,4 +42,16 @@ enum GeometryType {
         return 'ポリゴン';
     }
   }
+
+  /// デフォルトレイヤ名を取得
+  String get defaultLayerName {
+    switch (this) {
+      case GeometryType.point:
+        return 'point';
+      case GeometryType.linestring:
+        return 'line';
+      case GeometryType.polygon:
+        return 'polygon';
+    }
+  }
 }

@@ -559,63 +559,10 @@ mixin LayerDrawerTiles {
       onTap: () async {
         final result = await showDialog<Map<String, String>>(
           context: context,
-          builder: (context) {
-            String input = '';
-            GeometryType geomType = GeometryType.point;
-            return AlertDialog(
-              title: const Text('新規レイヤ'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'レイヤ名'),
-                    onChanged: (v) => input = v,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<GeometryType>(
-                    value: geomType,
-                    decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
-                    items: [
-                      DropdownMenuItem(
-                        value: GeometryType.point,
-                        child: Text(GeometryType.point.displayName),
-                      ),
-                      DropdownMenuItem(
-                        value: GeometryType.linestring,
-                        child: Text(GeometryType.linestring.displayName),
-                      ),
-                      DropdownMenuItem(
-                        value: GeometryType.polygon,
-                        child: Text(GeometryType.polygon.displayName),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) geomType = v;
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, null),
-                  child: const Text('キャンセル'),
-                ),
-                TextButton(
-                  onPressed:
-                      () => Navigator.pop(context, {
-                        'name': input,
-                        'geomType': geomType.value,
-                      }),
-                  child: const Text('作成'),
-                ),
-              ],
-            );
-          },
+          builder: (context) => _NewLayerDialog(),
         );
         if (result != null &&
-            result['name'] != null &&
-            result['name']!.isNotEmpty) {
+            result['name'] != null) {
           print(
             '[LayerDrawer] レイヤ作成開始: ${result['name']}, タイプ: ${result['geomType']}',
           );
@@ -1119,5 +1066,143 @@ mixin LayerDrawerTiles {
         );
       }
     }
+  }
+}
+
+/// レイヤ新規作成ダイアログ
+class _NewLayerDialog extends StatefulWidget {
+  @override
+  _NewLayerDialogState createState() => _NewLayerDialogState();
+}
+
+class _NewLayerDialogState extends State<_NewLayerDialog> {
+  late TextEditingController _controller;
+  late FocusNode _focusNode;
+  GeometryType _geomType = GeometryType.point;
+  bool _isUserInput = false; // ユーザーが手動で入力したかを追跡
+
+  @override
+  void initState() {
+    super.initState();
+    // 初期状態ではデフォルト名を設定
+    _controller = TextEditingController(text: _geomType.defaultLayerName);
+    _focusNode = FocusNode();
+    
+    // フォーカス取得時に全選択するためのリスナーを追加
+    _focusNode.addListener(() {
+      if (_focusNode.hasFocus) {
+        _selectAllText();
+      }
+    });
+    
+    // 初期表示時に全選択
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectAllText();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  /// テキストを全選択する
+  void _selectAllText() {
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+  }
+
+  /// レイヤ名を取得（空欄の場合はデフォルト名を返す）
+  String _getLayerName() {
+    final input = _controller.text.trim();
+    return input.isEmpty ? _geomType.defaultLayerName : input;
+  }
+
+  /// ダイアログを閉じてレイヤ作成を実行
+  void _createLayer() {
+    Navigator.pop(context, {
+      'name': _getLayerName(),
+      'geomType': _geomType.value,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('新規レイヤ'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'レイヤ名',
+              hintText: _geomType.defaultLayerName, // プレースホルダとしてデフォルト名を表示
+            ),
+            onTap: () {
+              // タップ時にも全選択を実行
+              _selectAllText();
+            },
+            onChanged: (value) {
+              // ユーザーが入力した場合のフラグを立てる
+              // ただし、デフォルト名と同じ場合はユーザー入力とみなさない
+              _isUserInput = value.isNotEmpty && value != _geomType.defaultLayerName;
+            },
+            onSubmitted: (value) {
+              // Enterキーが押された場合、常に作成処理を実行
+              _createLayer();
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<GeometryType>(
+            value: _geomType,
+            decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
+            items: [
+              DropdownMenuItem(
+                value: GeometryType.point,
+                child: Text(GeometryType.point.displayName),
+              ),
+              DropdownMenuItem(
+                value: GeometryType.linestring,
+                child: Text(GeometryType.linestring.displayName),
+              ),
+              DropdownMenuItem(
+                value: GeometryType.polygon,
+                child: Text(GeometryType.polygon.displayName),
+              ),
+            ],
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _geomType = v;
+                  // ユーザーが手動入力していない場合は、デフォルト名を更新
+                  if (!_isUserInput) {
+                    _controller.text = _geomType.defaultLayerName;
+                    // テキストを全選択状態にする
+                    _selectAllText();
+                  }
+                });
+              }
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('キャンセル'),
+        ),
+        TextButton(
+          onPressed: _createLayer,
+          child: const Text('作成'),
+        ),
+      ],
+    );
   }
 }

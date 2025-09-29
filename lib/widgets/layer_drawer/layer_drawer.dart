@@ -221,6 +221,12 @@ class _LayerDrawerState extends State<LayerDrawer>
             autofocus: true,
             decoration: const InputDecoration(labelText: 'フォルダ名'),
             onChanged: (v) => input = v,
+            onSubmitted: (value) {
+              // Enterキーが押された場合、フォルダ名が空でなければ作成処理を実行
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
           ),
           actions: [
             TextButton(
@@ -265,6 +271,12 @@ class _LayerDrawerState extends State<LayerDrawer>
             autofocus: true,
             decoration: const InputDecoration(labelText: 'ファイル名（.gpkg）'),
             onChanged: (v) => input = v,
+            onSubmitted: (value) {
+              // Enterキーが押された場合、ファイル名が空でなければ作成処理を実行
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
           ),
           actions: [
             TextButton(

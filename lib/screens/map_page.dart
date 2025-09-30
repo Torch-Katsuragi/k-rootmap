@@ -1007,8 +1007,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         '[DEBUG] _updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
       );
 
-      // LayerNodeのchildrenから直接FeatureNodeを取得（高速化）
-      final layerFeatures = layer.children.whereType<FeatureNode>().toList();
+      // LayerNodeのchildrenから直接FeatureNodeを取得（dispose済みを除外）
+      final layerFeatures = layer.children
+          .whereType<FeatureNode>()
+          .where((f) => !f.isDisposed)
+          .toList();
 
       if (layer is PointLayerNode) {
         final layerPointFeatures =
@@ -1538,8 +1541,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     PolylineLayer(
                       polylines: [
                         for (final f in lineFeatures)
-                          Polyline(
-                            points: f.geometry as List<LatLng>,
+                          if (f.geometry != null)
+                            Polyline(
+                              points: f.geometry as List<LatLng>,
                             color:
                                 GlobalConfig.instance.selectedFeatures.contains(
                                       f,
@@ -1627,8 +1631,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     PolygonLayer(
                       polygons: [
                         for (final f in polygonFeatures)
-                          Polygon(
-                            points: (f.geometry as List<List<LatLng>>).first,
+                          if (f.geometry != null)
+                            Polygon(
+                              points: (f.geometry as List<List<LatLng>>).first,
                             holePointsList:
                                 (f.geometry as List<List<LatLng>>)
                                     .skip(1)
@@ -1841,7 +1846,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
                         // --- Existing point feature markers ---
                         for (final f in pointFeatures)
-                          ...((f.geometry as List<LatLng>).map(
+                          if (f.geometry != null)
+                            ...((f.geometry as List<LatLng>).map(
                             (pt) => Marker(
                               point: pt,
                               width: 8,

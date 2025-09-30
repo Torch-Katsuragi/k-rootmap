@@ -15,29 +15,46 @@ import '../../converters/turf_converter.dart';
 
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
-/// turf_dartのFeatureオブジェクトをメインデータとして内部的に保持
+/// データはLayerNode._featureMapに一元管理され、FeatureNodeは参照と操作を提供
 abstract class FeatureNode extends LayerTreeNode {
-  /// turf_dartのFeatureオブジェクト（メインデータ）
-  turf.Feature _turfFeature;
+  /// DB上のrowId（主キー）- データは持たず、IDのみ保持
+  final int _rowId;
 
   /// 変更の追跡フラグ
   bool _isDirty = false;
-
-  /// turf_dartのFeatureオブジェクトを取得
-  turf.Feature get turfFeature => _turfFeature;
+  
+  /// dispose済みフラグ（null参照対策）
+  bool _isDisposed = false;
 
   /// DB上のrowId（主キー）
-  int get rowId => _turfFeature.properties?['id'] as int? ?? 0;
+  int get rowId => _rowId;
+  
+  /// dispose済みかどうかを取得
+  bool get isDisposed => _isDisposed;
+
+  /// turf_dartのFeatureオブジェクトを取得（親のMapから参照）
+  turf.Feature get turfFeature {
+    if (_isDisposed) {
+      throw StateError('FeatureNode is disposed');
+    }
+    final feature = parent.getFeatureById(_rowId);
+    if (feature == null) {
+      throw StateError('Feature not found in parent map: rowId=$_rowId');
+    }
+    return feature;
+  }
 
   /// フィーチャの重心座標（turf_dartで計算）
   LatLng get centroid {
-    final calculatedCentroid = TurfConverter.calculateCentroid(_turfFeature);
+    if (_isDisposed) return LatLng(0, 0);
+    final calculatedCentroid = TurfConverter.calculateCentroid(turfFeature);
     return calculatedCentroid ?? LatLng(0, 0);
   }
 
   /// 座標データをposition型で取得（turf_dart形式）
   List<double> get position {
-    final geometry = _turfFeature.geometry;
+    if (_isDisposed) return [0, 0];
+    final geometry = turfFeature.geometry;
     if (geometry is turf.Point) {
       return TurfConverter.latlngToPosition(
         TurfConverter.pointToLatlng(geometry),
@@ -49,7 +66,8 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 複数座標データをpositionリストで取得
   List<List<double>> get positions {
-    final geometry = _turfFeature.geometry;
+    if (_isDisposed) return [];
+    final geometry = turfFeature.geometry;
     if (geometry is turf.LineString) {
       return TurfConverter.latlngsToPositions(
         TurfConverter.lineStringToLatlngs(geometry),
@@ -66,7 +84,8 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
   dynamic get geometry {
-    final geom = _turfFeature.geometry;
+    if (_isDisposed) return null;
+    final geom = turfFeature.geometry;
     if (geom is turf.Point) {
       return [TurfConverter.pointToLatlng(geom)];
     } else if (geom is turf.LineString) {
@@ -79,29 +98,35 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 名前のgetter（turf_dartのpropertiesから取得）
   @override
-  String get name =>
-      _turfFeature.properties?['name'] as String? ?? 'Unnamed Feature';
+  String get name {
+    if (_isDisposed) return 'Disposed Feature';
+    return turfFeature.properties?['name'] as String? ?? 'Unnamed Feature';
+  }
 
-  /// 名前のsetter（turf_dartのpropertiesに設定）
+  /// 名前のsetter（親のMapを更新）
   set name(String value) {
-    _turfFeature.properties ??= {};
-    _turfFeature.properties!['name'] = value;
+    if (_isDisposed) return;
+    parent.updateFeatureAttribute(_rowId, 'name', value);
     _markDirty();
   }
 
   /// 説明のgetter（turf_dartのpropertiesから取得）
-  String? get description => _turfFeature.properties?['description'] as String?;
+  String? get description {
+    if (_isDisposed) return null;
+    return turfFeature.properties?['description'] as String?;
+  }
 
-  /// 説明のsetter（turf_dartのpropertiesに設定）
+  /// 説明のsetter（親のMapを更新）
   set description(String? value) {
-    _turfFeature.properties ??= {};
-    _turfFeature.properties!['description'] = value;
+    if (_isDisposed) return;
+    parent.updateFeatureAttribute(_rowId, 'description', value);
     _markDirty();
   }
 
   /// メタデータのgetter（turf_dartのpropertiesから取得）
   Map<String, dynamic>? get metadata {
-    final value = _turfFeature.properties?['kmaps_metadata'];
+    if (_isDisposed) return null;
+    final value = turfFeature.properties?['kmaps_metadata'];
     if (value == null) return null;
     if (value is Map<String, dynamic>) return value;
     if (value is String) {
@@ -115,10 +140,10 @@ abstract class FeatureNode extends LayerTreeNode {
     return null;
   }
 
-  /// メタデータのsetter（turf_dartのpropertiesに設定）
+  /// メタデータのsetter（親のMapを更新）
   set metadata(Map<String, dynamic>? value) {
-    _turfFeature.properties ??= {};
-    _turfFeature.properties!['kmaps_metadata'] = value;
+    if (_isDisposed) return;
+    parent.updateFeatureAttribute(_rowId, 'kmaps_metadata', value);
     _markDirty();
   }
 
@@ -127,8 +152,10 @@ abstract class FeatureNode extends LayerTreeNode {
     print('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
     _isDirty = true;
     
+    if (_isDisposed) return;
+    
     // GeoPackageFileの遅延保存キューに追加
-    final rowData = TurfConverter.featureToRowData(_turfFeature);
+    final rowData = TurfConverter.featureToRowData(turfFeature);
     if (rowData != null) {
       print('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
       print('[DEBUG] FeatureNode: rowData内容: $rowData');
@@ -140,15 +167,20 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 属性値の取得（turf_dartのpropertiesから）
   Future<dynamic> getAttributeValue(String attributeName) async {
-    return _turfFeature.properties?[attributeName];
+    if (_isDisposed) return null;
+    return turfFeature.properties?[attributeName];
   }
 
-  /// 属性値の設定（turf_dartのpropertiesに設定し、バックグラウンドでDB書き込み）
+  /// 属性値の設定（親のMapを更新し、バックグラウンドでDB書き込み）
   Future<void> setAttributeValue(String attributeName, dynamic value) async {
     print('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
 
-    _turfFeature.properties ??= {};
-    _turfFeature.properties![attributeName] = value;
+    if (_isDisposed) {
+      print('[WARNING] FeatureNode is disposed, cannot set attribute');
+      return;
+    }
+    
+    parent.updateFeatureAttribute(_rowId, attributeName, value);
     _markDirty();
   }
 
@@ -156,14 +188,22 @@ abstract class FeatureNode extends LayerTreeNode {
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
     print('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
 
-    _turfFeature.properties ??= {};
-    _turfFeature.properties!.addAll(attributes);
+    if (_isDisposed) {
+      print('[WARNING] FeatureNode is disposed, cannot set attributes');
+      return;
+    }
+    
+    // 各属性を親のMap経由で更新
+    for (final entry in attributes.entries) {
+      parent.updateFeatureAttribute(_rowId, entry.key, entry.value);
+    }
     _markDirty();
   }
 
   /// 全属性値を取得
   Future<Map<String, dynamic>> getAllAttributes() async {
-    return Map<String, dynamic>.from(_turfFeature.properties ?? {});
+    if (_isDisposed) return {};
+    return Map<String, dynamic>.from(turfFeature.properties ?? {});
   }
 
   /// 即座に全ての変更をDBに保存
@@ -222,7 +262,14 @@ abstract class FeatureNode extends LayerTreeNode {
   /// DBからの削除も基底クラスで統一処理
   @override
   Future<void> dispose() async {
-    print('[DEBUG] FeatureNode.dispose: disposing ${name} (${runtimeType})');
+    if (_isDisposed) {
+      print('[WARNING] FeatureNode already disposed');
+      return;
+    }
+    
+    print('[DEBUG] FeatureNode.dispose: disposing $name ($runtimeType)');
+    
+    _isDisposed = true;  // dispose済みフラグを設定
 
     // 保留中の変更を即座に保存
     await flushChanges();
@@ -246,16 +293,16 @@ abstract class FeatureNode extends LayerTreeNode {
         .removeFeature(layerName, rowId)
         .then((_) {
           print(
-            '[DEBUG] FeatureNode.dispose: DB deletion completed for ${name}',
+            '[DEBUG] FeatureNode.dispose: DB deletion completed',
           );
         })
         .catchError((e) {
           print(
-            '[ERROR] FeatureNode.dispose: DB deletion failed for ${name}: $e',
+            '[ERROR] FeatureNode.dispose: DB deletion failed: $e',
           );
         });
 
-    print('[DEBUG] FeatureNode.dispose: base dispose completed for ${name}');
+    print('[DEBUG] FeatureNode.dispose: base dispose completed');
 
     // 基底クラスのdisposeを呼び出し
     await super.dispose();
@@ -267,29 +314,36 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// rowデータとジオメトリタイプを基にFeatureNodeを作成
   FeatureNode(Map<String, dynamic> row, this.parent, String geometryType)
-    : _turfFeature =
-          TurfConverter.createFeatureFromRow(row, geometryType) ??
-          turf.Feature(
-            geometry: turf.Point(coordinates: turf.Position.of([0, 0])),
-            properties: row,
-          ),
+    : _rowId = row['id'] as int? ?? 0,
       super(
         row['name'] as String? ?? 'Unnamed Feature',
         visible: parent.visible,
         parent: parent,
         children: [],
         nodeType: 'feature',
-      );
+      ) {
+    // 親のMapにturfFeatureを登録
+    final turfFeature = TurfConverter.createFeatureFromRow(row, geometryType) ??
+        turf.Feature(
+          geometry: turf.Point(coordinates: turf.Position.of([0, 0])),
+          properties: row,
+        );
+    parent.addFeatureToMap(_rowId, turfFeature);
+  }
 
   /// turf_dartのFeatureオブジェクトから直接FeatureNodeを作成
-  FeatureNode.fromTurfFeature(this._turfFeature, this.parent)
-    : super(
-        _turfFeature.properties?['name'] as String? ?? 'Unnamed Feature',
+  FeatureNode.fromTurfFeature(turf.Feature feature, this.parent)
+    : _rowId = feature.properties?['id'] as int? ?? 0,
+      super(
+        feature.properties?['name'] as String? ?? 'Unnamed Feature',
         visible: parent.visible,
         parent: parent,
         children: [],
         nodeType: 'feature',
-      );
+      ) {
+    // 親のMapにturfFeatureを登録
+    parent.addFeatureToMap(_rowId, feature);
+  }
 
   /// GeoPackageFile参照
   GeoPackageFile get geoPackageFile => parent.geoPackageFile;
@@ -365,7 +419,7 @@ class PointFeatureNode extends FeatureNode {
   }
 
   /// 指定したPointLayerNodeの下に新しい点フィーチャを作成し、PointFeatureNodeインスタンスを返す
-  /// turf_dartのFeatureオブジェクトを作成してからDBに保存
+  /// DBに保存してrowIdを取得してからFeatureNodeを作成
   static Future<PointFeatureNode?> createIn(
     LayerNode parent,
     LatLng point,
@@ -377,7 +431,7 @@ class PointFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // turf_dartのFeatureオブジェクトを作成
+    // 属性辞書を作成
     final properties = <String, dynamic>{
       'name': name,
       'description': description,
@@ -386,15 +440,7 @@ class PointFeatureNode extends FeatureNode {
       properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
-    final turfFeature = turf.Feature(
-      geometry: TurfConverter.createPoint(point),
-      properties: properties,
-    );
-
-    // FeatureNodeを先に作成
-    final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
-
-    // DBへの保存を実行
+    // DBへの保存を実行してrowIdを取得
     final actualRowId = await gpkgFile.addPointWithAttributes(
       layerName,
       point,
@@ -406,8 +452,15 @@ class PointFeatureNode extends FeatureNode {
       return null;
     }
 
-    // DBから実際のrowIdをturf_dartのpropertiesに設定
-    node._turfFeature.properties!['id'] = actualRowId;
+    // rowIdを含むFeatureオブジェクトを作成
+    properties['id'] = actualRowId;
+    final turfFeature = turf.Feature(
+      geometry: TurfConverter.createPoint(point),
+      properties: properties,
+    );
+
+    // FeatureNodeを作成して親に追加
+    final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
 
     print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -435,16 +488,18 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // turf_dartのFeatureオブジェクトを更新
-      _turfFeature = turf.Feature(
+      // 親のMap内のFeatureを更新
+      final updatedFeature = turf.Feature(
         geometry: TurfConverter.createPoint(geometryToUpdate),
         properties: {
-          ..._turfFeature.properties ?? {},
+          ...turfFeature.properties ?? {},
+          'id': _rowId,
           'name': name,
           'description': description,
           'kmaps_metadata': metadata,
         },
       );
+      parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
 
       print('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
@@ -467,11 +522,12 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // turf_dartのジオメトリを更新
-      _turfFeature = turf.Feature(
+      // 親のMap内のFeatureのジオメトリを更新
+      final updatedFeature = turf.Feature(
         geometry: TurfConverter.createPoint(newLocation),
-        properties: _turfFeature.properties,
+        properties: turfFeature.properties,
       );
+      parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
       print('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
     } else {
@@ -562,7 +618,7 @@ class LineFeatureNode extends FeatureNode {
   }
 
   /// 指定したLineLayerNodeの下に新しい線フィーチャを作成し、LineFeatureNodeインスタンスを返す
-  /// turf_dartのFeatureオブジェクトを作成してからDBに保存
+  /// DBに保存してrowIdを取得してからFeatureNodeを作成
   static Future<LineFeatureNode?> createIn(
     LayerNode parent,
     List<LatLng> line,
@@ -574,7 +630,7 @@ class LineFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // turf_dartのFeatureオブジェクトを作成
+    // 属性辞書を作成
     final properties = <String, dynamic>{
       'name': name,
       'description': description,
@@ -583,15 +639,7 @@ class LineFeatureNode extends FeatureNode {
       properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
-    final turfFeature = turf.Feature(
-      geometry: TurfConverter.createLineString(line),
-      properties: properties,
-    );
-
-    // FeatureNodeを先に作成
-    final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
-
-    // DBへの保存を実行
+    // DBへの保存を実行してrowIdを取得
     final actualRowId = await gpkgFile.addLineWithAttributes(
       layerName,
       line,
@@ -603,8 +651,15 @@ class LineFeatureNode extends FeatureNode {
       return null;
     }
 
-    // DBから実際のrowIdをturf_dartのpropertiesに設定
-    node._turfFeature.properties!['id'] = actualRowId;
+    // rowIdを含むFeatureオブジェクトを作成
+    properties['id'] = actualRowId;
+    final turfFeature = turf.Feature(
+      geometry: TurfConverter.createLineString(line),
+      properties: properties,
+    );
+
+    // FeatureNodeを作成して親に追加
+    final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
 
     print('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
@@ -632,16 +687,18 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // turf_dartのFeatureオブジェクトを更新
-      _turfFeature = turf.Feature(
+      // 親のMap内のFeatureを更新
+      final updatedFeature = turf.Feature(
         geometry: TurfConverter.createLineString(geometryToUpdate),
         properties: {
-          ..._turfFeature.properties ?? {},
+          ...turfFeature.properties ?? {},
+          'id': _rowId,
           'name': name,
           'description': description,
           'kmaps_metadata': metadata,
         },
       );
+      parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
 
       print('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
@@ -664,11 +721,12 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // turf_dartのジオメトリを更新
-      _turfFeature = turf.Feature(
+      // 親のMap内のFeatureのジオメトリを更新
+      final updatedFeature = turf.Feature(
         geometry: TurfConverter.createLineString(newLine),
-        properties: _turfFeature.properties,
+        properties: turfFeature.properties,
       );
+      parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
       print(
         '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
@@ -847,13 +905,19 @@ class PolygonFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのプロパティを一括更新
-      await setAttributeValues({
-        'name': name,
-        'description': description,
-        'kmaps_metadata': metadata,
-        'geometry': geometryToUpdate,
-      });
+      // 親のMap内のFeatureを更新
+      final updatedFeature = turf.Feature(
+        geometry: TurfConverter.createPolygon(geometryToUpdate),
+        properties: {
+          ...turfFeature.properties ?? {},
+          'id': _rowId,
+          'name': name,
+          'description': description,
+          'kmaps_metadata': metadata,
+        },
+      );
+      parent.addFeatureToMap(_rowId, updatedFeature);
+      _markDirty();
 
       print('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
     } else {
@@ -875,8 +939,13 @@ class PolygonFeatureNode extends FeatureNode {
     );
 
     if (success) {
-      // ローカルのジオメトリも更新
-      await setAttributeValue('geometry', newPolygon);
+      // 親のMap内のFeatureのジオメトリを更新
+      final updatedFeature = turf.Feature(
+        geometry: TurfConverter.createPolygon(newPolygon),
+        properties: turfFeature.properties,
+      );
+      parent.addFeatureToMap(_rowId, updatedFeature);
+      _markDirty();
       print(
         '[DEBUG] PolygonFeatureNode: ポリゴン更新成功 - $name (${newPolygon.length} rings)',
       );

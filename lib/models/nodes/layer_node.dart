@@ -35,7 +35,7 @@ class LayerNameUtils {
 }
 
 /// レイヤノード（LayerNode）: GeoPackage内のフィーチャテーブル＋FeatureNodeコレクション
-/// turf_dartのFeatureCollectionオブジェクトをメインデータとして内部的に保持
+/// turf_dartのFeatureをMap管理し、FeatureCollectionを動的生成する（Single Source of Truth）
 abstract class LayerNode extends LayerTreeNode {
   /// GeoPackageファイル管理クラスへの参照
   final GeoPackageFile geoPackageFile;
@@ -43,11 +43,14 @@ abstract class LayerNode extends LayerTreeNode {
   /// レイヤ名（DBテーブル名）
   final String layerName;
 
-  /// turf_dartのFeatureCollectionオブジェクト（メインデータ）
-  turf.FeatureCollection? _turfFeatureCollection;
+  /// turf_dartのFeatureをrowIdで管理するMap（真のデータソース）
+  final Map<int, turf.Feature> _featureMap = {};
 
   /// 変更の追跡フラグ
   bool _isDirty = false;
+  
+  /// dispose済みフラグ（null参照対策）
+  bool _isDisposed = false;
 
   /// 親のGeoPackageNodeを取得
   GeoPackageNode get geoPackageNode {
@@ -62,21 +65,63 @@ abstract class LayerNode extends LayerTreeNode {
   }
 
   /// turf_dartのFeatureCollectionオブジェクトを取得
+  /// _featureMapから動的に生成（常に最新の状態を反映）
   turf.FeatureCollection get turfFeatureCollection {
-    if (_turfFeatureCollection == null) {
-      // childrenからturf_dartのFeatureリストを作成
-      final turfFeatures =
-          features.map((feature) => feature.turfFeature).toList();
-      _turfFeatureCollection = TurfConverter.createFeatureCollection(
-        turfFeatures,
-      );
+    if (_isDisposed) {
+      throw StateError('LayerNode is disposed');
     }
-    return _turfFeatureCollection!;
+    return TurfConverter.createFeatureCollection(
+      _featureMap.values.toList(),
+    );
+  }
+  
+  /// rowIdでFeatureを取得（null安全）
+  turf.Feature? getFeatureById(int rowId) {
+    if (_isDisposed) return null;
+    return _featureMap[rowId];
+  }
+  
+  /// Featureを追加（FeatureNodeから呼ばれる、null参照対策含む）
+  void addFeatureToMap(int rowId, turf.Feature feature) {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot add feature');
+      return;
+    }
+    _featureMap[rowId] = feature;
+    _markDirty();
+  }
+  
+  /// Featureを削除（内部用、null参照対策含む）
+  void _removeFeatureFromMap(int rowId) {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot remove feature');
+      return;
+    }
+    _featureMap.remove(rowId);
+    _markDirty();
+  }
+  
+  /// Featureの属性を更新（内部用、null参照対策含む）
+  bool updateFeatureAttribute(int rowId, String key, dynamic value) {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot update attribute');
+      return false;
+    }
+    final feature = _featureMap[rowId];
+    if (feature == null) return false;
+    
+    feature.properties ??= {};
+    feature.properties![key] = value;
+    _markDirty();
+    return true;
   }
 
-  /// このレイヤに含まれるFeatureNodeリスト（型安全なchildren）
+  /// このレイヤに含まれるFeatureNodeリスト（型安全なchildren、dispose済みを除外）
   List<FeatureNode> get features =>
-      super.children.whereType<FeatureNode>().toList();
+      super.children
+          .whereType<FeatureNode>()
+          .where((f) => !f.isDisposed)  // dispose済みを除外
+          .toList();
 
   /// position型の座標データを取得（全フィーチャの重心座標リスト）
   List<List<double>> get positions {
@@ -85,8 +130,9 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 変更フラグをセット
   void _markDirty() {
+    if (_isDisposed) return;
     _isDirty = true;
-    _turfFeatureCollection = null; // キャッシュをクリア
+    // FeatureCollectionは動的生成なのでキャッシュクリア不要
   }
 
   /// 属性テーブルのカラム名キャッシュ
@@ -116,14 +162,24 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// FeatureNodeを安全に追加するメソッド
   void addFeature(FeatureNode feature) {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot add feature');
+      return;
+    }
     super.addChild(feature);
-    _markDirty(); // FeatureCollectionキャッシュをクリア
+    // _featureMapにも追加（FeatureNodeが持つturfFeatureを登録）
+    addFeatureToMap(feature.rowId, feature.turfFeature);
   }
 
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot remove feature');
+      return;
+    }
     super.removeChild(feature);
-    _markDirty(); // FeatureCollectionキャッシュをクリア
+    // _featureMapからも削除
+    _removeFeatureFromMap(feature.rowId);
   }
 
   /// rowIdに該当するFeatureNodeを検索
@@ -243,22 +299,43 @@ abstract class LayerNode extends LayerTreeNode {
 
   @override
   Future<void> dispose() async {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode already disposed');
+      return;
+    }
+    
+    _isDisposed = true;  // dispose済みフラグを設定
+    
     // レイヤ（DBテーブル）削除
     await geoPackageFile.removeLayer(layerName);
+    
+    // Mapをクリア（メモリ解放）
+    _featureMap.clear();
+    
     await super.dispose();
   }
 
   @override
   Future<void> updateChildren() async {
+    if (_isDisposed) {
+      print('[WARNING] LayerNode is disposed, cannot update children');
+      return;
+    }
+    
     children.clear();
+    _featureMap.clear();  // Mapもクリア
+    
     // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
     final featureList = await _loadFeaturesFromDB();
     for (final node in featureList) {
       addChild(node);
+      // _featureMapにも追加
+      addFeatureToMap(node.rowId, node.turfFeature);
     }
+    
     // 子ノードの変更があったためキャッシュをクリア
     clearColumnNamesCache();
-    _markDirty(); // FeatureCollectionキャッシュもクリア
+    _markDirty();
   }
 
   /// レイヤを別のGeoPackageに移植

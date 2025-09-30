@@ -205,16 +205,11 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
     }
   }
 
-  /// 選択されたフィーチャを削除
+  /// 選択されたフィーチャを削除（GlobalConfig統一処理を使用）
   Future<void> _deleteSelectedFeatures() async {
     try {
-      // GlobalConfigから選択されたフィーチャーを取得
-      final selectedFeatures = GlobalConfig.instance.selectedFeatures
-          .whereType<FeatureNode>()
-          .toList();
-
       // 選択されたフィーチャーがない場合は処理を終了
-      if (selectedFeatures.isEmpty) {
+      if (GlobalConfig.instance.selectedFeatures.isEmpty) {
         print('[DynamicAttributeTable] 削除するフィーチャーが選択されていません');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -228,74 +223,24 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
         return;
       }
 
-      print('[DynamicAttributeTable] 削除処理開始: ${selectedFeatures.length}個のフィーチャ');
+      final featureCount = GlobalConfig.instance.selectedFeatures.length;
+      print('[DynamicAttributeTable] 削除処理開始: $featureCount個のフィーチャ');
 
-      // 削除対象の行インデックスを収集
-      final rowIndicesToRemove = <int>[];
-      for (final feature in selectedFeatures) {
-        final index = features.indexOf(feature);
-        if (index >= 0) {
-          rowIndicesToRemove.add(index);
-        }
-      }
+      // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
+      await GlobalConfig.instance.disposeSelectedFeatures(
+        mapState: GlobalConfig.instance.mapState,
+      );
 
-      // 各フィーチャーに対してdispose()を実行（データベース削除）
-      for (final feature in selectedFeatures) {
-        print('[DynamicAttributeTable] フィーチャ削除中: ${feature.name} (ID: ${feature.rowId})');
-        
-        // レイヤーノードから削除
-        widget.layer.removeFeature(feature);
-        
-        // dispose()を実行してDBからも削除
-        await feature.dispose();
-        
-        print('[DynamicAttributeTable] フィーチャ削除完了: ${feature.name}');
-      }
+      // 属性テーブルのデータを再読み込み
+      await _initializeTableData();
 
-      // PlutoGridから該当する行を削除（後ろからインデックス順で削除）
-      if (stateManager != null && rowIndicesToRemove.isNotEmpty) {
-        rowIndicesToRemove.sort((a, b) => b.compareTo(a)); // 後ろから削除
-        final rowsToRemove = <PlutoRow>[];
-        for (final index in rowIndicesToRemove) {
-          if (index < rows.length) {
-            rowsToRemove.add(rows[index]);
-          }
-        }
-        
-        print('[DynamicAttributeTable] PlutoGrid行削除: ${rowsToRemove.length}行');
-        
-        // rowsリストからも削除（後ろから削除）
-        rowIndicesToRemove.sort((a, b) => b.compareTo(a));
-        for (final index in rowIndicesToRemove) {
-          if (index < rows.length) {
-            rows.removeAt(index);
-          }
-        }
-        
-        // StateManagerから行削除
-        stateManager!.removeRows(rowsToRemove);
-      }
-
-      // ローカルのfeaturesリストからも削除
-      for (final feature in selectedFeatures) {
-        features.remove(feature);
-      }
-
-      // GlobalConfigのselectedFeaturesをクリア
-      GlobalConfig.instance.selectedFeatures.clear();
-
-      // setState でUIを更新
-      setState(() {
-        // UI状態を更新
-      });
-
-      print('[DynamicAttributeTable] 選択されたフィーチャを削除しました: ${selectedFeatures.length}個');
+      print('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');
 
       // 成功メッセージ
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${selectedFeatures.length}個のフィーチャを削除しました'),
+            content: Text('${featureCount}個のフィーチャを削除しました'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),

@@ -332,61 +332,12 @@ class PenTool extends MapTool {
     _uiUpdateTimer = null;
   }
 
-  /// 選択されたフィーチャーを効率的に削除（最適化・UI更新修正）
+  /// 選択されたフィーチャーを削除（GlobalConfig統一処理を使用）
   void _disposeSelectedFeatures(dynamic mapState) async {
-    final selectedFeatures = List.from(GlobalConfig.instance.selectedFeatures);
-    print(
-      '[DEBUG] PenTool._disposeSelectedFeatures: disposing ${selectedFeatures.length} features',
-    );
-
-    if (selectedFeatures.isEmpty) {
-      print('[DEBUG] PenTool._disposeSelectedFeatures: no features to dispose');
-      return;
-    }
-
-    // 即座に選択状態をクリア（UI更新優先）
-    GlobalConfig.instance.selectedFeatures.clear();
-    print(
-      '[DEBUG] PenTool._disposeSelectedFeatures: cleared selected features',
-    );
-
-    // 即座にUI更新（選択表示を確実にクリア）
-    mapState.setState(() {});
-    mapState.refreshFeatures();
-    print('[DEBUG] PenTool._disposeSelectedFeatures: triggered UI update');
-
-    // 各フィーチャーを非同期で削除（並行処理）
-    final disposeFutures =
-        selectedFeatures.map((feature) async {
-          try {
-            print(
-              '[DEBUG] PenTool._disposeSelectedFeatures: disposing feature ${feature.name}',
-            );
-            await feature.dispose();
-            print(
-              '[DEBUG] PenTool._disposeSelectedFeatures: disposed feature ${feature.name}',
-            );
-          } catch (e) {
-            print(
-              '[ERROR] PenTool._disposeSelectedFeatures: failed to dispose ${feature.name}: $e',
-            );
-          }
-        }).toList();
-
-    // バックグラウンドで削除処理完了を待機（UIには影響しない）
-    Future.wait(disposeFutures)
-        .then((_) {
-          print(
-            '[DEBUG] PenTool._disposeSelectedFeatures: all ${selectedFeatures.length} features disposed',
-          );
-          // 削除完了後に最終的なUI更新
-          mapState.refreshFeatures();
-        })
-        .catchError((e) {
-          print(
-            '[ERROR] PenTool._disposeSelectedFeatures: error during batch disposal: $e',
-          );
-        });
+    print('[DEBUG] PenTool._disposeSelectedFeatures: using GlobalConfig unified deletion');
+    
+    // GlobalConfigの統一削除処理を使用
+    await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）

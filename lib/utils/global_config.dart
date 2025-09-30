@@ -3,11 +3,7 @@
 library;
 
 import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import '../tools/map_tool.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';

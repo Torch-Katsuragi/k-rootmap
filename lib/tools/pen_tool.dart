@@ -7,12 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import '../utils/global_config.dart';
 import '../utils/global_drawing_state.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import 'package:latlong2/latlong.dart';
 import 'pan_tool.dart'; // てのひらツールを利用
 import 'select_tool.dart';
@@ -35,7 +31,6 @@ class PenTool extends MapTool {
   /// UI更新デバウンス用タイマー
   Timer? _uiUpdateTimer;
 
-  Offset? _lastFingerPosition;
   bool _isDrawing = false;
   int _pointerCount = 0;
 
@@ -148,7 +143,7 @@ class PenTool extends MapTool {
       _pointerCount = 0;
       return;
     }
-    _pointerCount = details.pointerCount ?? 1;
+    _pointerCount = details.pointerCount;
 
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {

@@ -20,7 +20,8 @@ abstract class FeatureNode extends LayerTreeNode {
   /// DB上のrowId（主キー）- データは持たず、IDのみ保持
   final int _rowId;
 
-  /// 変更の追跡フラグ
+  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
+  // ignore: unused_field
   bool _isDirty = false;
   
   /// dispose済みフラグ（null参照対策）

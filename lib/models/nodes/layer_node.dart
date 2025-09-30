@@ -46,7 +46,8 @@ abstract class LayerNode extends LayerTreeNode {
   /// turf_dartのFeatureをrowIdで管理するMap（真のデータソース）
   final Map<int, turf.Feature> _featureMap = {};
 
-  /// 変更の追跡フラグ
+  /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
+  // ignore: unused_field
   bool _isDirty = false;
   
   /// dispose済みフラグ（null参照対策）

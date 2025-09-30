@@ -224,14 +224,52 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
       }
 
       final featureCount = GlobalConfig.instance.selectedFeatures.length;
+      final selectedFeaturesToDelete = List.from(
+        GlobalConfig.instance.selectedFeatures.whereType<FeatureNode>(),
+      );
       print('[DynamicAttributeTable] 削除処理開始: $featureCount個のフィーチャ');
+
+      // 削除対象の行インデックスを事前に収集（UI即座更新用）
+      final rowIndicesToRemove = <int>[];
+      for (final feature in selectedFeaturesToDelete) {
+        final index = features.indexOf(feature);
+        if (index >= 0) {
+          rowIndicesToRemove.add(index);
+        }
+      }
+
+      // PlutoGridから該当する行を即座に削除（UI更新優先）
+      if (stateManager != null && rowIndicesToRemove.isNotEmpty) {
+        rowIndicesToRemove.sort((a, b) => b.compareTo(a)); // 後ろから削除
+        final rowsToRemove = <PlutoRow>[];
+        for (final index in rowIndicesToRemove) {
+          if (index < rows.length) {
+            rowsToRemove.add(rows[index]);
+          }
+        }
+        
+        print('[DynamicAttributeTable] PlutoGrid行を即座に削除: ${rowsToRemove.length}行');
+        stateManager!.removeRows(rowsToRemove);
+        
+        // rowsリストからも削除
+        for (final index in rowIndicesToRemove.reversed) {
+          if (index < rows.length) {
+            rows.removeAt(index);
+          }
+        }
+      }
+
+      // ローカルのfeaturesリストからも削除
+      for (final feature in selectedFeaturesToDelete) {
+        features.remove(feature);
+      }
 
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(
         mapState: GlobalConfig.instance.mapState,
       );
 
-      // 属性テーブルのデータを再読み込み
+      // 削除完了後に念のため再読み込み（データ整合性確保）
       await _initializeTableData();
 
       print('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');

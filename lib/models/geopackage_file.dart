@@ -1263,30 +1263,34 @@ class GeoPackageFile {
       for (int i = 0; i < polygonData.length; i++) {
         final data = polygonData[i];
         final rings = data['rings'] as List<List<LatLng>>;
-        final name = data['name'] as String? ?? 'Polygon ${i + 1}';
-        final description = data['description'] as String? ?? '';
-        final metadata = data['metadata'] as Map<String, dynamic>?;
-
+        
+        // WKBジオメトリを作成
         final wkb = createWkbPolygon(rings);
-        final insertData = {
-          'geom': wkb,
-          'name': name,
-          'description': description,
-        };
-
-        if (metadata != null) {
-          insertData['kmaps_metadata'] = jsonEncode(metadata);
-        }
-
-        // テーブル名を適切にエスケープしてINSERT文を実行
+        
+        // insertData を構築（ringsを除く全ての属性を含める）
+        final insertData = <String, dynamic>{'geom': wkb};
+        
+        // dataから全ての属性をコピー（ringsは除外）
+        data.forEach((key, value) {
+          if (key != 'rings') {
+            insertData[key] = value;
+          }
+        });
+        
+        // デフォルト値を設定
+        insertData['name'] ??= 'Polygon ${i + 1}';
+        insertData['description'] ??= '';
+        
+        // カラム名とプレースホルダーを動的に生成
+        final columns = insertData.keys.toList();
+        final placeholders = List.filled(columns.length, '?').join(', ');
+        final columnNames = columns.map((c) => '"$c"').join(', ');
+        final values = columns.map((c) => insertData[c]).toList();
+        
+        // 動的INSERT文を実行
         batch.rawInsert(
-          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
-          [
-            insertData['geom'],
-            insertData['name'],
-            insertData['description'],
-            insertData['kmaps_metadata'],
-          ],
+          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
+          values,
         );
       }
 
@@ -1330,30 +1334,34 @@ class GeoPackageFile {
       for (int i = 0; i < pointData.length; i++) {
         final data = pointData[i];
         final point = data['point'] as LatLng;
-        final name = data['name'] as String? ?? 'Point ${i + 1}';
-        final description = data['description'] as String? ?? '';
-        final metadata = data['metadata'] as Map<String, dynamic>?;
-
+        
+        // WKBジオメトリを作成
         final wkb = createWkbPoint(point.longitude, point.latitude);
-        final insertData = {
-          'geom': wkb,
-          'name': name,
-          'description': description,
-        };
-
-        if (metadata != null) {
-          insertData['kmaps_metadata'] = jsonEncode(metadata);
-        }
-
-        // テーブル名を適切にエスケープしてINSERT文を実行
+        
+        // insertData を構築（pointを除く全ての属性を含める）
+        final insertData = <String, dynamic>{'geom': wkb};
+        
+        // dataから全ての属性をコピー（pointは除外）
+        data.forEach((key, value) {
+          if (key != 'point') {
+            insertData[key] = value;
+          }
+        });
+        
+        // デフォルト値を設定
+        insertData['name'] ??= 'Point ${i + 1}';
+        insertData['description'] ??= '';
+        
+        // カラム名とプレースホルダーを動的に生成
+        final columns = insertData.keys.toList();
+        final placeholders = List.filled(columns.length, '?').join(', ');
+        final columnNames = columns.map((c) => '"$c"').join(', ');
+        final values = columns.map((c) => insertData[c]).toList();
+        
+        // 動的INSERT文を実行
         batch.rawInsert(
-          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
-          [
-            insertData['geom'],
-            insertData['name'],
-            insertData['description'],
-            insertData['kmaps_metadata'],
-          ],
+          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
+          values,
         );
       }
 
@@ -1395,30 +1403,34 @@ class GeoPackageFile {
       for (int i = 0; i < lineData.length; i++) {
         final data = lineData[i];
         final line = data['line'] as List<LatLng>;
-        final name = data['name'] as String? ?? 'Line ${i + 1}';
-        final description = data['description'] as String? ?? '';
-        final metadata = data['metadata'] as Map<String, dynamic>?;
-
+        
+        // WKBジオメトリを作成
         final wkb = createWkbLineString(line);
-        final insertData = {
-          'geom': wkb,
-          'name': name,
-          'description': description,
-        };
-
-        if (metadata != null) {
-          insertData['kmaps_metadata'] = jsonEncode(metadata);
-        }
-
-        // テーブル名を適切にエスケープしてINSERT文を実行
+        
+        // insertData を構築（lineを除く全ての属性を含める）
+        final insertData = <String, dynamic>{'geom': wkb};
+        
+        // dataから全ての属性をコピー（lineは除外）
+        data.forEach((key, value) {
+          if (key != 'line') {
+            insertData[key] = value;
+          }
+        });
+        
+        // デフォルト値を設定
+        insertData['name'] ??= 'Line ${i + 1}';
+        insertData['description'] ??= '';
+        
+        // カラム名とプレースホルダーを動的に生成
+        final columns = insertData.keys.toList();
+        final placeholders = List.filled(columns.length, '?').join(', ');
+        final columnNames = columns.map((c) => '"$c"').join(', ');
+        final values = columns.map((c) => insertData[c]).toList();
+        
+        // 動的INSERT文を実行
         batch.rawInsert(
-          'INSERT INTO "$tableName" (geom, name, description, kmaps_metadata) VALUES (?, ?, ?, ?)',
-          [
-            insertData['geom'],
-            insertData['name'],
-            insertData['description'],
-            insertData['kmaps_metadata'],
-          ],
+          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
+          values,
         );
       }
 

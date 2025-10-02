@@ -472,48 +472,48 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
           child: PlutoGrid(
             columns: columns,
             rows: rows,
-            mode: PlutoGridMode.selectWithOneTap, // セル選択を1タップで有効化
+            mode: PlutoGridMode.normal, // 通常モード（ダブルタップで編集、セルクリックでフィーチャ選択）
             onLoaded: (PlutoGridOnLoadedEvent event) {
               stateManager = event.stateManager;
-            },
-            onChanged: (PlutoGridOnChangedEvent event) async {
-              final rowIndex = event.rowIdx;
-              final field = event.column.field;
-              final newValue = event.value;
-
-              if (rowIndex < features.length) {
-                final feature = features[rowIndex];
-                await _saveAttributeChange(feature, field, newValue);
-              }
-            },
-            onSelected: (PlutoGridOnSelectedEvent event) {
-              print('[DynamicAttributeTable] onSelected イベント発生！');
-              final selectedRow = event.row;
-              if (selectedRow != null && event.rowIdx != null) {
-                final rowIndex = event.rowIdx!;
-                if (rowIndex < features.length) {
-                  final feature = features[rowIndex];
+              // セル選択モードを有効化（デフォルト）
+              stateManager?.setSelectingMode(PlutoGridSelectingMode.cell);
+              
+              // セル選択が変更されたときにフィーチャを選択
+              stateManager?.addListener(() {
+                final currentCell = stateManager?.currentCell;
+                final currentRowIdx = stateManager?.currentRowIdx;
+                final currentColumnField = currentCell?.column.field;
+                
+                print('[DynamicAttributeTable] ========== stateManager.listener 発火 ==========');
+                print('[DynamicAttributeTable] currentCell: ${currentCell != null ? "存在" : "null"}');
+                print('[DynamicAttributeTable] currentRowIdx: $currentRowIdx');
+                print('[DynamicAttributeTable] currentColumnField: $currentColumnField');
+                print('[DynamicAttributeTable] features.length: ${features.length}');
+                
+                if (currentCell != null && currentRowIdx != null && currentRowIdx >= 0 && currentRowIdx < features.length) {
+                  final feature = features[currentRowIdx];
                   
-                  // 選択されたセルの列情報を取得
-                  final selectedColumnField = event.cell?.column.field;
-                  final selectedCellValue = event.cell?.value;
-                  
-                  // GlobalConfigのselectedFeaturesリストをクリアして選択されたFeatureNodeを追加
-                  GlobalConfig.instance.selectedFeatures.clear();
-                  GlobalConfig.instance.selectedFeatures.add(feature);
-                  
-                  // デバッグログ: 選択されたフィーチャの情報を出力
-                  print('[DynamicAttributeTable] セル選択 - フィーチャ選択完了');
-                  print('[DynamicAttributeTable] 選択セル情報:');
-                  print('  - 行インデックス: $rowIndex');
-                  print('  - 列フィールド: $selectedColumnField');
-                  print('  - セル値: $selectedCellValue');
+                  print('[DynamicAttributeTable] 有効な行選択を検出');
                   print('[DynamicAttributeTable] 選択フィーチャ情報:');
                   print('  - rowId: ${feature.rowId}');
                   print('  - name: ${feature.name}');
                   print('  - layerName: ${feature.layerName}');
                   print('  - フィーチャタイプ: ${feature.runtimeType}');
                   print('  - 座標: ${feature.centroid}');
+                  
+                  // 既に選択されている場合はスキップ（無限ループ防止）
+                  if (GlobalConfig.instance.selectedFeatures.length == 1 && 
+                      GlobalConfig.instance.selectedFeatures.first == feature) {
+                    print('[DynamicAttributeTable] 既に選択済み → スキップ');
+                    return;
+                  }
+                  
+                  print('[DynamicAttributeTable] GlobalConfigに追加開始');
+                  
+                  // GlobalConfigのselectedFeaturesリストをクリアして選択されたFeatureNodeを追加
+                  GlobalConfig.instance.selectedFeatures.clear();
+                  GlobalConfig.instance.selectedFeatures.add(feature);
+                  
                   print('[DynamicAttributeTable] GlobalConfig.selectedFeatures:');
                   print('  - 選択フィーチャ数: ${GlobalConfig.instance.selectedFeatures.length}');
                   for (int i = 0; i < GlobalConfig.instance.selectedFeatures.length; i++) {
@@ -525,8 +525,23 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
                     }
                   }
                   
+                  print('[DynamicAttributeTable] onFeatureSelected コールバック呼び出し');
                   widget.onFeatureSelected?.call(feature);
+                  print('[DynamicAttributeTable] フィーチャ選択処理完了');
+                } else {
+                  print('[DynamicAttributeTable] 無効な選択状態 → フィーチャ選択スキップ');
                 }
+                print('[DynamicAttributeTable] ========================================');
+              });
+            },
+            onChanged: (PlutoGridOnChangedEvent event) async {
+              final rowIndex = event.rowIdx;
+              final field = event.column.field;
+              final newValue = event.value;
+
+              if (rowIndex < features.length) {
+                final feature = features[rowIndex];
+                await _saveAttributeChange(feature, field, newValue);
               }
             },
             configuration: PlutoGridConfiguration(

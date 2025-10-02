@@ -2814,7 +2814,7 @@ class FeatureDetailPanel extends StatelessWidget {
           ),
       ];
 
-      // LineFeatureNodeの場合は簡略化ボタンを追加
+      // LineFeatureNodeの場合は簡略化ボタンとポイント変換ボタンを追加
       if (feature is LineFeatureNode) {
         children.addAll([
           const SizedBox(height: 12),
@@ -2827,6 +2827,42 @@ class FeatureDetailPanel extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade50,
                 foregroundColor: Colors.blue.shade700,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _showConvertToPointsDialog(context, feature),
+              icon: const Icon(Icons.scatter_plot, size: 16),
+              label: const Text('ポイントに変換'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade50,
+                foregroundColor: Colors.green.shade700,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ]);
+      }
+
+      // PolygonFeatureNodeの場合はポイント変換ボタンを追加
+      if (feature is PolygonFeatureNode) {
+        children.addAll([
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _showConvertToPointsDialog(context, feature),
+              icon: const Icon(Icons.scatter_plot, size: 16),
+              label: const Text('ポイントに変換'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade50,
+                foregroundColor: Colors.green.shade700,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 8),
               ),
@@ -2893,6 +2929,138 @@ class FeatureDetailPanel extends StatelessWidget {
     }
   }
 
+  /// ライン/ポリゴン→ポイント変換ダイアログを表示
+  Future<void> _showConvertToPointsDialog(
+    BuildContext context,
+    FeatureNode feature,
+  ) async {
+    // 座標リストを取得
+    List<LatLng> points = [];
+    
+    if (feature is LineFeatureNode) {
+      // ラインの場合：全頂点を取得
+      points = feature.line;
+    } else if (feature is PolygonFeatureNode) {
+      // ポリゴンの場合：外環（最初のリング）を取得
+      final geometry = feature.geometry as List<List<LatLng>>?;
+      if (geometry != null && geometry.isNotEmpty) {
+        final outerRing = geometry.first;
+        
+        // 閉じたポリゴンの場合、最後の座標が最初と同じなら削除
+        if (outerRing.length >= 2) {
+          final first = outerRing.first;
+          final last = outerRing.last;
+          if (first.latitude == last.latitude && first.longitude == last.longitude) {
+            // 最後の座標を除外
+            points = outerRing.sublist(0, outerRing.length - 1);
+          } else {
+            points = outerRing;
+          }
+        } else {
+          points = outerRing;
+        }
+      }
+    }
+
+    if (points.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('座標データが見つかりません')),
+        );
+      }
+      return;
+    }
+
+    // カレントディレクトリ直下のポイントレイヤーを検索
+    final pointLayers = <PointLayerNode>[];
+    final rootNode = GlobalConfig.instance.folderTree;
+    if (rootNode != null) {
+      // rootNodeの直接の子（GeoPackageNode）のみを検索
+      for (final child in rootNode.children) {
+        if (child is GeoPackageNode) {
+          _searchPointLayersInNode(child, pointLayers);
+        }
+      }
+    }
+
+    if (pointLayers.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('カレントディレクトリ直下にポイントレイヤーが見つかりません。\n先にポイントレイヤーを作成してください。')),
+        );
+      }
+      return;
+    }
+
+    // ダイアログを表示
+    final targetLayer = await showDialog<PointLayerNode>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return _ConvertToPointsDialog(
+          sourceFeature: feature,
+          availableLayers: pointLayers,
+          pointCount: points.length,
+        );
+      },
+    );
+
+    if (targetLayer == null) {
+      return;
+    }
+
+    // 各座標をポイントフィーチャとして追加
+    try {
+      for (int i = 0; i < points.length; i++) {
+        await PointFeatureNode.createIn(
+          targetLayer,
+          points[i],
+          'Point ${i + 1} from ${feature.name}',
+          null,
+        );
+      }
+
+      // UI更新
+      await targetLayer.updateChildren();
+      
+      // マップを更新（GlobalConfig経由）
+      final mapState = GlobalConfig.instance.mapState;
+      if (mapState != null) {
+        mapState.refreshFeatures();
+        mapState.setState(() {});
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${points.length}個のポイントを作成しました'),
+          ),
+        );
+      }
+    } catch (e) {
+      print('[ERROR] ポイント変換失敗: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ポイント変換に失敗しました: $e')),
+        );
+      }
+    }
+  }
+
+  /// ノードツリーからポイントレイヤーを検索
+  static void _searchPointLayersInNode(LayerTreeNode node, List<PointLayerNode> result) {
+    if (node is FeatureNode) return;
+    
+    if (node is PointLayerNode) {
+      result.add(node);
+      return;
+    }
+    
+    for (final child in node.children) {
+      _searchPointLayersInNode(child, result);
+    }
+  }
+
   Widget _buildPanel(
     BuildContext context, {
     required String title,
@@ -2933,6 +3101,125 @@ class FeatureDetailPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// ライン/ポリゴン→ポイント変換ダイアログ
+class _ConvertToPointsDialog extends StatefulWidget {
+  final FeatureNode sourceFeature;
+  final List<PointLayerNode> availableLayers;
+  final int pointCount;
+
+  const _ConvertToPointsDialog({
+    required this.sourceFeature,
+    required this.availableLayers,
+    required this.pointCount,
+  });
+
+  @override
+  State<_ConvertToPointsDialog> createState() => _ConvertToPointsDialogState();
+}
+
+class _ConvertToPointsDialogState extends State<_ConvertToPointsDialog> {
+  late PointLayerNode _selectedLayer;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLayer = widget.availableLayers.first;
+  }
+
+  String _getFeatureTypeLabel() {
+    if (widget.sourceFeature is LineFeatureNode) {
+      return 'ライン';
+    } else if (widget.sourceFeature is PolygonFeatureNode) {
+      return 'ポリゴン';
+    }
+    return '不明';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final typeLabel = _getFeatureTypeLabel();
+    
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.scatter_plot, color: Colors.blue),
+          SizedBox(width: 8),
+          Text('ポイントに変換'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$typeLabel「${widget.sourceFeature.name}」の頂点 (${widget.pointCount}個) をポイントに変換します。',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            
+            // レイヤー選択
+            const Text(
+              '追加先のポイントレイヤー:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<PointLayerNode>(
+                  value: _selectedLayer,
+                  isExpanded: true,
+                  items: widget.availableLayers.map((layer) {
+                    return DropdownMenuItem(
+                      value: layer,
+                      child: Row(
+                        children: [
+                          Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${layer.geoPackageNode.name} / ${layer.name}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedLayer = value;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.of(context).pop(_selectedLayer),
+          icon: const Icon(Icons.check),
+          label: const Text('変換'),
+        ),
+      ],
     );
   }
 }

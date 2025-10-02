@@ -302,6 +302,69 @@
 
 **テスト項目**:
 - ✅ コンパイル確認: Linterエラーなし（既存warningのみ）
-- ⏳ ライン→ポイント変換が正常に動作すること（要実機確認）
-- ⏳ ポリゴン→ポイント変換が正常に動作すること（要実機確認）
-- ⏳ 閉じたポリゴンの最後の座標が除外されること（要実機確認）
+- ✅ ライン→ポイント変換が正常に動作すること（実機確認済み）
+- ✅ ポリゴン→ポイント変換が正常に動作すること（実機確認済み）
+- ✅ 閉じたポリゴンの最後の座標が除外されること（実機確認済み）
+
+---
+
+### 8. ジオメトリ変換処理のリファクタリング（完了）
+
+**背景**:
+- 変換処理が複数のファイルに分散していた（layer_drawer_tiles.dart, map_page.dart）
+- 重複したコードが多く、保守性が低かった
+- 今後の機能拡張（属性保存など）を見据えて、コードを整理
+
+**実装内容**:
+
+1. **新規ファイル作成**
+   - ✅ `lib/services/geometry_conversion_service.dart`
+     - ジオメトリ変換ロジックを集約
+     - レイヤー検索ヘルパー関数
+     - ユーティリティ関数（closeRingなど）
+   - ✅ `lib/widgets/geometry_conversion_dialogs.dart`
+     - 変換ダイアログウィジェットを集約
+     - `ConvertPointsToGeometryDialog`（ポイント→ライン/ポリゴン）
+     - `ConvertGeometryToPointsDialog`（ライン/ポリゴン→ポイント）
+
+2. **GeometryConversionServiceの構成**
+   - ✅ `closeRing()`: ポリゴンリングを閉じる
+   - ✅ `searchLineAndPolygonLayers()`: ライン/ポリゴンレイヤー検索
+   - ✅ `searchPointLayers()`: ポイントレイヤー検索
+   - ✅ `findTargetLayersForPoints()`: ポイント変換先候補の検索
+   - ✅ `findTargetLayersForGeometry()`: ジオメトリ変換先候補の検索
+   - ✅ `convertPointsToGeometry()`: ポイント→ライン/ポリゴン変換実行
+   - ✅ `convertGeometryToPoints()`: ライン/ポリゴン→ポイント変換実行
+
+3. **既存コードの書き換え**
+   - ✅ `layer_drawer_tiles.dart`
+     - `_convertPointsToLine()`を簡略化（サービス呼び出しのみ）
+     - 古いダイアログクラス（`_ConvertToLineDialog`, `_ConvertPointsDialog`）を削除
+     - ヘルパー関数を削除
+   - ✅ `map_page.dart`
+     - `_showConvertToPointsDialog()`を簡略化（サービス呼び出しのみ）
+     - 古いダイアログクラス（`_ConvertToPointsDialog`）を削除
+     - 検索関数を削除
+
+**効果**:
+- ✅ コードの重複を排除
+- ✅ 保守性の向上（変換ロジックが1箇所に集約）
+- ✅ テストしやすい構造
+- ✅ 将来の拡張が容易（属性保存機能の追加準備完了）
+
+**ファイル構成**:
+```
+lib/
+├── services/
+│   └── geometry_conversion_service.dart  ← NEW（変換ロジック）
+├── widgets/
+│   └── geometry_conversion_dialogs.dart  ← NEW（ダイアログUI）
+├── widgets/layer_drawer/
+│   └── layer_drawer_tiles.dart          ← 簡略化
+└── screens/
+    └── map_page.dart                    ← 簡略化
+```
+
+**テスト項目**:
+- ✅ コンパイル確認: Linterエラーなし（既存warningのみ）
+- ⏳ リファクタリング後も全機能が正常動作すること（要実機確認）

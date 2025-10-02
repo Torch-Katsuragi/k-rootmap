@@ -16,7 +16,9 @@ import '../../models/geometry_type.dart';
 import '../../utils/global_config.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../services/import_export_service.dart';
+import '../../services/geometry_conversion_service.dart';
 import '../../widgets/dialog_manager.dart';
+import '../../widgets/geometry_conversion_dialogs.dart';
 
 import 'layer_drawer_extensions.dart';
 
@@ -795,7 +797,7 @@ mixin LayerDrawerTiles {
     );
   }
 
-  /// ポイントレイヤーをラインに変換
+  /// ポイントレイヤーをライン/ポリゴンに変換
   Future<void> _convertPointsToLine(
     BuildContext context,
     PointLayerNode sourceLayer,
@@ -811,22 +813,8 @@ mixin LayerDrawerTiles {
         return;
       }
 
-      // ポイントの座標リストを作成
-      final points = features.map((feature) {
-        return feature.centroid;
-      }).toList();
-
-      // カレントディレクトリ（LayerDrawerで開いているフォルダ）直下のGeoPackage内のライン/ポリゴンレイヤーを検索
-      final targetLayers = <LayerNode>[];
-      final currentDir = currentNode;
-      if (currentDir != null) {
-        // currentNodeの直接の子（GeoPackageNode）のみを検索
-        for (final child in currentDir.children) {
-          if (child is GeoPackageNode) {
-            _searchLineAndPolygonLayersSync(child, targetLayers);
-          }
-        }
-      }
+      // カレントディレクトリ直下のGeoPackage内のライン/ポリゴンレイヤーを検索
+      final targetLayers = GeometryConversionService.findTargetLayersForPoints(currentNode);
       
       if (targetLayers.isEmpty) {
         if (context.mounted) {
@@ -842,7 +830,7 @@ mixin LayerDrawerTiles {
         context: context,
         barrierDismissible: true,
         builder: (dialogContext) {
-          return _ConvertPointsDialog(
+          return ConvertPointsToGeometryDialog(
             sourceLayer: sourceLayer,
             availableLayers: targetLayers,
           );
@@ -853,118 +841,42 @@ mixin LayerDrawerTiles {
         return;
       }
 
-      // レイヤータイプに応じてフィーチャを作成
-      if (targetLayer is LineLayerNode) {
-        // ラインフィーチャを作成
-        final lineFeature = await LineFeatureNode.createIn(
-          targetLayer,
-          points,
-          'Converted from ${sourceLayer.name}',
-          null,
+      // 変換サービスを使用してフィーチャを作成
+      final createdFeature = await GeometryConversionService.convertPointsToGeometry(
+        sourceLayer: sourceLayer,
+        targetLayer: targetLayer,
+      );
+
+      if (createdFeature != null) {
+        // UI更新とマップ反映
+        await targetLayer.updateChildren();
+        setStateCallback(() {});
+        
+        // マップの強制更新
+        triggerMapRefresh();
+        
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.refreshFeatures();
+        }
+
+        final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ポイントを$typeLabel に変換しました (${features.length}個の点)'),
+          ),
         );
-
-        if (lineFeature != null) {
-          // UI更新とマップ反映（pen_toolパターン）
-          await targetLayer.updateChildren();
-          setStateCallback(() {});
-          
-          // マップの強制更新
-          triggerMapRefresh();
-          
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('ポイントをラインに変換しました (${points.length}個の点)'),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('ラインフィーチャの作成に失敗しました')));
-        }
-      } else if (targetLayer is PolygonLayerNode) {
-        // ポリゴンフィーチャを作成（外環のみ、穴なし）
-        // リングを閉じる（最初と最後の座標を同じにする）
-        final closedPoints = _closeRing(points);
-        if (closedPoints.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ポリゴンを作成するには3点以上必要です')),
-          );
-          return;
-        }
-        final rings = [closedPoints]; // 閉じた外環のみのリスト
-        final polygonFeature = await PolygonFeatureNode.createIn(
-          targetLayer,
-          rings,
-          'Converted from ${sourceLayer.name}',
-          null,
-        );
-
-        if (polygonFeature != null) {
-          // UI更新とマップ反映（pen_toolパターン）
-          await targetLayer.updateChildren();
-          setStateCallback(() {});
-          
-          // マップの強制更新
-          triggerMapRefresh();
-          
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('ポイントをポリゴンに変換しました (${points.length}個の点)'),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('ポリゴンフィーチャの作成に失敗しました')));
-        }
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('フィーチャの作成に失敗しました')));
       }
     } catch (e, stack) {
-      print('[LayerDrawer] ポイント→ライン変換エラー: $e');
+      print('[LayerDrawer] ポイント変換エラー: $e');
       print('[LayerDrawer] スタックトレース: $stack');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('変換処理中にエラーが発生しました: $e')));
     }
-  }
-
-  /// ノードツリーからライン/ポリゴンレイヤーを同期的に検索
-  void _searchLineAndPolygonLayersSync(LayerTreeNode node, List<LayerNode> result) {
-    // FeatureNodeは検索しない（パフォーマンス最適化）
-    if (node is FeatureNode) {
-      return;
-    }
-    
-    if (node is LineLayerNode || node is PolygonLayerNode) {
-      result.add(node as LayerNode);
-      // レイヤーが見つかったら、その子（FeatureNode）は検索しない
-      return;
-    }
-    
-    // FolderNodeとGeoPackageNodeの子を再帰的に検索
-    for (final child in node.children) {
-      _searchLineAndPolygonLayersSync(child, result);
-    }
-  }
-
-  /// ポリゴンリングを閉じる（最初と最後の座標を同じにする）
-  /// map_page.dartのcloseRing()と同じ処理
-  List<LatLng> _closeRing(List<LatLng> pts) {
-    if (pts.length < 3) return [];
-    final first = pts.first;
-    final last = pts.last;
-    bool isClosed = (first.latitude == last.latitude) && (first.longitude == last.longitude);
-    if (!isClosed) {
-      return List<LatLng>.from(pts)..add(first);
-    }
-    return pts;
   }
 
   /// ポリゴンレイヤー内のポリゴンを合成
@@ -1390,331 +1302,6 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
         TextButton(
           onPressed: _createLayer,
           child: const Text('作成'),
-        ),
-      ],
-    );
-  }
-}
-
-/// ポイント→ライン変換ダイアログ
-class _ConvertToLineDialog extends StatefulWidget {
-  final PointLayerNode sourceLayer;
-
-  const _ConvertToLineDialog({required this.sourceLayer});
-
-  @override
-  _ConvertToLineDialogState createState() => _ConvertToLineDialogState();
-}
-
-class _ConvertToLineDialogState extends State<_ConvertToLineDialog> {
-  LineLayerNode? _selectedLayer;
-  List<LineLayerNode> _availableLayers = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableLineLayers();
-  }
-
-  /// カレントディレクトリ直下の.gpkgファイル内のラインレイヤーを取得
-  Future<void> _loadAvailableLineLayers() async {
-    try {
-      final lineLayers = <LineLayerNode>[];
-      
-      // プロジェクトルートのGeoPackageノードを取得
-      final projectRoot = GlobalConfig.instance.projectRootDir;
-      if (projectRoot == null) {
-        print('[ConvertToLineDialog] プロジェクトルートが設定されていません');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      // カレントディレクトリ直下のgpkgファイルを探索
-      final directory = Directory(projectRoot);
-      if (!directory.existsSync()) {
-        print('[ConvertToLineDialog] ディレクトリが存在しません: $projectRoot');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      // GeoPackageノードからラインレイヤーを検索
-      // GlobalConfigのfolderTreeから全てのGeoPackageNodeを取得
-      final rootNode = GlobalConfig.instance.folderTree;
-      if (rootNode != null) {
-        _searchLineLayers(rootNode, lineLayers);
-        print('[ConvertToLineDialog] ラインレイヤー検索完了: ${lineLayers.length}個');
-      }
-
-      print('[ConvertToLineDialog] mounted check: $mounted');
-      if (mounted) {
-        print('[ConvertToLineDialog] setState呼び出し開始...');
-        setState(() {
-          print('[ConvertToLineDialog] setState内部実行中...');
-          _availableLayers = lineLayers;
-          _isLoading = false;
-          if (lineLayers.isNotEmpty) {
-            _selectedLayer = lineLayers.first;
-            print('[ConvertToLineDialog] 選択レイヤー: ${_selectedLayer?.name}');
-          }
-        });
-        print('[ConvertToLineDialog] setState完了');
-      } else {
-        print('[ConvertToLineDialog] mountedがfalseのためsetStateスキップ');
-      }
-    } catch (e, stack) {
-      print('[ConvertToLineDialog] レイヤー検索エラー: $e');
-      print('[ConvertToLineDialog] スタックトレース: $stack');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  /// ノードツリーからラインレイヤーを再帰的に検索
-  void _searchLineLayers(LayerTreeNode node, List<LineLayerNode> result) {
-    // FeatureNodeは検索しない（パフォーマンス最適化）
-    if (node is FeatureNode) {
-      return;
-    }
-    
-    if (node is LineLayerNode) {
-      result.add(node);
-      // ラインレイヤーが見つかったら、その子（FeatureNode）は検索しない
-      return;
-    }
-    
-    // FolderNodeとGeoPackageNodeの子を再帰的に検索
-    for (final child in node.children) {
-      _searchLineLayers(child, result);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    print('[ConvertToLineDialog] build呼び出し - isLoading: $_isLoading, layers: ${_availableLayers.length}');
-    
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.show_chart, color: Colors.green),
-          SizedBox(width: 8),
-          Text('ラインに変換'),
-        ],
-      ),
-      content: _isLoading
-          ? const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('ラインレイヤーを検索中...'),
-              ],
-            )
-          : _availableLayers.isEmpty
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning, color: Colors.orange, size: 48),
-                    SizedBox(height: 16),
-                    Text(
-                      'ラインレイヤーが見つかりません。\n先にラインレイヤーを作成してください。',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              : Builder(
-                  builder: (context) {
-                    print('[ConvertToLineDialog] ドロップダウン構築開始');
-                    try {
-                      final dropdown = Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${widget.sourceLayer.name} のポイント (${widget.sourceLayer.features.length}個) をラインに変換します。',
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<LineLayerNode>(
-                            value: _selectedLayer,
-                            decoration: const InputDecoration(
-                              labelText: '追加先のラインレイヤー',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: _availableLayers.map((layer) {
-                              print('[ConvertToLineDialog] ドロップダウン項目作成: ${layer.name}');
-                              final geoPackageName = layer.geoPackageNode.name;
-                              print('[ConvertToLineDialog] GeoPackage名取得: $geoPackageName');
-                              return DropdownMenuItem(
-                                value: layer,
-                                child: Row(
-                                  children: [
-                                    Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        '$geoPackageName / ${layer.name}',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedLayer = value;
-                              });
-                            },
-                          ),
-                        ],
-                      );
-                      print('[ConvertToLineDialog] ドロップダウン構築完了');
-                      return dropdown;
-                    } catch (e, stack) {
-                      print('[ConvertToLineDialog] ドロップダウン構築エラー: $e');
-                      print('[ConvertToLineDialog] スタックトレース: $stack');
-                      rethrow;
-                    }
-                  },
-                ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, null),
-          child: const Text('キャンセル'),
-        ),
-        if (!_isLoading && _availableLayers.isNotEmpty)
-          TextButton(
-            onPressed: () => Navigator.pop(context, _selectedLayer),
-            child: const Text('変換'),
-          ),
-      ],
-    );
-  }
-}
-
-/// ポイント→ライン/ポリゴン変換ダイアログ（TrackSaveDialogパターン）
-class _ConvertPointsDialog extends StatefulWidget {
-  final PointLayerNode sourceLayer;
-  final List<LayerNode> availableLayers;
-
-  const _ConvertPointsDialog({
-    required this.sourceLayer,
-    required this.availableLayers,
-  });
-
-  @override
-  State<_ConvertPointsDialog> createState() => _ConvertPointsDialogState();
-}
-
-class _ConvertPointsDialogState extends State<_ConvertPointsDialog> {
-  late LayerNode _selectedLayer;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedLayer = widget.availableLayers.first;
-  }
-
-  String _getLayerTypeLabel(LayerNode layer) {
-    if (layer is LineLayerNode) {
-      return 'ライン';
-    } else if (layer is PolygonLayerNode) {
-      return 'ポリゴン';
-    }
-    return '不明';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedTypeLabel = _getLayerTypeLabel(_selectedLayer);
-    
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.transform, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('ポイント変換'),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${widget.sourceLayer.name} のポイント (${widget.sourceLayer.features.length}個) を$selectedTypeLabel に変換します。',
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            
-            // レイヤー選択
-            const Text(
-              '変換先のレイヤー:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<LayerNode>(
-                  value: _selectedLayer,
-                  isExpanded: true,
-                  items: widget.availableLayers.map((layer) {
-                    final typeLabel = _getLayerTypeLabel(layer);
-                    return DropdownMenuItem(
-                      value: layer,
-                      child: Row(
-                        children: [
-                          Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '${layer.geoPackageNode.name} / ${layer.name} ($typeLabel)',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedLayer = value;
-                      });
-                    }
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('キャンセル'),
-        ),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.of(context).pop(_selectedLayer),
-          icon: const Icon(Icons.check),
-          label: const Text('変換'),
         ),
       ],
     );

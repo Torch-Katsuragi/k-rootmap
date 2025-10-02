@@ -26,9 +26,9 @@ class GeoPackageFile {
   bool _isInitialized = false;
 
   /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
-  /// geom のみを固定カラムとし、他は動的に追加
-  /// 注意: id列はテーブルの主キーとして存在するが、属性データとしては扱わない
+  /// id と geom を固定カラムとし、他は動的に追加
   final List<String> supportedAttributes = [
+    "id",
     "geom",
   ];
 
@@ -831,7 +831,7 @@ class GeoPackageFile {
   }
 
   /// 指定テーブルのカラム名一覧を返す（getAll=trueなら全属性カラム、falseならsupportedAttributesのみ）
-  /// 注意: id（主キー）とgeom（ジオメトリ）は常に除外される
+  /// 注意: geom（ジオメトリ）は常に除外される
   Future<List<String>> getColumnNames(
     String tableName, {
     bool getAll = false,
@@ -841,8 +841,8 @@ class GeoPackageFile {
       final result = await db.rawQuery('PRAGMA table_info("$tableName");');
       final columns = result.map((row) => row['name'] as String).toList();
 
-      // id と geom は属性データではないため常に除外
-      final filteredColumns = columns.where((c) => c != 'id' && c != 'geom').toList();
+      // geom は属性データではないため常に除外（idは表示する）
+      final filteredColumns = columns.where((c) => c != 'geom').toList();
 
       if (getAll) return filteredColumns;
       // supportedAttributesに含まれるものだけ返す

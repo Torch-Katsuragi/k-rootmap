@@ -50,6 +50,9 @@ mixin LayerDrawerTiles {
   /// マップの強制更新をトリガー
   void triggerMapRefresh();
 
+  /// 現在開いているノード（フォルダ）
+  LayerTreeNode? get currentNode;
+
   /// フォルダタイルを構築
   Widget buildFolderTile(
     BuildContext context,
@@ -461,6 +464,8 @@ mixin LayerDrawerTiles {
               context,
               sourceLayer: node,
             );
+          } else if (value == 'convert_to_line' && node is PointLayerNode) {
+            await _convertPointsToLine(context, node);
           } else if (value == 'merge' && node is PolygonLayerNode) {
             await _mergePolygonsInLayer(context, node);
           }
@@ -477,6 +482,18 @@ mixin LayerDrawerTiles {
                   ],
                 ),
               ),
+              // PointLayerNodeの場合のみラインに変換メニューを表示
+              if (node is PointLayerNode)
+                const PopupMenuItem(
+                  value: 'convert_to_line',
+                  child: Row(
+                    children: [
+                      Icon(Icons.show_chart, size: 16),
+                      SizedBox(width: 8),
+                      Text('ラインに変換'),
+                    ],
+                  ),
+                ),
               // PolygonLayerNodeの場合のみ合成メニューを表示
               if (node is PolygonLayerNode)
                 const PopupMenuItem(value: 'merge', child: Text('合成')),
@@ -735,7 +752,7 @@ mixin LayerDrawerTiles {
                   if (node.metadata.fileSize != null)
                     _buildDetailRow(
                       'ファイルサイズ',
-                      '${(node.metadata.fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB',
+                      '${(node.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
                     ),
                   if (node.metadata.width != null &&
                       node.metadata.height != null)
@@ -776,6 +793,118 @@ mixin LayerDrawerTiles {
         ],
       ),
     );
+  }
+
+  /// ポイントレイヤーをラインに変換
+  Future<void> _convertPointsToLine(
+    BuildContext context,
+    PointLayerNode sourceLayer,
+  ) async {
+    try {
+      // ポイントレイヤー内の全フィーチャを取得
+      final features = sourceLayer.features;
+      
+      if (features.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ポイントが存在しないため変換できません')),
+        );
+        return;
+      }
+
+      // ポイントの座標リストを作成
+      final points = features.map((feature) {
+        return feature.centroid;
+      }).toList();
+
+      // カレントディレクトリ（LayerDrawerで開いているフォルダ）直下のGeoPackage内のラインレイヤーを検索
+      final lineLayers = <LineLayerNode>[];
+      final currentDir = currentNode;
+      if (currentDir != null) {
+        // currentNodeの直接の子（GeoPackageNode）のみを検索
+        for (final child in currentDir.children) {
+          if (child is GeoPackageNode) {
+            _searchLineLayersSync(child, lineLayers);
+          }
+        }
+      }
+      
+      if (lineLayers.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('カレントディレクトリ直下にラインレイヤーが見つかりません。\n先にラインレイヤーを作成してください。')),
+          );
+        }
+        return;
+      }
+      
+      // ダイアログを表示
+      final targetLayer = await showDialog<LineLayerNode>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          return _ConvertToLineDialogSimple(
+            sourceLayer: sourceLayer,
+            availableLayers: lineLayers,
+          );
+        },
+      );
+
+      if (targetLayer == null) {
+        return;
+      }
+
+      // ラインフィーチャを作成して追加
+      final lineFeature = await LineFeatureNode.createIn(
+        targetLayer,
+        points,
+        'Converted from ${sourceLayer.name}',
+        null,
+      );
+
+      if (lineFeature != null) {
+        // UI更新
+        await targetLayer.updateChildren();
+        setStateCallback(() {});
+        if (GlobalConfig.instance.mapState != null) {
+          GlobalConfig.instance.mapState.setState(() {});
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ポイントをラインに変換しました (${points.length}個の点)'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ラインフィーチャの作成に失敗しました')));
+      }
+    } catch (e, stack) {
+      print('[LayerDrawer] ポイント→ライン変換エラー: $e');
+      print('[LayerDrawer] スタックトレース: $stack');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('変換処理中にエラーが発生しました: $e')));
+    }
+  }
+
+  /// ノードツリーからラインレイヤーを同期的に検索（ミックスイン内のヘルパー関数）
+  void _searchLineLayersSync(LayerTreeNode node, List<LineLayerNode> result) {
+    // FeatureNodeは検索しない（パフォーマンス最適化）
+    if (node is FeatureNode) {
+      return;
+    }
+    
+    if (node is LineLayerNode) {
+      result.add(node);
+      // ラインレイヤーが見つかったら、その子（FeatureNode）は検索しない
+      return;
+    }
+    
+    // FolderNodeとGeoPackageNodeの子を再帰的に検索
+    for (final child in node.children) {
+      _searchLineLayersSync(child, result);
+    }
   }
 
   /// ポリゴンレイヤー内のポリゴンを合成
@@ -1201,6 +1330,319 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
         TextButton(
           onPressed: _createLayer,
           child: const Text('作成'),
+        ),
+      ],
+    );
+  }
+}
+
+/// ポイント→ライン変換ダイアログ
+class _ConvertToLineDialog extends StatefulWidget {
+  final PointLayerNode sourceLayer;
+
+  const _ConvertToLineDialog({required this.sourceLayer});
+
+  @override
+  _ConvertToLineDialogState createState() => _ConvertToLineDialogState();
+}
+
+class _ConvertToLineDialogState extends State<_ConvertToLineDialog> {
+  LineLayerNode? _selectedLayer;
+  List<LineLayerNode> _availableLayers = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableLineLayers();
+  }
+
+  /// カレントディレクトリ直下の.gpkgファイル内のラインレイヤーを取得
+  Future<void> _loadAvailableLineLayers() async {
+    try {
+      final lineLayers = <LineLayerNode>[];
+      
+      // プロジェクトルートのGeoPackageノードを取得
+      final projectRoot = GlobalConfig.instance.projectRootDir;
+      if (projectRoot == null) {
+        print('[ConvertToLineDialog] プロジェクトルートが設定されていません');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // カレントディレクトリ直下のgpkgファイルを探索
+      final directory = Directory(projectRoot);
+      if (!directory.existsSync()) {
+        print('[ConvertToLineDialog] ディレクトリが存在しません: $projectRoot');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // GeoPackageノードからラインレイヤーを検索
+      // GlobalConfigのfolderTreeから全てのGeoPackageNodeを取得
+      final rootNode = GlobalConfig.instance.folderTree;
+      if (rootNode != null) {
+        _searchLineLayers(rootNode, lineLayers);
+        print('[ConvertToLineDialog] ラインレイヤー検索完了: ${lineLayers.length}個');
+      }
+
+      print('[ConvertToLineDialog] mounted check: $mounted');
+      if (mounted) {
+        print('[ConvertToLineDialog] setState呼び出し開始...');
+        setState(() {
+          print('[ConvertToLineDialog] setState内部実行中...');
+          _availableLayers = lineLayers;
+          _isLoading = false;
+          if (lineLayers.isNotEmpty) {
+            _selectedLayer = lineLayers.first;
+            print('[ConvertToLineDialog] 選択レイヤー: ${_selectedLayer?.name}');
+          }
+        });
+        print('[ConvertToLineDialog] setState完了');
+      } else {
+        print('[ConvertToLineDialog] mountedがfalseのためsetStateスキップ');
+      }
+    } catch (e, stack) {
+      print('[ConvertToLineDialog] レイヤー検索エラー: $e');
+      print('[ConvertToLineDialog] スタックトレース: $stack');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// ノードツリーからラインレイヤーを再帰的に検索
+  void _searchLineLayers(LayerTreeNode node, List<LineLayerNode> result) {
+    // FeatureNodeは検索しない（パフォーマンス最適化）
+    if (node is FeatureNode) {
+      return;
+    }
+    
+    if (node is LineLayerNode) {
+      result.add(node);
+      // ラインレイヤーが見つかったら、その子（FeatureNode）は検索しない
+      return;
+    }
+    
+    // FolderNodeとGeoPackageNodeの子を再帰的に検索
+    for (final child in node.children) {
+      _searchLineLayers(child, result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print('[ConvertToLineDialog] build呼び出し - isLoading: $_isLoading, layers: ${_availableLayers.length}');
+    
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.show_chart, color: Colors.green),
+          SizedBox(width: 8),
+          Text('ラインに変換'),
+        ],
+      ),
+      content: _isLoading
+          ? const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('ラインレイヤーを検索中...'),
+              ],
+            )
+          : _availableLayers.isEmpty
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning, color: Colors.orange, size: 48),
+                    SizedBox(height: 16),
+                    Text(
+                      'ラインレイヤーが見つかりません。\n先にラインレイヤーを作成してください。',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                )
+              : Builder(
+                  builder: (context) {
+                    print('[ConvertToLineDialog] ドロップダウン構築開始');
+                    try {
+                      final dropdown = Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${widget.sourceLayer.name} のポイント (${widget.sourceLayer.features.length}個) をラインに変換します。',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<LineLayerNode>(
+                            value: _selectedLayer,
+                            decoration: const InputDecoration(
+                              labelText: '追加先のラインレイヤー',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _availableLayers.map((layer) {
+                              print('[ConvertToLineDialog] ドロップダウン項目作成: ${layer.name}');
+                              final geoPackageName = layer.geoPackageNode.name;
+                              print('[ConvertToLineDialog] GeoPackage名取得: $geoPackageName');
+                              return DropdownMenuItem(
+                                value: layer,
+                                child: Row(
+                                  children: [
+                                    Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '$geoPackageName / ${layer.name}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedLayer = value;
+                              });
+                            },
+                          ),
+                        ],
+                      );
+                      print('[ConvertToLineDialog] ドロップダウン構築完了');
+                      return dropdown;
+                    } catch (e, stack) {
+                      print('[ConvertToLineDialog] ドロップダウン構築エラー: $e');
+                      print('[ConvertToLineDialog] スタックトレース: $stack');
+                      rethrow;
+                    }
+                  },
+                ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('キャンセル'),
+        ),
+        if (!_isLoading && _availableLayers.isNotEmpty)
+          TextButton(
+            onPressed: () => Navigator.pop(context, _selectedLayer),
+            child: const Text('変換'),
+          ),
+      ],
+    );
+  }
+}
+
+/// ポイント→ライン変換ダイアログ（TrackSaveDialogパターン）
+class _ConvertToLineDialogSimple extends StatefulWidget {
+  final PointLayerNode sourceLayer;
+  final List<LineLayerNode> availableLayers;
+
+  const _ConvertToLineDialogSimple({
+    required this.sourceLayer,
+    required this.availableLayers,
+  });
+
+  @override
+  State<_ConvertToLineDialogSimple> createState() => _ConvertToLineDialogSimpleState();
+}
+
+class _ConvertToLineDialogSimpleState extends State<_ConvertToLineDialogSimple> {
+  late LineLayerNode _selectedLayer;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLayer = widget.availableLayers.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.show_chart, color: Colors.green),
+          SizedBox(width: 8),
+          Text('ラインに変換'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.sourceLayer.name} のポイント (${widget.sourceLayer.features.length}個) をラインに変換します。',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            
+            // レイヤー選択
+            const Text(
+              '追加先のラインレイヤー:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<LineLayerNode>(
+                  value: _selectedLayer,
+                  isExpanded: true,
+                  items: widget.availableLayers.map((layer) {
+                    return DropdownMenuItem(
+                      value: layer,
+                      child: Row(
+                        children: [
+                          Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${layer.geoPackageNode.name} / ${layer.name}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedLayer = value;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.of(context).pop(_selectedLayer),
+          icon: const Icon(Icons.check),
+          label: const Text('変換'),
         ),
       ],
     );

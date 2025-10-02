@@ -103,6 +103,9 @@ class _LayerDrawerState extends State<LayerDrawer>
   Set<String> get userClosedGpkgPaths => _userClosedGpkgPaths;
 
   @override
+  LayerTreeNode? get currentNode => widget.currentNode;
+
+  @override
   void initState() {
     super.initState();
     // デフォルトで全gpkgノードを展開状態に

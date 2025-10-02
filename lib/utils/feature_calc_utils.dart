@@ -213,21 +213,44 @@ class GeometryCalc {
   static bool pointInPolygonWithHoles(LatLng pt, List<List<LatLng>> polygon) {
     if (polygon.isEmpty) return false;
 
-    // turf_dartのbooleanPointInPolygon関数を使用
-    final pointPos = Position(pt.longitude, pt.latitude);
-    final coordinates =
-        polygon
-            .map(
-              (ring) =>
-                  ring
-                      .map((ll) => Position(ll.longitude, ll.latitude))
-                      .toList(),
-            )
-            .toList();
-    final polygonGeometry = Polygon(coordinates: coordinates);
-    final feature = Feature(geometry: polygonGeometry);
+    try {
+      // turf_dartのbooleanPointInPolygon関数を使用
+      final pointPos = Position(pt.longitude, pt.latitude);
+      
+      // 各リングを閉じる（最初と最後の座標が同じでない場合は最初の座標を追加）
+      final closedPolygon = polygon.map((ring) {
+        if (ring.length < 3) return ring; // 3点未満はそのまま
+        
+        final first = ring.first;
+        final last = ring.last;
+        final isClosed = (first.latitude == last.latitude) && 
+                        (first.longitude == last.longitude);
+        
+        if (!isClosed) {
+          // 閉じていない場合は最初の座標を最後に追加
+          return List<LatLng>.from(ring)..add(first);
+        }
+        return ring;
+      }).toList();
+      
+      final coordinates =
+          closedPolygon
+              .map(
+                (ring) =>
+                    ring
+                        .map((ll) => Position(ll.longitude, ll.latitude))
+                        .toList(),
+              )
+              .toList();
+      final polygonGeometry = Polygon(coordinates: coordinates);
+      final feature = Feature(geometry: polygonGeometry);
 
-    return booleanPointInPolygon(pointPos, feature);
+      return booleanPointInPolygon(pointPos, feature);
+    } catch (e) {
+      // ポリゴンが壊れている場合でもエラーを出さずfalseを返す
+      print('[WARNING] pointInPolygonWithHoles: エラー発生（壊れたポリゴン？）: $e');
+      return false;
+    }
   }
 
   /// 点と線分の最短距離（メートル）

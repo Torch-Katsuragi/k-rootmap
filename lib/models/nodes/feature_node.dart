@@ -268,12 +268,22 @@ abstract class FeatureNode extends LayerTreeNode {
       return;
     }
     
-    print('[DEBUG] FeatureNode.dispose: disposing $name ($runtimeType)');
+    // dispose済みフラグを先に設定（エラー回避のため）
+    _isDisposed = true;
     
-    _isDisposed = true;  // dispose済みフラグを設定
+    try {
+      // nameアクセス時のエラーを回避するため、try-catchで囲む
+      print('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId ($runtimeType)');
+    } catch (e) {
+      print('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId (name取得失敗)');
+    }
 
-    // 保留中の変更を即座に保存
-    await flushChanges();
+    try {
+      // 保留中の変更を即座に保存（エラーが発生しても続行）
+      await flushChanges();
+    } catch (e) {
+      print('[WARNING] FeatureNode.dispose: flushChanges failed: $e');
+    }
 
     // 即座に親子関係を切断（UI更新を優先）
     parent.children.remove(this);
@@ -290,23 +300,29 @@ abstract class FeatureNode extends LayerTreeNode {
     children.clear();
 
     // DBからID指定で削除を非同期で実行（UIには影響させない）
+    // エラーが発生しても強制的に削除を試みる
     geoPackageFile
         .removeFeature(layerName, rowId)
         .then((_) {
           print(
-            '[DEBUG] FeatureNode.dispose: DB deletion completed',
+            '[DEBUG] FeatureNode.dispose: DB deletion completed (rowId=$rowId)',
           );
         })
         .catchError((e) {
           print(
-            '[ERROR] FeatureNode.dispose: DB deletion failed: $e',
+            '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
           );
+          // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
         });
 
     print('[DEBUG] FeatureNode.dispose: base dispose completed');
 
     // 基底クラスのdisposeを呼び出し
-    await super.dispose();
+    try {
+      await super.dispose();
+    } catch (e) {
+      print('[WARNING] FeatureNode.dispose: super.dispose failed: $e');
+    }
   }
 
   /// 親LayerNode

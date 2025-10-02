@@ -125,10 +125,16 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
 
   /// 行データを作成
   Future<List<PlutoRow>> _createRows() async {
-    if (features.isEmpty || columnNames.isEmpty) {
+    // カラム名が空の場合は、'no_data'カラムに対応する行を返す
+    if (columnNames.isEmpty) {
       return [
         PlutoRow(cells: {'no_data': PlutoCell(value: 'No features available')}),
       ];
+    }
+
+    // フィーチャが空の場合は、空のリストを返す（カラム定義は存在する）
+    if (features.isEmpty) {
+      return [];
     }
 
     final List<PlutoRow> tableRows = [];
@@ -352,11 +358,15 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
       );
     }
 
-    if (columns.isEmpty || rows.isEmpty) {
+    // カラムが空の場合はエラー表示
+    if (columns.isEmpty) {
       return const Center(
-        child: Text('データがありません'),
+        child: Text('カラム定義がありません'),
       );
     }
+
+    // フィーチャが0個の場合は、空のテーブルを表示
+    // （rowsが空でもPlutoGridは正常に動作する）
 
     return Column(
       children: [

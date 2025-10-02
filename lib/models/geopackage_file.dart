@@ -26,12 +26,10 @@ class GeoPackageFile {
   bool _isInitialized = false;
 
   /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
+  /// geom のみを固定カラムとし、他は動的に追加
+  /// 注意: id列はテーブルの主キーとして存在するが、属性データとしては扱わない
   final List<String> supportedAttributes = [
-    "id",
     "geom",
-    "name",
-    "description",
-    "kmaps_metadata",
   ];
 
   /// コンストラクタ
@@ -150,7 +148,6 @@ class GeoPackageFile {
     Map<String, dynamic> attributes,
   ) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPoint(point.longitude, point.latitude);
 
@@ -192,7 +189,6 @@ class GeoPackageFile {
     Map<String, dynamic> attributes,
   ) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbLineString(line);
 
@@ -233,7 +229,6 @@ class GeoPackageFile {
     Map<String, dynamic> attributes,
   ) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPolygon(polygon);
 
@@ -457,6 +452,7 @@ class GeoPackageFile {
   }
 
   /// 点フィーチャを追加（属性付き）
+  /// name, description, metadata は属性として追加（カラムが存在する場合のみ）
   Future<int?> addPoint(
     String tableName,
     LatLng pt, {
@@ -464,17 +460,31 @@ class GeoPackageFile {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    // 新しい辞書ベースAPIを使用
-    final attributes = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
+    try {
+      // カラムの存在確認
+      final db = await _getDatabase();
+      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columnNames = columns.map((row) => row['name'] as String).toSet();
+      
+      // 新しい辞書ベースAPIを使用
+      final attributes = <String, dynamic>{};
 
-    if (metadata != null) {
-      attributes['kmaps_metadata'] = jsonEncode(metadata);
+      // カラムが存在する場合のみ値を設定（空でも設定）
+      if (columnNames.contains('name')) {
+        attributes['name'] = name;
+      }
+      if (columnNames.contains('description')) {
+        attributes['description'] = description;
+      }
+      if (columnNames.contains('kmaps_metadata') && metadata != null) {
+        attributes['kmaps_metadata'] = jsonEncode(metadata);
+      }
+
+      return await addPointWithAttributes(tableName, pt, attributes);
+    } catch (e) {
+      print('[ERROR] GeoPackageFile: addPoint failed: $e');
+      return null;
     }
-
-    return await addPointWithAttributes(tableName, pt, attributes);
   }
 
   /// 指定IDのフィーチャを削除
@@ -508,10 +518,6 @@ class GeoPackageFile {
   /// 単一フィーチャを取得（geom列をgeometry typeに応じて変換）
   Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async {
     try {
-      // name/description/metadataカラムがなければ自動追加
-      await ensureNameDescriptionColumns(tableName);
-      await ensureMetadataColumn(tableName);
-
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
 
@@ -604,10 +610,6 @@ class GeoPackageFile {
   /// 指定レイヤの全フィーチャ（rawデータをそのまま返す）
   Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
     try {
-      // name/description/metadataカラムがなければ自動追加
-      await ensureNameDescriptionColumns(tableName);
-      await ensureMetadataColumn(tableName);
-
       final db = await _getDatabase();
       final rows = await db.rawQuery('SELECT * FROM "$tableName"');
 
@@ -640,14 +642,11 @@ class GeoPackageFile {
     try {
       final db = await _getDatabase();
 
-      // フィーチャテーブル作成
+      // フィーチャテーブル作成（必須カラムのみ：id と geom）
       await db.execute('''
 				CREATE TABLE IF NOT EXISTS "$name" (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					geom BLOB NOT NULL,
-					name TEXT,
-					description TEXT,
-					kmaps_metadata TEXT
+					geom BLOB NOT NULL
 				);
 			''');
 
@@ -693,9 +692,8 @@ class GeoPackageFile {
         ON "$tableName" (geom)
       ''');
 
-      print('[GeoPackageFile] 空間インデックス作成完了: $tableName');
     } catch (e) {
-      print('[GeoPackageFile] 空間インデックス作成エラー: $e');
+      print('[ERROR] GeoPackageFile._createSpatialIndex: $e');
     }
   }
 
@@ -832,7 +830,8 @@ class GeoPackageFile {
     return await addPolygonWithAttributes(tableName, rings, attributes);
   }
 
-  /// 指定テーブルのカラム名一覧を返す（getAll=trueなら全カラム、falseならsupportedAttributesのみ）
+  /// 指定テーブルのカラム名一覧を返す（getAll=trueなら全属性カラム、falseならsupportedAttributesのみ）
+  /// 注意: id（主キー）とgeom（ジオメトリ）は常に除外される
   Future<List<String>> getColumnNames(
     String tableName, {
     bool getAll = false,
@@ -842,9 +841,12 @@ class GeoPackageFile {
       final result = await db.rawQuery('PRAGMA table_info("$tableName");');
       final columns = result.map((row) => row['name'] as String).toList();
 
-      if (getAll) return columns;
+      // id と geom は属性データではないため常に除外
+      final filteredColumns = columns.where((c) => c != 'id' && c != 'geom').toList();
+
+      if (getAll) return filteredColumns;
       // supportedAttributesに含まれるものだけ返す
-      return columns.where((c) => supportedAttributes.contains(c)).toList();
+      return filteredColumns.where((c) => supportedAttributes.contains(c)).toList();
     } catch (e) {
       print('getColumnNames: エラー発生 - $e');
       return [];
@@ -916,42 +918,6 @@ class GeoPackageFile {
     }
   }
 
-  /// レイヤのカラム追加（name/descriptionがなければ追加）
-  Future<void> ensureNameDescriptionColumns(String tableName) async {
-    try {
-      final db = await _getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columns = result.map((row) => row['name'] as String).toList();
-
-      if (!columns.contains('name')) {
-        await db.execute('ALTER TABLE "$tableName" ADD COLUMN name TEXT;');
-      }
-      if (!columns.contains('description')) {
-        await db.execute(
-          'ALTER TABLE "$tableName" ADD COLUMN description TEXT;',
-        );
-      }
-    } catch (e) {
-      print('ensureNameDescriptionColumns: エラー発生 - $e');
-    }
-  }
-
-  /// レイヤのkmaps_metadataカラム追加（なければ追加）
-  Future<void> ensureMetadataColumn(String tableName) async {
-    try {
-      final db = await _getDatabase();
-      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columns = result.map((row) => row['name'] as String).toList();
-
-      if (!columns.contains('kmaps_metadata')) {
-        await db.execute(
-          'ALTER TABLE "$tableName" ADD COLUMN kmaps_metadata TEXT;',
-        );
-      }
-    } catch (e) {
-      print('ensureMetadataColumn: エラー発生 - $e');
-    }
-  }
 
   /// 属性カラムを動的に追加
   /// [tableName] テーブル名
@@ -978,9 +944,6 @@ class GeoPackageFile {
         await db.execute(
           'ALTER TABLE "$tableName" ADD COLUMN "$columnName" $columnType;',
         );
-        print('[GeoPackageFile] カラム追加成功: $tableName.$columnName ($columnType)');
-      } else {
-        print('[GeoPackageFile] カラム既存: $tableName.$columnName');
       }
     } catch (e) {
       print('[GeoPackageFile] addAttributeColumn エラー発生 - $e');
@@ -996,16 +959,11 @@ class GeoPackageFile {
     Map<String, String> attributeSchema,
   ) async {
     try {
-      print('[GeoPackageFile] 属性カラム追加開始: $tableName');
-      print('スキーマ: $attributeSchema');
-
       for (final entry in attributeSchema.entries) {
         final columnName = entry.key;
         final columnType = entry.value;
         await addAttributeColumn(tableName, columnName, columnType);
       }
-
-      print('[GeoPackageFile] 属性カラム追加完了: $tableName');
     } catch (e) {
       print('[GeoPackageFile] addAttributeColumns エラー発生 - $e');
       throw e;
@@ -1039,7 +997,7 @@ class GeoPackageFile {
 
   /// レイヤの全属性カラム情報を取得（詳細）
   /// [tableName] テーブル名
-  /// [includeBuiltIn] 組み込みカラム（id, geom等）を含めるか
+  /// [includeBuiltIn] 組み込みカラム（id, geom）を含めるか
   Future<List<Map<String, dynamic>>> getAttributeColumnInfo(
     String tableName, {
     bool includeBuiltIn = false,
@@ -1052,9 +1010,6 @@ class GeoPackageFile {
       final builtInColumns = {
         'id',
         'geom',
-        'name',
-        'description',
-        'kmaps_metadata',
       };
 
       for (final row in result) {
@@ -1111,6 +1066,7 @@ class GeoPackageFile {
   }
 
   /// 点フィーチャを更新（位置と属性を完全更新）
+  /// 注: カラムの存在を確認し、存在するカラムのみ更新
   Future<bool> updatePoint(
     String tableName,
     int id,
@@ -1120,7 +1076,6 @@ class GeoPackageFile {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPoint(pt.longitude, pt.latitude);
 
@@ -1130,26 +1085,34 @@ class GeoPackageFile {
         debugWkbData(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
       }
 
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] updatePoint メタデータ更新:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
-      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+      // カラムの存在確認
+      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columnNames = columns.map((row) => row['name'] as String).toSet();
 
-      final affectedRows = await db.rawUpdate(
-        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
-        [
-          data['geom'],
-          data['name'],
-          data['description'],
-          data['kmaps_metadata'],
-          id,
-        ],
-      );
+      // 更新するカラムと値のリストを動的に構築
+      final updateColumns = <String>[];
+      final updateValues = <dynamic>[];
+
+      updateColumns.add('geom = ?');
+      updateValues.add(wkb);
+
+      if (columnNames.contains('name')) {
+        updateColumns.add('name = ?');
+        updateValues.add(name);
+      }
+      if (columnNames.contains('description')) {
+        updateColumns.add('description = ?');
+        updateValues.add(description);
+      }
+      if (columnNames.contains('kmaps_metadata') && metadata != null) {
+        updateColumns.add('kmaps_metadata = ?');
+        updateValues.add(jsonEncode(metadata));
+      }
+
+      updateValues.add(id); // WHERE句のid
+
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
     } catch (e) {
@@ -1159,6 +1122,7 @@ class GeoPackageFile {
   }
 
   /// 線フィーチャを更新（ジオメトリと属性を完全更新）
+  /// 注: カラムの存在を確認し、存在するカラムのみ更新
   Future<bool> updateLine(
     String tableName,
     int id,
@@ -1168,30 +1132,37 @@ class GeoPackageFile {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbLineString(line);
 
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] updateLine メタデータ更新:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
-      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+      // カラムの存在確認
+      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columnNames = columns.map((row) => row['name'] as String).toSet();
 
-      final affectedRows = await db.rawUpdate(
-        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
-        [
-          data['geom'],
-          data['name'],
-          data['description'],
-          data['kmaps_metadata'],
-          id,
-        ],
-      );
+      // 更新するカラムと値のリストを動的に構築
+      final updateColumns = <String>[];
+      final updateValues = <dynamic>[];
+
+      updateColumns.add('geom = ?');
+      updateValues.add(wkb);
+
+      if (columnNames.contains('name')) {
+        updateColumns.add('name = ?');
+        updateValues.add(name);
+      }
+      if (columnNames.contains('description')) {
+        updateColumns.add('description = ?');
+        updateValues.add(description);
+      }
+      if (columnNames.contains('kmaps_metadata') && metadata != null) {
+        updateColumns.add('kmaps_metadata = ?');
+        updateValues.add(jsonEncode(metadata));
+      }
+
+      updateValues.add(id); // WHERE句のid
+
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
     } catch (e) {
@@ -1201,6 +1172,7 @@ class GeoPackageFile {
   }
 
   /// ポリゴンフィーチャを更新（ジオメトリと属性を完全更新）
+  /// 注: カラムの存在を確認し、存在するカラムのみ更新
   Future<bool> updatePolygon(
     String tableName,
     int id,
@@ -1210,30 +1182,37 @@ class GeoPackageFile {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final wkb = createWkbPolygon(rings);
 
-      final data = {'geom': wkb, 'name': name, 'description': description};
-      if (metadata != null) {
-        final encodedMetadata = jsonEncode(metadata);
-        print('[GeoPackageFile] updatePolygon メタデータ更新:');
-        print('  metadata: $metadata');
-        print('  encoded: $encodedMetadata');
-        data['kmaps_metadata'] = encodedMetadata;
-      }
-      // metadataがnullの場合はキーを設定しない（既存のメタデータをクリアしたい場合）
+      // カラムの存在確認
+      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+      final columnNames = columns.map((row) => row['name'] as String).toSet();
 
-      final affectedRows = await db.rawUpdate(
-        'UPDATE "$tableName" SET geom = ?, name = ?, description = ?, kmaps_metadata = ? WHERE id = ?',
-        [
-          data['geom'],
-          data['name'],
-          data['description'],
-          data['kmaps_metadata'],
-          id,
-        ],
-      );
+      // 更新するカラムと値のリストを動的に構築
+      final updateColumns = <String>[];
+      final updateValues = <dynamic>[];
+
+      updateColumns.add('geom = ?');
+      updateValues.add(wkb);
+
+      if (columnNames.contains('name')) {
+        updateColumns.add('name = ?');
+        updateValues.add(name);
+      }
+      if (columnNames.contains('description')) {
+        updateColumns.add('description = ?');
+        updateValues.add(description);
+      }
+      if (columnNames.contains('kmaps_metadata') && metadata != null) {
+        updateColumns.add('kmaps_metadata = ?');
+        updateValues.add(jsonEncode(metadata));
+      }
+
+      updateValues.add(id); // WHERE句のid
+
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
     } catch (e) {
@@ -1250,11 +1229,6 @@ class GeoPackageFile {
     List<Map<String, dynamic>> polygonData,
   ) async {
     try {
-      print(
-        '[GeoPackageFile] バッチ処理開始: $tableName, ${polygonData.length}個のポリゴン',
-      );
-
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final batch = db.batch();
       final insertedIds = <int>[];
@@ -1277,10 +1251,6 @@ class GeoPackageFile {
           }
         });
         
-        // デフォルト値を設定
-        insertData['name'] ??= 'Polygon ${i + 1}';
-        insertData['description'] ??= '';
-        
         // カラム名とプレースホルダーを動的に生成
         final columns = insertData.keys.toList();
         final placeholders = List.filled(columns.length, '?').join(', ');
@@ -1295,7 +1265,6 @@ class GeoPackageFile {
       }
 
       // バッチ実行
-      print('[GeoPackageFile] バッチ実行中...');
       final results = await batch.commit(noResult: false);
 
       // 結果をrowIdリストに変換
@@ -1305,10 +1274,9 @@ class GeoPackageFile {
         }
       }
 
-      print('[GeoPackageFile] バッチ処理完了: ${insertedIds.length}個のポリゴンを追加');
       return insertedIds;
     } catch (e) {
-      print('[GeoPackageFile] addPolygonsBatch エラー発生 - $e');
+      print('[ERROR] GeoPackageFile.addPolygonsBatch: $e');
       return [];
     }
   }
@@ -1321,11 +1289,6 @@ class GeoPackageFile {
     List<Map<String, dynamic>> pointData,
   ) async {
     try {
-      print(
-        '[GeoPackageFile] ポイントバッチ処理開始: $tableName, ${pointData.length}個のポイント',
-      );
-
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final batch = db.batch();
       final insertedIds = <int>[];
@@ -1348,10 +1311,6 @@ class GeoPackageFile {
           }
         });
         
-        // デフォルト値を設定
-        insertData['name'] ??= 'Point ${i + 1}';
-        insertData['description'] ??= '';
-        
         // カラム名とプレースホルダーを動的に生成
         final columns = insertData.keys.toList();
         final placeholders = List.filled(columns.length, '?').join(', ');
@@ -1366,7 +1325,6 @@ class GeoPackageFile {
       }
 
       // バッチ実行
-      print('[GeoPackageFile] ポイントバッチ実行中...');
       final results = await batch.commit(noResult: false);
 
       // 結果をrowIdリストに変換
@@ -1376,10 +1334,9 @@ class GeoPackageFile {
         }
       }
 
-      print('[GeoPackageFile] ポイントバッチ処理完了: ${insertedIds.length}個のポイントを追加');
       return insertedIds;
     } catch (e) {
-      print('[GeoPackageFile] addPointsBatch エラー発生 - $e');
+      print('[ERROR] GeoPackageFile.addPointsBatch: $e');
       return [];
     }
   }
@@ -1392,9 +1349,6 @@ class GeoPackageFile {
     List<Map<String, dynamic>> lineData,
   ) async {
     try {
-      print('[GeoPackageFile] ラインバッチ処理開始: $tableName, ${lineData.length}個のライン');
-
-      await ensureMetadataColumn(tableName);
       final db = await _getDatabase();
       final batch = db.batch();
       final insertedIds = <int>[];
@@ -1417,10 +1371,6 @@ class GeoPackageFile {
           }
         });
         
-        // デフォルト値を設定
-        insertData['name'] ??= 'Line ${i + 1}';
-        insertData['description'] ??= '';
-        
         // カラム名とプレースホルダーを動的に生成
         final columns = insertData.keys.toList();
         final placeholders = List.filled(columns.length, '?').join(', ');
@@ -1435,7 +1385,6 @@ class GeoPackageFile {
       }
 
       // バッチ実行
-      print('[GeoPackageFile] ラインバッチ実行中...');
       final results = await batch.commit(noResult: false);
 
       // 結果をrowIdリストに変換
@@ -1445,10 +1394,9 @@ class GeoPackageFile {
         }
       }
 
-      print('[GeoPackageFile] ラインバッチ処理完了: ${insertedIds.length}個のラインを追加');
       return insertedIds;
     } catch (e) {
-      print('[GeoPackageFile] addLinesBatch エラー発生 - $e');
+      print('[ERROR] GeoPackageFile.addLinesBatch: $e');
       return [];
     }
   }

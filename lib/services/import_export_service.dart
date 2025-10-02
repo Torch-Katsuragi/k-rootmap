@@ -858,14 +858,10 @@ class ImportExportService {
                   if (rings.isNotEmpty && rings.first.length >= 3) {
                     featureData = {
                       'rings': rings,
-                      'name': properties['name'] ?? 'Polygon ${i + 1}',
-                      'description': properties['description'] ?? '',
                     };
-                    // propertiesを直接展開（GeoPackageカラムにマッピング）
+                    // propertiesを直接展開（全属性をGeoPackageカラムにマッピング）
                     properties.forEach((key, value) {
-                      if (key != 'name' && key != 'description') {
-                        featureData![key] = value;
-                      }
+                      featureData![key] = value;
                     });
                   }
                 }
@@ -2196,15 +2192,11 @@ class ImportExportService {
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
             featureData = {
               'point': coordinates,
-              'name': attributes['name'] ?? 'Point ${featureCount + 1}',
-              'description': attributes['description'] ?? 'Extracted from ${p.basename(shpFilePath)}',
             };
             
-            // その他のDBF属性を直接追加（各カラムに格納される）
+            // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
-              if (key != 'name' && key != 'description') {
-                featureData![key] = value;
-              }
+              featureData![key] = value;
             });
           }
           offset += 16; // Point は X,Y の 8バイト × 2
@@ -2223,15 +2215,11 @@ class ImportExportService {
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
             featureData = {
               'line': coordinates,
-              'name': attributes['name'] ?? 'Line ${featureCount + 1}',
-              'description': attributes['description'] ?? 'Extracted from ${p.basename(shpFilePath)}',
             };
             
-            // その他のDBF属性を直接追加（各カラムに格納される）
+            // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
-              if (key != 'name' && key != 'description') {
-                featureData![key] = value;
-              }
+              featureData![key] = value;
             });
           }
           offset += (contentLength * 2) - 4; // コンテンツ長から既に読んだシェープタイプを除く
@@ -2250,15 +2238,11 @@ class ImportExportService {
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
             featureData = {
               'rings': coordinates,
-              'name': attributes['name'] ?? 'Polygon ${featureCount + 1}',
-              'description': attributes['description'] ?? 'Extracted from ${p.basename(shpFilePath)}',
             };
             
-            // その他のDBF属性を直接追加（各カラムに格納される）
+            // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
-              if (key != 'name' && key != 'description') {
-                featureData![key] = value;
-              }
+              featureData![key] = value;
             });
           }
           offset += (contentLength * 2) - 4; // コンテンツ長から既に読んだシェープタイプを除く
@@ -3338,9 +3322,6 @@ class ImportExportService {
           final fieldName = entry.key;
           final value = entry.value;
           
-          // nameとdescriptionは既存カラムなのでスキップ
-          if (fieldName == 'name' || fieldName == 'description') continue;
-          
           // 既にスキーマに追加済みならスキップ
           if (attributeSchema.containsKey(fieldName)) continue;
           
@@ -3391,9 +3372,6 @@ class ImportExportService {
       for (final entry in dbfData.entries) {
         final fieldName = entry.key;
         final values = entry.value;
-        
-        // nameとdescriptionは既存カラムなのでスキップ
-        if (fieldName == 'name' || fieldName == 'description') continue;
         
         // 値からデータ型を推定
         String sqliteType = 'TEXT';  // デフォルト
@@ -3542,11 +3520,7 @@ class ImportExportService {
         offset += 32;
       }
       
-      print('[ImportExportService] フィールド定義:');
-      for (int i = 0; i < fields.length; i++) {
-        final field = fields[i];
-        print('  [$i] ${field['name']}: ${field['type']} (${field['length']})');
-      }
+      // フィールド定義のログは詳細すぎるのでコメントアウト
       
       // レコードデータを読み込み
       final data = <String, List<dynamic>>{};

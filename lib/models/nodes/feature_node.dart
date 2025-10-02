@@ -432,12 +432,21 @@ class PointFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // 属性辞書を作成
-    final properties = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
-    if (metadata != null) {
+    // 属性辞書を作成（カラムの存在確認が必要なため、空の辞書から始める）
+    final properties = <String, dynamic>{};
+    
+    // カラムの存在確認
+    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
+    final columnSet = columnNames.toSet();
+    
+    // 存在するカラムのみ値を設定
+    if (columnSet.contains('name')) {
+      properties['name'] = name;
+    }
+    if (columnSet.contains('description')) {
+      properties['description'] = description;
+    }
+    if (columnSet.contains('kmaps_metadata') && metadata != null) {
       properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
@@ -631,12 +640,21 @@ class LineFeatureNode extends FeatureNode {
     final gpkgFile = parent.geoPackageFile;
     final layerName = parent.layerName;
 
-    // 属性辞書を作成
-    final properties = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
-    if (metadata != null) {
+    // 属性辞書を作成（カラムの存在確認が必要なため、空の辞書から始める）
+    final properties = <String, dynamic>{};
+    
+    // カラムの存在確認
+    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
+    final columnSet = columnNames.toSet();
+    
+    // 存在するカラムのみ値を設定
+    if (columnSet.contains('name')) {
+      properties['name'] = name;
+    }
+    if (columnSet.contains('description')) {
+      properties['description'] = description;
+    }
+    if (columnSet.contains('kmaps_metadata') && metadata != null) {
       properties['kmaps_metadata'] = jsonEncode(metadata);
     }
 
@@ -848,13 +866,21 @@ class PolygonFeatureNode extends FeatureNode {
     final layerName = parent.layerName;
     if (polygon.isEmpty) return null;
 
-    // 属性値を辞書として準備
-    final attributes = <String, dynamic>{
-      'name': name,
-      'description': description,
-    };
-
-    if (metadata != null) {
+    // 属性値を辞書として準備（カラムの存在確認が必要なため、空の辞書から始める）
+    final attributes = <String, dynamic>{};
+    
+    // カラムの存在確認
+    final columnNames = await gpkgFile.getColumnNames(layerName, getAll: true);
+    final columnSet = columnNames.toSet();
+    
+    // 存在するカラムのみ値を設定
+    if (columnSet.contains('name')) {
+      attributes['name'] = name;
+    }
+    if (columnSet.contains('description')) {
+      attributes['description'] = description;
+    }
+    if (columnSet.contains('kmaps_metadata') && metadata != null) {
       attributes['kmaps_metadata'] = jsonEncode(metadata);
     }
 

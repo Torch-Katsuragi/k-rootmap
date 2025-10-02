@@ -31,9 +31,6 @@ Uint8List _createGpbHeader({
 
   // エンベロープが指定されている場合は追加
   if (minX != null && maxX != null && minY != null && maxY != null) {
-    print(
-      '[GPB] Adding envelope: minX=$minX, maxX=$maxX, minY=$minY, maxY=$maxY',
-    );
     final envelopeBytes = ByteData(32);
     envelopeBytes.setFloat64(0, minX, Endian.little);
     envelopeBytes.setFloat64(8, maxX, Endian.little);

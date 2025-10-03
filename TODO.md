@@ -2,6 +2,67 @@
 
 ## 完了した作業
 
+### 19. GUIの大規模リファクタリング（完了）
+
+**背景**:
+- `map_page.dart`が3684行と非常に大きく、保守性が低下していた
+- buildメソッドが巨大で可読性が低かった
+- バイブコーディング時のトークン数が膨大だった
+- 関連するコードが散在し、変更が困難だった
+
+**実施したリファクタリング**:
+
+1. **ダイアログウィジェットの分離**
+   - ✅ 新規ファイル: `lib/widgets/gps_tracking_dialogs.dart`
+   - `TrackingStopDialog` - GPS追跡停止時の処理選択ダイアログ
+   - `SelectPointLayerDialog` - ポイントレイヤー選択ダイアログ
+   - 削減: 約380行
+
+2. **フィーチャ詳細パネルの分離**
+   - ✅ 新規ファイル: `lib/widgets/feature_detail_panel.dart`
+   - `FeatureDetailPanel` - フィーチャ詳細情報表示
+   - ライン簡略化、ポイント変換機能を含む
+   - 削減: 約420行
+
+3. **左下FABの分離**
+   - ✅ 新規ファイル: `lib/widgets/left_bottom_fab.dart`
+   - `LeftBottomFab` - 左下フローティングアクションボタン
+   - 削減: 約60行
+
+4. **地図ツールバーの分離**
+   - ✅ 新規ファイル: `lib/widgets/map_toolbar.dart`
+   - `MapToolbar` - 左側ツールバー（Pan, Pen, Select, GPSツールボタン）
+   - `_ToolButton` - ツールボタンの共通コンポーネント
+   - 削減: 約130行
+
+5. **AppBarアクションボタンの分離**
+   - ✅ 新規ファイル: `lib/widgets/map_appbar_actions.dart`
+   - `buildMapAppBarActions()` - AppBar右側のアクションボタン群
+   - 削減: 約50行
+
+**効果**:
+- ✅ **コード量の大幅削減**: 3684行 → **2645行** (削減: **1039行、約28%**)
+- ✅ **保守性の向上**: 関連するコードがまとまり、変更が容易に
+- ✅ **可読性の向上**: ファイルサイズが小さくなり、ナビゲーションが容易に
+- ✅ **再利用性の向上**: 分離されたウィジェットは他の箇所でも利用可能
+- ✅ **トークン数の削減**: AI支援コーディングのコスト削減（約28%削減）
+- ✅ **コンパイルエラーなし**: 全て正常にコンパイル可能
+
+**新規作成ファイル**:
+1. `lib/widgets/gps_tracking_dialogs.dart` (約170行)
+2. `lib/widgets/feature_detail_panel.dart` (約400行)
+3. `lib/widgets/left_bottom_fab.dart` (約70行)
+4. `lib/widgets/map_toolbar.dart` (約120行)
+5. `lib/widgets/map_appbar_actions.dart` (約60行)
+
+**テスト状況**:
+- ✅ コンパイルエラー: なし
+- ✅ Linter警告: 既存の警告のみ（新規エラーなし）
+- ✅ 動作確認: ユーザーによる実機テスト完了
+- ✅ Git保存: 完了
+
+---
+
 ### 18. GPS追跡ボタン（足跡アイコン）のポイント都度保存方式への変更（完了）
 
 **背景**:

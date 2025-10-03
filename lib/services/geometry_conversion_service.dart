@@ -85,9 +85,14 @@ class GeometryConversionService {
   }
 
   /// ポイントレイヤーをライン/ポリゴンに変換
+  /// 
+  /// [sourceLayer] 変換元のポイントレイヤー
+  /// [targetLayer] 変換先のライン/ポリゴンレイヤー
+  /// [name] 作成するフィーチャの名前（省略時はデフォルト名）
   static Future<FeatureNode?> convertPointsToGeometry({
     required PointLayerNode sourceLayer,
     required LayerNode targetLayer,
+    String? name,
   }) async {
     // ポイントの座標リストを作成
     final points = sourceLayer.features.map((feature) => feature.centroid).toList();
@@ -134,6 +139,9 @@ class GeometryConversionService {
       }
     }
 
+    // フィーチャ名を決定（指定がなければデフォルト名）
+    final featureName = name ?? 'Converted from ${sourceLayer.name}';
+    
     // レイヤータイプに応じてフィーチャを作成
     FeatureNode? createdFeature;
     if (targetLayer is LineLayerNode) {
@@ -141,7 +149,7 @@ class GeometryConversionService {
       createdFeature = await LineFeatureNode.createIn(
         targetLayer,
         points,
-        'Converted from ${sourceLayer.name}',
+        featureName,
         null,
       );
     } else if (targetLayer is PolygonLayerNode) {
@@ -155,7 +163,7 @@ class GeometryConversionService {
       createdFeature = await PolygonFeatureNode.createIn(
         targetLayer,
         rings,
-        'Converted from ${sourceLayer.name}',
+        featureName,
         null,
       );
     }
@@ -271,14 +279,29 @@ class GeometryConversionService {
       }
     }
 
+    // デフォルトのdescription値を準備（元のフィーチャのnameから）
+    final sourceFeatureName = sourceFeature.name;
+    final defaultDescription = sourceFeatureName.isNotEmpty 
+        ? 'imported from $sourceFeatureName' 
+        : null;
+    
     // 各座標をポイントフィーチャとして追加
     final createdFeatures = <PointFeatureNode>[];
+    final totalPoints = points.length;
+    print('[GeometryConversion] ポイント変換開始: ${totalPoints}個のポイントを作成');
+    
     for (int i = 0; i < points.length; i++) {
+      // 進捗表示（10%ごと、または最初と最後）
+      if (i == 0 || i == totalPoints - 1 || (i + 1) % (totalPoints ~/ 10 + 1) == 0) {
+        print('[GeometryConversion] 進捗: ${i + 1}/${totalPoints} (${((i + 1) * 100 / totalPoints).toStringAsFixed(1)}%)');
+      }
+      
+      // nameは空文字列、descriptionはnullで作成
       final pointFeature = await PointFeatureNode.createIn(
         targetLayer,
         points[i],
-        'Point ${i + 1} from ${sourceFeature.name}',
-        null,
+        '', // nameは空文字列
+        null, // descriptionはnull（後で属性復元時に設定）
       );
       if (pointFeature != null) {
         createdFeatures.add(pointFeature);
@@ -289,37 +312,52 @@ class GeometryConversionService {
             final rowData = dataRows[i];
             final attributes = <String, dynamic>{};
             
-            print('[GeometryConversion] ポイント${i + 1}: データ行=${rowData}');
-            
             for (int colIdx = 0; colIdx < columnNames.length && colIdx < rowData.length; colIdx++) {
               final columnName = columnNames[colIdx];
               // 組み込みカラムはスキップ
               if (columnName == 'id' || columnName == 'geom') {
-                print('[GeometryConversion]   カラム[$columnName]をスキップ（組み込み）');
                 continue;
               }
               
               final value = rowData[colIdx];
               attributes[columnName] = value;
-              print('[GeometryConversion]   カラム[$columnName] = $value');
+            }
+            
+            // descriptionの処理：
+            // 復元データにdescriptionがあればそれを使い、なければデフォルト値を設定
+            if (!attributes.containsKey('description') || 
+                attributes['description'] == null || 
+                attributes['description'].toString().isEmpty) {
+              if (defaultDescription != null) {
+                attributes['description'] = defaultDescription;
+              }
             }
             
             if (attributes.isNotEmpty) {
-              print('[GeometryConversion] ポイント${i + 1}に属性を設定: $attributes');
+              // setAttributeValuesで属性設定（カラムがなければ自動作成）
               await pointFeature.setAttributeValues(attributes);
               
               // 即座にDBに保存（updateChildren()の前に確実に保存）
               await pointFeature.flushChanges();
-              print('[GeometryConversion] ポイント${i + 1}の属性設定完了＆DB保存: ${attributes.length}個');
-            } else {
-              print('[GeometryConversion] ポイント${i + 1}: 復元する属性なし');
             }
           } catch (e) {
             print('[GeometryConversion] ポイント${i + 1}の属性復元エラー: $e');
           }
+        } else if (defaultDescription != null) {
+          // 属性テーブルがない場合でも、デフォルトdescriptionを設定
+          try {
+            await pointFeature.setAttributeValues({
+              'description': defaultDescription,
+            });
+            await pointFeature.flushChanges();
+          } catch (e) {
+            print('[GeometryConversion] ポイント${i + 1}のdescription設定エラー: $e');
+          }
         }
       }
     }
+    
+    print('[GeometryConversion] ポイント変換完了: ${createdFeatures.length}個のポイントを作成');
 
     return createdFeatures;
   }

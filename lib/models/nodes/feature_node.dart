@@ -199,12 +199,44 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 複数の属性値を一括設定
+  /// カラムが存在しない場合は自動的に作成する（TEXT型）
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
     print('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
 
     if (_isDisposed) {
       print('[WARNING] FeatureNode is disposed, cannot set attributes');
       return;
+    }
+    
+    // 既存のカラム名を取得
+    final existingColumns = await geoPackageFile.getColumnNames(
+      layerName,
+      getAll: true,
+    );
+    final existingColumnSet = existingColumns.toSet();
+    
+    // 存在しないカラムを検出して作成
+    final missingColumns = attributes.keys.where((key) => 
+      !existingColumnSet.contains(key) && 
+      key != 'id' && 
+      key != 'geom'
+    ).toList();
+    
+    if (missingColumns.isNotEmpty) {
+      print('[DEBUG] FeatureNode: 以下のカラムを自動作成します: $missingColumns');
+      for (final columnName in missingColumns) {
+        try {
+          await geoPackageFile.addAttributeColumn(
+            layerName,
+            columnName,
+            'TEXT', // デフォルトでTEXT型
+          );
+          print('[DEBUG] FeatureNode: カラム作成成功 - $columnName');
+        } catch (e) {
+          print('[WARNING] FeatureNode: カラム作成失敗 - $columnName: $e');
+          // カラム作成に失敗しても処理は続行（既に存在する場合など）
+        }
+      }
     }
     
     // 各属性を親のMap経由で更新

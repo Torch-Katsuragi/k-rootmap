@@ -112,6 +112,9 @@ class GpsManagerService extends ChangeNotifier {
   double? _speed;
   double? _bearing;
   DateTime? _timestamp;
+  
+  // ログ出力制御（頻繁なログを抑制）
+  DateTime? _lastLogTime;
 
   // 衛星情報・HDOP情報（外部GNSS用）
   int? _satelliteCount;
@@ -519,7 +522,7 @@ class GpsManagerService extends ChangeNotifier {
     // 位置情報監視開始
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 0,
+      distanceFilter: 1, // 1メートル以上移動した場合のみ更新（0だと頻繁すぎる）
     );
 
     _positionSubscription = Geolocator.getPositionStream(
@@ -635,11 +638,16 @@ class GpsManagerService extends ChangeNotifier {
     _hdop = hdop;
     _gpsQuality = gpsQuality;
 
-    debugPrint(
-      '$_logTag: 位置更新 - Lat: ${latitude.toStringAsFixed(6)}, '
-      'Lon: ${longitude.toStringAsFixed(6)}, '
-      'Source: $sourceType',
-    );
+    // ログ出力を5秒に1回に制限（大量のログを防ぐ）
+    final now = DateTime.now();
+    if (_lastLogTime == null || now.difference(_lastLogTime!).inSeconds >= 5) {
+      debugPrint(
+        '$_logTag: 位置更新 - Lat: ${latitude.toStringAsFixed(6)}, '
+        'Lon: ${longitude.toStringAsFixed(6)}, '
+        'Source: $sourceType',
+      );
+      _lastLogTime = now;
+    }
 
     // 連続測量中の場合はデータを収集
     if (_isContinuousSurvey) {

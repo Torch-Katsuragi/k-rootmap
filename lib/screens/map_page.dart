@@ -850,7 +850,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         additionalMetadata: additionalMetadata,
         refreshCallback: () {
           // フィーチャ表示を更新（pen_toolと同じ処理を使用）
-          _forceMapRefresh();
+          _refreshMapUI();
         },
       );
 
@@ -942,7 +942,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       closeRing: closeRing,
       refreshCallback: () {
         // フィーチャ表示を更新
-        _forceMapRefresh();
+        _refreshMapUI();
       },
     );
 
@@ -1114,9 +1114,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   /// マップの強制更新処理（外部から呼び出し可能）
-  /// フィーチャの追加・更新・削除後にマップ表示を強制的にリフレッシュ
+  /// フィーチャの追加・更新・削除後にマップ表示を更新
   void forceMapRefresh() {
-    _forceMapRefresh();
+    _refreshMapUI();
   }
 
   /// コンパス方向付きの現在位置マーカーを構築
@@ -1186,10 +1186,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     print('[MAP] 追記モード開始完了');
   }
 
-  /// マップの強制更新処理
-  /// フィーチャの追加・更新・削除後にマップ表示を強制的にリフレッシュ
-  void _forceMapRefresh() {
-    print('[MAP] マップ強制更新開始');
+  /// マップUI更新処理
+  /// フィーチャの追加・更新・削除後にマップ表示を更新
+  /// 【重要】childrenはクリアせず、メモリ上のインスタンスから読み込む（DBアクセスなし）
+  void _refreshMapUI() {
+    print('[MAP] マップUI更新開始（インスタンスベース）');
 
     // 1. フィーチャデータのキャッシュをクリア
     _pointFeatures.clear();
@@ -1197,29 +1198,20 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _polygonFeatures.clear();
     _photoNodes.clear();
 
-    // 2. 【重要】LayerNodeのchildrenも強制的にクリアしてDBから再読み込みを強制
-    final folderTree = GlobalConfig.instance.folderTree;
-    if (folderTree != null) {
-      final visibleLayers = folderTree.getVisibleLayerNodes();
-      for (final layer in visibleLayers) {
-        print(
-          '[MAP] レイヤー ${layer.name} のchildren をクリア (${layer.children.length} features)',
-        );
-        layer.children.clear(); // 既存のFeatureNodeをクリア
-      }
-    }
+    // 2. 【重要】LayerNodeのchildrenはクリアしない（メモリ上のインスタンスを維持）
+    //    DBからの再読み込みは行わず、既存のchildrenから読み込む
 
-    // 3. フィーチャデータを再読み込み
+    // 3. フィーチャデータを再読み込み（childrenが空の場合のみDBから読み込む）
     _updateFeatures()
         .then((_) {
           // 4. UI全体を更新
           if (mounted) {
             setState(() {});
-            print('[MAP] マップ強制更新完了');
+            print('[MAP] マップUI更新完了');
           }
         })
         .catchError((error) {
-          print('[ERROR] マップ強制更新エラー: $error');
+          print('[ERROR] マップUI更新エラー: $error');
         });
   }
 
@@ -2292,7 +2284,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     }
 
                     // マップを更新
-                    _forceMapRefresh();
+                    _refreshMapUI();
 
                     print('[MAP] フィーチャ削除完了: ${feature.rowId}');
                   } catch (e) {
@@ -2879,9 +2871,19 @@ class FeatureDetailPanel extends StatelessWidget {
         ]);
       }
 
+      // タイトルをシンプルに（PointFeatureNode → Point等）
+      String displayTitle = 'Feature';
+      if (feature is PointFeatureNode) {
+        displayTitle = 'Point';
+      } else if (feature is LineFeatureNode) {
+        displayTitle = 'Line';
+      } else if (feature is PolygonFeatureNode) {
+        displayTitle = 'Polygon';
+      }
+      
       return _buildPanel(
         context,
-        title: feature.runtimeType.toString(),
+        title: displayTitle,
         children: children,
       );
     }

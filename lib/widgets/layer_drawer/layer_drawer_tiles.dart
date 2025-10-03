@@ -841,10 +841,43 @@ mixin LayerDrawerTiles {
         return;
       }
 
-      // 変換サービスを使用してフィーチャを作成
+      // 名前入力ダイアログを表示（ペンツールと同じパターン）
+      String? featureName = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          String text = '';
+          final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
+          return AlertDialog(
+            title: Text('$typeLabel フィーチャ名の入力'),
+            content: TextField(
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '名前（任意）'),
+              onChanged: (v) => text = v,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, text),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+
+      // キャンセルされた場合は処理を中断
+      if (featureName == null) {
+        return;
+      }
+
+      // 変換サービスを使用してフィーチャを作成（入力された名前を渡す）
       final createdFeature = await GeometryConversionService.convertPointsToGeometry(
         sourceLayer: sourceLayer,
         targetLayer: targetLayer,
+        name: featureName.isNotEmpty ? featureName : null, // 空の場合はnullを渡してデフォルト名を使用
       );
 
       if (createdFeature != null) {

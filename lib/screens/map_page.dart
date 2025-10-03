@@ -38,6 +38,7 @@ import '../services/foreground_service.dart'; // GPS追跡フォアグラウン�
 import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
 import '../services/geometry_conversion_service.dart';
 import '../utils/global_drawing_state.dart'; // GlobalDrawingState
+import '../utils/keyboard_handler.dart'; // キーボードショートカット
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -1299,7 +1300,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
-    return Scaffold(
+    
+    // キーボードショートカット対応（Deleteキーなど）
+    return KeyboardShortcutWrapper(
+      mapState: this,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('K-MAPS GIS'),
         actions: [
@@ -2574,7 +2579,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             return null;
           })(),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-    );
+      ),
+    ); // KeyboardShortcutWrapper
   }
 
   /// GPS information bar widget
@@ -3005,8 +3011,8 @@ class FeatureDetailPanel extends StatelessWidget {
       );
 
       if (createdFeatures.isNotEmpty) {
-        // UI更新
-        await targetLayer.updateChildren();
+        // UI更新（updateChildren()は不要 - createIn()で既にchildrenに追加済み）
+        // await targetLayer.updateChildren(); ← 削除：せっかく設定した属性が消えてしまう
         
         // マップを更新
         final mapState = GlobalConfig.instance.mapState;

@@ -52,6 +52,9 @@ abstract class LayerNode extends LayerTreeNode {
   
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
+  
+  /// updateChildren実行中フラグ（競合状態防止）
+  bool _isUpdatingChildren = false;
 
   /// 親のGeoPackageNodeを取得
   GeoPackageNode get geoPackageNode {
@@ -323,20 +326,40 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     
-    children.clear();
-    _featureMap.clear();  // Mapもクリア
-    
-    // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
-    final featureList = await _loadFeaturesFromDB();
-    for (final node in featureList) {
-      addChild(node);
-      // _featureMapにも追加
-      addFeatureToMap(node.rowId, node.turfFeature);
+    // 競合状態を防止：既に実行中の場合はスキップ
+    if (_isUpdatingChildren) {
+      print('[LayerNode] updateChildren already in progress for $layerName, skipping');
+      return;
     }
     
-    // 子ノードの変更があったためキャッシュをクリア
-    clearColumnNamesCache();
-    _markDirty();
+    _isUpdatingChildren = true;
+    
+    try {
+      print('[LayerNode] updateChildren開始: $layerName');
+      
+      children.clear();
+      _featureMap.clear();  // Mapもクリア
+      
+      print('[LayerNode] children.clear()完了: $layerName');
+      
+      // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
+      final featureList = await _loadFeaturesFromDB();
+      print('[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)');
+      
+      for (final node in featureList) {
+        addChild(node);
+        // _featureMapにも追加
+        addFeatureToMap(node.rowId, node.turfFeature);
+      }
+      
+      print('[LayerNode] updateChildren完了: $layerName (${children.length}個)');
+      
+      // 子ノードの変更があったためキャッシュをクリア
+      clearColumnNamesCache();
+      _markDirty();
+    } finally {
+      _isUpdatingChildren = false;
+    }
   }
 
   /// レイヤを別のGeoPackageに移植

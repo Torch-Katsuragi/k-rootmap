@@ -368,3 +368,40 @@ lib/
 **テスト項目**:
 - ✅ コンパイル確認: Linterエラーなし（既存warningのみ）
 - ⏳ リファクタリング後も全機能が正常動作すること（要実機確認）
+
+---
+
+### 9. FeatureNode.dispose()の_featureMap削除漏れ修正（完了）
+
+**背景**:
+- たまに`StateError (Bad state: Feature not found in parent map: rowId=XX)`というエラーが発生
+- 主に以下の2つのケースで発生：
+  1. 属性テーブルからフィーチャを削除したとき
+  2. point→line変換のとき
+
+**原因**:
+- `FeatureNode.dispose()`メソッドで`parent.children.remove(this)`を直接呼んでいた
+- これにより、`parent.children`リストからは削除されるが、`parent._featureMap`からは削除されない
+- その後、何らかの理由で`turfFeature`プロパティにアクセスすると、`parent.getFeatureById(_rowId)`がnullを返してエラーが発生
+
+**修正内容**: `lib/models/nodes/feature_node.dart`
+
+1. **`dispose()`メソッドの修正（288-298行）**
+   - ✅ `parent.children.remove(this)`の代わりに`parent.removeFeature(this)`を呼び出し
+   - ✅ `removeFeature()`は`children`リストと`_featureMap`の両方から削除する
+   - ✅ try-catchでエラーハンドリングを追加（フォールバック処理）
+
+2. **`turfFeature`ゲッターの改善（36-52行）**
+   - ✅ エラーメッセージに`rowId`と`layerName`を追加
+   - ✅ エラー発生時に詳細なデバッグ情報をログ出力
+   - ✅ `parent._featureMap`のサイズも表示
+
+**効果**:
+- ✅ dispose時に`children`と`_featureMap`の両方から確実に削除される
+- ✅ エラーが発生した場合でも、より詳細な情報が得られる
+- ✅ フォールバック処理により、エラーが発生しても可能な限り削除を試みる
+
+**テスト項目**:
+- ✅ コンパイル確認: Linterエラーなし
+- ⏳ 属性テーブルからフィーチャを削除してもエラーが出ないこと（要実機確認）
+- ⏳ point→line変換でエラーが出ないこと（要実機確認）

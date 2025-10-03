@@ -1,5 +1,6 @@
 // lib/services/geometry_conversion_service.dart
 // ジオメトリ変換サービス（ポイント⇔ライン/ポリゴン）
+import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';
@@ -95,10 +96,49 @@ class GeometryConversionService {
       return null;
     }
 
+    // ポイントレイヤーの属性テーブルを取得してJSON化
+    String? subTableJson;
+    try {
+      // getAll=trueで全カラムを取得（組み込みカラムも含む）
+      final attributeTable = await sourceLayer.getAttributeTableData(getAll: true);
+      print('[GeometryConversion] ポイントレイヤー「${sourceLayer.name}」の属性テーブル取得');
+      print('[GeometryConversion] 行数: ${attributeTable.length}');
+      if (attributeTable.isNotEmpty) {
+        print('[GeometryConversion] ヘッダー行（カラム名）: ${attributeTable.first}');
+        if (attributeTable.length > 1) {
+          print('[GeometryConversion] データ行サンプル: ${attributeTable[1]}');
+        }
+      }
+      
+      if (attributeTable.length > 1) { // ヘッダー行 + 最低1データ行
+        subTableJson = jsonEncode(attributeTable);
+        print('[GeometryConversion] 属性テーブルをJSON化: ${subTableJson.length}文字');
+      } else {
+        print('[GeometryConversion] 属性テーブルが空（保存スキップ）');
+      }
+    } catch (e) {
+      print('[GeometryConversion] 属性テーブル取得エラー: $e');
+    }
+
+    // 変換先レイヤーにsub_tableカラムを追加（存在しない場合）
+    if (subTableJson != null) {
+      try {
+        await targetLayer.geoPackageFile.addAttributeColumn(
+          targetLayer.layerName,
+          'sub_table',
+          'TEXT',
+        );
+        print('[GeometryConversion] sub_tableカラムを追加');
+      } catch (e) {
+        print('[GeometryConversion] sub_tableカラム追加エラー（既存の可能性）: $e');
+      }
+    }
+
     // レイヤータイプに応じてフィーチャを作成
+    FeatureNode? createdFeature;
     if (targetLayer is LineLayerNode) {
       // ラインフィーチャを作成
-      return await LineFeatureNode.createIn(
+      createdFeature = await LineFeatureNode.createIn(
         targetLayer,
         points,
         'Converted from ${sourceLayer.name}',
@@ -112,15 +152,36 @@ class GeometryConversionService {
         return null;
       }
       final rings = [closedPoints]; // 閉じた外環のみのリスト
-      return await PolygonFeatureNode.createIn(
+      createdFeature = await PolygonFeatureNode.createIn(
         targetLayer,
         rings,
         'Converted from ${sourceLayer.name}',
         null,
       );
     }
+
+    // sub_table属性を設定
+    if (createdFeature != null && subTableJson != null) {
+      try {
+        print('[GeometryConversion] sub_table設定開始: rowId=${createdFeature.rowId}, layer=${createdFeature.layerName}');
+        print('[GeometryConversion] 親レイヤーのfeature数: ${targetLayer.features.length}');
+        
+        // 少し待機（フィーチャが完全に登録されるまで）
+        await Future.delayed(const Duration(milliseconds: 50));
+        
+        await createdFeature.setAttributeValue('sub_table', subTableJson);
+        print('[GeometryConversion] sub_table属性を設定完了（メモリ）');
+        
+        // 即座にDBに保存（バックグラウンド保存を待たない）
+        await createdFeature.flushChanges();
+        print('[GeometryConversion] sub_table属性をDBに即座保存完了');
+      } catch (e, stack) {
+        print('[GeometryConversion] sub_table属性設定エラー: $e');
+        print('[GeometryConversion] スタックトレース: $stack');
+      }
+    }
     
-    return null;
+    return createdFeature;
   }
 
   /// ライン/ポリゴンフィーチャをポイントに変換
@@ -160,6 +221,56 @@ class GeometryConversionService {
       return [];
     }
 
+    // sub_table属性から復元する属性テーブルを取得
+    List<List<dynamic>>? attributeTable;
+    try {
+      final subTableValue = await sourceFeature.getAttributeValue('sub_table');
+      if (subTableValue != null && subTableValue is String && subTableValue.isNotEmpty) {
+        final decoded = jsonDecode(subTableValue);
+        if (decoded is List) {
+          attributeTable = decoded.map((row) => List<dynamic>.from(row as List)).toList();
+          print('[GeometryConversion] 属性テーブルを復元: ${attributeTable.length}行');
+        }
+      }
+    } catch (e) {
+      print('[GeometryConversion] sub_table復元エラー: $e');
+    }
+
+    // 属性テーブルからカラム名とデータ行を分離
+    List<String>? columnNames;
+    List<List<dynamic>>? dataRows;
+    if (attributeTable != null && attributeTable.isNotEmpty) {
+      columnNames = attributeTable.first.map((col) => col.toString()).toList();
+      dataRows = attributeTable.skip(1).toList();
+      
+      print('[GeometryConversion] 復元対象カラム: $columnNames');
+      
+      // 必要に応じて変換先レイヤーに属性カラムを追加
+      int addedCount = 0;
+      int skippedCount = 0;
+      try {
+        for (final columnName in columnNames) {
+          // 組み込みカラム（id, geom）はスキップ
+          if (columnName == 'id' || columnName == 'geom') {
+            print('[GeometryConversion] カラムをスキップ（組み込み）: $columnName');
+            skippedCount++;
+            continue;
+          }
+          
+          print('[GeometryConversion] カラムを追加: $columnName');
+          await targetLayer.geoPackageFile.addAttributeColumn(
+            targetLayer.layerName,
+            columnName,
+            'TEXT', // 型情報がないのでTEXTにフォールバック
+          );
+          addedCount++;
+        }
+        print('[GeometryConversion] 属性カラムを復元: ${addedCount}個追加, ${skippedCount}個スキップ');
+      } catch (e) {
+        print('[GeometryConversion] 属性カラム追加エラー: $e');
+      }
+    }
+
     // 各座標をポイントフィーチャとして追加
     final createdFeatures = <PointFeatureNode>[];
     for (int i = 0; i < points.length; i++) {
@@ -171,6 +282,42 @@ class GeometryConversionService {
       );
       if (pointFeature != null) {
         createdFeatures.add(pointFeature);
+        
+        // 属性テーブルがあれば、対応する行の属性を復元
+        if (dataRows != null && columnNames != null && i < dataRows.length) {
+          try {
+            final rowData = dataRows[i];
+            final attributes = <String, dynamic>{};
+            
+            print('[GeometryConversion] ポイント${i + 1}: データ行=${rowData}');
+            
+            for (int colIdx = 0; colIdx < columnNames.length && colIdx < rowData.length; colIdx++) {
+              final columnName = columnNames[colIdx];
+              // 組み込みカラムはスキップ
+              if (columnName == 'id' || columnName == 'geom') {
+                print('[GeometryConversion]   カラム[$columnName]をスキップ（組み込み）');
+                continue;
+              }
+              
+              final value = rowData[colIdx];
+              attributes[columnName] = value;
+              print('[GeometryConversion]   カラム[$columnName] = $value');
+            }
+            
+            if (attributes.isNotEmpty) {
+              print('[GeometryConversion] ポイント${i + 1}に属性を設定: $attributes');
+              await pointFeature.setAttributeValues(attributes);
+              
+              // 即座にDBに保存（updateChildren()の前に確実に保存）
+              await pointFeature.flushChanges();
+              print('[GeometryConversion] ポイント${i + 1}の属性設定完了＆DB保存: ${attributes.length}個');
+            } else {
+              print('[GeometryConversion] ポイント${i + 1}: 復元する属性なし');
+            }
+          } catch (e) {
+            print('[GeometryConversion] ポイント${i + 1}の属性復元エラー: $e');
+          }
+        }
       }
     }
 

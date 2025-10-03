@@ -67,6 +67,15 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
       // LayerNodeからFeatureNodeリストを取得
       features = widget.layer.features;
       print('[DynamicAttributeTable] フィーチャ取得: ${features.length}個');
+      
+      // 重複チェック（LayerNode.featuresゲッターレベル）
+      final featureRowIds = features.map((f) => f.rowId).toList();
+      final uniqueRowIds = featureRowIds.toSet();
+      if (featureRowIds.length != uniqueRowIds.length) {
+        print('[DynamicAttributeTable] !! LayerNode.featuresに重複を検出！');
+        print('[DynamicAttributeTable] 全rowId: $featureRowIds');
+        print('[DynamicAttributeTable] ユニークrowId: $uniqueRowIds');
+      }
 
       // カラムとデータを構築
       columns = _createColumns();
@@ -137,6 +146,25 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
       return [];
     }
 
+    print('[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ');
+    
+    // 重複チェック: rowIdのセットを作成
+    final seenRowIds = <int>{};
+    final duplicateRowIds = <int>[];
+    
+    for (final feature in features) {
+      if (seenRowIds.contains(feature.rowId)) {
+        duplicateRowIds.add(feature.rowId);
+      } else {
+        seenRowIds.add(feature.rowId);
+      }
+    }
+    
+    if (duplicateRowIds.isNotEmpty) {
+      print('[DynamicAttributeTable] ! 重複するrowIdを検出: $duplicateRowIds');
+      print('[DynamicAttributeTable] features配列に重複があります！');
+    }
+
     final List<PlutoRow> tableRows = [];
 
     for (final feature in features) {
@@ -156,6 +184,7 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
       tableRows.add(PlutoRow(cells: cells));
     }
 
+    print('[DynamicAttributeTable] 行データ作成完了: ${tableRows.length}行');
     return tableRows;
   }
 
@@ -234,49 +263,70 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
         GlobalConfig.instance.selectedFeatures.whereType<FeatureNode>(),
       );
       print('[DynamicAttributeTable] 削除処理開始: $featureCount個のフィーチャ');
+      print('[DynamicAttributeTable] 削除対象フィーチャ: ${selectedFeaturesToDelete.map((f) => 'rowId=${f.rowId}, name=${f.name}').toList()}');
 
       // 削除対象の行インデックスを事前に収集（UI即座更新用）
       final rowIndicesToRemove = <int>[];
       for (final feature in selectedFeaturesToDelete) {
         final index = features.indexOf(feature);
+        print('[DynamicAttributeTable] フィーチャ rowId=${feature.rowId} のインデックス: $index');
         if (index >= 0) {
           rowIndicesToRemove.add(index);
         }
       }
+      
+      print('[DynamicAttributeTable] 削除対象行インデックス（ソート前）: $rowIndicesToRemove');
 
       // PlutoGridから該当する行を即座に削除（UI更新優先）
       if (stateManager != null && rowIndicesToRemove.isNotEmpty) {
         rowIndicesToRemove.sort((a, b) => b.compareTo(a)); // 後ろから削除
+        print('[DynamicAttributeTable] 削除対象行インデックス（ソート後、後ろから）: $rowIndicesToRemove');
+        
         final rowsToRemove = <PlutoRow>[];
         for (final index in rowIndicesToRemove) {
           if (index < rows.length) {
-            rowsToRemove.add(rows[index]);
+            final row = rows[index];
+            print('[DynamicAttributeTable] 削除する行[$index]: ${row.cells}');
+            rowsToRemove.add(row);
+          } else {
+            print('[DynamicAttributeTable] ⚠️ インデックス$indexが範囲外（rows.length=${rows.length}）');
           }
         }
         
         print('[DynamicAttributeTable] PlutoGrid行を即座に削除: ${rowsToRemove.length}行');
         stateManager!.removeRows(rowsToRemove);
         
-        // rowsリストからも削除
-        for (final index in rowIndicesToRemove.reversed) {
-          if (index < rows.length) {
-            rows.removeAt(index);
-          }
-        }
+        // NOTE: rowsリストはPlutoGridが自動管理しているため、
+        // ここで手動削除する必要はない。最後の_initializeTableData()で再同期される。
+        print('[DynamicAttributeTable] PlutoGridの行削除完了');
       }
 
       // ローカルのfeaturesリストからも削除
+      print('[DynamicAttributeTable] featuresリストから削除開始（現在${features.length}個）');
       for (final feature in selectedFeaturesToDelete) {
         features.remove(feature);
+        print('[DynamicAttributeTable] features.remove: rowId=${feature.rowId}');
       }
+      print('[DynamicAttributeTable] featuresリスト削除完了（現在${features.length}個）');
 
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(
         mapState: GlobalConfig.instance.mapState,
       );
 
-      // 削除完了後に念のため再読み込み（データ整合性確保）
+      print('[DynamicAttributeTable] DB削除完了、テーブルを再読み込み');
+      
+      // 削除完了後に再読み込み（データ整合性確保）
       await _initializeTableData();
+      
+      // PlutoGridに新しいデータを明示的にセット
+      if (stateManager != null && mounted) {
+        print('[DynamicAttributeTable] PlutoGridに新しいデータをセット: ${columns.length}カラム, ${rows.length}行');
+        stateManager!.removeAllRows();
+        stateManager!.appendRows(rows);
+        stateManager!.notifyListeners();
+        print('[DynamicAttributeTable] PlutoGrid更新完了');
+      }
 
       print('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');
 
@@ -350,6 +400,134 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
     }
   }
 
+  /// カラム追加ダイアログを表示
+  Future<void> _showAddColumnDialog() async {
+    final columnNameController = TextEditingController();
+    String selectedType = 'TEXT';
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.add_box, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('カラム追加'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: columnNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'カラム名',
+                      hintText: '例: 備考, 数量, 日付',
+                      border: OutlineInputBorder(),
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    decoration: const InputDecoration(
+                      labelText: 'データ型',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'TEXT', child: Text('テキスト (TEXT)')),
+                      DropdownMenuItem(value: 'INTEGER', child: Text('整数 (INTEGER)')),
+                      DropdownMenuItem(value: 'REAL', child: Text('小数 (REAL)')),
+                      DropdownMenuItem(value: 'BLOB', child: Text('バイナリ (BLOB)')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          selectedType = value;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    final columnName = columnNameController.text.trim();
+                    if (columnName.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('カラム名を入力してください'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.of(context).pop({
+                      'name': columnName,
+                      'type': selectedType,
+                    });
+                  },
+                  icon: const Icon(Icons.check),
+                  label: const Text('追加'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    // ダイアログから結果が返ってきたらカラムを追加
+    if (result != null && mounted) {
+      final columnName = result['name']!;
+      final columnType = result['type']!;
+      
+      try {
+        // GeoPackageにカラムを追加
+        await widget.layer.geoPackageFile.addAttributeColumn(
+          widget.layer.layerName,
+          columnName,
+          columnType,
+        );
+        
+        // カラム名キャッシュをクリア
+        widget.layer.clearColumnNamesCache();
+        
+        // テーブルを再読み込み
+        await _initializeTableData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('カラム「$columnName」を追加しました'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        print('[DynamicAttributeTable] カラム追加エラー: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('カラム追加に失敗しました: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -394,6 +572,17 @@ class _DynamicAttributeTableWidgetState extends State<DynamicAttributeTableWidge
               ),
               const Spacer(),
               // 極小アイコンボタン
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 12,
+                  icon: const Icon(Icons.add_box, color: Colors.blue),
+                  onPressed: _showAddColumnDialog,
+                  tooltip: 'カラム追加',
+                ),
+              ),
               SizedBox(
                 width: 20,
                 height: 20,

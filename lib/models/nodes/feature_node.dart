@@ -36,11 +36,17 @@ abstract class FeatureNode extends LayerTreeNode {
   /// turf_dartのFeatureオブジェクトを取得（親のMapから参照）
   turf.Feature get turfFeature {
     if (_isDisposed) {
-      throw StateError('FeatureNode is disposed');
+      throw StateError('FeatureNode is disposed: rowId=$_rowId');
     }
     final feature = parent.getFeatureById(_rowId);
     if (feature == null) {
-      throw StateError('Feature not found in parent map: rowId=$_rowId');
+      // より詳細なエラー情報を提供
+      print('[ERROR] Feature not found in parent map');
+      print('[ERROR]   rowId: $_rowId');
+      print('[ERROR]   parent layer: ${parent.layerName}');
+      print('[ERROR]   isDisposed: $_isDisposed');
+      print('[ERROR]   parent._featureMap size: ${parent.features.length}');
+      throw StateError('Feature not found in parent map: rowId=$_rowId, layer=${parent.layerName}');
     }
     return feature;
   }
@@ -181,7 +187,14 @@ abstract class FeatureNode extends LayerTreeNode {
       return;
     }
     
-    parent.updateFeatureAttribute(_rowId, attributeName, value);
+    // 親のMapを更新（失敗した場合はfalseを返す）
+    final success = parent.updateFeatureAttribute(_rowId, attributeName, value);
+    if (!success) {
+      print('[WARNING] FeatureNode: updateFeatureAttribute failed for rowId=$_rowId, attribute=$attributeName');
+      print('[WARNING] Feature may not be registered in parent._featureMap yet');
+      return;
+    }
+    
     _markDirty();
   }
 
@@ -285,9 +298,17 @@ abstract class FeatureNode extends LayerTreeNode {
       print('[WARNING] FeatureNode.dispose: flushChanges failed: $e');
     }
 
-    // 即座に親子関係を切断（UI更新を優先）
-    parent.children.remove(this);
-    print('[DEBUG] FeatureNode.dispose: removed from parent children');
+    // 即座に親子関係を切断し、親の_featureMapからも削除（UI更新を優先）
+    // LayerNode.removeFeature()を使用することで、childrenと_featureMapの両方から削除される
+    try {
+      parent.removeFeature(this);
+      print('[DEBUG] FeatureNode.dispose: removed from parent children and featureMap');
+    } catch (e) {
+      print('[WARNING] FeatureNode.dispose: removeFeature failed: $e');
+      // フォールバック: 直接削除を試みる
+      parent.children.remove(this);
+      print('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
+    }
 
     // 選択状態からも除去
     final globalConfig = GlobalConfig.instance;

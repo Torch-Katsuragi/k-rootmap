@@ -204,23 +204,48 @@ class GpsTool extends MapTool {
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（メタデータ活用）
-        // optimizedGpsDataを辞書のまま保存
-        final metadata = {
-          'type': 'measurement_log',
-          'contents': optimizedGpsData,
-        };
-
-        debugPrint('[GpsTool] 長押し測量 metadata: $metadata');
+        // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
         final pointFeature = await PointFeatureNode.createIn(
           selected,
           position,
-          'GPS測量ポイント',
-          '', // description は空にしてメタデータを使用
-          metadata: metadata,
+          '', // nameは空
+          '', // descriptionも空
         );
 
         if (pointFeature != null) {
+          // GPS属性を個別カラムとして設定（GPS追跡と同じ形式）
+          final attributes = <String, dynamic>{};
+          
+          // 平均化された結果から属性を設定
+          if (averagedResult['altitude'] != null) {
+            attributes['altitude'] = averagedResult['altitude'];
+          }
+          if (averagedResult['accuracy'] != null) {
+            attributes['accuracy'] = averagedResult['accuracy'];
+          }
+          
+          // 最初のGPSデータからspeed、bearingを取得（平均化されていない）
+          if (_longPressGpsData.isNotEmpty) {
+            final firstData = _longPressGpsData.first;
+            if (firstData['speed'] != null) {
+              attributes['speed'] = firstData['speed'];
+            }
+            if (firstData['bearing'] != null) {
+              attributes['bearing'] = firstData['bearing'];
+            }
+            if (firstData['sourceType'] != null) {
+              attributes['source_type'] = firstData['sourceType'];
+            }
+          }
+          
+          attributes['timestamp'] = DateTime.now().toIso8601String();
+          attributes['sample_count'] = averagedResult['sampleCount']; // 平均化に使用したサンプル数
+          
+          // 属性値を設定（カラムが存在しない場合は自動作成される）
+          if (attributes.isNotEmpty) {
+            await pointFeature.setAttributeValues(attributes);
+          }
+          
           // UI更新（pen_toolと同様）
           if (GlobalConfig.instance.mapState != null) {
             GlobalConfig.instance.mapState.refreshFeatures();
@@ -314,23 +339,43 @@ class GpsTool extends MapTool {
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
       if (selected is PointLayerNode) {
-        // GPS測量時は即座にPointフィーチャを作成（メタデータ活用）
-        // optimizedGpsDataを辞書のまま保存
-        final metadata = {
-          'type': 'measurement_log',
-          'contents': optimizedGpsData,
-        };
-
-        debugPrint('[GpsTool] 単発測量 metadata: $metadata');
+        // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
         final pointFeature = await PointFeatureNode.createIn(
           selected,
           position,
-          'GPS測量ポイント',
-          '', // description は空にしてメタデータを使用
-          metadata: metadata,
+          '', // nameは空
+          '', // descriptionも空
         );
 
         if (pointFeature != null) {
+          // GPS属性を個別カラムとして設定（GPS追跡と同じ形式）
+          final attributes = <String, dynamic>{};
+          
+          // 単発測量の場合はsingleGpsDataから直接取得
+          if (gpsInfo['altitude'] != null) {
+            attributes['altitude'] = gpsInfo['altitude'];
+          }
+          if (gpsInfo['accuracy'] != null) {
+            attributes['accuracy'] = gpsInfo['accuracy'];
+          }
+          if (gpsInfo['speed'] != null) {
+            attributes['speed'] = gpsInfo['speed'];
+          }
+          if (gpsInfo['bearing'] != null) {
+            attributes['bearing'] = gpsInfo['bearing'];
+          }
+          if (gpsInfo['sourceType'] != null) {
+            attributes['source_type'] = gpsInfo['sourceType'];
+          }
+          
+          attributes['timestamp'] = DateTime.now().toIso8601String();
+          attributes['sample_count'] = 1; // 単発測量なので1
+          
+          // 属性値を設定（カラムが存在しない場合は自動作成される）
+          if (attributes.isNotEmpty) {
+            await pointFeature.setAttributeValues(attributes);
+          }
+          
           // UI更新（pen_toolと同様）
           if (GlobalConfig.instance.mapState != null) {
             GlobalConfig.instance.mapState.refreshFeatures();

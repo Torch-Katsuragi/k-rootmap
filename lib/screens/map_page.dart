@@ -30,7 +30,7 @@ import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
 import '../utils/feature_calc_utils.dart';
 import '../models/gps_track.dart';
-import '../widgets/track_save_dialog.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import '../widgets/line_simplification_dialog.dart';
 import '../widgets/geometry_conversion_dialogs.dart';
 import '../screens/gps_settings_screen.dart'; // GPS設定画面
@@ -84,6 +84,15 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   final ForegroundServiceManager _serviceManager = ForegroundServiceManager();
   bool _isGpsTrackingServiceRunning = false;
   LatLng? _lastTrackedPosition; // フォアグラウンドサービスからの最新位置
+  
+  // GPS追跡ポイント都度保存用
+  PointLayerNode? _trackingTargetPointLayer;
+  int _trackedPointCount = 0;
+  StreamSubscription<dynamic>? _trackPointSubscription;
+  int _trackingSaveIntervalSeconds = 10; // 保存間隔（秒）
+  int _trackingMinDistanceCm = 0; // 最小移動距離（cm）
+  DateTime? _lastTrackingSaveTime; // 最後に保存した時刻
+  LatLng? _lastSavedTrackingPosition; // 最後に保存した位置
 
   // 属性テーブル表示状態
   bool _showAttributeTable = false;
@@ -335,6 +344,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _gpsWaitTimer?.cancel();
     _serviceStatusUpdateTimer?.cancel();
     _longPressCountUpdateTimer?.cancel(); // 長押しカウンタータイマーも破棄
+    _trackPointSubscription?.cancel(); // GPS追跡ポイント受信リスナーを破棄
     _trackingAnimationController.dispose(); // アニメーションコントローラーを破棄
     super.dispose();
   }
@@ -398,11 +408,33 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS追跡フォアグラウンドサービス開始
   Future<void> _startGpsTrackingService() async {
+    // 保存先PointLayerNodeと保存オプションを選択
+    final result = await _showSelectPointLayerDialog();
+    if (result == null) {
+      // ユーザーがキャンセルした
+      return;
+    }
+    
+    _trackingTargetPointLayer = result['layer'] as PointLayerNode;
+    _trackingSaveIntervalSeconds = result['intervalSeconds'] as int;
+    _trackingMinDistanceCm = result['minDistanceCm'] as int;
+    _trackedPointCount = 0;
+    _lastTrackingSaveTime = null;
+    _lastSavedTrackingPosition = null;
+    
     // 外部GNSS設定確認
     final gnssDevice = ForegroundServiceManager.getGnssDevice();
     String sourceType = gnssDevice['address'] != null ? '外部GNSS' : '内蔵GPS';
     String deviceInfo =
         gnssDevice['name'] != null ? ' (${gnssDevice['name']})' : '';
+
+    // バックグラウンドサービスからのポイント受信設定（既存のものをキャンセル）
+    _trackPointSubscription?.cancel();
+    _trackPointSubscription = FlutterBackgroundService().on('addTrackPoint').listen((event) {
+      if (event != null) {
+        _handleTrackPointForSaving(event);
+      }
+    });
 
     await _serviceManager.startService();
     _updateGpsTrackingServiceStatus();
@@ -410,12 +442,163 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$sourceType追跡フォアグラウンドサービスを開始しました$deviceInfo'),
+          content: Text('$sourceType追跡を開始しました。ポイントを「${_trackingTargetPointLayer!.name}」に${_trackingSaveIntervalSeconds}秒間隔で保存します$deviceInfo'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
       );
     }
+  }
+  
+  /// GPS追跡ポイントを都度保存
+  Future<void> _handleTrackPointForSaving(Map<String, dynamic> event) async {
+    // 保存先レイヤーの存在チェック
+    if (_trackingTargetPointLayer == null) {
+      debugPrint('[MapPage] GPS追跡: 保存先レイヤーがnullです');
+      return;
+    }
+    
+    // レイヤーが削除されていないかチェック
+    final parent = _trackingTargetPointLayer!.parent;
+    if (parent == null || !parent.children.contains(_trackingTargetPointLayer)) {
+      debugPrint('[MapPage] GPS追跡: 保存先レイヤーが削除されています');
+      // 追跡を停止
+      await _stopGpsTrackingService();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('保存先レイヤーが削除されました。GPS追跡を停止します。'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    
+    // 時間間隔チェック
+    final now = DateTime.now();
+    if (_lastTrackingSaveTime != null) {
+      final elapsedSeconds = now.difference(_lastTrackingSaveTime!).inSeconds;
+      if (elapsedSeconds < _trackingSaveIntervalSeconds) {
+        // まだ保存間隔に達していない
+        return;
+      }
+    }
+    
+    try {
+      final pointData = Map<String, dynamic>.from(event);
+      final latitude = pointData['latitude'].toDouble();
+      final longitude = pointData['longitude'].toDouble();
+      final position = LatLng(latitude, longitude);
+      
+      // 移動距離チェック（最小移動距離が0より大きい場合のみ）
+      if (_trackingMinDistanceCm > 0 && _lastSavedTrackingPosition != null) {
+        final distanceMeters = _calculateDistance(
+          _lastSavedTrackingPosition!,
+          position,
+        );
+        final distanceCm = distanceMeters * 100;
+        if (distanceCm < _trackingMinDistanceCm) {
+          // 移動距離が閾値未満なので保存をスキップ
+          debugPrint('[MapPage] GPS追跡: 移動距離不足でスキップ (${distanceCm.toStringAsFixed(0)}cm < ${_trackingMinDistanceCm}cm)');
+          return;
+        }
+      }
+      
+      // PointFeatureNodeを作成（メタデータなし、nameも空）
+      final pointFeature = await PointFeatureNode.createIn(
+        _trackingTargetPointLayer!,
+        position,
+        '', // nameは空（NULL相当）
+        '',
+      );
+      
+      if (pointFeature != null) {
+        // GPS属性を個別カラムとして設定（geomと重複しないもののみ）
+        final attributes = <String, dynamic>{};
+        
+        // 高度、精度、速度、方位など、geomに含まれない情報のみ保存
+        if (pointData['altitude'] != null) {
+          attributes['altitude'] = pointData['altitude'].toDouble();
+        }
+        if (pointData['accuracy'] != null) {
+          attributes['accuracy'] = pointData['accuracy'].toDouble();
+        }
+        if (pointData['speed'] != null) {
+          attributes['speed'] = pointData['speed'].toDouble();
+        }
+        if (pointData['bearing'] != null) {
+          attributes['bearing'] = pointData['bearing'].toDouble();
+        }
+        
+        attributes['source_type'] = pointData['sourceType'] ?? 'GPS';
+        attributes['timestamp'] = DateTime.now().toIso8601String();
+        
+        // 属性値を設定（カラムが存在しない場合は自動作成される）
+        if (attributes.isNotEmpty) {
+          await pointFeature.setAttributeValues(attributes);
+        }
+        
+        _trackedPointCount++;
+        _lastTrackingSaveTime = DateTime.now();
+        _lastSavedTrackingPosition = position;
+        debugPrint('[MapPage] GPS追跡ポイント保存: $_trackedPointCount ポイント目');
+        
+        // UI更新
+        setState(() {
+          _lastTrackedPosition = position;
+        });
+        refreshFeatures();
+      } else {
+        debugPrint('[ERROR] GPS追跡ポイントの作成に失敗しました');
+      }
+    } catch (e) {
+      debugPrint('[MapPage] GPS追跡ポイント保存エラー: $e');
+    }
+  }
+  
+  /// 2点間の距離を計算（メートル）
+  double _calculateDistance(LatLng point1, LatLng point2) {
+    const double earthRadius = 6371000; // 地球の半径（メートル）
+    
+    final lat1Rad = point1.latitude * pi / 180;
+    final lat2Rad = point2.latitude * pi / 180;
+    final dLat = (point2.latitude - point1.latitude) * pi / 180;
+    final dLon = (point2.longitude - point1.longitude) * pi / 180;
+    
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    
+    return earthRadius * c;
+  }
+  
+  /// 保存先PointLayerNode選択ダイアログを表示（GPS追跡用）
+  Future<Map<String, dynamic>?> _showSelectPointLayerDialog() async {
+    // カレントディレクトリからポイントレイヤーを検索
+    final rootNode = GlobalConfig.instance.folderTree;
+    if (rootNode == null) return null;
+
+    // ポイントレイヤーを検索（空でもOK、新規作成できるので）
+    final pointLayers = <PointLayerNode>[];
+    void searchPointLayers(LayerTreeNode node) {
+      if (node is PointLayerNode) {
+        pointLayers.add(node);
+      }
+      if (node is! FeatureNode) {
+        for (final child in node.children) {
+          searchPointLayers(child);
+        }
+      }
+    }
+    searchPointLayers(rootNode);
+
+    // ダイアログで選択（保存オプション付き）
+    return await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _SelectPointLayerDialog(pointLayers: pointLayers),
+    );
   }
 
   /// GPS測量（現在位置を記録）
@@ -618,138 +801,110 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS追跡フォアグラウンドサービス停止
   Future<void> _stopGpsTrackingService() async {
-    // 軌跡データを取得
-    final track = _serviceManager.stopTrackingAndGetTrack();
+    // ポイント受信リスナーをキャンセル
+    _trackPointSubscription?.cancel();
+    _trackPointSubscription = null;
+    
+    final savedCount = _trackedPointCount;
+    final savedPointLayer = _trackingTargetPointLayer;
 
     await _serviceManager.stopService();
     _updateGpsTrackingServiceStatus();
 
-    // 軌跡保存ダイアログを表示
-    if (track != null && track.pointCount > 0) {
-      _showTrackSaveDialog(track);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('位置追跡フォアグラウンドサービスを停止しました（軌跡データなし）'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  /// 軌跡保存ダイアログを表示
-  Future<void> _showTrackSaveDialog(GpsTrack track) async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder:
-          (context) => TrackSaveDialog(
-            track: track,
-            rootNode: GlobalConfig.instance.folderTree,
-          ),
-    );
-
-    if (result != null) {
-      final savedTrack = result['track'] as GpsTrack;
-      final geoPackage = result['geoPackage'] as GeoPackageNode;
-      await _saveTrackToGeoPackage(savedTrack, geoPackage);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('位置追跡フォアグラウンドサービスを停止しました（軌跡は保存されませんでした）'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  /// 軌跡をGeoPackageに保存
-  Future<void> _saveTrackToGeoPackage(
-    GpsTrack track,
-    GeoPackageNode geoPackage,
-  ) async {
-    try {
-      print('[DEBUG] GPS軌跡保存開始: ${track.trackName} -> ${geoPackage.name}');
-      print('[DEBUG] 軌跡ポイント数: ${track.pointCount}');
-      print('[DEBUG] 軌跡座標リスト長: ${track.toLatLngList().length}');
-
-      // GPS軌跡レイヤー名を生成（通常の線レイヤーとして保存）
-      const layerName = 'gps_tracks';
-
-      // 軌跡の統計情報を取得
-      final stats = track.getStatistics();
-      print('[DEBUG] 軌跡統計: $stats');
-
-      // 軌跡座標を取得
-      final coordinates = track.toLatLngList();
-      if (coordinates.isEmpty) {
-        throw Exception('軌跡座標が空です');
-      }
-
-      // GPS軌跡レイヤーを取得または作成
-      LineLayerNode? lineLayer =
-          geoPackage.children
-              .whereType<LineLayerNode>()
-              .where((layer) => layer.layerName == layerName)
-              .firstOrNull;
-
-      if (lineLayer == null) {
-        print('[DEBUG] GPS軌跡レイヤー作成開始: $layerName');
-        lineLayer = await LineLayerNode.createIn(geoPackage, layerName);
-        if (lineLayer == null) {
-          throw Exception('GPS軌跡レイヤーの作成に失敗しました');
-        }
-        print('[DEBUG] GPS軌跡レイヤー作成完了: $layerName');
-      }
-
-      // LineFeatureNode.createInを使用してフィーチャを作成（設計統一）
-      print('[DEBUG] LineFeatureNode作成開始: ${track.trackName}');
-      final lineFeature = await LineFeatureNode.createIn(
-        lineLayer,
-        coordinates,
-        track.trackName,
-        '${stats['pointCount']}ポイント、${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
+    // 保存されたポイントがある場合、処理方法を選択するダイアログを表示
+    if (savedCount > 0 && savedPointLayer != null && mounted) {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => _TrackingStopDialog(
+          pointLayer: savedPointLayer,
+          pointCount: savedCount,
+        ),
       );
-
-      if (lineFeature == null) {
-        throw Exception('GPS軌跡フィーチャの作成に失敗しました');
+      
+      if (result != null) {
+        await _handleTrackingStopOption(result, savedPointLayer);
       }
-      print('[DEBUG] LineFeatureNode作成完了: ${track.trackName}');
-
-      // UI更新（フィーチャキャッシュの更新）
-      print('[DEBUG] UI更新開始');
-      await _updateFeatures();
-      print('[DEBUG] UI更新完了');
-
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GPS追跡を停止しました（保存されたポイントなし）'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // 保存先レイヤー情報をクリア
+    _trackingTargetPointLayer = null;
+    _trackedPointCount = 0;
+    _lastTrackingSaveTime = null;
+    _lastSavedTrackingPosition = null;
+  }
+  
+  /// GPS追跡停止時の処理オプションを実行
+  Future<void> _handleTrackingStopOption(Map<String, dynamic> result, PointLayerNode pointLayer) async {
+    final targetLayer = result['targetLayer'] as LayerNode?;
+    final deletePoint = result['deletePoint'] as bool? ?? false;
+    
+    if (targetLayer == null) {
+      // ポイントのみ保持
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'GPS軌跡「${track.trackName}」を${geoPackage.name}に保存しました',
-            ),
+            content: Text('GPS追跡を停止しました。ポイントは「${pointLayer.name}」に保存されています'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
-
-      print('[DEBUG] GPS軌跡保存完了: ${track.trackName} -> ${geoPackage.name}');
-    } catch (e, stackTrace) {
-      print('[ERROR] GPS軌跡保存エラー: $e');
-      print('[ERROR] スタックトレース: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS軌跡の保存に失敗しました: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+    } else {
+      // ライン/ポリゴンに変換
+      try {
+        final createdFeature = await GeometryConversionService.convertPointsToGeometry(
+          sourceLayer: pointLayer,
+          targetLayer: targetLayer,
+          name: 'GPS追跡軌跡',
         );
+        
+        if (createdFeature != null) {
+          // 変換後にポイントレイヤーを削除するか
+          if (deletePoint) {
+            await pointLayer.dispose();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('GPS軌跡を「${targetLayer.name}」に変換し、ポイントレイヤーを削除しました'),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('GPS軌跡を「${targetLayer.name}」に変換しました'),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+          
+          // UI更新
+          await _updateFeatures();
+          setState(() {});
+        }
+      } catch (e) {
+        debugPrint('[MapPage] GPS追跡ポイント変換エラー: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('変換エラー: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -3143,6 +3298,387 @@ class _LeftBottomFabState extends State<_LeftBottomFab> {
         ),
         child: centerIcon,
       ),
+    );
+  }
+}
+
+/// GPS追跡停止時の処理選択ダイアログ
+class _TrackingStopDialog extends StatefulWidget {
+  final PointLayerNode pointLayer;
+  final int pointCount;
+
+  const _TrackingStopDialog({
+    required this.pointLayer,
+    required this.pointCount,
+  });
+
+  @override
+  State<_TrackingStopDialog> createState() => _TrackingStopDialogState();
+}
+
+class _TrackingStopDialogState extends State<_TrackingStopDialog> {
+  LayerNode? _selectedTarget; // null = ポイントのみ保持
+  bool _deletePointLayer = false;
+  List<LayerNode> _availableLayers = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableLayers();
+  }
+
+  Future<void> _loadAvailableLayers() async {
+    // 同じGeoPackage内のライン/ポリゴンレイヤーを検索
+    final geoPackageNode = _findParentGeoPackage(widget.pointLayer);
+    if (geoPackageNode != null) {
+      final layers = <LayerNode>[];
+      void searchLayers(LayerTreeNode node) {
+        if (node is LineLayerNode || node is PolygonLayerNode) {
+          layers.add(node as LayerNode);
+        }
+        if (node is! FeatureNode) {
+          for (final child in node.children) {
+            searchLayers(child);
+          }
+        }
+      }
+      searchLayers(geoPackageNode);
+      
+      setState(() {
+        _availableLayers = layers;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+  
+  GeoPackageNode? _findParentGeoPackage(LayerTreeNode node) {
+    LayerTreeNode? current = node;
+    while (current != null) {
+      if (current is GeoPackageNode) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('レイヤーを検索中...'),
+          ],
+        ),
+      );
+    }
+    
+    return AlertDialog(
+      title: const Text('GPS追跡を停止しました'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${widget.pointCount} ポイントが「${widget.pointLayer.name}」に保存されました'),
+          const SizedBox(height: 16),
+          const Text('保存先', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          DropdownButtonHideUnderline(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: DropdownButton<LayerNode?>(
+                value: _selectedTarget,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<LayerNode?>(
+                    value: null,
+                    child: Text('ポイントレイヤーにのみ保持'),
+                  ),
+                  ..._availableLayers.map((layer) {
+                    final typeLabel = layer is LineLayerNode ? '(ライン)' : '(ポリゴン)';
+                    return DropdownMenuItem<LayerNode?>(
+                      value: layer,
+                      child: Text('${layer.name} $typeLabel'),
+                    );
+                  }),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedTarget = value;
+                    // ポイントのみ保持の場合は削除フラグをリセット
+                    if (value == null) {
+                      _deletePointLayer = false;
+                    }
+                  });
+                },
+              ),
+            ),
+          ),
+          // ポイントレイヤー削除チェックボックス（変換先が選択されている場合のみ表示）
+          if (_selectedTarget != null) ...[
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _deletePointLayer,
+              onChanged: (value) {
+                setState(() {
+                  _deletePointLayer = value ?? false;
+                });
+              },
+              title: const Text('ポイントレイヤーを削除'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pop(context, {
+            'targetLayer': _selectedTarget,
+            'deletePoint': _deletePointLayer,
+          }),
+          icon: const Icon(Icons.check),
+          label: const Text('決定'),
+        ),
+      ],
+    );
+  }
+}
+
+/// PointLayerNode選択ダイアログ（GPS追跡用）
+class _SelectPointLayerDialog extends StatefulWidget {
+  final List<PointLayerNode> pointLayers;
+
+  const _SelectPointLayerDialog({required this.pointLayers});
+
+  @override
+  State<_SelectPointLayerDialog> createState() =>
+      _SelectPointLayerDialogState();
+}
+
+class _SelectPointLayerDialogState extends State<_SelectPointLayerDialog> {
+  PointLayerNode? _selectedLayer; // null = 新しいレイヤを作成
+  int _intervalSeconds = 10; // 保存間隔（秒）
+  int _minDistanceCm = 0; // 最小移動距離（cm）
+  final _intervalController = TextEditingController(text: '10');
+  final _distanceController = TextEditingController(text: '0');
+  final _newLayerNameController = TextEditingController(text: 'gps_track');
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLayer = null; // 初期値は「新しいレイヤを作成」
+  }
+  
+  @override
+  void dispose() {
+    _intervalController.dispose();
+    _distanceController.dispose();
+    _newLayerNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('GPS追跡の保存先と設定'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('保存先', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButtonHideUnderline(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: DropdownButton<PointLayerNode?>(
+                  value: _selectedLayer,
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem<PointLayerNode?>(
+                      value: null,
+                      child: Text('新しいレイヤを作成'),
+                    ),
+                    ...widget.pointLayers.map((layer) {
+                      return DropdownMenuItem<PointLayerNode?>(
+                        value: layer,
+                        child: Text(layer.name),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedLayer = value;
+                    });
+                  },
+                ),
+              ),
+            ),
+            // 新規レイヤ名入力フィールド（新しいレイヤを作成する場合のみ表示）
+            if (_selectedLayer == null) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _newLayerNameController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: '新規レイヤ名',
+                  hintText: 'gps_track',
+                  border: OutlineInputBorder(),
+                ),
+                onTap: () {
+                  // タップ時に全選択
+                  _newLayerNameController.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: _newLayerNameController.text.length,
+                  );
+                },
+              ),
+            ],
+            const SizedBox(height: 24),
+            const Text('保存オプション', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _intervalController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '保存間隔（秒）',
+                hintText: '1以上の整数',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                final parsed = int.tryParse(value);
+                if (parsed != null && parsed >= 1) {
+                  _intervalSeconds = parsed;
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _distanceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '最小移動距離（cm）',
+                hintText: '0以上の整数',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                final parsed = int.tryParse(value);
+                if (parsed != null && parsed >= 0) {
+                  _minDistanceCm = parsed;
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () async {
+            // バリデーション
+            if (_intervalSeconds < 1) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('保存間隔は1秒以上に設定してください'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              return;
+            }
+            
+            PointLayerNode? targetLayer = _selectedLayer;
+            
+            // 新しいレイヤーを作成する場合
+            if (_selectedLayer == null) {
+              final newLayerName = _newLayerNameController.text.trim().isEmpty 
+                  ? 'gps_track' 
+                  : _newLayerNameController.text.trim();
+              
+              // GeoPackageNodeを検索（プロジェクトルートから最初のGeoPackageを使用）
+              final rootNode = GlobalConfig.instance.folderTree;
+              if (rootNode == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('GeoPackageが見つかりません'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              GeoPackageNode? geoPackageNode;
+              void findGeoPackage(LayerTreeNode node) {
+                if (geoPackageNode != null) return;
+                if (node is GeoPackageNode) {
+                  geoPackageNode = node;
+                  return;
+                }
+                for (final child in node.children) {
+                  findGeoPackage(child);
+                }
+              }
+              findGeoPackage(rootNode);
+              
+              if (geoPackageNode == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('GeoPackageが見つかりません'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // 新しいPointLayerNodeを作成
+              targetLayer = await PointLayerNode.createIn(geoPackageNode!, newLayerName);
+              if (targetLayer == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('レイヤーの作成に失敗しました'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+            }
+            
+            if (targetLayer != null && context.mounted) {
+              Navigator.pop(context, {
+                'layer': targetLayer,
+                'intervalSeconds': _intervalSeconds,
+                'minDistanceCm': _minDistanceCm,
+              });
+            }
+          },
+          icon: const Icon(Icons.check),
+          label: const Text('決定'),
+        ),
+      ],
     );
   }
 }

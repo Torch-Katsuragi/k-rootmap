@@ -38,6 +38,10 @@ abstract class FeatureNode extends LayerTreeNode {
     if (_isDisposed) {
       throw StateError('FeatureNode is disposed: rowId=$_rowId');
     }
+    // 親のLayerNodeがdispose済みの場合もエラーを回避
+    if (parent.isDisposed) {
+      throw StateError('Parent LayerNode is disposed: rowId=$_rowId, layer=${parent.layerName}');
+    }
     final feature = parent.getFeatureById(_rowId);
     if (feature == null) {
       // より詳細なエラー情報を提供
@@ -45,6 +49,7 @@ abstract class FeatureNode extends LayerTreeNode {
       print('[ERROR]   rowId: $_rowId');
       print('[ERROR]   parent layer: ${parent.layerName}');
       print('[ERROR]   isDisposed: $_isDisposed');
+      print('[ERROR]   parent isDisposed: ${parent.isDisposed}');
       print('[ERROR]   parent._featureMap size: ${parent.features.length}');
       throw StateError('Feature not found in parent map: rowId=$_rowId, layer=${parent.layerName}');
     }
@@ -53,14 +58,14 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// フィーチャの重心座標（turf_dartで計算）
   LatLng get centroid {
-    if (_isDisposed) return LatLng(0, 0);
+    if (_isDisposed || parent.isDisposed) return LatLng(0, 0);
     final calculatedCentroid = TurfConverter.calculateCentroid(turfFeature);
     return calculatedCentroid ?? LatLng(0, 0);
   }
 
   /// 座標データをposition型で取得（turf_dart形式）
   List<double> get position {
-    if (_isDisposed) return [0, 0];
+    if (_isDisposed || parent.isDisposed) return [0, 0];
     final geometry = turfFeature.geometry;
     if (geometry is turf.Point) {
       return TurfConverter.latlngToPosition(
@@ -73,7 +78,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 複数座標データをpositionリストで取得
   List<List<double>> get positions {
-    if (_isDisposed) return [];
+    if (_isDisposed || parent.isDisposed) return [];
     final geometry = turfFeature.geometry;
     if (geometry is turf.LineString) {
       return TurfConverter.latlngsToPositions(
@@ -91,7 +96,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
   dynamic get geometry {
-    if (_isDisposed) return null;
+    if (_isDisposed || parent.isDisposed) return null;
     final geom = turfFeature.geometry;
     if (geom is turf.Point) {
       return [TurfConverter.pointToLatlng(geom)];
@@ -106,7 +111,7 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 名前のgetter（turf_dartのpropertiesから取得）
   @override
   String get name {
-    if (_isDisposed) return 'Disposed Feature';
+    if (_isDisposed || parent.isDisposed) return 'Disposed Feature';
     return turfFeature.properties?['name'] as String? ?? 'Unnamed Feature';
   }
 
@@ -119,7 +124,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 説明のgetter（turf_dartのpropertiesから取得）
   String? get description {
-    if (_isDisposed) return null;
+    if (_isDisposed || parent.isDisposed) return null;
     return turfFeature.properties?['description'] as String?;
   }
 
@@ -132,7 +137,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// メタデータのgetter（turf_dartのpropertiesから取得）
   Map<String, dynamic>? get metadata {
-    if (_isDisposed) return null;
+    if (_isDisposed || parent.isDisposed) return null;
     final value = turfFeature.properties?['kmaps_metadata'];
     if (value == null) return null;
     if (value is Map<String, dynamic>) return value;

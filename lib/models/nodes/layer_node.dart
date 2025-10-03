@@ -55,6 +55,9 @@ abstract class LayerNode extends LayerTreeNode {
   
   /// updateChildren実行中フラグ（競合状態防止）
   bool _isUpdatingChildren = false;
+  
+  /// dispose済みかどうかを取得
+  bool get isDisposed => _isDisposed;
 
   /// 親のGeoPackageNodeを取得
   GeoPackageNode get geoPackageNode {
@@ -308,15 +311,18 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
     
-    _isDisposed = true;  // dispose済みフラグを設定
+    // 先に子のFeatureNodeを全てdispose（_isDisposed = trueを設定する前に）
+    // これにより、子がparent.removeFeature()を呼んだ時に正常に_featureMapから削除される
+    await super.dispose();
+    
+    // 子のdispose完了後にdispose済みフラグを設定
+    _isDisposed = true;
     
     // レイヤ（DBテーブル）削除
     await geoPackageFile.removeLayer(layerName);
     
     // Mapをクリア（メモリ解放）
     _featureMap.clear();
-    
-    await super.dispose();
   }
 
   @override

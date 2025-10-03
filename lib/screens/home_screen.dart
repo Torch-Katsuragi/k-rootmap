@@ -55,9 +55,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (manageStorageGranted) {
       print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
-      setState(() {
-        _permissionsGranted = true;
-      });
+      // ストレージ権限OK後、Bluetooth権限をチェック
+      await _checkBluetoothPermissions();
       return;
     }
 
@@ -68,9 +67,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (status.isGranted) {
       print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
-      setState(() {
-        _permissionsGranted = true;
-      });
+      // ストレージ権限OK後、Bluetooth権限をチェック
+      await _checkBluetoothPermissions();
     } else if (status.isPermanentlyDenied) {
       print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
       // 権限が恒久的に拒否された場合、設定画面を開く
@@ -94,12 +92,71 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (statuses[Permission.storage]?.isGranted == true) {
       print('[HomeScreen] ストレージ権限が許可されました');
+      // ストレージ権限OK後、Bluetooth権限をチェック
+      await _checkBluetoothPermissions();
+    } else {
+      print('[HomeScreen] ストレージ権限が拒否されました');
+      _showPermissionDeniedDialog();
+    }
+  }
+
+  /// Bluetooth権限の確認・リクエスト（ストレージ権限の後に実行）
+  Future<void> _checkBluetoothPermissions() async {
+    print('[HomeScreen] Bluetooth権限チェック開始');
+
+    // Android 12以降で必要な権限
+    final bluetoothScan = await Permission.bluetoothScan.status;
+    final bluetoothConnect = await Permission.bluetoothConnect.status;
+    
+    print('[HomeScreen] BLUETOOTH_SCAN状態: $bluetoothScan');
+    print('[HomeScreen] BLUETOOTH_CONNECT状態: $bluetoothConnect');
+
+    // 両方の権限が許可されている場合
+    if (bluetoothScan.isGranted && bluetoothConnect.isGranted) {
+      print('[HomeScreen] Bluetooth権限が既に許可済み');
+      setState(() {
+        _permissionsGranted = true;
+      });
+      return;
+    }
+
+    // 複数の権限を一度にリクエスト（プラグイン側が適切に管理）
+    print('[HomeScreen] Bluetooth権限をリクエスト中...');
+    
+    final statuses = await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+    ].request();
+    
+    print('[HomeScreen] Bluetooth権限リクエスト結果: $statuses');
+
+    // 結果を確認
+    final scanGranted = statuses[Permission.bluetoothScan]?.isGranted ?? false;
+    final connectGranted = statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+    final bluetoothGranted = scanGranted && connectGranted;
+
+    if (bluetoothGranted) {
+      print('[HomeScreen] 全てのBluetooth権限が許可されました');
       setState(() {
         _permissionsGranted = true;
       });
     } else {
-      print('[HomeScreen] ストレージ権限が拒否されました');
-      _showPermissionDeniedDialog();
+      print('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
+      // Bluetooth権限がなくてもアプリは動作可能なので、警告のみ表示してストレージ権限で起動許可
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bluetooth GNSS機能を使用するには、Bluetooth権限が必要です'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      
+      // ストレージ権限があれば、基本機能は使える
+      setState(() {
+        _permissionsGranted = true;
+      });
     }
   }
 

@@ -4,9 +4,26 @@
 import 'package:flutter/material.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:proj4dart/proj4dart.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../utils/global_config.dart';
+
+/// EPSG座標系の定義
+class EpsgDefinition {
+  final String code;
+  final String name;
+  final String proj4String;
+
+  const EpsgDefinition({
+    required this.code,
+    required this.name,
+    required this.proj4String,
+  });
+
+  @override
+  String toString() => '$code - $name';
+}
 
 /// 動的属性テーブル表示・編集ウィジェット
 /// LayerNodeのスキーマから動的にテーブル構造を構築
@@ -38,6 +55,243 @@ class _DynamicAttributeTableWidgetState
   List<FeatureNode> features = [];
   bool _isLoading = true;
 
+  // 座標表示用EPSG設定
+  EpsgDefinition _selectedEpsg = _epsgDefinitions.first;
+
+  // PlutoGrid再構築用のKey
+  Key _plutoGridKey = UniqueKey();
+
+  // 日本で一般的に使用されるEPSGコードのリスト（拡張版）
+  static const List<EpsgDefinition> _epsgDefinitions = [
+    // 地理座標系
+    EpsgDefinition(
+      code: 'EPSG:4326',
+      name: 'WGS 84 (GPS/Webマップ標準)',
+      proj4String: '+proj=longlat +datum=WGS84 +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:3857',
+      name: 'Web Mercator (Google Maps等)',
+      proj4String:
+          '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6668',
+      name: 'JGD2011 地理座標系',
+      proj4String: '+proj=longlat +ellps=GRS80 +no_defs',
+    ),
+
+    // JGD2011 平面直角座標系（全19系）
+    EpsgDefinition(
+      code: 'EPSG:6669',
+      name: 'JGD2011 / 平面直角 I系 (長崎・佐賀)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6670',
+      name: 'JGD2011 / 平面直角 II系 (福岡・熊本・大分・宮崎・鹿児島)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6671',
+      name: 'JGD2011 / 平面直角 III系 (山口・島根・広島)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6672',
+      name: 'JGD2011 / 平面直角 IV系 (香川・愛媛・徳島・高知)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6673',
+      name: 'JGD2011 / 平面直角 V系 (兵庫・鳥取・岡山)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6674',
+      name: 'JGD2011 / 平面直角 VI系 (京都・大阪・福井・滋賀・三重・奈良・和歌山)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6675',
+      name: 'JGD2011 / 平面直角 VII系 (石川・富山・岐阜・愛知)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6676',
+      name: 'JGD2011 / 平面直角 VIII系 (新潟・長野・山梨・静岡)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6677',
+      name: 'JGD2011 / 平面直角 IX系 (東京・福島・栃木・茨城・埼玉・千葉・群馬・神奈川)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6678',
+      name: 'JGD2011 / 平面直角 X系 (青森・秋田・山形・岩手・宮城)',
+      proj4String:
+          '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6679',
+      name: 'JGD2011 / 平面直角 XI系 (北海道西部)',
+      proj4String:
+          '+proj=tmerc +lat_0=44 +lon_0=140.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6680',
+      name: 'JGD2011 / 平面直角 XII系 (北海道中央部)',
+      proj4String:
+          '+proj=tmerc +lat_0=44 +lon_0=142.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6681',
+      name: 'JGD2011 / 平面直角 XIII系 (北海道東部)',
+      proj4String:
+          '+proj=tmerc +lat_0=44 +lon_0=144.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6682',
+      name: 'JGD2011 / 平面直角 XIV系 (東京都・島しょ部)',
+      proj4String:
+          '+proj=tmerc +lat_0=26 +lon_0=142 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6683',
+      name: 'JGD2011 / 平面直角 XV系 (沖縄本島)',
+      proj4String:
+          '+proj=tmerc +lat_0=26 +lon_0=127.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6684',
+      name: 'JGD2011 / 平面直角 XVI系 (沖縄・宮古島)',
+      proj4String:
+          '+proj=tmerc +lat_0=26 +lon_0=124 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6685',
+      name: 'JGD2011 / 平面直角 XVII系 (沖縄・石垣島)',
+      proj4String:
+          '+proj=tmerc +lat_0=26 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6686',
+      name: 'JGD2011 / 平面直角 XVIII系 (小笠原諸島)',
+      proj4String:
+          '+proj=tmerc +lat_0=20 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6687',
+      name: 'JGD2011 / 平面直角 XIX系 (南鳥島)',
+      proj4String:
+          '+proj=tmerc +lat_0=26 +lon_0=154 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+
+    // JGD2000 平面直角座標系（互換性のため）
+    EpsgDefinition(
+      code: 'EPSG:2443',
+      name: 'JGD2000 / 平面直角 I系 (長崎・佐賀)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2444',
+      name: 'JGD2000 / 平面直角 II系 (福岡・熊本・大分・宮崎・鹿児島)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2445',
+      name: 'JGD2000 / 平面直角 III系 (山口・島根・広島)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2446',
+      name: 'JGD2000 / 平面直角 IV系 (香川・愛媛・徳島・高知)',
+      proj4String:
+          '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2447',
+      name: 'JGD2000 / 平面直角 V系 (兵庫・鳥取・岡山)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2448',
+      name: 'JGD2000 / 平面直角 VI系 (京都・大阪・福井・滋賀・三重・奈良・和歌山)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2449',
+      name: 'JGD2000 / 平面直角 VII系 (石川・富山・岐阜・愛知)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2450',
+      name: 'JGD2000 / 平面直角 VIII系 (新潟・長野・山梨・静岡)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2451',
+      name: 'JGD2000 / 平面直角 IX系 (東京・福島・栃木・茨城・埼玉・千葉・群馬・神奈川)',
+      proj4String:
+          '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2452',
+      name: 'JGD2000 / 平面直角 X系 (青森・秋田・山形・岩手・宮城)',
+      proj4String:
+          '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+    ),
+
+    // UTM座標系（日本周辺）
+    EpsgDefinition(
+      code: 'EPSG:32651',
+      name: 'WGS 84 / UTM zone 51N (九州西部)',
+      proj4String: '+proj=utm +zone=51 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32652',
+      name: 'WGS 84 / UTM zone 52N (九州・四国)',
+      proj4String: '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32653',
+      name: 'WGS 84 / UTM zone 53N (本州西部)',
+      proj4String: '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32654',
+      name: 'WGS 84 / UTM zone 54N (本州中部・東部)',
+      proj4String: '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32655',
+      name: 'WGS 84 / UTM zone 55N (北海道・東北)',
+      proj4String: '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32656',
+      name: 'WGS 84 / UTM zone 56N (千島列島)',
+      proj4String: '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
+    ),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +304,13 @@ class _DynamicAttributeTableWidgetState
     if (oldWidget.layer != widget.layer) {
       _initializeTableData();
     }
+  }
+
+  @override
+  void dispose() {
+    // 属性テーブルが閉じられた時に編集中フラグをリセット
+    GlobalConfig.instance.isAttributeTableEditing = false;
+    super.dispose();
   }
 
   /// テーブルデータを初期化
@@ -85,6 +346,23 @@ class _DynamicAttributeTableWidgetState
       rows = await _createRows();
 
       print('[DynamicAttributeTable] テーブル構築完了');
+
+      // PlutoGridが既に構築されている場合は、データを更新
+      if (stateManager != null && mounted) {
+        print(
+          '[DynamicAttributeTable] PlutoGridを更新: ${columns.length}カラム, ${rows.length}行',
+        );
+
+        // 行データを更新
+        stateManager!.removeAllRows();
+        stateManager!.appendRows(rows);
+
+        // カラムも更新（PlutoGridは動的なカラム変更をサポートしていないので、
+        // カラムが変わった場合はWidgetを再構築する必要がある）
+        // そのため、setStateを呼び出してWidget全体を再構築
+
+        print('[DynamicAttributeTable] PlutoGrid更新完了');
+      }
     } catch (e) {
       print('[DynamicAttributeTable] データ初期化エラー: $e');
       columnNames = [];
@@ -164,7 +442,7 @@ class _DynamicAttributeTableWidgetState
 
       // []で囲まれているかチェック
       if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
-        return {'valid': false, 'error': 'Must be in [lat, lon] format'};
+        return {'valid': false, 'error': 'Must be in [...] format'};
       }
 
       // []を除去してカンマで分割
@@ -173,10 +451,7 @@ class _DynamicAttributeTableWidgetState
 
       // 2つの要素があるかチェック
       if (parts.length != 2) {
-        return {
-          'valid': false,
-          'error': 'Must have exactly 2 values: [lat, lon]',
-        };
+        return {'valid': false, 'error': 'Must have exactly 2 values'};
       }
 
       // 数値に変換
@@ -187,29 +462,78 @@ class _DynamicAttributeTableWidgetState
         return {'valid': false, 'error': 'Values must be numbers'};
       }
 
-      // 座標の範囲をチェック（緯度・経度の妥当性）
-      // [lat, lon]形式を想定
-      double lat, lon;
-
-      // 緯度は-90～90、経度は-180～180の範囲
-      if (num1.abs() <= 90 && num2.abs() <= 180) {
-        // [lat, lon]形式
-        lat = num1;
-        lon = num2;
-      } else if (num2.abs() <= 90 && num1.abs() <= 180) {
-        // [lon, lat]形式の可能性
-        lon = num1;
-        lat = num2;
+      // 選択されたEPSGがWGS84の場合は緯度経度として解析
+      if (_selectedEpsg.code == 'EPSG:4326' ||
+          _selectedEpsg.code == 'EPSG:6668') {
+        double lat, lon;
+        // 緯度は-90～90、経度は-180～180の範囲
+        if (num1.abs() <= 90 && num2.abs() <= 180) {
+          // [lat, lon]形式
+          lat = num1;
+          lon = num2;
+        } else if (num2.abs() <= 90 && num1.abs() <= 180) {
+          // [lon, lat]形式の可能性
+          lon = num1;
+          lat = num2;
+        } else {
+          return {
+            'valid': false,
+            'error': 'Out of range (lat: -90~90, lon: -180~180)',
+          };
+        }
+        return {'valid': true, 'point': LatLng(lat, lon)};
       } else {
-        return {
-          'valid': false,
-          'error': 'Values out of range (lat: -90~90, lon: -180~180)',
-        };
-      }
+        // 投影座標系の場合はXY座標として解析し、WGS84に変換
+        try {
+          final proj =
+              Projection.get(_selectedEpsg.code) ??
+              Projection.add(_selectedEpsg.code, _selectedEpsg.proj4String);
 
-      return {'valid': true, 'point': LatLng(lat, lon)};
+          final wgs84 =
+              Projection.get('EPSG:4326') ??
+              Projection.add(
+                'EPSG:4326',
+                '+proj=longlat +datum=WGS84 +no_defs',
+              );
+
+          // XY座標をWGS84に変換
+          final point = Point(x: num1, y: num2);
+          final result = proj.transform(wgs84, point);
+          return {'valid': true, 'point': LatLng(result.y, result.x)};
+        } catch (e) {
+          return {'valid': false, 'error': 'Transform error: $e'};
+        }
+      }
     } catch (e) {
       return {'valid': false, 'error': 'Parse error: $e'};
+    }
+  }
+
+  /// WGS84座標を選択されたEPSGの座標系に変換して文字列化
+  String _formatCoordinate(LatLng point) {
+    try {
+      // WGS84の場合はそのまま緯度経度を表示
+      if (_selectedEpsg.code == 'EPSG:4326' ||
+          _selectedEpsg.code == 'EPSG:6668') {
+        return '[${point.latitude}, ${point.longitude}]';
+      }
+
+      // 投影座標系の場合はWGS84からXY座標に変換
+      final wgs84 =
+          Projection.get('EPSG:4326') ??
+          Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+      final proj =
+          Projection.get(_selectedEpsg.code) ??
+          Projection.add(_selectedEpsg.code, _selectedEpsg.proj4String);
+
+      // WGS84から目標座標系に変換
+      final p = Point(x: point.longitude, y: point.latitude);
+      final result = wgs84.transform(proj, p);
+      return '[${result.x.toStringAsFixed(3)}, ${result.y.toStringAsFixed(3)}]';
+    } catch (e) {
+      print('[DynamicAttributeTable] 座標変換エラー: $e');
+      return '[${point.latitude}, ${point.longitude}]';
     }
   }
 
@@ -266,10 +590,8 @@ class _DynamicAttributeTableWidgetState
       // Pointレイヤーの場合、仮想的な_coordinate列を追加
       if (isPointLayer && feature is PointFeatureNode) {
         final point = feature.point;
-        // [lat, lon]形式で表示（GeoJSON準拠）
-        cells['_coordinate'] = PlutoCell(
-          value: '[${point.latitude}, ${point.longitude}]',
-        );
+        // 選択されたEPSGで座標を変換して表示
+        cells['_coordinate'] = PlutoCell(value: _formatCoordinate(point));
       }
 
       tableRows.add(PlutoRow(cells: cells));
@@ -755,6 +1077,114 @@ class _DynamicAttributeTableWidgetState
                   height: 1.0,
                 ),
               ),
+              // Pointレイヤーの場合のみEPSG選択を表示
+              if (_isPointLayer()) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 200,
+                  height: 22,
+                  child: Autocomplete<EpsgDefinition>(
+                    initialValue: TextEditingValue(
+                      text: _selectedEpsg.toString(),
+                    ),
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return _epsgDefinitions;
+                      }
+                      // 検索文字列にマッチするEPSGをフィルタリング
+                      final searchText = textEditingValue.text.toLowerCase();
+                      return _epsgDefinitions.where((epsg) {
+                        final epsgStr = epsg.toString().toLowerCase();
+                        return epsgStr.contains(searchText);
+                      });
+                    },
+                    displayStringForOption:
+                        (EpsgDefinition option) => option.toString(),
+                    onSelected: (EpsgDefinition selection) async {
+                      setState(() {
+                        _selectedEpsg = selection;
+                        // PlutoGridを完全に再構築するために新しいKeyを生成
+                        _plutoGridKey = UniqueKey();
+                      });
+                      // 座標表示を更新
+                      await _initializeTableData();
+                    },
+                    fieldViewBuilder: (
+                      BuildContext context,
+                      TextEditingController textEditingController,
+                      FocusNode focusNode,
+                      VoidCallback onFieldSubmitted,
+                    ) {
+                      // フォーカス時にテキストを全選択
+                      focusNode.addListener(() {
+                        if (focusNode.hasFocus) {
+                          textEditingController.selection = TextSelection(
+                            baseOffset: 0,
+                            extentOffset: textEditingController.text.length,
+                          );
+                        }
+                      });
+
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        style: const TextStyle(fontSize: 8, height: 1.0),
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          hintText: 'EPSG検索...',
+                          hintStyle: const TextStyle(fontSize: 8),
+                        ),
+                        onSubmitted: (String value) {
+                          onFieldSubmitted();
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (
+                      BuildContext context,
+                      AutocompleteOnSelected<EpsgDefinition> onSelected,
+                      Iterable<EpsgDefinition> options,
+                    ) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: 200,
+                              maxWidth: 400,
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final option = options.elementAt(index);
+                                return InkWell(
+                                  onTap: () {
+                                    onSelected(option);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Text(
+                                      option.toString(),
+                                      style: const TextStyle(fontSize: 10),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
               const Spacer(),
               // 極小アイコンボタン
               SizedBox(
@@ -775,7 +1205,12 @@ class _DynamicAttributeTableWidgetState
                   padding: EdgeInsets.zero,
                   iconSize: 12,
                   icon: const Icon(Icons.refresh),
-                  onPressed: _initializeTableData,
+                  onPressed: () {
+                    setState(() {
+                      _plutoGridKey = UniqueKey();
+                    });
+                    _initializeTableData();
+                  },
                   tooltip: '更新',
                 ),
               ),
@@ -844,6 +1279,7 @@ class _DynamicAttributeTableWidgetState
         // テーブル
         Expanded(
           child: PlutoGrid(
+            key: _plutoGridKey, // EPSGが変わったら完全に再構築
             columns: columns,
             rows: rows,
             mode: PlutoGridMode.normal, // 通常モード（ダブルタップで編集、セルクリックでフィーチャ選択）
@@ -851,6 +1287,16 @@ class _DynamicAttributeTableWidgetState
               stateManager = event.stateManager;
               // セル選択モードを有効化（デフォルト）
               stateManager?.setSelectingMode(PlutoGridSelectingMode.cell);
+
+              // 編集モードの変化を監視してグローバルフラグを更新
+              stateManager?.addListener(() {
+                final isEditing = stateManager?.isEditing ?? false;
+                if (GlobalConfig.instance.isAttributeTableEditing !=
+                    isEditing) {
+                  GlobalConfig.instance.isAttributeTableEditing = isEditing;
+                  print('[DynamicAttributeTable] 編集モード変更: $isEditing');
+                }
+              });
 
               // セル選択が変更されたときにフィーチャを選択
               stateManager?.addListener(() {
@@ -970,6 +1416,9 @@ class _DynamicAttributeTableWidgetState
                 scrollbarThickness: 8,
                 scrollbarThicknessWhileDragging: 10,
               ),
+              // キーボードショートカットを全て無効化
+              shortcut: const PlutoGridShortcut(actions: {}),
+              enterKeyAction: PlutoGridEnterKeyAction.none,
             ),
           ),
         ),

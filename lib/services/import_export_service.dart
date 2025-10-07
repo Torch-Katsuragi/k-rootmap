@@ -171,6 +171,10 @@ class SmartCoordinateSystemManager {
     'EPSG:32656': '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
   };
 
+  /// EPSGコードとProj4定義のマップを取得（公開）
+  static Map<String, String> get commonEpsgDefinitions =>
+      _commonEpsgDefinitions;
+
   /// WKT文字列から座標系を解析（proj4dartを最大限活用）
   Future<CoordinateSystem?> parseWktToCoordinateSystem(String wkt) async {
     try {
@@ -533,7 +537,7 @@ class ImportExportService {
       final dbfFile = File('$basePath.dbf');
       final shxFile = File('$basePath.shx');
       final prjFile = File('$basePath.prj');
-      final cpgFile = File('$basePath.cpg');  // 文字コード指定ファイル
+      final cpgFile = File('$basePath.cpg'); // 文字コード指定ファイル
 
       print('[ImportExportService] 関連ファイル確認:');
       print('  .shp: ${shpFile.existsSync()}');
@@ -541,7 +545,7 @@ class ImportExportService {
       print('  .shx: ${shxFile.existsSync()}');
       print('  .prj: ${prjFile.existsSync()}');
       print('  .cpg: ${cpgFile.existsSync()}');
-      
+
       // CPGファイルから文字コードを読み取り
       String? dbfEncoding;
       if (cpgFile.existsSync()) {
@@ -552,14 +556,14 @@ class ImportExportService {
           print('[ImportExportService] CPGファイル読み込みエラー: $e');
         }
       }
-      
+
       // DBFファイルから属性スキーマとデータを読み込み
       Map<String, List<dynamic>>? dbfData;
       if (dbfFile.existsSync()) {
         try {
           dbfData = await _readDbfFile(
             dbfFile.path,
-            encoding: dbfEncoding ?? 'Shift_JIS',  // デフォルトはShift_JIS
+            encoding: dbfEncoding ?? 'Shift_JIS', // デフォルトはShift_JIS
           );
           if (dbfData != null) {
             print('[ImportExportService] DBF属性データ読み込み成功:');
@@ -639,7 +643,7 @@ class ImportExportService {
           actualLayerName,
           geometryType,
         );
-        
+
         // DBF属性スキーマをGeoPackageテーブルに追加
         if (dbfData != null) {
           await _addDbfSchemaToGeoPackage(
@@ -658,7 +662,7 @@ class ImportExportService {
             actualLayerName,
             geometryType,
             sourceCoordinateSystem: sourceCoordinateSystem,
-            dbfData: dbfData,  // DBF属性データを渡す
+            dbfData: dbfData, // DBF属性データを渡す
           );
         } catch (e) {
           print('[ImportExportService] フィーチャ読み込みエラー（サンプルデータで代替）: $e');
@@ -678,15 +682,16 @@ class ImportExportService {
         await targetGeoPackage.updateChildren();
 
         // 作成されたレイヤノードを取得
-        final createdLayer = targetGeoPackage.children
-            .whereType<LayerNode>()
-            .where((layer) => layer.layerName == actualLayerName)
-            .firstOrNull;
-        
+        final createdLayer =
+            targetGeoPackage.children
+                .whereType<LayerNode>()
+                .where((layer) => layer.layerName == actualLayerName)
+                .firstOrNull;
+
         if (createdLayer == null) {
           return ImportExportResult.error(
             'レイヤー作成後の取得に失敗しました: $actualLayerName\n'
-            '利用可能なレイヤー: ${targetGeoPackage.children.whereType<LayerNode>().map((l) => l.layerName).toList()}'
+            '利用可能なレイヤー: ${targetGeoPackage.children.whereType<LayerNode>().map((l) => l.layerName).toList()}',
           );
         }
 
@@ -729,46 +734,50 @@ class ImportExportService {
   ) async {
     try {
       print('[ImportExportService] GeoJSON読み込み開始: $geoJsonFilePath');
-      
+
       // ファイル読み込み
       final file = File(geoJsonFilePath);
       if (!file.existsSync()) {
-        return ImportExportResult.error('GeoJSONファイルが見つかりません: $geoJsonFilePath');
+        return ImportExportResult.error(
+          'GeoJSONファイルが見つかりません: $geoJsonFilePath',
+        );
       }
-      
+
       final fileContent = await file.readAsString();
       final jsonData = json.decode(fileContent) as Map<String, dynamic>;
-      
+
       print('[ImportExportService] GeoJSON解析成功');
-      
+
       // FeatureCollectionかどうか確認
       if (jsonData['type'] != 'FeatureCollection') {
-        return ImportExportResult.error('FeatureCollection形式のGeoJSONのみサポートしています');
+        return ImportExportResult.error(
+          'FeatureCollection形式のGeoJSONのみサポートしています',
+        );
       }
-      
+
       final features = jsonData['features'] as List<dynamic>?;
       if (features == null || features.isEmpty) {
         return ImportExportResult.error('フィーチャが含まれていません');
       }
-      
+
       print('[ImportExportService] フィーチャ数: ${features.length}');
-      
+
       // 最初のフィーチャからジオメトリタイプを判定
       final firstFeature = features.first as Map<String, dynamic>;
       final firstGeometry = firstFeature['geometry'] as Map<String, dynamic>?;
       if (firstGeometry == null) {
         return ImportExportResult.error('ジオメトリデータが見つかりません');
       }
-      
+
       final geometryType = _geoJsonGeometryTypeToGeometryType(
         firstGeometry['type'] as String,
       );
-      
+
       print('[ImportExportService] ジオメトリタイプ: ${geometryType.value}');
-      
+
       // レイヤー作成
       await targetGeoPackage.geoPackageFile.addLayer(layerName, geometryType);
-      
+
       // GeoJSONのpropertiesからスキーマを抽出してカラムを追加
       if (features.isNotEmpty) {
         await _addGeoJsonSchemaToGeoPackage(
@@ -777,36 +786,42 @@ class ImportExportService {
           features,
         );
       }
-      
+
       // バッチデータを準備
       final batchData = <Map<String, dynamic>>[];
       int successCount = 0;
       int skipCount = 0;
-      
+
       for (int i = 0; i < features.length; i++) {
         try {
           final feature = features[i] as Map<String, dynamic>;
           final geometry = feature['geometry'] as Map<String, dynamic>?;
-          final properties = feature['properties'] as Map<String, dynamic>? ?? {};
-          
+          final properties =
+              feature['properties'] as Map<String, dynamic>? ?? {};
+
           if (geometry == null) {
             print('[ImportExportService] フィーチャ[$i]: ジオメトリなし、スキップ');
             skipCount++;
             continue;
           }
-          
+
           // ジオメトリタイプを確認
           final featureGeomType = geometry['type'] as String;
           final coordinates = geometry['coordinates'];
-          
+
           // GeoPackageに追加するデータを作成
           Map<String, dynamic>? featureData;
-          
+
           switch (geometryType) {
             case GeometryType.point:
-              if (featureGeomType == 'Point' && coordinates is List && coordinates.length >= 2) {
+              if (featureGeomType == 'Point' &&
+                  coordinates is List &&
+                  coordinates.length >= 2) {
                 featureData = {
-                  'point': LatLng(coordinates[1] as double, coordinates[0] as double),
+                  'point': LatLng(
+                    coordinates[1] as double,
+                    coordinates[0] as double,
+                  ),
                   'name': properties['name'] ?? 'Point ${i + 1}',
                   'description': properties['description'] ?? '',
                 };
@@ -818,15 +833,20 @@ class ImportExportService {
                 });
               }
               break;
-              
+
             case GeometryType.linestring:
-              if ((featureGeomType == 'LineString' || featureGeomType == 'MultiLineString') && 
+              if ((featureGeomType == 'LineString' ||
+                      featureGeomType == 'MultiLineString') &&
                   coordinates is List) {
                 // LineStringの場合
                 if (featureGeomType == 'LineString') {
-                  final line = (coordinates as List)
-                      .map((coord) => LatLng(coord[1] as double, coord[0] as double))
-                      .toList();
+                  final line =
+                      (coordinates as List)
+                          .map(
+                            (coord) =>
+                                LatLng(coord[1] as double, coord[0] as double),
+                          )
+                          .toList();
                   if (line.length >= 2) {
                     featureData = {
                       'line': line,
@@ -843,22 +863,27 @@ class ImportExportService {
                 }
               }
               break;
-              
+
             case GeometryType.polygon:
-              if ((featureGeomType == 'Polygon' || featureGeomType == 'MultiPolygon') && 
+              if ((featureGeomType == 'Polygon' ||
+                      featureGeomType == 'MultiPolygon') &&
                   coordinates is List) {
                 // Polygonの場合
                 if (featureGeomType == 'Polygon' && coordinates.isNotEmpty) {
-                  final rings = (coordinates as List).map((ring) {
-                    return (ring as List)
-                        .map((coord) => LatLng(coord[1] as double, coord[0] as double))
-                        .toList();
-                  }).toList();
-                  
+                  final rings =
+                      (coordinates as List).map((ring) {
+                        return (ring as List)
+                            .map(
+                              (coord) => LatLng(
+                                coord[1] as double,
+                                coord[0] as double,
+                              ),
+                            )
+                            .toList();
+                      }).toList();
+
                   if (rings.isNotEmpty && rings.first.length >= 3) {
-                    featureData = {
-                      'rings': rings,
-                    };
+                    featureData = {'rings': rings};
                     // propertiesを直接展開（全属性をGeoPackageカラムにマッピング）
                     properties.forEach((key, value) {
                       featureData![key] = value;
@@ -868,17 +893,22 @@ class ImportExportService {
               }
               break;
           }
-          
+
           if (featureData != null) {
             batchData.add(featureData);
             successCount++;
           } else {
             skipCount++;
           }
-          
+
           // バッチ処理（1000個ずつ）
           if (batchData.length >= 1000) {
-            await _processBatchData(targetGeoPackage, layerName, geometryType, batchData);
+            await _processBatchData(
+              targetGeoPackage,
+              layerName,
+              geometryType,
+              batchData,
+            );
             batchData.clear();
             print('[ImportExportService] バッチ処理完了: ${successCount}個まで処理済み');
           }
@@ -887,29 +917,35 @@ class ImportExportService {
           skipCount++;
         }
       }
-      
+
       // 残りのバッチを処理
       if (batchData.isNotEmpty) {
-        await _processBatchData(targetGeoPackage, layerName, geometryType, batchData);
-      }
-      
-      print('[ImportExportService] GeoJSONインポート完了: ${successCount}個成功, ${skipCount}個スキップ');
-      
-      // レイヤーノードの更新
-      await targetGeoPackage.updateChildren();
-      
-      // 作成されたレイヤノードを取得
-      final createdLayer = targetGeoPackage.children
-          .whereType<LayerNode>()
-          .where((layer) => layer.layerName == layerName)
-          .firstOrNull;
-      
-      if (createdLayer == null) {
-        return ImportExportResult.error(
-          'GeoJSONレイヤー作成後の取得に失敗しました: $layerName'
+        await _processBatchData(
+          targetGeoPackage,
+          layerName,
+          geometryType,
+          batchData,
         );
       }
-      
+
+      print(
+        '[ImportExportService] GeoJSONインポート完了: ${successCount}個成功, ${skipCount}個スキップ',
+      );
+
+      // レイヤーノードの更新
+      await targetGeoPackage.updateChildren();
+
+      // 作成されたレイヤノードを取得
+      final createdLayer =
+          targetGeoPackage.children
+              .whereType<LayerNode>()
+              .where((layer) => layer.layerName == layerName)
+              .firstOrNull;
+
+      if (createdLayer == null) {
+        return ImportExportResult.error('GeoJSONレイヤー作成後の取得に失敗しました: $layerName');
+      }
+
       return ImportExportResult.success(
         createdLayer: createdLayer,
         metadata: {
@@ -920,14 +956,13 @@ class ImportExportService {
           'importMethod': 'geojson_standard',
         },
       );
-      
     } catch (e, stack) {
       print('[ImportExportService] GeoJSONインポートエラー: $e');
       print('[ImportExportService] スタックトレース: $stack');
       return ImportExportResult.error('GeoJSONの読み込みでエラーが発生しました: $e');
     }
   }
-  
+
   /// GeoJSONジオメトリタイプをGeometryTypeに変換
   GeometryType _geoJsonGeometryTypeToGeometryType(String geoJsonType) {
     switch (geoJsonType) {
@@ -2115,7 +2150,7 @@ class ImportExportService {
     GeometryType geometryType,
     String shpFilePath, {
     CoordinateSystem? sourceCoordinateSystem,
-    Map<String, List<dynamic>>? dbfData,  // DBF属性データ
+    Map<String, List<dynamic>>? dbfData, // DBF属性データ
   }) async {
     print('[ImportExportService] 実際の座標データ抽出開始');
     print('  シェープタイプ: $shapeType');
@@ -2187,13 +2222,14 @@ class ImportExportService {
           );
           if (coordinates != null) {
             // DBF属性を取得（featureCountがDBFのレコードインデックスに対応）
-            final attributes = _getDbfAttributesForFeature(dbfData, featureCount);
-            
+            final attributes = _getDbfAttributesForFeature(
+              dbfData,
+              featureCount,
+            );
+
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
-            featureData = {
-              'point': coordinates,
-            };
-            
+            featureData = {'point': coordinates};
+
             // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
               featureData![key] = value;
@@ -2210,13 +2246,14 @@ class ImportExportService {
           );
           if (coordinates != null && coordinates.isNotEmpty) {
             // DBF属性を取得
-            final attributes = _getDbfAttributesForFeature(dbfData, featureCount);
-            
+            final attributes = _getDbfAttributesForFeature(
+              dbfData,
+              featureCount,
+            );
+
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
-            featureData = {
-              'line': coordinates,
-            };
-            
+            featureData = {'line': coordinates};
+
             // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
               featureData![key] = value;
@@ -2233,13 +2270,14 @@ class ImportExportService {
           );
           if (coordinates != null && coordinates.isNotEmpty) {
             // DBF属性を取得
-            final attributes = _getDbfAttributesForFeature(dbfData, featureCount);
-            
+            final attributes = _getDbfAttributesForFeature(
+              dbfData,
+              featureCount,
+            );
+
             // featureDataに直接属性を配置（GeoPackageのカラムにマッピング）
-            featureData = {
-              'rings': coordinates,
-            };
-            
+            featureData = {'rings': coordinates};
+
             // DBF属性を直接追加（全属性をそのまま追加）
             attributes.forEach((key, value) {
               featureData![key] = value;
@@ -2323,7 +2361,7 @@ class ImportExportService {
       print(
         '[ImportExportService] バッチ処理: ${actualGeometryType.value}, ${batchData.length}個のフィーチャ',
       );
-      
+
       // デバッグ: 最初のバッチアイテムの構造を確認
       if (batchData.isNotEmpty) {
         print('[DEBUG] バッチデータサンプル（最初の1件）:');
@@ -2331,7 +2369,9 @@ class ImportExportService {
         batchData.first.forEach((key, value) {
           if (key != 'rings' && key != 'line' && key != 'point') {
             final valueStr = value?.toString() ?? 'null';
-            print('  $key: ${valueStr.length > 50 ? valueStr.substring(0, 50) + '...' : valueStr}');
+            print(
+              '  $key: ${valueStr.length > 50 ? valueStr.substring(0, 50) + '...' : valueStr}',
+            );
           }
         });
       }
@@ -2939,7 +2979,7 @@ class ImportExportService {
     String layerName,
     GeometryType geometryType, {
     CoordinateSystem? sourceCoordinateSystem,
-    Map<String, List<dynamic>>? dbfData,  // DBF属性データ
+    Map<String, List<dynamic>>? dbfData, // DBF属性データ
   }) async {
     try {
       print('[ImportExportService] シェープファイル構造解析開始: $shpFilePath');
@@ -2988,7 +3028,7 @@ class ImportExportService {
           geometryType,
           shpFilePath,
           sourceCoordinateSystem: sourceCoordinateSystem,
-          dbfData: dbfData,  // DBF属性データを渡す
+          dbfData: dbfData, // DBF属性データを渡す
         );
 
         if (featureCount > 0) {
@@ -3008,7 +3048,7 @@ class ImportExportService {
       print('[WARNING] 実データの読み込みに失敗しました');
       print('[WARNING] サンプルデータで代替します（実際のデータではありません）');
       print('[WARNING] ========================================');
-      
+
       final maxFeatures = 8; // 段階的実装として8個まで
       final baseLatitude = 35.6812;
       final baseLongitude = 139.7671;
@@ -3185,15 +3225,14 @@ class ImportExportService {
 
     await targetGeoPackage.updateChildren();
 
-    final createdLayer = targetGeoPackage.children
-        .whereType<LayerNode>()
-        .where((layer) => layer.layerName == layerName)
-        .firstOrNull;
-    
+    final createdLayer =
+        targetGeoPackage.children
+            .whereType<LayerNode>()
+            .where((layer) => layer.layerName == layerName)
+            .firstOrNull;
+
     if (createdLayer == null) {
-      return ImportExportResult.error(
-        'サンプルレイヤー作成後の取得に失敗しました: $layerName'
-      );
+      return ImportExportResult.error('サンプルレイヤー作成後の取得に失敗しました: $layerName');
     }
 
     return ImportExportResult.success(
@@ -3309,36 +3348,36 @@ class ImportExportService {
   ) async {
     try {
       print('[ImportExportService] GeoJSONスキーマをGeoPackageに追加: $layerName');
-      
+
       // 全フィーチャのpropertiesからフィールド名と型を収集
       final attributeSchema = <String, String>{};
-      
+
       for (final feature in features) {
         if (feature is! Map<String, dynamic>) continue;
         final properties = feature['properties'] as Map<String, dynamic>?;
         if (properties == null) continue;
-        
+
         for (final entry in properties.entries) {
           final fieldName = entry.key;
           final value = entry.value;
-          
+
           // 既にスキーマに追加済みならスキップ
           if (attributeSchema.containsKey(fieldName)) continue;
-          
+
           // 値からデータ型を推定
-          String sqliteType = 'TEXT';  // デフォルト
+          String sqliteType = 'TEXT'; // デフォルト
           if (value is num || value is int || value is double) {
             sqliteType = 'REAL';
           } else if (value is bool) {
             sqliteType = 'INTEGER';
           }
-          
+
           attributeSchema[fieldName] = sqliteType;
         }
       }
-      
+
       print('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
-      
+
       if (attributeSchema.isNotEmpty) {
         // GeoPackageFileのaddAttributeColumnsを使用
         await targetGeoPackage.geoPackageFile.addAttributeColumns(
@@ -3346,7 +3385,7 @@ class ImportExportService {
           attributeSchema,
         );
       }
-      
+
       print('[ImportExportService] GeoJSONスキーマ追加完了');
     } catch (e, stack) {
       print('[ImportExportService] GeoJSONスキーマ追加エラー: $e');
@@ -3363,18 +3402,18 @@ class ImportExportService {
   ) async {
     try {
       print('[ImportExportService] DBFスキーマをGeoPackageに追加: $layerName');
-      
+
       // DBFファイルからフィールドタイプを読み取るため、一時的に再パース
       // （将来的には_readDbfFileでフィールド定義も返すように改善）
       final attributeSchema = <String, String>{};
-      
+
       // 各フィールドの値からデータ型を推定
       for (final entry in dbfData.entries) {
         final fieldName = entry.key;
         final values = entry.value;
-        
+
         // 値からデータ型を推定
-        String sqliteType = 'TEXT';  // デフォルト
+        String sqliteType = 'TEXT'; // デフォルト
         if (values.isNotEmpty && values.first != null) {
           final firstValue = values.first;
           if (firstValue is num || firstValue is int || firstValue is double) {
@@ -3383,18 +3422,18 @@ class ImportExportService {
             sqliteType = 'INTEGER';
           }
         }
-        
+
         attributeSchema[fieldName] = sqliteType;
       }
-      
+
       print('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
-      
+
       // GeoPackageFileのaddAttributeColumnsを使用
       await targetGeoPackage.geoPackageFile.addAttributeColumns(
         layerName,
         attributeSchema,
       );
-      
+
       print('[ImportExportService] DBFスキーマ追加完了');
     } catch (e, stack) {
       print('[ImportExportService] DBFスキーマ追加エラー: $e');
@@ -3409,12 +3448,12 @@ class ImportExportService {
     int recordIndex,
   ) {
     if (dbfData == null) return {};
-    
+
     final attributes = <String, dynamic>{};
     for (final entry in dbfData.entries) {
       final fieldName = entry.key;
       final values = entry.value;
-      
+
       if (recordIndex < values.length) {
         final value = values[recordIndex];
         // nullや空文字列は除外
@@ -3423,7 +3462,7 @@ class ImportExportService {
         }
       }
     }
-    
+
     return attributes;
   }
 
@@ -3438,27 +3477,28 @@ class ImportExportService {
     try {
       print('[ImportExportService] DBF読み込み開始: $dbfFilePath');
       print('[ImportExportService] 文字コード: $encoding');
-      
+
       final dbfFile = File(dbfFilePath);
       if (!dbfFile.existsSync()) {
         print('[ImportExportService] DBFファイルが見つかりません');
         return null;
       }
-      
+
       final bytes = await dbfFile.readAsBytes();
       if (bytes.length < 32) {
         print('[ImportExportService] DBFファイルが小さすぎます: ${bytes.length}bytes');
         return null;
       }
-      
+
       // 文字コードの変換関数を取得
       // TODO: Shift_JIS対応を改善（現在はUTF-8/Latin1のみ）
       String Function(List<int>) decodeFunc;
-      
+
       if (encoding.toUpperCase().contains('UTF-8')) {
         decodeFunc = (bytes) => utf8.decode(bytes, allowMalformed: true);
         print('[ImportExportService] UTF-8 Codec使用');
-      } else if (encoding.toUpperCase().contains('SHIFT') || encoding.toUpperCase().contains('SJIS')) {
+      } else if (encoding.toUpperCase().contains('SHIFT') ||
+          encoding.toUpperCase().contains('SJIS')) {
         // TODO: Shift_JIS対応を実装（現在はUTF-8で試行、失敗時はLatin1）
         decodeFunc = (bytes) {
           try {
@@ -3473,87 +3513,102 @@ class ImportExportService {
         decodeFunc = (bytes) => latin1.decode(bytes);
         print('[ImportExportService] Latin1 Codec使用');
       }
-      
+
       // ヘッダー解析
       final version = bytes[0];
-      final recordCount = ByteData.sublistView(bytes, 4, 8).getUint32(0, Endian.little);
-      final headerLength = ByteData.sublistView(bytes, 8, 10).getUint16(0, Endian.little);
-      final recordLength = ByteData.sublistView(bytes, 10, 12).getUint16(0, Endian.little);
-      
+      final recordCount = ByteData.sublistView(
+        bytes,
+        4,
+        8,
+      ).getUint32(0, Endian.little);
+      final headerLength = ByteData.sublistView(
+        bytes,
+        8,
+        10,
+      ).getUint16(0, Endian.little);
+      final recordLength = ByteData.sublistView(
+        bytes,
+        10,
+        12,
+      ).getUint16(0, Endian.little);
+
       print('[ImportExportService] DBFヘッダー情報:');
       print('  バージョン: 0x${version.toRadixString(16)}');
       print('  レコード数: $recordCount');
       print('  ヘッダー長: $headerLength bytes');
       print('  レコード長: $recordLength bytes');
-      
+
       // フィールド記述子を読み込み（32バイトから開始、0x0Dまで）
       final fields = <Map<String, dynamic>>[];
       int offset = 32;
-      
+
       while (offset < headerLength - 1 && bytes[offset] != 0x0D) {
         if (offset + 32 > bytes.length) break;
-        
+
         // フィールド名（11バイト、null-terminated）
         final nameBytes = bytes.sublist(offset, offset + 11);
         final nameEndIndex = nameBytes.indexOf(0);
-        final fieldNameBytes = nameBytes.sublist(0, nameEndIndex >= 0 ? nameEndIndex : 11);
-        
+        final fieldNameBytes = nameBytes.sublist(
+          0,
+          nameEndIndex >= 0 ? nameEndIndex : 11,
+        );
+
         // 文字コード変換を適用
         final fieldName = decodeFunc(fieldNameBytes).trim();
-        
+
         // フィールドタイプ（1バイト）
         final fieldType = String.fromCharCode(bytes[offset + 11]);
-        
+
         // フィールド長（1バイト）
         final fieldLength = bytes[offset + 16];
-        
+
         // 小数点以下桁数（1バイト）
         final decimalCount = bytes[offset + 17];
-        
+
         fields.add({
           'name': fieldName,
           'type': fieldType,
           'length': fieldLength,
           'decimal': decimalCount,
         });
-        
+
         offset += 32;
       }
-      
+
       // フィールド定義のログは詳細すぎるのでコメントアウト
-      
+
       // レコードデータを読み込み
       final data = <String, List<dynamic>>{};
       for (final field in fields) {
         data[field['name'] as String] = [];
       }
-      
+
       offset = headerLength;
       for (int recordIndex = 0; recordIndex < recordCount; recordIndex++) {
         if (offset >= bytes.length) break;
-        
+
         // 削除フラグをチェック（0x2A = 削除済み）
         final deletionFlag = bytes[offset];
         offset++;
-        
+
         if (deletionFlag == 0x2A) {
           // 削除済みレコードはスキップ
           offset += recordLength - 1;
           continue;
         }
-        
+
         // 各フィールドの値を読み込み
         for (final field in fields) {
           final fieldName = field['name'] as String;
           final fieldType = field['type'] as String;
           final fieldLength = field['length'] as int;
-          
+
           if (offset + fieldLength > bytes.length) break;
-          
+
           final valueBytes = bytes.sublist(offset, offset + fieldLength);
           // 文字コード変換を適用
           final valueString = decodeFunc(valueBytes).trim();
-          
+
           // タイプに応じて値を変換
           dynamic value;
           switch (fieldType) {
@@ -3562,7 +3617,11 @@ class ImportExportService {
               value = double.tryParse(valueString);
               break;
             case 'L': // 論理値
-              value = valueString == 'T' || valueString == 't' || valueString == 'Y' || valueString == 'y';
+              value =
+                  valueString == 'T' ||
+                  valueString == 't' ||
+                  valueString == 'Y' ||
+                  valueString == 'y';
               break;
             case 'D': // 日付（YYYYMMDD）
               if (valueString.length == 8) {
@@ -3581,15 +3640,14 @@ class ImportExportService {
             default: // 'C' (文字列) など
               value = valueString;
           }
-          
+
           data[fieldName]!.add(value);
           offset += fieldLength;
         }
       }
-      
+
       print('[ImportExportService] DBFデータ読み込み完了: ${recordCount}レコード');
       return data;
-      
     } catch (e, stack) {
       print('[ImportExportService] DBF読み込みエラー: $e');
       print('[ImportExportService] スタックトレース: $stack');

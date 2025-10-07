@@ -45,50 +45,61 @@ class GlobalConfig {
 
   /// 左下フロートボタンの押下状態（true: 押下中, false: 通常）
   bool isFabActive = false;
-  
+
+  /// 属性テーブル編集中フラグ（true: 編集中、false: 非編集中）
+  /// Deleteキー/Backspaceキーでのフィーチャ削除を防ぐために使用
+  bool isAttributeTableEditing = false;
+
   /// 選択されたフィーチャを削除（統一処理）
   /// pen_tool、AttributeTableなど全ての削除処理で使用
   Future<void> disposeSelectedFeatures({dynamic mapState}) async {
     final selectedFeaturesToDispose = List.from(selectedFeatures);
     print('[GlobalConfig] 削除処理開始: ${selectedFeaturesToDispose.length}個のフィーチャ');
-    
+
     if (selectedFeaturesToDispose.isEmpty) {
       print('[GlobalConfig] 削除するフィーチャがありません');
       return;
     }
-    
+
     // 即座に選択状態をクリア（UI更新優先）
     selectedFeatures.clear();
     print('[GlobalConfig] 選択状態をクリアしました');
-    
+
     // 即座にUI更新（選択表示を確実にクリア）
     if (mapState != null) {
       mapState.setState(() {});
       mapState.refreshFeatures();
       print('[GlobalConfig] UI更新をトリガーしました');
     }
-    
+
     // 各フィーチャーを非同期で削除（並行処理）
-    final disposeFutures = selectedFeaturesToDispose.map((feature) async {
-      try {
-        print('[GlobalConfig] フィーチャ削除中: ${feature.name} (ID: ${feature.rowId})');
-        await feature.dispose();
-        print('[GlobalConfig] フィーチャ削除完了: ${feature.name}');
-      } catch (e) {
-        print('[ERROR] GlobalConfig: フィーチャ削除失敗 ${feature.name}: $e');
-      }
-    }).toList();
-    
+    final disposeFutures =
+        selectedFeaturesToDispose.map((feature) async {
+          try {
+            print(
+              '[GlobalConfig] フィーチャ削除中: ${feature.name} (ID: ${feature.rowId})',
+            );
+            await feature.dispose();
+            print('[GlobalConfig] フィーチャ削除完了: ${feature.name}');
+          } catch (e) {
+            print('[ERROR] GlobalConfig: フィーチャ削除失敗 ${feature.name}: $e');
+          }
+        }).toList();
+
     // バックグラウンドで削除処理完了を待機（UIには影響しない）
-    await Future.wait(disposeFutures).then((_) {
-      print('[GlobalConfig] 全${selectedFeaturesToDispose.length}個のフィーチャ削除完了');
-      // 削除完了後に最終的なUI更新
-      if (mapState != null) {
-        mapState.refreshFeatures();
-      }
-    }).catchError((e) {
-      print('[ERROR] GlobalConfig: バッチ削除エラー: $e');
-    });
+    await Future.wait(disposeFutures)
+        .then((_) {
+          print(
+            '[GlobalConfig] 全${selectedFeaturesToDispose.length}個のフィーチャ削除完了',
+          );
+          // 削除完了後に最終的なUI更新
+          if (mapState != null) {
+            mapState.refreshFeatures();
+          }
+        })
+        .catchError((e) {
+          print('[ERROR] GlobalConfig: バッチ削除エラー: $e');
+        });
   }
 
   /// 背景地図管理サービス

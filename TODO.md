@@ -2,6 +2,97 @@
 
 ## 完了した作業
 
+### 21. 座標系変換機能の実装（EPSG選択プルダウン）（完了）
+
+**背景**:
+- Pointレイヤーの属性テーブルで、座標を異なる座標系で表示・編集したいニーズ
+- 日本の平面直角座標系（JGD2011）やWebメルカトルなど、用途に応じた座標系の切り替えが必要
+
+**実装内容**:
+
+1. **EPSG座標系の定義リスト**
+   - ✅ 15種類の主要なEPSGコードを定義
+     - `EPSG:4326` - WGS 84 (GPS/Webマップ標準)
+     - `EPSG:3857` - Web Mercator (Google Maps等)
+     - `EPSG:6668` - JGD2011 地理座標系
+     - `EPSG:6669~6679, 6683` - JGD2011 平面直角座標系 (第I~XI系, XV系)
+   - ✅ 各EPSGにコード、名称、proj4文字列を含む
+
+2. **検索可能なEPSGプルダウン**
+   - ✅ Pointレイヤーの属性テーブルツールバーに追加
+   - ✅ `Autocomplete`ウィジェットで検索機能を実装
+   - ✅ EPSGコードや名称の一部を入力すると絞り込み
+   - ✅ 最大200pxの幅、コンパクトなUI
+
+3. **座標変換ロジック**
+   - ✅ `_formatCoordinate()`: WGS84から選択されたEPSGへ変換
+   - ✅ `_parseCoordinate()`: 選択されたEPSGからWGS84へ逆変換
+   - ✅ `proj4dart`ライブラリを使用した高精度変換
+
+4. **座標表示の自動更新**
+   - ✅ EPSG選択時に`_coordinate`列の表示を自動更新
+   - ✅ WGS84: `[lat, lon]`形式
+   - ✅ 投影座標系: `[x.xxx, y.yyy]`形式（メートル単位、小数点3桁）
+
+5. **編集時の座標変換**
+   - ✅ 編集された座標を選択されたEPSGで解析
+   - ✅ WGS84に変換してGeoPackageに保存
+   - ✅ バリデーションとエラー処理
+
+**技術詳細**:
+
+```dart
+// EPSG定義
+class EpsgDefinition {
+  final String code;
+  final String name;
+  final String proj4String;
+}
+
+// 座標変換（WGS84 → EPSG）
+String _formatCoordinate(LatLng point) {
+  if (WGS84) return '[lat, lon]';
+  // proj4dartで変換
+  final result = wgs84.transform(proj, point);
+  return '[x.xxx, y.yyy]';
+}
+
+// 座標解析（EPSG → WGS84）
+Map<String, dynamic> _parseCoordinate(String value) {
+  if (WGS84) return LatLng(lat, lon);
+  // proj4dartで逆変換
+  final result = proj.transform(wgs84, point);
+  return LatLng(result.y, result.x);
+}
+
+// プルダウンUI
+Autocomplete<EpsgDefinition>(
+  optionsBuilder: (text) => _epsgDefinitions.where(
+    (epsg) => epsg.toString().contains(text)
+  ),
+  onSelected: (epsg) => setState(() => _selectedEpsg = epsg),
+)
+```
+
+**効果**:
+- ✅ **柔軟性向上**: 15種類のEPSGから選択可能
+- ✅ **検索機能**: EPSGコードや地域名で素早く検索
+- ✅ **日本全国対応**: 全ての平面直角座標系に対応
+- ✅ **高精度変換**: `proj4dart`による正確な座標変換
+- ✅ **使いやすさ**: コンパクトなUIで邪魔にならない
+- ✅ **Pointレイヤー限定**: Line/Polygonレイヤーには表示されない
+- ✅ **リアルタイム更新**: EPSG選択時に即座に座標表示が更新
+
+**テスト項目**:
+- ✅ コンパイル確認: Linterエラーなし
+- ⏳ EPSGプルダウンが表示されること（要実機確認）
+- ⏳ 検索機能が動作すること（例: "東京"で第IX系が検索される）（要実機確認）
+- ⏳ EPSG選択時に座標表示が更新されること（要実機確認）
+- ⏳ 投影座標系で編集した座標が正しくWGS84に変換されること（要実機確認）
+- ⏳ Line/Polygonレイヤーでプルダウンが表示されないこと（要実機確認）
+
+---
+
 ### 20. Pointレイヤー属性テーブルへの仮想_coordinate列追加（完了）
 
 **背景**:

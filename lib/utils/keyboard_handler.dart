@@ -10,9 +10,12 @@ import 'global_config.dart';
 class KeyboardHandler {
   /// Deleteキー押下時の処理
   /// 選択されたフィーチャを削除
-  static Future<void> handleDeleteKey(BuildContext context, dynamic mapState) async {
+  static Future<void> handleDeleteKey(
+    BuildContext context,
+    dynamic mapState,
+  ) async {
     print('[KeyboardHandler] Deleteキーが押されました');
-    
+
     // 選択されたフィーチャがあるかチェック
     if (GlobalConfig.instance.selectedFeatures.isEmpty) {
       print('[KeyboardHandler] 削除対象のフィーチャが選択されていません');
@@ -25,9 +28,9 @@ class KeyboardHandler {
     try {
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
-      
+
       print('[KeyboardHandler] フィーチャ削除完了: ${featureCount}個');
-      
+
       // 成功メッセージ
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -40,7 +43,7 @@ class KeyboardHandler {
       }
     } catch (e) {
       print('[KeyboardHandler] フィーチャ削除エラー: $e');
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -68,8 +71,15 @@ class KeyboardHandler {
     print('[KeyboardHandler] キー押下: ${event.logicalKey}');
 
     // Deleteキーまたはバックスペースキー
+    // 属性テーブル編集中は無効化（GlobalConfigのフラグをチェック）
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
+      // 属性テーブル編集中は削除しない
+      if (GlobalConfig.instance.isAttributeTableEditing) {
+        print('[KeyboardHandler] 属性テーブル編集中のため削除をスキップ');
+        return false; // イベントを伝播させる
+      }
+
       await handleDeleteKey(context, mapState);
       return true; // イベントを処理済みとしてマーク
     }
@@ -99,7 +109,8 @@ class KeyboardShortcutWrapper extends StatefulWidget {
   });
 
   @override
-  State<KeyboardShortcutWrapper> createState() => _KeyboardShortcutWrapperState();
+  State<KeyboardShortcutWrapper> createState() =>
+      _KeyboardShortcutWrapperState();
 }
 
 class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
@@ -127,12 +138,14 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
       autofocus: true,
       onKeyEvent: (node, event) {
         // キーイベントを処理
-        KeyboardHandler.handleKeyEvent(event, context, widget.mapState).then((handled) {
+        KeyboardHandler.handleKeyEvent(event, context, widget.mapState).then((
+          handled,
+        ) {
           if (handled) {
             print('[KeyboardShortcutWrapper] キーイベント処理済み');
           }
         });
-        
+
         // イベントを常に伝播させる（マップの操作を妨げない）
         return KeyEventResult.ignored;
       },
@@ -149,4 +162,3 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
     );
   }
 }
-

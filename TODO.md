@@ -1,3 +1,118 @@
+# K-MAPS 作業ログ（2025年10月7日）
+
+## 完了した作業
+
+### 20. Pointレイヤー属性テーブルへの仮想_coordinate列追加（完了）
+
+**背景**:
+- 属性テーブルでは、geom列を表示していない
+- Pointレイヤーのユーザーが緯度経度を直接確認・編集したいというニーズ
+- 配列形式で表示・編集することで、データのコピー&ペーストや一括編集が容易に
+
+**実装内容**:
+
+1. **仮想カラム`_coordinate`の追加**
+   - ✅ Pointレイヤーの属性テーブルに限定
+   - ✅ geomを解析して`[lat, lon]`形式で表示
+   - ✅ GeoPackageには保存されない（仮想カラム）
+   - ✅ レイヤーのカラムとしても登録されない
+
+2. **表示機能**
+   - ✅ `_createColumns()`で`_coordinate`カラムを動的に追加
+   - ✅ テキスト型、150pxの幅
+   - ✅ `_createRows()`でPointFeatureNodeから`[lat, lon]`形式の文字列を生成
+
+3. **編集機能と妥当性検証**
+   - ✅ `_coordinate`列の編集を検知
+   - ✅ `_parseCoordinate()`メソッドで座標文字列を解析
+   - ✅ バリデーションチェック:
+     - `[]`で囲まれているか
+     - 2つの数値が含まれているか
+     - 緯度: -90～90の範囲
+     - 経度: -180～180の範囲
+   - ✅ `[lat, lon]`と`[lon, lat]`の両形式を自動判定
+   - ✅ 不正な入力は受け付けず、元の値に戻す
+   - ✅ `PointFeatureNode.updateLocation()`でgeomを更新
+   - ✅ GeoPackageに保存
+   - ✅ マップをリアルタイム更新
+
+**技術詳細**:
+
+```dart
+// カラム追加（Pointレイヤーのみ）
+if (_isPointLayer()) {
+  tableColumns.add(
+    PlutoColumn(
+      title: '_coordinate',
+      field: '_coordinate',
+      type: PlutoColumnType.text(),
+      enableEditingMode: true,
+      width: 150,
+    ),
+  );
+}
+
+// 座標データの抽出
+if (isPointLayer && feature is PointFeatureNode) {
+  final point = feature.point;
+  cells['_coordinate'] = PlutoCell(
+    value: '[${point.latitude}, ${point.longitude}]',
+  );
+}
+
+// 座標編集時の処理
+if (field == '_coordinate') {
+  final coordinateResult = _parseCoordinate(value.toString());
+  
+  if (!coordinateResult['valid']) {
+    // 不正な入力は受け付けずエラー表示
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Invalid coordinate: ${coordinateResult['error']}'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    await _initializeTableData(); // 元の値に戻す
+    return;
+  }
+  
+  final newPoint = coordinateResult['point'] as LatLng;
+  await feature.updateLocation(newPoint);
+  GlobalConfig.instance.mapState?.refreshFeatures();
+}
+
+// 座標解析メソッド
+Map<String, dynamic> _parseCoordinate(String value) {
+  // []で囲まれているかチェック
+  // 2つの数値が含まれているかチェック
+  // 緯度経度の範囲をチェック
+  // [lat, lon]と[lon, lat]を自動判定
+}
+```
+
+**効果**:
+- ✅ **使いやすさ向上**: 緯度経度を配列形式で直接確認・編集可能
+- ✅ **データ整合性**: 編集がgeomに即座に反映される
+- ✅ **バリデーション**: 不正な入力を受け付けず、元の値に戻す
+- ✅ **柔軟性**: `[lat, lon]`と`[lon, lat]`の両形式に対応
+- ✅ **GeoPackage互換性維持**: 仮想カラムなので標準GeoPackage構造を変更しない
+- ✅ **Pointレイヤーに限定**: 他のレイヤー（Line/Polygon）には影響なし
+- ✅ **リアルタイム更新**: 編集後すぐにマップに反映される
+- ✅ **コピペしやすい**: 配列形式なのでExcelやJSON等との相互変換が容易
+
+**テスト項目**:
+- ✅ コンパイル確認: Linterエラーなし
+- ⏳ Pointレイヤーで`_coordinate`が`[lat, lon]`形式で表示されること（要実機確認）
+- ⏳ Line/Polygonレイヤーでは表示されないこと（要実機確認）
+- ⏳ `[35.6762, 139.6503]`形式で編集するとgeomが更新されること（要実機確認）
+- ⏳ `[139.6503, 35.6762]`形式（lon, lat）でも正しく認識されること（要実機確認）
+- ⏳ 不正な形式（`[abc, def]`、`[35.6762]`等）は受け付けないこと（要実機確認）
+- ⏳ 範囲外の値（緯度>90、経度>180等）は受け付けないこと（要実機確認）
+- ⏳ 編集後にマップが更新されること（要実機確認）
+- ⏳ GeoPackageに仮想カラムが保存されないこと（要実機確認）
+
+---
+
 # K-MAPS 作業ログ（2025年10月3日）
 
 ## 完了した作業

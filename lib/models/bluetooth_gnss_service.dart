@@ -307,14 +307,6 @@ class BluetoothGnssService extends ChangeNotifier {
               now.difference(_lastNotificationTime!).inMilliseconds >= 500) {
             _lastNotificationTime = now;
             notifyListeners();
-
-            debugPrint(
-              '$_logTag: GGA位置更新（通知実行） - Lat: $_latitude, Lon: $_longitude, Alt: $_altitude, Acc: $_accuracy',
-            );
-          } else {
-            debugPrint(
-              '$_logTag: GGA位置更新（通知スキップ） - Lat: $_latitude, Lon: $_longitude, Alt: $_altitude, Acc: $_accuracy',
-            );
           }
         }
       }
@@ -372,14 +364,6 @@ class BluetoothGnssService extends ChangeNotifier {
               now.difference(_lastNotificationTime!).inMilliseconds >= 500) {
             _lastNotificationTime = now;
             notifyListeners();
-
-            debugPrint(
-              '$_logTag: RMC位置更新（通知実行） - Lat: $_latitude, Lon: $_longitude, Speed: $_speed, Bearing: $_bearing',
-            );
-          } else {
-            debugPrint(
-              '$_logTag: RMC位置更新（通知スキップ） - Lat: $_latitude, Lon: $_longitude, Speed: $_speed, Bearing: $_bearing',
-            );
           }
         }
       }
@@ -421,10 +405,6 @@ class BluetoothGnssService extends ChangeNotifier {
 
       double result = degrees + (minutes / 60.0);
 
-      debugPrint(
-        '$_logTag: DMS変換 - 入力: $dms, 度: $degrees, 分: $minutes, 結果: $result',
-      );
-
       return result;
     } catch (e) {
       debugPrint('$_logTag: DMS変換エラー: $dms - $e');
@@ -464,9 +444,6 @@ class BluetoothGnssService extends ChangeNotifier {
     try {
       // Androidのネイティブコードを呼び出してMock Locationを設定
       // 実装はAndroidプラットフォーム固有のコードが必要
-      debugPrint(
-        '$_logTag: Mock Location送信 - Lat: $_latitude, Lon: $_longitude',
-      );
     } catch (e) {
       debugPrint('$_logTag: Mock Location送信エラー: $e');
     }

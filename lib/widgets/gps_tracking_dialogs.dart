@@ -5,6 +5,7 @@ import '../models/nodes/layer_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../utils/global_config.dart';
+import '../services/gps_manager_service.dart';
 
 /// GPS追跡停止時の処理選択ダイアログ
 class TrackingStopDialog extends StatefulWidget {
@@ -48,8 +49,9 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
           }
         }
       }
+
       searchLayers(geoPackageNode);
-      
+
       setState(() {
         _availableLayers = layers;
         _isLoading = false;
@@ -60,7 +62,7 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
       });
     }
   }
-  
+
   GeoPackageNode? _findParentGeoPackage(LayerTreeNode node) {
     LayerTreeNode? current = node;
     while (current != null) {
@@ -86,7 +88,7 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
         ),
       );
     }
-    
+
     return AlertDialog(
       title: const Text('GPS追跡を停止しました'),
       content: Column(
@@ -113,7 +115,8 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
                     child: Text('ポイントレイヤーにのみ保持'),
                   ),
                   ..._availableLayers.map((layer) {
-                    final typeLabel = layer is LineLayerNode ? '(ライン)' : '(ポリゴン)';
+                    final typeLabel =
+                        layer is LineLayerNode ? '(ライン)' : '(ポリゴン)';
                     return DropdownMenuItem<LayerNode?>(
                       value: layer,
                       child: Text('${layer.name} $typeLabel'),
@@ -155,10 +158,11 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
           child: const Text('キャンセル'),
         ),
         ElevatedButton.icon(
-          onPressed: () => Navigator.pop(context, {
-            'targetLayer': _selectedTarget,
-            'deletePoint': _deletePointLayer,
-          }),
+          onPressed:
+              () => Navigator.pop(context, {
+                'targetLayer': _selectedTarget,
+                'deletePoint': _deletePointLayer,
+              }),
           icon: const Icon(Icons.check),
           label: const Text('決定'),
         ),
@@ -174,24 +178,36 @@ class SelectPointLayerDialog extends StatefulWidget {
   const SelectPointLayerDialog({super.key, required this.pointLayers});
 
   @override
-  State<SelectPointLayerDialog> createState() =>
-      _SelectPointLayerDialogState();
+  State<SelectPointLayerDialog> createState() => _SelectPointLayerDialogState();
 }
 
 class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
   PointLayerNode? _selectedLayer; // null = 新しいレイヤを作成
   int _intervalSeconds = 10; // 保存間隔（秒）
   int _minDistanceCm = 0; // 最小移動距離（cm）
+  bool _useExternalGnss = false; // 外部GNSS使用フラグ
   final _intervalController = TextEditingController(text: '10');
   final _distanceController = TextEditingController(text: '0');
   final _newLayerNameController = TextEditingController(text: 'gps_track');
+  final GpsManagerService _gpsManager = GpsManagerService();
 
   @override
   void initState() {
     super.initState();
     _selectedLayer = null; // 初期値は「新しいレイヤを作成」
+    _initializeExternalGnssOption();
   }
-  
+
+  /// 外部GNSS使用オプションの初期化
+  void _initializeExternalGnssOption() {
+    // 外部GNSS機器が実際に接続されている場合、デフォルトで有効にする
+    if (_gpsManager.isExternalGnssConnected) {
+      setState(() {
+        _useExternalGnss = true;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _intervalController.dispose();
@@ -213,7 +229,10 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
             const SizedBox(height: 8),
             DropdownButtonHideUnderline(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey),
                   borderRadius: BorderRadius.circular(4),
@@ -262,7 +281,10 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
               ),
             ],
             const SizedBox(height: 24),
-            const Text('保存オプション', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              '保存オプション',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _intervalController,
@@ -295,6 +317,10 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                 }
               },
             ),
+            const SizedBox(height: 24),
+            const Text('GPS設定', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _buildExternalGnssOption(),
           ],
         ),
       ),
@@ -315,15 +341,16 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
               );
               return;
             }
-            
+
             PointLayerNode? targetLayer = _selectedLayer;
-            
+
             // 新しいレイヤーを作成する場合
             if (_selectedLayer == null) {
-              final newLayerName = _newLayerNameController.text.trim().isEmpty 
-                  ? 'gps_track' 
-                  : _newLayerNameController.text.trim();
-              
+              final newLayerName =
+                  _newLayerNameController.text.trim().isEmpty
+                      ? 'gps_track'
+                      : _newLayerNameController.text.trim();
+
               // GeoPackageNodeを検索（プロジェクトルートから最初のGeoPackageを使用）
               final rootNode = GlobalConfig.instance.folderTree;
               if (rootNode == null) {
@@ -335,7 +362,7 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                 );
                 return;
               }
-              
+
               GeoPackageNode? geoPackageNode;
               void findGeoPackage(LayerTreeNode node) {
                 if (geoPackageNode != null) return;
@@ -347,8 +374,9 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                   findGeoPackage(child);
                 }
               }
+
               findGeoPackage(rootNode);
-              
+
               if (geoPackageNode == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -358,9 +386,12 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                 );
                 return;
               }
-              
+
               // 新しいPointLayerNodeを作成
-              targetLayer = await PointLayerNode.createIn(geoPackageNode!, newLayerName);
+              targetLayer = await PointLayerNode.createIn(
+                geoPackageNode!,
+                newLayerName,
+              );
               if (targetLayer == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -371,12 +402,13 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                 return;
               }
             }
-            
+
             if (targetLayer != null && context.mounted) {
               Navigator.pop(context, {
                 'layer': targetLayer,
                 'intervalSeconds': _intervalSeconds,
                 'minDistanceCm': _minDistanceCm,
+                'useExternalGnss': _useExternalGnss,
               });
             }
           },
@@ -386,5 +418,56 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
       ],
     );
   }
-}
 
+  /// 外部GNSS使用オプションのウィジェット
+  Widget _buildExternalGnssOption() {
+    // 実際にBluetooth接続が確立されているかを確認
+    final isExternalConnected = _gpsManager.isExternalGnssConnected;
+    final connectedDeviceName = _gpsManager.selectedGnssDevice?.name;
+
+    if (!isExternalConnected) {
+      // 外部GNSS機器が接続されていない場合は表示しない
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CheckboxListTile(
+              value: _useExternalGnss,
+              onChanged: (value) {
+                setState(() {
+                  _useExternalGnss = value ?? false;
+                });
+              },
+              title: Row(
+                children: [
+                  Icon(Icons.bluetooth_connected, color: Colors.green),
+                  const SizedBox(width: 8),
+                  const Text('外部GNSS機器を使用'),
+                ],
+              ),
+              subtitle: Text(
+                '接続済み: ${connectedDeviceName ?? "不明"}',
+                style: const TextStyle(color: Colors.green),
+              ),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            if (_useExternalGnss)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, top: 8),
+                child: Text(
+                  'GPS追跡時に外部GNSS機器「${connectedDeviceName ?? "不明"}」を使用します。',
+                  style: TextStyle(color: Colors.blue[700], fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

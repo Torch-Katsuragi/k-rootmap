@@ -89,7 +89,6 @@ class GpsManagerService extends ChangeNotifier {
 
   // 内蔵GPS関連
   StreamSubscription<Position>? _positionSubscription;
-  Position? _lastInternalPosition;
 
   // 外部GNSS関連
   BluetoothGnssService? _externalGnssService;
@@ -112,9 +111,6 @@ class GpsManagerService extends ChangeNotifier {
   double? _speed;
   double? _bearing;
   DateTime? _timestamp;
-  
-  // ログ出力制御（頻繁なログを抑制）
-  DateTime? _lastLogTime;
 
   // 衛星情報・HDOP情報（外部GNSS用）
   int? _satelliteCount;
@@ -136,6 +132,13 @@ class GpsManagerService extends ChangeNotifier {
       List.unmodifiable(_availableGnssDevices);
   BluetoothDevice? get selectedGnssDevice => _selectedGnssDevice;
   bool get isRecording => _isRecording;
+
+  /// 外部GNSS機器が実際にBluetooth接続されているかを確認
+  bool get isExternalGnssConnected =>
+      _currentSource == GpsSourceType.external &&
+      _selectedGnssDevice != null &&
+      _externalGnssService != null &&
+      _externalGnssService!.isConnected;
   GpsRecordingOptions get recordingOptions => _recordingOptions;
   List<Map<String, dynamic>> get gpsHistory => List.unmodifiable(_gpsHistory);
   DateTime? get recordingStartTime => _recordingStartTime;
@@ -281,26 +284,8 @@ class GpsManagerService extends ChangeNotifier {
       debugPrint('$_logTag: GPS測量開始 - 測量専用GPS位置取得...');
       _isSurveyMode = true;
 
-      final serviceManager = ForegroundServiceManager();
-
-      // フォアグラウンドサービスが既に動作中の場合のみ、そこから位置情報を取得
-      if (serviceManager.isServiceRunning) {
-        debugPrint('$_logTag: フォアグラウンドサービス経由で位置取得（軌跡記録継続中）');
-
-        final response = await serviceManager.requestGpsPosition(
-          timeout: timeout,
-        );
-
-        if (response != null && response['success'] == true) {
-          final gpsInfo = response['gpsInfo'] as Map<String, dynamic>;
-          debugPrint('$_logTag: GPS測量用位置取得成功（フォアグラウンドサービス経由）');
-          notifyListeners();
-          return gpsInfo;
-        }
-      }
-
-      // フォアグラウンドサービス未動作時は、測量専用GPS開始
-      debugPrint('$_logTag: 測量専用GPS開始（軌跡記録は開始しません）');
+      // GPS測量専用開始（フォアグラウンドサービスとは独立）
+      debugPrint('$_logTag: 測量専用GPS開始');
 
       // 外部GNSS接続が既にある場合は再利用
       if (!_isGpsActive) {
@@ -546,7 +531,6 @@ class GpsManagerService extends ChangeNotifier {
     // 内蔵GPS停止
     await _positionSubscription?.cancel();
     _positionSubscription = null;
-    _lastInternalPosition = null;
 
     // 外部GNSS停止
     if (_externalGnssService != null) {
@@ -573,8 +557,6 @@ class GpsManagerService extends ChangeNotifier {
 
   /// 内蔵GPS位置更新コールバック
   void _onInternalPositionUpdate(Position position) {
-    _lastInternalPosition = position;
-
     if (_currentSource == GpsSourceType.internal) {
       _updateCurrentPosition(
         latitude: position.latitude,
@@ -638,16 +620,7 @@ class GpsManagerService extends ChangeNotifier {
     _hdop = hdop;
     _gpsQuality = gpsQuality;
 
-    // ログ出力を5秒に1回に制限（大量のログを防ぐ）
-    final now = DateTime.now();
-    if (_lastLogTime == null || now.difference(_lastLogTime!).inSeconds >= 5) {
-      debugPrint(
-        '$_logTag: 位置更新 - Lat: ${latitude.toStringAsFixed(6)}, '
-        'Lon: ${longitude.toStringAsFixed(6)}, '
-        'Source: $sourceType',
-      );
-      _lastLogTime = now;
-    }
+    // ログ出力は削減（エラー時のみ出力）
 
     // 連続測量中の場合はデータを収集
     if (_isContinuousSurvey) {
@@ -729,33 +702,10 @@ class GpsManagerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 現在のGPS情報を取得（フォアグラウンドサービス経由）
+  /// 現在のGPS情報を取得
   Map<String, dynamic> getCurrentGpsInfo() {
-    // フォアグラウンドサービスが実行中の場合は、そちらの情報を優先
-    final serviceManager = ForegroundServiceManager();
-    if (serviceManager.isServiceRunning) {
-      // 非同期でフォアグラウンドサービスから情報を取得する場合は
-      // 同期版では基本情報のみ返す
-      return {
-        'sourceType': _currentSource.sourceCode,
-        'sourceName': _currentSource.displayName,
-        'selectedDevice': _selectedGnssDevice?.name,
-        'latitude': null, // フォアグラウンドサービス経由で取得
-        'longitude': null, // フォアグラウンドサービス経由で取得
-        'altitude': null,
-        'accuracy': null,
-        'speed': null,
-        'bearing': null,
-        'timestamp': null,
-        'isActive': false, // フォアグラウンドサービス経由で確認が必要
-        'isGpsActive': serviceManager.isServiceRunning,
-        'isInitialized': _isInitialized,
-        'isSurveyMode': _isSurveyMode,
-        'usesForegroundService': true,
-      };
-    }
-
-    // フォアグラウンドサービス未実行時は従来通り
+    // 外部GNSS使用時は、フォアグラウンドサービス実行中でもメインisolateの位置情報を返す
+    // （外部GNSSデータはメインisolateでのみ取得可能）
     return {
       'sourceType': _currentSource.sourceCode,
       'sourceName': _currentSource.displayName,

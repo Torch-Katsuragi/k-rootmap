@@ -2,6 +2,86 @@
 
 ## 完了した作業
 
+### 20. 初回起動時の権限リクエスト重複エラー修正（完了）
+
+**背景**:
+- デバイスの初回起動時、すべてのファイルへのアクセス権限を許可した後、以下のエラーで処理が停止
+  ```
+  PlatformException (PlatformException(PermissionHandler.PermissionManager, 
+  A request for permissions is already running, please wait for it to finish 
+  before doing another request (note that you can request multiple permissions 
+  at the same time)., null, null))
+  ```
+
+**問題の詳細**:
+1. **ライフサイクルイベントによる重複呼び出し**:
+   - 権限ダイアログが表示されている間にアプリがバックグラウンドに移動
+   - フォアグラウンドに戻った時に`didChangeAppLifecycleState`が発火
+   - 既に権限チェックが進行中なのに`_checkPermissions()`が再度呼ばれる
+
+2. **非同期処理の競合**:
+   - ストレージ権限のリクエストがまだ完了していない
+   - 次のBluetooth権限リクエストまたは別の権限チェックが走る
+
+**変更内容**: `lib/screens/home_screen.dart`
+
+1. **権限チェック中フラグの追加（25行）**
+   - ✅ `bool _isCheckingPermissions = false;`を追加
+   - 権限チェックの重複実行を防止
+
+2. **`didChangeAppLifecycleState`の修正（40-49行）**
+   - ✅ アプリがフォアグラウンドに戻った時の処理を改善
+   - ✅ 既に権限チェック中の場合はスキップ
+   ```dart
+   if (state == AppLifecycleState.resumed) {
+     // ただし、既に権限チェック中の場合はスキップ
+     if (!_isCheckingPermissions) {
+       _checkPermissions();
+     }
+   }
+   ```
+
+3. **`_checkPermissions()`の修正（51-99行）**
+   - ✅ 開始時に重複チェック
+     ```dart
+     if (_isCheckingPermissions) {
+       print('[HomeScreen] 権限チェックが既に実行中のため、スキップします');
+       return;
+     }
+     ```
+   - ✅ フラグの設定・解除をtry-catch-finallyで管理
+     ```dart
+     _isCheckingPermissions = true; // フラグをセット
+     try {
+       // 権限チェック処理
+     } catch (e) {
+       print('[HomeScreen] 権限チェック中にエラーが発生: $e');
+     } finally {
+       _isCheckingPermissions = false; // フラグをクリア
+     }
+     ```
+   - ✅ エラーハンドリングの強化
+
+**効果**:
+- ✅ **重複リクエストの防止**: 権限チェック中の再実行を完全にブロック
+- ✅ **安定性の向上**: ライフサイクルイベントによる競合を解消
+- ✅ **エラーハンドリング**: 予期しないエラーでもフラグを確実にクリア
+- ✅ **ユーザー体験の改善**: 権限リクエストがスムーズに完了
+
+**テスト項目**:
+- ✅ コンパイル確認: エラーなし（既存warningのみ）
+- ⏳ 初回起動時に権限リクエストがエラーなく完了すること（要実機確認）
+- ⏳ アプリのバックグラウンド/フォアグラウンド切り替え時に問題が発生しないこと（要実機確認）
+- ⏳ 権限リクエスト中にアプリが切り替わってもエラーにならないこと（要実機確認）
+
+**備考**:
+- permission_handlerプラグインの推奨事項に従い、複数の権限を同時にリクエストする方式は既に実装済み（Bluetooth権限: 126-129行）
+- この修正により、ライフサイクルイベントによる重複リクエストも防止される
+
+---
+
+## 完了した作業
+
 ### 19. GUIの大規模リファクタリング（完了）
 
 **背景**:

@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String? _projectDir;
   bool _permissionsGranted = false;
+  bool _isCheckingPermissions = false; // 権限チェック中フラグ
 
   @override
   void initState() {
@@ -40,43 +41,60 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // アプリがフォアグラウンドに戻ったときに権限を再確認
-      _checkPermissions();
+      // ただし、既に権限チェック中の場合はスキップ
+      if (!_isCheckingPermissions) {
+        _checkPermissions();
+      }
     }
   }
 
   /// ストレージ権限の確認・リクエスト
   Future<void> _checkPermissions() async {
-    print('[HomeScreen] 権限チェック開始');
-
-    // Android 11 (API level 30) 以降での権限管理
-    final manageStorageGranted =
-        await Permission.manageExternalStorage.isGranted;
-    print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted');
-
-    if (manageStorageGranted) {
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
-      // ストレージ権限OK後、Bluetooth権限をチェック
-      await _checkBluetoothPermissions();
+    // 既に権限チェック中の場合はスキップ
+    if (_isCheckingPermissions) {
+      print('[HomeScreen] 権限チェックが既に実行中のため、スキップします');
       return;
     }
 
-    print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限をリクエスト中...');
-    // MANAGE_EXTERNAL_STORAGE権限をリクエスト
-    final status = await Permission.manageExternalStorage.request();
-    print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限リクエスト結果: $status');
+    _isCheckingPermissions = true; // フラグをセット
+    print('[HomeScreen] 権限チェック開始');
 
-    if (status.isGranted) {
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
-      // ストレージ権限OK後、Bluetooth権限をチェック
-      await _checkBluetoothPermissions();
-    } else if (status.isPermanentlyDenied) {
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
-      // 権限が恒久的に拒否された場合、設定画面を開く
-      _showPermissionDeniedDialog();
-    } else {
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行');
-      // 従来のストレージ権限を試行
-      await _requestLegacyStoragePermissions();
+    try {
+      // Android 11 (API level 30) 以降での権限管理
+      final manageStorageGranted =
+          await Permission.manageExternalStorage.isGranted;
+      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted');
+
+      if (manageStorageGranted) {
+        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
+        // ストレージ権限OK後、Bluetooth権限をチェック
+        await _checkBluetoothPermissions();
+        return;
+      }
+
+      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限をリクエスト中...');
+      // MANAGE_EXTERNAL_STORAGE権限をリクエスト
+      final status = await Permission.manageExternalStorage.request();
+      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限リクエスト結果: $status');
+
+      if (status.isGranted) {
+        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
+        // ストレージ権限OK後、Bluetooth権限をチェック
+        await _checkBluetoothPermissions();
+      } else if (status.isPermanentlyDenied) {
+        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
+        // 権限が恒久的に拒否された場合、設定画面を開く
+        _showPermissionDeniedDialog();
+      } else {
+        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行');
+        // 従来のストレージ権限を試行
+        await _requestLegacyStoragePermissions();
+      }
+    } catch (e) {
+      print('[HomeScreen] 権限チェック中にエラーが発生: $e');
+    } finally {
+      _isCheckingPermissions = false; // フラグをクリア
+      print('[HomeScreen] 権限チェック終了');
     }
   }
 

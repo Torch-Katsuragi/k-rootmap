@@ -15,6 +15,11 @@ import 'geometry_type.dart'; // ジオメトリタイプenumをインポート
 
 /// GeoPackageファイルを管理するクラス（sqflite版）
 /// 段階的移行のため、すべてのメソッドをFutureを返すように変更
+/// 
+/// PRIMARY KEY戦略:
+/// - 新規作成: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
+/// - 読み込み: 動的検出（fid, id, rowid等）して内部的に'id'として正規化
+/// - FeatureNode互換性: row['id']で常にPRIMARY KEYにアクセス可能
 class GeoPackageFile {
   /// ルートからのパスリスト
   final List<String> pathList;
@@ -25,10 +30,14 @@ class GeoPackageFile {
   /// データベース初期化完了フラグ
   bool _isInitialized = false;
 
+  /// PRIMARY KEYカラム名のキャッシュ（テーブル名 → PRIMARY KEYカラム名）
+  final Map<String, String> _primaryKeyCache = {};
+
   /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
-  /// id と geom を固定カラムとし、他は動的に追加
+  /// 内部正規化により、PRIMARY KEY（fid, id等）は常に'id'として扱われる
+  /// geom はジオメトリカラムで属性データではないため除外
   final List<String> supportedAttributes = [
-    "id",
+    "id", // 内部的にPRIMARY KEYを正規化したもの（実テーブルではfid等）
     "geom",
   ];
 
@@ -73,7 +82,8 @@ class GeoPackageFile {
     Map<String, dynamic> attributes,
   ) async {
     try {
-      print('[DEBUG] GeoPackageFile: 属性更新開始 - テーブル:$tableName, 行ID:$rowId');
+      final db = await _getDatabase();
+      final pkColumn = await getPrimaryKeyColumn(tableName);
       
       // SQLiteでサポートされていない型を除外
       final filteredAttributes = <String, dynamic>{};
@@ -81,9 +91,8 @@ class GeoPackageFile {
         final key = entry.key;
         final value = entry.value;
         
-        // ジオメトリ関連フィールドとidフィールドは属性更新対象から除外
-        if (key == 'geometry' || key == 'geom' || key == 'id') {
-          print('[DEBUG] GeoPackageFile: スキップするフィールド: $key');
+        // ジオメトリ関連フィールドとPRIMARY KEYフィールドは属性更新対象から除外
+        if (key == 'geometry' || key == 'geom' || key == pkColumn) {
           continue;
         }
         
@@ -95,31 +104,28 @@ class GeoPackageFile {
             value is Uint8List) {
           filteredAttributes[key] = value;
         } else {
-          print('[DEBUG] GeoPackageFile: サポートされていない型のためスキップ: $key = $value (${value.runtimeType})');
+          print('[GeoPackageFile] ⚠️ サポートされていない型: $key = ${value.runtimeType}');
         }
       }
       
       if (filteredAttributes.isEmpty) {
-        print('[DEBUG] GeoPackageFile: 更新対象の属性がありません');
         return true; // 更新対象がない場合は成功とみなす
       }
       
-      print('[DEBUG] GeoPackageFile: 更新する属性: $filteredAttributes');
-      
-      final db = await _getDatabase();
       // テーブル名をエスケープしてUPDATE文を実行
       final columnAssignments = filteredAttributes.keys
           .map((key) => '"$key" = ?')
           .join(', ');
       final values = [...filteredAttributes.values, rowId];
       
-      final sql = 'UPDATE "$tableName" SET $columnAssignments WHERE id = ?';
-      print('[DEBUG] GeoPackageFile: 実行SQL: $sql');
-      print('[DEBUG] GeoPackageFile: 実行値: $values');
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
       
+      final sql = 'UPDATE "$tableName" SET $columnAssignments WHERE $whereClause';
       final rowsUpdated = await db.rawUpdate(sql, values);
       
-      print('[DEBUG] GeoPackageFile: 更新された行数: $rowsUpdated');
       return rowsUpdated > 0;
     } catch (e) {
       print('[ERROR] GeoPackageFile: _updateFeatureAttributes failed: $e');
@@ -302,8 +308,12 @@ class GeoPackageFile {
         onCreate: _createDatabase,
         onUpgrade: _upgradeDatabase,
       );
+      
+      // GeoPackageファイルの基本構造をチェック
+      await _validateGeoPackageStructure();
+      
       _isInitialized = true;
-      print('[GeoPackageFile] 初期化成功: ${p.basename(absPath)}');
+      // 正常時のログは不要（異常時のみ出力）
     } catch (e, stack) {
       print('[GeoPackageFile] 初期化時にエラー発生:');
       print('  パス: $absPath');
@@ -316,6 +326,59 @@ class GeoPackageFile {
       } catch (dirError) {
         print('  親ディレクトリアクセスエラー: $dirError');
       }
+    }
+  }
+
+  /// GeoPackageファイルの基本構造を検証
+  /// K-MAPS標準形式かどうかをチェックし、問題があればログを出力
+  Future<void> _validateGeoPackageStructure() async {
+    if (_database == null) return;
+
+    try {
+      // 必須テーブルの存在チェック
+      final tables = await _database!.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table';",
+      );
+      final tableNames = tables.map((row) => row['name'] as String).toSet();
+
+      // GeoPackage標準の必須テーブル
+      final requiredTables = {
+        'gpkg_contents',
+        'gpkg_spatial_ref_sys',
+        'gpkg_geometry_columns',
+      };
+
+      final missingTables = requiredTables.difference(tableNames);
+      
+      if (missingTables.isNotEmpty) {
+        print('[GeoPackageFile] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables');
+        print('[GeoPackageFile] ⚠️ これはK-MAPS標準形式ではない可能性があります。');
+        return; // 必須テーブルがない場合は以降のチェックをスキップ
+      }
+
+      // gpkg_contentsテーブルの構造チェック
+      final contentsColumns = await _database!.rawQuery('PRAGMA table_info("gpkg_contents");');
+      final contentsColumnNames = contentsColumns.map((row) => row['name'] as String).toSet();
+      
+      final requiredContentsColumns = {
+        'table_name',
+        'data_type',
+        'identifier',
+        'srs_id',
+      };
+
+      final missingContentsColumns = requiredContentsColumns.difference(contentsColumnNames);
+      
+      if (missingContentsColumns.isNotEmpty) {
+        print('[GeoPackageFile] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns');
+        print('[GeoPackageFile] ⚠️ このファイルは破損している可能性があります。');
+      }
+
+      // フィーチャテーブルの存在チェック（正常時はログ不要）
+      // 異常がなければ検証完了
+    } catch (e) {
+      print('[GeoPackageFile] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e');
+      print('[GeoPackageFile] ⚠️ このファイルは標準的なGeoPackage形式ではない可能性があります。');
     }
   }
 
@@ -334,7 +397,7 @@ class GeoPackageFile {
     }
 
     _isInitialized = false;
-    print('[DEBUG] GeoPackageFile: Disposed database connection');
+    // 正常なdisposeはログ不要
   }
 
   /// データベース作成時のコールバック（OGC GeoPackage仕様準拠）
@@ -434,6 +497,114 @@ class GeoPackageFile {
     return _database!;
   }
 
+  /// PRIMARY KEYカラム名を動的に取得（キャッシュ機能付き）
+  /// 
+  /// K-MAPS標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
+  /// 旧K-MAPS形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
+  /// PRIMARY KEYがない外部ファイル: fid を自動追加、または rowid フォールバック
+  Future<String> getPrimaryKeyColumn(String tableName) async {
+    // キャッシュをチェック
+    if (_primaryKeyCache.containsKey(tableName)) {
+      return _primaryKeyCache[tableName]!;
+    }
+
+    final db = await _getDatabase();
+    
+    // PRAGMA table_infoでカラム情報を取得
+    final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+    
+    // PRIMARY KEYカラムを検索（pk列が1のもの）
+    String? primaryKeyColumn;
+    for (final column in columns) {
+      final pk = column['pk'] as int?;
+      if (pk != null && pk > 0) {
+        primaryKeyColumn = column['name'] as String;
+        break;
+      }
+    }
+
+    // PRIMARY KEYが見つかった場合
+    if (primaryKeyColumn != null) {
+      // QGIS標準形式（fid PRIMARY KEY）以外の場合は情報ログ出力
+      if (primaryKeyColumn != 'fid') {
+        if (primaryKeyColumn == 'id') {
+          print('[GeoPackageFile] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のK-MAPS標準は "fid"）');
+        } else {
+          print('[GeoPackageFile] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用');
+        }
+      }
+      _primaryKeyCache[tableName] = primaryKeyColumn;
+      return primaryKeyColumn;
+    }
+
+    // PRIMARY KEYがない場合の処理
+    print('[GeoPackageFile] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！');
+    print('[GeoPackageFile] ⚠️ データが破損している可能性があります。');
+    
+    try {
+      // テーブルのレコード数をチェック（大きなテーブルの進行状況表示のため）
+      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM "$tableName";');
+      final rowCount = countResult.first['count'] as int? ?? 0;
+      
+      // fid または id カラムが既に存在するかチェック
+      final hasFidColumn = columns.any((col) => col['name'] == 'fid');
+      final hasIdColumn = columns.any((col) => col['name'] == 'id');
+      
+      // QGIS互換性のため、fid カラムを優先的に使用・追加
+      if (!hasFidColumn && !hasIdColumn) {
+        // 大容量テーブルの場合は進行状況を表示
+        if (rowCount > 10000) {
+          print('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...');
+        } else {
+          print('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...');
+        }
+        
+        // fidカラムを追加（QGIS標準）
+        await db.execute(
+          'ALTER TABLE "$tableName" ADD COLUMN fid INTEGER;',
+        );
+        
+        // rowidから値をコピー（大きなテーブルでは時間がかかる）
+        await db.execute(
+          'UPDATE "$tableName" SET fid = rowid;',
+        );
+        
+        print('[GeoPackageFile] ✓ fidカラムを追加し、rowidから値をコピーしました。');
+        _primaryKeyCache[tableName] = 'fid';
+        return 'fid';
+      } else if (hasFidColumn) {
+        // fidカラムは存在するが、PRIMARY KEYではない場合
+        print('[GeoPackageFile] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        _primaryKeyCache[tableName] = 'fid';
+        return 'fid';
+      } else {
+        // idカラムが存在する場合（旧形式）
+        print('[GeoPackageFile] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        _primaryKeyCache[tableName] = 'id';
+        return 'id';
+      }
+    } catch (e, stackTrace) {
+      print('[GeoPackageFile] ❌ エラー: PRIMARY KEY処理中に問題が発生しました: $e');
+      print('[GeoPackageFile] スタックトレース: $stackTrace');
+      
+      // フォールバック: fid > id > rowid の優先順位
+      final hasFidColumn = columns.any((col) => col['name'] == 'fid');
+      final hasIdColumn = columns.any((col) => col['name'] == 'id');
+      
+      if (hasFidColumn) {
+        _primaryKeyCache[tableName] = 'fid';
+        return 'fid';
+      } else if (hasIdColumn) {
+        _primaryKeyCache[tableName] = 'id';
+        return 'id';
+      } else {
+        print('[GeoPackageFile] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。');
+        _primaryKeyCache[tableName] = 'rowid';
+        return 'rowid';
+      }
+    }
+  }
+
   /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
   /// GeoPackageNode作成時に呼び出す
   Future<bool> createEmptyDatabase() async {
@@ -491,7 +662,14 @@ class GeoPackageFile {
   Future<void> removeFeature(String tableName, int id) async {
     try {
       final db = await _getDatabase();
-      await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
+      await db.delete(tableName, where: whereClause, whereArgs: [id]);
     } catch (e) {
       print('removeFeature: エラー発生 - $e');
     }
@@ -516,19 +694,36 @@ class GeoPackageFile {
   }
 
   /// 単一フィーチャを取得（geom列をgeometry typeに応じて変換）
+  /// PRIMARY KEYカラム（fid, id, rowid等）の値を内部的に'id'として正規化
+  /// これにより、FeatureNodeは常にrow['id']でPRIMARY KEYにアクセスできる
   Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async {
     try {
       final db = await _getDatabase();
       final geomType = await getGeometryType(tableName);
+      final pkColumn = await getPrimaryKeyColumn(tableName);
 
-      final rows = await db.rawQuery(
-        'SELECT * FROM "$tableName" WHERE id = ?',
-        [rowId],
-      );
+      // rowidを使用する場合は明示的にSELECTに含める
+      final selectClause = pkColumn == 'rowid'
+          ? 'SELECT rowid, * FROM "$tableName" WHERE rowid = ?'
+          : 'SELECT * FROM "$tableName" WHERE "$pkColumn" = ?';
+      
+      final rows = await db.rawQuery(selectClause, [rowId]);
 
       if (rows.isEmpty) return null;
 
       final row = Map<String, dynamic>.from(rows.first);
+      
+      // PRIMARY KEYカラムが'id'以外の場合、必ず正規化が必要
+      // FeatureNodeのコンストラクタは常にrow['id']を参照するため
+      if (pkColumn != 'id') {
+        if (row.containsKey(pkColumn)) {
+          row['id'] = row[pkColumn];
+        } else {
+          // PRIMARY KEYカラムが存在しない場合（異常事態）
+          print('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
+          row['id'] = 0; // フォールバック値
+        }
+      }
       final geom = row['geom'] as Uint8List?;
 
       // geom列をgeometry typeに応じて変換
@@ -574,7 +769,17 @@ class GeoPackageFile {
               13,
               21,
             ).getFloat64(0, Endian.little);
-            row['geometry'] = [LatLng(lat, lon)];
+            
+            // 座標値の妥当性チェック
+            if (lat >= -90.0 && lat <= 90.0 && 
+                lon >= -180.0 && lon <= 180.0 &&
+                !lat.isNaN && !lon.isNaN &&
+                !lat.isInfinite && !lon.isInfinite) {
+              row['geometry'] = [LatLng(lat, lon)];
+            } else {
+              print('[GeoPackageFile] ⚠️ 警告: 無効なPoint座標値を検出: lat=$lat, lon=$lon (rowId=$rowId)');
+              print('[GeoPackageFile] ⚠️ このフィーチャは破損している可能性があります。');
+            }
           }
         } else if (geomType == GeometryType.linestring) {
           final lines = parseWkbLineString(geom);
@@ -607,14 +812,39 @@ class GeoPackageFile {
     }
   }
 
-  /// 指定レイヤの全フィーチャ（rawデータをそのまま返す）
+  /// 指定レイヤの全フィーチャ（rawデータを取得し、内部形式に正規化）
+  /// PRIMARY KEYカラム（fid, id, rowid等）の値を内部的に'id'として正規化
+  /// これにより、FeatureNodeは常にrow['id']でPRIMARY KEYにアクセスできる
   Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
     try {
       final db = await _getDatabase();
-      final rows = await db.rawQuery('SELECT * FROM "$tableName"');
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidを使用する場合は明示的にSELECTに含める
+      final selectClause = pkColumn == 'rowid' 
+          ? 'SELECT rowid, * FROM "$tableName"' 
+          : 'SELECT * FROM "$tableName"';
+      
+      final rows = await db.rawQuery(selectClause);
 
-      // rawデータをそのまま返す（geometry変換は行わない）
-      return rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      // すべてのケースで正規化処理を実行（一貫性のため）
+      return rows.map((row) {
+        final normalizedRow = Map<String, dynamic>.from(row);
+        
+        // PRIMARY KEYカラムが'id'以外の場合、必ず正規化が必要
+        // FeatureNodeのコンストラクタは常にrow['id']を参照するため
+        if (pkColumn != 'id') {
+          if (row.containsKey(pkColumn)) {
+            normalizedRow['id'] = row[pkColumn];
+          } else {
+            // PRIMARY KEYカラムが存在しない場合（異常事態）
+            print('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
+            normalizedRow['id'] = 0; // フォールバック値
+          }
+        }
+        
+        return normalizedRow;
+      }).toList();
     } catch (e) {
       print('getFeatures: エラー発生 - $e');
       return [];
@@ -638,14 +868,16 @@ class GeoPackageFile {
   }
 
   /// レイヤ追加（DBにテーブル作成）
+  /// QGIS互換性のため、PRIMARY KEYは fid を使用
   Future<void> addLayer(String name, GeometryType geomType) async {
     try {
       final db = await _getDatabase();
 
-      // フィーチャテーブル作成（必須カラムのみ：id と geom）
+      // フィーチャテーブル作成（必須カラムのみ：fid と geom）
+      // QGIS標準に準拠して fid をPRIMARY KEYとして使用
       await db.execute('''
 				CREATE TABLE IF NOT EXISTS "$name" (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					fid INTEGER PRIMARY KEY AUTOINCREMENT,
 					geom BLOB NOT NULL
 				);
 			''');
@@ -756,9 +988,7 @@ class GeoPackageFile {
         whereArgs: [tableName],
       );
 
-      print(
-        '[GeoPackageFile] Layer envelope updated: $tableName ($newMinX, $newMinY, $newMaxX, $newMaxY)',
-      );
+      // 正常時のログは不要（異常時のみ出力）
     } catch (e) {
       print('[GeoPackageFile] エンベロープ更新エラー: $e');
     }
@@ -861,9 +1091,16 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
       final result = await db.query(
         tableName,
-        where: 'id = ?',
+        where: whereClause,
         whereArgs: [rowId],
       );
       if (result.isNotEmpty) {
@@ -883,9 +1120,16 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
       final result = await db.query(
         tableName,
-        where: 'id = ?',
+        where: whereClause,
         whereArgs: [rowId],
       );
       if (result.isNotEmpty) {
@@ -907,8 +1151,15 @@ class GeoPackageFile {
   ) async {
     try {
       final db = await _getDatabase();
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
       final rowsUpdated = await db.rawUpdate(
-        'UPDATE "$tableName" SET "$attributeName" = ? WHERE id = ?',
+        'UPDATE "$tableName" SET "$attributeName" = ? WHERE $whereClause',
         [newValue, rowId],
       );
       return rowsUpdated > 0;
@@ -1111,7 +1362,14 @@ class GeoPackageFile {
 
       updateValues.add(id); // WHERE句のid
 
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
       final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
@@ -1161,7 +1419,14 @@ class GeoPackageFile {
 
       updateValues.add(id); // WHERE句のid
 
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
       final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
@@ -1211,7 +1476,14 @@ class GeoPackageFile {
 
       updateValues.add(id); // WHERE句のid
 
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE id = ?';
+      final pkColumn = await getPrimaryKeyColumn(tableName);
+      
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final whereClause = pkColumn == 'rowid' 
+          ? 'rowid = ?' 
+          : '"$pkColumn" = ?';
+      
+      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
       final affectedRows = await db.rawUpdate(sql, updateValues);
 
       return affectedRows > 0;
@@ -1411,17 +1683,22 @@ class GeoPackageFile {
   }) async {
     try {
       final db = await _getDatabase();
+      final pkColumn = await getPrimaryKeyColumn(tableName);
 
       // カラム指定がある場合は指定されたカラムのみ、ない場合は全カラム
       final columnList = columns?.join(', ') ?? '*';
 
-      print('[GeoPackageFile] 一括属性取得開始: $tableName, カラム: $columnList');
+      // ORDER BYで動的PRIMARY KEYカラムを使用
+      // rowidの場合はクォートなし、それ以外はクォート付き
+      final orderByClause = pkColumn == 'rowid' 
+          ? 'ORDER BY rowid' 
+          : 'ORDER BY "$pkColumn"';
 
       final result = await db.rawQuery(
-        'SELECT $columnList FROM "$tableName" ORDER BY id',
+        'SELECT $columnList FROM "$tableName" $orderByClause',
       );
 
-      print('[GeoPackageFile] 一括属性取得完了: ${result.length}件');
+      // 正常時のログは不要（異常時のみ出力）
       return result;
     } catch (e) {
       print('[GeoPackageFile] getAllFeatureAttributes エラー発生 - $e');

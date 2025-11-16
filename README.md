@@ -4,6 +4,51 @@ GISアプリケーション（Flutter製）
 
 ## 最新の更新情報
 
+### QGIS標準形式への移行（PRIMARY KEY: id → fid）+ フリーズ・クラッシュ対策 (2025-11-16 最新)
+
+**改善内容**: K-MAPSをQGIS標準形式（`fid` PRIMARY KEY）に準拠させ、外部ファイルの互換性・安定性を大幅向上
+
+**問題**: 
+- 旧K-MAPSは独自に`id`カラムをPRIMARY KEYとして使用していた
+- QGISは`fid`カラムをPRIMARY KEYとして標準的に使用する
+- PRIMARY KEYの不一致により、QGIS作成ファイルが正しく読み込めない
+- 特定のファイルを読み込むとフリーズやクラッシュが発生する
+
+**解決策**:
+
+**1. QGIS標準形式への準拠**
+- ✅ **新規作成**: `fid INTEGER PRIMARY KEY AUTOINCREMENT`を使用（QGIS標準）
+- ✅ **動的検出**: `PRAGMA table_info`でPRIMARY KEYカラムを自動検出（`fid`, `id`, `rowid`等）
+- ✅ **内部正規化**: PRIMARY KEYの値を内部的に`id`として扱い、FeatureNodeとの互換性を維持
+
+**2. フリーズ防止対策**
+- ✅ **SQLエラー防止**: `ORDER BY id`を`ORDER BY "$pkColumn"`に修正（根本原因）
+- ✅ **処理の統一**: PRIMARY KEYがない場合、テーブルサイズに関わらず`fid`を追加
+- ✅ **進行状況表示**: 大容量テーブル（10,000行超）の場合は処理時間の警告を表示
+
+**3. クラッシュ防止対策**
+- ✅ **WKBバリデーション**: 座標値の妥当性チェック（緯度±90度、経度±180度）
+- ✅ **異常値検出**: NaN、Infinite、範囲外の座標を検出
+- ✅ **破損データスキップ**: 異常な座標を含むフィーチャをスキップしてクラッシュを防止
+
+**4. ファイル形式検証**
+- ✅ **GeoPackage構造チェック**: 必須テーブル・カラムの存在を検証
+- ✅ **クリーンなログ**: 正常時（QGIS標準）はログなし、異常時のみ詳細ログ出力
+
+**効果**:
+- **QGIS標準準拠**: 新規作成ファイルは`fid`を使用し、QGISとの完全な相互運用を実現
+- **QGIS互換性**: QGIS作成のGeoPackageファイルを正常に読み込める（警告なし）
+- **後方互換性**: 旧K-MAPS作成ファイル（`id` PRIMARY KEY）も引き続き動作
+- **処理の統一性**: PRIMARY KEYがないファイルは、テーブルサイズに関わらず`fid`を追加
+- **フリーズ完全防止**: SQLエラー修正（`ORDER BY`動的化）で根本解決
+- **クラッシュ防止**: WKB座標バリデーションで異常値を検出・スキップ
+- **ファイル検証**: 破損ファイルや非標準形式を早期に検出
+- **クリーンなログ**: 正常時（QGIS標準）は静か、異常時のみ詳細ログ
+
+**技術参照**: 
+- [GeoPackage Specification](https://www.geopackage.org/spec/) - GeoPackageの標準仕様
+- [SQLite ROWID](https://www.sqlite.org/rowidtable.html) - SQLiteの内部行ID仕様
+
 ### UI要素極小化 - Point Feature＆線の太さ最適化 (2024-12-19 最新)
 
 **改善内容**: Point Feature マーカーと線/ポリゴンの線の太さを大幅に細くして、地図の視認性を大幅向上

@@ -147,15 +147,20 @@ class PhotoNode extends LayerTreeNode {
 
   /// EXIFデータから位置情報と撮影情報を抽出
   /// 位置情報がない場合はnullを返す
+  /// 
+  /// パフォーマンス最適化: ファイル全体ではなくヘッダー部分のみを読み込む
   static Future<ExifPhotoData?> _extractExifData(String filePath) async {
     try {
-      // 基本的なEXIF解析（JPEG対応）
-      /// GPS情報がある場合のみ座標データを返す
-      final bytes = await File(filePath).readAsBytes();
+      // ファイルサイズを取得
+      final file = File(filePath);
+      final stats = await file.stat();
+      
+      // EXIF情報はファイルの先頭部分にあるため、最大256KBまで読み込む
+      // 大量の画像がある場合、これにより読み込み速度が大幅に向上
+      final bytes = await _readFileHeader(filePath, 256 * 1024);
       final exifResult = _parseBasicExif(bytes);
       if (exifResult == null) return null;
 
-      final stats = await File(filePath).stat();
       final metadata = PhotoMetadata(
         fileSize: stats.size,
         width: exifResult['width'] as int?,
@@ -174,6 +179,29 @@ class PhotoNode extends LayerTreeNode {
     } catch (e) {
       print('[ERROR] PhotoNode._extractExifData: $e');
       return null;
+    }
+  }
+
+  /// ファイルの先頭部分のみを読み込む（EXIF解析用）
+  /// 
+  /// [filePath] 読み込むファイルのパス
+  /// [maxBytes] 読み込む最大バイト数（デフォルト256KB）
+  /// 
+  /// 大きな画像ファイルでも先頭部分だけを読み込むことで、
+  /// メモリ使用量を削減し、読み込み速度を大幅に向上させる
+  static Future<Uint8List> _readFileHeader(String filePath, int maxBytes) async {
+    final file = File(filePath);
+    final fileSize = await file.length();
+    
+    // ファイルサイズが指定バイト数より小さい場合は全体を読み込む
+    final bytesToRead = fileSize < maxBytes ? fileSize : maxBytes;
+    
+    final randomAccessFile = await file.open(mode: FileMode.read);
+    try {
+      final bytes = await randomAccessFile.read(bytesToRead);
+      return Uint8List.fromList(bytes);
+    } finally {
+      await randomAccessFile.close();
     }
   }
 

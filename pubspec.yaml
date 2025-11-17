@@ -71,6 +71,10 @@ dependencies:
   # 地理空間計算用パッケージ
   turf: ^0.0.10                       # GeoJSONベースの地理空間分析ライブラリ
 
+  # カメラ・写真撮影用パッケージ
+  camera: ^0.11.0+2                   # カメラ機能（ズーム対応）
+  native_exif: ^0.6.2                 # EXIF情報完全読み書き用（ネイティブAPI使用）
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

@@ -45,5 +45,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- カメラ権限の説明 -->
+	<key>NSCameraUsageDescription</key>
+	<string>写真を撮影してプロジェクトに保存するためにカメラへのアクセスが必要です。</string>
+	<!-- 位置情報権限の説明 -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>撮影した写真に位置情報を記録するために、位置情報へのアクセスが必要です。</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>撮影した写真に位置情報を記録するために、位置情報へのアクセスが必要です。</string>
 </dict>
 </plist>

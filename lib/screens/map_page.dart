@@ -452,7 +452,32 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             }
           });
 
-      await _serviceManager.startService();
+      try {
+        await _serviceManager.startService();
+      } catch (e) {
+        // Android 12以降でフォアグラウンドサービス開始が失敗する場合
+        debugPrint('[MapPage] GPS追跡サービス開始エラー: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'GPS追跡サービスの開始に失敗しました。\n'
+                'アプリを再起動してから再度お試しください。',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        // エラー時はクリーンアップして終了
+        _trackPointSubscription?.cancel();
+        _trackPointSubscription = null;
+        if (_isMainIsolateTracking) {
+          await _gpsManager.stopGpsSurvey();
+        }
+        return;
+      }
+      
       _updateGpsTrackingServiceStatus();
 
       // アニメーション開始
@@ -1564,6 +1589,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             context: context,
             showAttributeTable: _showAttributeTable,
             drawerOpen: drawerOpen,
+            currentFolder: _currentNode is FolderNode ? _currentNode as FolderNode : null,
             onAttributeTableToggle: () {
               if (_showAttributeTable) {
                 _closeAttributeTable();

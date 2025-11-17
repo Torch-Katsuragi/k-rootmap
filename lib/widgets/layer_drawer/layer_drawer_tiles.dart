@@ -1,7 +1,6 @@
 /// K-MAPS: LayerDrawer用各種タイル描画ロジック
 library;
 
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 
@@ -94,7 +93,7 @@ mixin LayerDrawerTiles {
                   (context) => AlertDialog(
                     title: const Text('写真削除'),
                     content: Text(
-                      '${node.name} をリストから削除しますか？\n（ファイル自体は削除されません）',
+                      '${node.name} を本当に削除しますか？\nファイルも完全に削除されます。',
                     ),
                     actions: [
                       TextButton(
@@ -103,29 +102,51 @@ mixin LayerDrawerTiles {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
                         child: const Text('削除'),
                       ),
                     ],
                   ),
             );
             if (confirm == true) {
-              // 削除されるPhotoNodeが選択されている場合は選択状態をクリア
-              GlobalConfig.instance.selectedFeatures.remove(node);
+              try {
+                // 削除されるPhotoNodeが選択されている場合は選択状態をクリア
+                GlobalConfig.instance.selectedFeatures.remove(node);
 
-              await node.dispose();
+                await node.dispose();
 
-              // マップのフィーチャキャッシュを更新
-              triggerMapRefresh();
+                // マップのフィーチャキャッシュを更新
+                triggerMapRefresh();
 
-              setStateCallback(() {});
+                setStateCallback(() {});
+                
+                // 成功メッセージを表示
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('写真を削除しました: ${node.name}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                // エラーメッセージを表示
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('写真の削除に失敗しました: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             }
-          } else if (value == 'details') {
-            _showPhotoDetails(context, node);
           }
         },
         itemBuilder:
             (context) => [
-              const PopupMenuItem(value: 'details', child: Text('詳細情報')),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
@@ -682,120 +703,6 @@ mixin LayerDrawerTiles {
   }
 
   /// 写真の詳細情報を表示するダイアログ
-  void _showPhotoDetails(BuildContext context, PhotoNode node) {
-    // プロジェクトルートからの相対パスを計算
-    final projectRoot = GlobalConfig.instance.projectRootDir;
-    String displayPath = node.filePath;
-    if (projectRoot != null && node.filePath.startsWith(projectRoot)) {
-      displayPath = node.filePath.substring(projectRoot.length);
-      if (displayPath.startsWith('\\') || displayPath.startsWith('/')) {
-        displayPath = displayPath.substring(1);
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.photo_camera, color: Colors.purple),
-                SizedBox(width: 8),
-                Text('写真ファイル'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 画像プレビューを追加
-                  Container(
-                    width: double.infinity,
-                    height: 200,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(node.filePath),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey.shade100,
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                  size: 48,
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  '画像を読み込めません',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  _buildDetailRow('ファイルパス', displayPath),
-                  _buildDetailRow('緯度', '${node.location.latitude}'),
-                  _buildDetailRow('経度', '${node.location.longitude}'),
-                  if (node.takenAt != null)
-                    _buildDetailRow('撮影日時', '${node.takenAt}'),
-                  if (node.metadata.fileSize != null)
-                    _buildDetailRow(
-                      'ファイルサイズ',
-                      '${(node.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
-                    ),
-                  if (node.metadata.width != null &&
-                      node.metadata.height != null)
-                    _buildDetailRow(
-                      '解像度',
-                      '${node.metadata.width} × ${node.metadata.height}',
-                    ),
-                  if (node.metadata.camera != null)
-                    _buildDetailRow('カメラ', '${node.metadata.camera}'),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('閉じる'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  /// 詳細情報の行を構築
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-          ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
-        ],
-      ),
-    );
-  }
 
   /// ポイントレイヤーをライン/ポリゴンに変換
   Future<void> _convertPointsToLine(

@@ -116,6 +116,11 @@ class ForegroundServiceManager {
       debugPrint('[ForegroundService] GPS追跡サービス開始');
     } catch (e) {
       debugPrint('[ForegroundService] サービス開始エラー: $e');
+      // Android 12以降でフォアグラウンドサービス開始が失敗する場合、
+      // ユーザーに通知を表示（デバッグ情報）
+      debugPrint('[ForegroundService] エラー詳細: ${e.toString()}');
+      // サービスが開始できなくてもアプリはクラッシュさせない
+      rethrow; // エラーを呼び出し元に伝播して、ユーザーにメッセージを表示
     }
   }
 
@@ -212,18 +217,24 @@ void onStart(ServiceInstance service) async {
         // サービス停止チェック
         if (service is AndroidServiceInstance) {
           if (await service.isForegroundService()) {
-            // 通知内容を更新
-            String notificationContent =
-                "位置追跡中: ${DateTime.now().toString().substring(11, 19)}";
-            if (currentPosition != null) {
-              notificationContent +=
-                  "\nGPS: ${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
-            }
+            // 通知内容を更新（Android 12以降のエラー対策でtry-catchで囲む）
+            try {
+              String notificationContent =
+                  "位置追跡中: ${DateTime.now().toString().substring(11, 19)}";
+              if (currentPosition != null) {
+                notificationContent +=
+                    "\nGPS: ${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
+              }
 
-            service.setForegroundNotificationInfo(
-              title: "K-MAPS GPS追跡実行中",
-              content: notificationContent,
-            );
+              service.setForegroundNotificationInfo(
+                title: "K-MAPS GPS追跡実行中",
+                content: notificationContent,
+              );
+            } catch (notificationError) {
+              // Android 12以降で通知更新が失敗する場合があるが、
+              // GPS追跡自体は継続するためエラーを無視
+              debugPrint('[ForegroundService] 通知更新エラー（継続）: $notificationError');
+            }
           }
         }
       } catch (e) {

@@ -545,6 +545,22 @@ class PhotoNode extends LayerTreeNode {
   @override
   Future<void> dispose() async {
     print('[DEBUG] PhotoNode.dispose: disposing photo ${name}');
+    
+    // 画像ファイルを削除
+    try {
+      final file = File(filePath);
+      if (file.existsSync()) {
+        await file.delete();
+        print('[DEBUG] PhotoNode.dispose: deleted file ${filePath}');
+      } else {
+        print('[DEBUG] PhotoNode.dispose: file not found ${filePath}');
+      }
+    } catch (e) {
+      print('[ERROR] PhotoNode.dispose: failed to delete file ${filePath}: $e');
+      // エラーを再throwして、呼び出し元で処理できるようにする
+      rethrow;
+    }
+    
     await super.dispose();
   }
 }

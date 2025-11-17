@@ -8,6 +8,7 @@ import '../models/nodes/layer_node.dart'; // PointLayerNode用
 import '../utils/global_config.dart';
 import '../widgets/line_simplification_dialog.dart';
 import '../widgets/geometry_conversion_dialogs.dart';
+import '../widgets/photo_viewer.dart';
 import '../services/geometry_conversion_service.dart';
 
 /// フィーチャ詳細パネル
@@ -37,36 +38,68 @@ class FeatureDetailPanel extends StatelessWidget {
         context,
         title: "📸 写真ファイル",
         children: [
-          // 画像プレビューを追加
-          Container(
-            width: double.infinity,
-            height: 120,
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(photo.filePath),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey.shade100,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.broken_image, color: Colors.grey, size: 24),
-                        const SizedBox(height: 4),
-                        Text(
-                          '画像エラー',
-                          style: TextStyle(color: Colors.grey, fontSize: 10),
-                        ),
-                      ],
+          // 画像プレビューを追加（タップでフルスクリーン表示）
+          GestureDetector(
+            onTap: () {
+              showPhotoViewer(
+                context,
+                imagePath: photo.filePath,
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              height: 120,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Stack(
+                children: [
+                  // 画像
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(photo.filePath),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey.shade100,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image, color: Colors.grey, size: 24),
+                              const SizedBox(height: 4),
+                              Text(
+                                '画像エラー',
+                                style: TextStyle(color: Colors.grey, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                  // 拡大アイコン（ホバーヒント）
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        Icons.zoom_in,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -119,24 +152,22 @@ class FeatureDetailPanel extends StatelessWidget {
               ],
             ),
           ],
-          if (photo.metadata.fileSize != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'サイズ: ',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'サイズ: ',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Expanded(
+                child: Text(
+                  '${(photo.metadata.fileSize / (1024 * 1024)).toStringAsFixed(1)} MB',
+                  style: const TextStyle(fontSize: 11),
                 ),
-                Expanded(
-                  child: Text(
-                    '${(photo.metadata.fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       );
     }

@@ -97,43 +97,45 @@ class PhotoNode extends LayerTreeNode {
     }
 
     print('[DEBUG] PhotoNode.loadNodes: scanning directory: $absPath');
-    // ディレクトリ内の画像ファイルをスキャン
+    // ディレクトリ内の画像ファイルをスキャンして名前順にソート
     final supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
+    
+    final imageFiles = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => supportedExtensions.contains(p.extension(f.path).toLowerCase()))
+        .toList()
+      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in dir.listSync()) {
-      if (entity is File) {
-        final ext = p.extension(entity.path).toLowerCase();
-        if (supportedExtensions.contains(ext)) {
-          final fileName = p.basename(entity.path);
-          print('[DEBUG] PhotoNode.loadNodes: found image file: $fileName');
+    for (var entity in imageFiles) {
+      final fileName = p.basename(entity.path);
+      print('[DEBUG] PhotoNode.loadNodes: found image file: $fileName');
 
-          try {
-            // EXIFデータから位置情報を抽出
-            final exifData = await _extractExifData(entity.path);
-            if (exifData != null) {
-              final photoNode = PhotoNode(
-                entity.path,
-                exifData.location,
-                exifData.metadata,
-                takenAt: exifData.takenAt,
-                visible: true,
-                parent: parent,
-              );
-              nodes.add(photoNode);
-              print(
-                '[DEBUG] PhotoNode.loadNodes: created PhotoNode for $fileName at ${exifData.location}',
-              );
-            } else {
-              print(
-                '[DEBUG] PhotoNode.loadNodes: no GPS data found in $fileName, skipping',
-              );
-            }
-          } catch (e) {
-            print(
-              '[ERROR] PhotoNode.loadNodes: failed to process $fileName: $e',
-            );
-          }
+      try {
+        // EXIFデータから位置情報を抽出
+        final exifData = await _extractExifData(entity.path);
+        if (exifData != null) {
+          final photoNode = PhotoNode(
+            entity.path,
+            exifData.location,
+            exifData.metadata,
+            takenAt: exifData.takenAt,
+            visible: true,
+            parent: parent,
+          );
+          nodes.add(photoNode);
+          print(
+            '[DEBUG] PhotoNode.loadNodes: created PhotoNode for $fileName at ${exifData.location}',
+          );
+        } else {
+          print(
+            '[DEBUG] PhotoNode.loadNodes: no GPS data found in $fileName, skipping',
+          );
         }
+      } catch (e) {
+        print(
+          '[ERROR] PhotoNode.loadNodes: failed to process $fileName: $e',
+        );
       }
     }
 

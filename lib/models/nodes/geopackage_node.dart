@@ -89,20 +89,25 @@ class GeoPackageNode extends LayerTreeNode {
     }
 
     print('[DEBUG] GeoPackageNode.loadNodes: scanning directory: $absPath');
-    // ディレクトリ内の.gpkgファイルをスキャン
-    for (var entity in dir.listSync()) {
-      if (entity is File && entity.path.endsWith('.gpkg')) {
-        final fileName = p.basename(entity.path);
-        print('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
-        final parentPathSegments = parent.getAbsolutePathSegments();
-        final pathList = [...parentPathSegments, fileName];
-        final gpkgFile = GeoPackageFile(pathList);
+    // ディレクトリ内の.gpkgファイルをスキャンして名前順にソート
+    final gpkgFiles = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.gpkg'))
+        .toList()
+      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    
+    for (var entity in gpkgFiles) {
+      final fileName = p.basename(entity.path);
+      print('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
+      final parentPathSegments = parent.getAbsolutePathSegments();
+      final pathList = [...parentPathSegments, fileName];
+      final gpkgFile = GeoPackageFile(pathList);
 
-        nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
-        print(
-          '[DEBUG] GeoPackageNode.loadNodes: created GeoPackageNode for $fileName',
-        );
-      }
+      nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
+      print(
+        '[DEBUG] GeoPackageNode.loadNodes: created GeoPackageNode for $fileName',
+      );
     }
     print(
       '[DEBUG] GeoPackageNode.loadNodes: found ${nodes.length} .gpkg files, returning',

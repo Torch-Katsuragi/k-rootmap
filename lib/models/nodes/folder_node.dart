@@ -64,24 +64,30 @@ class FolderNode extends LayerTreeNode {
     );
   }
 
-  /// このフォルダ直下のFolderNodeリストのみ返す
+  /// このフォルダ直下のFolderNodeリストのみ返す（名前昇順でソート）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
     final dir = Directory(absPath);
-    for (var entity in dir.listSync()) {
-      if (entity is Directory) {
-        nodes.add(
-          FolderNode(
-            p.basename(entity.path),
-            visible: true,
-            parent: parent,
-            children: [],
-          ),
-        );
-      }
+    
+    // ディレクトリを取得して名前順にソート
+    final directories = dir
+        .listSync()
+        .whereType<Directory>()
+        .toList()
+      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    
+    for (var entity in directories) {
+      nodes.add(
+        FolderNode(
+          p.basename(entity.path),
+          visible: true,
+          parent: parent,
+          children: [],
+        ),
+      );
     }
     return nodes;
   }

@@ -4,7 +4,207 @@ GISアプリケーション（Flutter製）
 
 ## 最新の更新情報
 
-### ⚡ 画像ファイル読み込みの大幅な高速化 (2025-11-17 最新)
+### 📦 タイルキャッシュのGeoPackage化 + バッチ書き込み最適化 (2025-11-17 最新)
+
+**改善内容**: タイルキャッシュをファイルベースからOGC GeoPackage標準ベースに移行し、バッチ書き込みでSQL渋滞を解消
+
+**従来の問題**:
+- 何千ものファイルが散在（1タイル = 1ファイル）
+- ファイルシステムの負荷増大
+- キャッシュインデックスJSONの管理が煩雑
+- ファイル検証が遅い
+
+**GeoPackage化のメリット**:
+
+1. **単一ファイル管理**
+   - 全タイルを1つの`.gpkg`ファイルに集約
+   - バックアップが容易（1ファイルコピー）
+   - ストレージ効率向上
+
+2. **OGC標準準拠**
+   - GeoPackage Encoding Standard完全準拠
+   - `gpkg_spatial_ref_sys` - 空間参照系（EPSG:3857）
+   - `gpkg_contents` - コンテンツメタデータ
+   - `gpkg_tile_matrix_set` - タイルマトリックスセット
+   - `gpkg_tile_matrix` - ズームレベル情報（0-22）
+   - タイル座標系: TMS（左下原点）
+
+3. **SQLiteの高性能**
+   - WALモードで並行読み書き
+   - インデックスで高速検索
+   - トランザクションで整合性保証
+   - VACUUMで自動最適化
+
+4. **バッチ書き込み最適化** ⭐
+   - 複数タイルを100msキューに蓄積
+   - 1トランザクションで一括書き込み
+   - **SQL渋滞を完全解消**
+   - 並行ダウンロード時のパフォーマンス向上
+
+5. **破損検出・修復**
+   - SQL内でタイルデータを直接検証
+   - PNGヘッダーチェック
+   - サイズ検証
+   - 破損タイルの一括削除
+
+**技術仕様**:
+
+```sql
+-- タイルデータテーブル
+CREATE TABLE map_tiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    zoom_level INTEGER NOT NULL,
+    tile_column INTEGER NOT NULL,
+    tile_row INTEGER NOT NULL,
+    tile_data BLOB NOT NULL,
+    provider_id TEXT NOT NULL,
+    cached_at INTEGER NOT NULL
+);
+
+-- 高速検索用インデックス
+CREATE UNIQUE INDEX idx_tiles_lookup 
+ON map_tiles(provider_id, zoom_level, tile_column, tile_row);
+
+-- 座標変換（XYZ → TMS）
+tile_row = (2^zoom - 1) - y
+```
+
+**ファイル構成**:
+```
+k_maps_tiles/
+  └── tile_cache.gpkg  ← 単一ファイルに集約！
+```
+
+**パフォーマンス**:
+- ✅ ファイル数: 数千ファイル → **1ファイル**
+- ✅ キャッシュ検索: O(n) → **O(1)** (インデックス)
+- ✅ 書き込み競合: **バッチ化で渋滞なし**（100msキュー）
+- ✅ 並行ダウンロード: **WAL+トランザクションで高速**
+- ✅ ディスク容量: ファイルシステムオーバーヘッド削減
+- ✅ 検証速度: **SQL一括処理で高速化**
+
+**修正ファイル**:
+- `lib/services/tile_cache_geopackage.dart` - GeoPackage管理クラス（新規）
+- `lib/services/basemap_service.dart` - GeoPackageベースに完全移行
+- `lib/screens/basemap_settings_screen.dart` - 非同期統計取得に対応
+
+---
+
+### 🛡️ 地図タイルキャッシュの破損対策 + デバッグログ強化 (2025-11-17)
+
+**改善内容**: 破損したキャッシュファイルの自動検出・削除機能を追加し、オフライン時の安定性を向上
+
+**問題**:
+- 機内モード時に `Invalid image data` / `CRC error` が発生
+- ダウンロード途中で保存された不完全なタイルデータが原因
+- 破損キャッシュがあると、オフライン時に地図が表示できない
+
+**解決策**:
+
+1. **キャッシュ読み込み時の自動検証**
+   - ファイルサイズチェック（100バイト未満は破損とみなす）
+   - PNGヘッダー検証（先頭8バイトの署名チェック）
+   - 破損検出時は自動削除してインデックス更新
+
+2. **ダウンロード時の妥当性チェック**
+   - サイズ検証後にキャッシュ保存
+   - PNGヘッダー検証済みデータのみ保存
+   - 不完全なデータは保存しない
+
+3. **手動キャッシュ検証機能**
+   - 背景地図設定画面に「検証・修復」ボタン追加
+   - 全キャッシュファイルをスキャン
+   - 破損ファイルを自動削除して結果レポート表示
+
+4. **詳細なデバッグログ**
+   - タイル要求の追跡（リクエスト→キャッシュ→ネットワーク→保存）
+   - キャッシュHIT/MISS状態の可視化
+   - ネットワーク処理の詳細（URL、ステータス、サイズ）
+   - フォールバック処理の追跡
+   - エラー詳細（例外、スタックトレース）
+
+**ログ出力例**:
+```
+[TILE] Request: z=8, x=227, y=104 | Provider: GSI Pale (maxZoom: 18)
+[TILE] 🔍 Checking cache: z=8, x=227, y=104
+[TILE] ⚠️ Corrupted cache (invalid PNG header): gsi_8_227_104
+[TILE] 🗑️ Deleted corrupted cache file: /path/to/cache/gsi/8/227_104.tile
+[TILE] ✗ Cache MISS: z=8, x=227, y=104
+[TILE] 🌐 Network fetch (attempt 1): https://cyberjapandata.gsi.go.jp/xyz/pale/8/227/104.png
+[TILE] ✓ Network SUCCESS: z=8, x=227, y=104 (15234 bytes)
+[TILE] 💾 Saving to cache...
+```
+
+**修正効果**:
+- ✅ 破損キャッシュを自動検出・削除
+- ✅ オフライン時の安定性向上（透明タイルで代替表示）
+- ✅ 不完全なダウンロードを防止
+- ✅ ユーザーが手動で修復可能
+- ✅ デバッグが容易（詳細ログ）
+
+**修正ファイル**:
+- `lib/services/basemap_service.dart` - キャッシュ検証・削除機能
+- `lib/widgets/cached_tile_layer.dart` - デコードエラーハンドリング強化
+- `lib/screens/basemap_settings_screen.dart` - 検証・修復UI追加
+
+---
+
+### 🐛 地図タイルダウンロードのデバッグログ強化 (2025-11-17)
+
+**改善内容**: 地図タイルのダウンロード処理全体に詳細なデバッグログを追加し、問題の原因特定を容易に
+
+**追加されたログ**:
+
+1. **タイル要求の追跡**
+   - リクエスト開始時: ズームレベル、座標、プロバイダー情報
+   - 処理結果: 成功/失敗、データサイズ
+
+2. **キャッシュ動作の可視化**
+   - キャッシュ検索: HIT/MISS状態
+   - キャッシュ保存: 保存先パス、総タイル数
+   - クロスプラットフォームキャッシュの動作
+
+3. **ネットワーク処理の詳細**
+   - ダウンロード試行: URL、試行回数
+   - HTTPレスポンス: ステータスコード、データサイズ
+   - リトライ処理: 遅延時間、残り回数
+
+4. **フォールバック処理の追跡**
+   - 親タイル検索: ズームレベルの遷移
+   - タイルスケーリング: 切り出し範囲、リサイズ処理
+   - 再帰的フォールバック: 深さ、終了条件
+
+5. **エラー詳細**
+   - 例外メッセージ: 詳細なエラー内容
+   - スタックトレース: 上位3行を出力
+   - リカバリー試行: キャッシュからの復旧
+
+**ログ形式**:
+```
+[TILE] Request: z=15, x=29321, y=12345 | Provider: OpenStreetMap (maxZoom: 19)
+[TILE] 🔍 Checking cache: z=15, x=29321, y=12345
+[TILE] ✗ Cache MISS: z=15, x=29321, y=12345
+[TILE] 🌐 Network fetch (attempt 1): https://tile.openstreetmap.org/15/29321/12345.png
+[TILE] HTTP Response: status=200, size=12345 bytes
+[TILE] ✓ Network SUCCESS: z=15, x=29321, y=12345 (12345 bytes)
+[TILE] 💾 Saving to cache...
+[TILE] ✓ Cache saved: osm_15_29321_12345 (total: 150 tiles)
+```
+
+**デバッグ効果**:
+- ✅ タイルダウンロードの各ステップが可視化される
+- ✅ キャッシュヒット率の把握が容易
+- ✅ ネットワークエラーの原因特定が迅速
+- ✅ フォールバック処理の動作確認
+- ✅ パフォーマンスボトルネックの特定
+
+**修正ファイル**:
+- `lib/services/basemap_service.dart` - タイルダウンロード・キャッシュ処理
+- `lib/widgets/cached_tile_layer.dart` - UI側のタイル読み込み
+
+---
+
+### ⚡ 画像ファイル読み込みの大幅な高速化 (2025-11-17)
 
 **改善内容**: 大量の画像ファイルがある場合の読み込み速度を最大40倍高速化
 

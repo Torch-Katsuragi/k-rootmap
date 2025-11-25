@@ -95,16 +95,27 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
       );
 
       if (tileData != null && tileData.isNotEmpty) {
-        final buffer = await ui.ImmutableBuffer.fromUint8List(tileData);
-        final codec = await decode(buffer);
-        final frame = await codec.getNextFrame();
-        return ImageInfo(image: frame.image);
+        // データサイズの事前チェック
+        if (tileData.length < 100) {
+          return await _createTransparentTile(decode);
+        }
+        
+        try {
+          final buffer = await ui.ImmutableBuffer.fromUint8List(tileData);
+          final codec = await decode(buffer);
+          final frame = await codec.getNextFrame();
+          
+          return ImageInfo(image: frame.image);
+        } catch (decodeError) {
+          print('[TILE-UI] ❌ Decode error: $decodeError');
+          return await _createTransparentTile(decode);
+        }
       } else {
         // タイルが取得できない場合は透明な画像を返す
         return await _createTransparentTile(decode);
       }
     } catch (e) {
-      print('[ERROR] CachedTileImageProvider: タイル読み込み中にエラー - $e');
+      print('[TILE-UI] ❌ Load error: $e');
       return await _createErrorTile(decode);
     }
   }

@@ -26,7 +26,7 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
   /// キャッシュ情報を読み込み
   Future<void> _loadCacheInfo() async {
     try {
-      final stats = _baseMapService.getCacheStatistics();
+      final stats = await _baseMapService.getCacheStatistics();
       final sizeMB = await _baseMapService.getCacheSizeMB();
 
       if (mounted) {
@@ -142,6 +142,109 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('キャッシュクリアに失敗しました: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// キャッシュ検証・修復
+  Future<void> _validateAndRepairCache() async {
+    try {
+      // 進行状況ダイアログを表示
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Expanded(child: Text('キャッシュを検証しています...')),
+            ],
+          ),
+        ),
+      );
+
+      // キャッシュ検証実行
+      final result = await _baseMapService.validateAndRepairCache();
+      
+      // ダイアログを閉じる
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // 結果を表示
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('キャッシュ検証結果'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('総タイル数: ${result['totalTiles']}'),
+                Text(
+                  '有効: ${result['validTiles']}',
+                  style: const TextStyle(color: Colors.green),
+                ),
+                Text(
+                  '無効: ${result['invalidTiles']}',
+                  style: const TextStyle(color: Colors.orange),
+                ),
+                Text(
+                  '削除: ${result['removedTiles']}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+                const SizedBox(height: 8),
+                if (result['removedTiles'] > 0)
+                  const Text(
+                    '破損したキャッシュファイルを削除しました',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  )
+                else
+                  const Text(
+                    '問題は検出されませんでした',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+        );
+
+        // キャッシュ情報を再読み込み
+        await _loadCacheInfo();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
+            ),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      // エラー時はダイアログを閉じる
+      if (mounted) {
+        Navigator.pop(context);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('キャッシュ検証に失敗しました: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -338,6 +441,19 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
               ],
             ),
             const SizedBox(height: 12),
+
+            // キャッシュ検証・修復ボタン
+            ListTile(
+              leading: const Icon(Icons.build, color: Colors.blue),
+              title: const Text('キャッシュを検証・修復'),
+              subtitle: const Text('破損したキャッシュを自動検出して削除'),
+              trailing: ElevatedButton(
+                onPressed: _cacheStats.isNotEmpty ? _validateAndRepairCache : null,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                child: const Text('検証', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+            const Divider(),
 
             // 全キャッシュクリアボタン
             ListTile(

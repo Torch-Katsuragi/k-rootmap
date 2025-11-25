@@ -1,0 +1,522 @@
+/// GeoPackageを使用したタイルキャッシュ管理
+/// OGC GeoPackage標準仕様に準拠したタイル格納
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as path;
+
+/// 保存待ちタイル
+class _PendingTile {
+  final String providerId;
+  final int z;
+  final int x;
+  final int y;
+  final Uint8List data;
+  final int tileRow;
+
+  _PendingTile({
+    required this.providerId,
+    required this.z,
+    required this.x,
+    required this.y,
+    required this.data,
+    required this.tileRow,
+  });
+}
+
+/// GeoPackage タイルキャッシュデータベース
+/// OGC GeoPackage Encoding Standard準拠
+class TileCacheGeoPackage {
+  static const String _databaseName = 'tile_cache.gpkg';
+  static const String _tilesTableName = 'map_tiles';
+  
+  Database? _database;
+  String? _databasePath;
+  
+  // バッチ書き込み用
+  final List<_PendingTile> _writeQueue = [];
+  Timer? _batchTimer;
+  bool _isFlushing = false;
+
+  /// データベース初期化
+  Future<void> initialize(String cacheDirectory) async {
+    _databasePath = path.join(cacheDirectory, _databaseName);
+    
+    // データベースを開く（なければ作成）
+    _database = await openDatabase(
+      _databasePath!,
+      version: 1,
+      onCreate: _onCreate,
+      onOpen: _onOpen,
+    );
+    
+    print('[TILE-CACHE] GeoPackage initialized: $_databasePath');
+  }
+
+  /// データベース作成時の処理
+  Future<void> _onCreate(Database db, int version) async {
+    // 1. GeoPackageアプリケーションID設定（必須）
+    await db.rawQuery('PRAGMA application_id = 0x47504B47'); // 'GPKG' in hex
+    
+    // 2. gpkg_spatial_ref_sys テーブル（必須）
+    await db.execute('''
+      CREATE TABLE gpkg_spatial_ref_sys (
+        srs_name TEXT NOT NULL,
+        srs_id INTEGER NOT NULL PRIMARY KEY,
+        organization TEXT NOT NULL,
+        organization_coordsys_id INTEGER NOT NULL,
+        definition TEXT NOT NULL,
+        description TEXT
+      )
+    ''');
+    
+    // Web Mercator (EPSG:3857) の定義を追加
+    await db.execute('''
+      INSERT INTO gpkg_spatial_ref_sys (
+        srs_name, srs_id, organization, organization_coordsys_id, definition, description
+      ) VALUES (
+        'WGS 84 / Pseudo-Mercator',
+        3857,
+        'EPSG',
+        3857,
+        'PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_easting",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]',
+        'Web Mercator projection used by most web mapping applications'
+      )
+    ''');
+    
+    // 3. gpkg_contents テーブル（必須）
+    await db.execute('''
+      CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY,
+        data_type TEXT NOT NULL,
+        identifier TEXT UNIQUE,
+        description TEXT DEFAULT '',
+        last_change TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        min_x REAL,
+        min_y REAL,
+        max_x REAL,
+        max_y REAL,
+        srs_id INTEGER,
+        CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+      )
+    ''');
+    
+    // 4. gpkg_tile_matrix_set テーブル（タイル用必須）
+    await db.execute('''
+      CREATE TABLE gpkg_tile_matrix_set (
+        table_name TEXT NOT NULL PRIMARY KEY,
+        srs_id INTEGER NOT NULL,
+        min_x REAL NOT NULL,
+        min_y REAL NOT NULL,
+        max_x REAL NOT NULL,
+        max_y REAL NOT NULL,
+        CONSTRAINT fk_gtms_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
+        CONSTRAINT fk_gtms_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+      )
+    ''');
+    
+    // 5. gpkg_tile_matrix テーブル（タイル用必須）
+    await db.execute('''
+      CREATE TABLE gpkg_tile_matrix (
+        table_name TEXT NOT NULL,
+        zoom_level INTEGER NOT NULL,
+        matrix_width INTEGER NOT NULL,
+        matrix_height INTEGER NOT NULL,
+        tile_width INTEGER NOT NULL,
+        tile_height INTEGER NOT NULL,
+        pixel_x_size REAL NOT NULL,
+        pixel_y_size REAL NOT NULL,
+        CONSTRAINT pk_ttm PRIMARY KEY (table_name, zoom_level),
+        CONSTRAINT fk_tmm_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name)
+      )
+    ''');
+    
+    // 6. タイルデータテーブル
+    await db.execute('''
+      CREATE TABLE $_tilesTableName (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        zoom_level INTEGER NOT NULL,
+        tile_column INTEGER NOT NULL,
+        tile_row INTEGER NOT NULL,
+        tile_data BLOB NOT NULL,
+        provider_id TEXT NOT NULL,
+        cached_at INTEGER NOT NULL
+      )
+    ''');
+    
+    // タイル検索用インデックス（重要）
+    await db.execute('''
+      CREATE UNIQUE INDEX idx_tiles_lookup 
+      ON $_tilesTableName(provider_id, zoom_level, tile_column, tile_row)
+    ''');
+    
+    // プロバイダー別インデックス
+    await db.execute('''
+      CREATE INDEX idx_tiles_provider 
+      ON $_tilesTableName(provider_id)
+    ''');
+    
+    // 7. gpkg_contents にタイルテーブルを登録
+    // Web Mercator の範囲: EPSG:3857
+    await db.execute('''
+      INSERT INTO gpkg_contents (
+        table_name, data_type, identifier, description, srs_id,
+        min_x, min_y, max_x, max_y
+      ) VALUES (
+        '$_tilesTableName',
+        'tiles',
+        'map_tiles',
+        'Cached map tiles from various providers',
+        3857,
+        -20037508.342789244,
+        -20037508.342789244,
+        20037508.342789244,
+        20037508.342789244
+      )
+    ''');
+    
+    // 8. gpkg_tile_matrix_set にタイルマトリックスセットを登録
+    await db.execute('''
+      INSERT INTO gpkg_tile_matrix_set (
+        table_name, srs_id, min_x, min_y, max_x, max_y
+      ) VALUES (
+        '$_tilesTableName',
+        3857,
+        -20037508.342789244,
+        -20037508.342789244,
+        20037508.342789244,
+        20037508.342789244
+      )
+    ''');
+    
+    // 9. gpkg_tile_matrix にズームレベル情報を登録（0-22レベル）
+    // Web Mercator 標準タイルマトリックス
+    for (int zoom = 0; zoom <= 22; zoom++) {
+      final matrixSize = 1 << zoom; // 2^zoom
+      final pixelSize = (20037508.342789244 * 2) / (matrixSize * 256);
+      
+      await db.execute('''
+        INSERT INTO gpkg_tile_matrix (
+          table_name, zoom_level, matrix_width, matrix_height,
+          tile_width, tile_height, pixel_x_size, pixel_y_size
+        ) VALUES (
+          '$_tilesTableName',
+          $zoom,
+          $matrixSize,
+          $matrixSize,
+          256,
+          256,
+          $pixelSize,
+          $pixelSize
+        )
+      ''');
+    }
+  }
+
+  /// データベースオープン時の処理
+  Future<void> _onOpen(Database db) async {
+    // WALモード有効化（パフォーマンス向上）
+    await db.rawQuery('PRAGMA journal_mode = WAL');
+    await db.rawQuery('PRAGMA synchronous = NORMAL');
+  }
+
+  /// タイルを保存（バッチキューに追加）
+  Future<void> saveTile({
+    required String providerId,
+    required int z,
+    required int x,
+    required int y,
+    required Uint8List data,
+  }) async {
+    if (_database == null) {
+      return; // 初期化前は静かにスキップ
+    }
+    
+    // GeoPackageのタイル座標系はTMS方式（左下原点）
+    // Web地図のXYZ方式（左上原点）から変換
+    final tileRow = (1 << z) - 1 - y;
+    
+    // キューに追加
+    _writeQueue.add(_PendingTile(
+      providerId: providerId,
+      z: z,
+      x: x,
+      y: y,
+      data: data,
+      tileRow: tileRow,
+    ));
+    
+    // 100ms後にバッチ書き込み（複数タイルをまとめて処理）
+    _batchTimer?.cancel();
+    _batchTimer = Timer(const Duration(milliseconds: 100), _flushBatch);
+  }
+  
+  /// バッチ書き込み実行（キューに溜まったタイルを一括保存）
+  Future<void> _flushBatch() async {
+    if (_isFlushing || _writeQueue.isEmpty || _database == null) return;
+    
+    _isFlushing = true;
+    final batch = _writeQueue.toList();
+    _writeQueue.clear();
+    
+    try {
+      // トランザクションで一括書き込み（SQL渋滞を回避）
+      await _database!.transaction((txn) async {
+        for (final tile in batch) {
+          await txn.insert(
+            _tilesTableName,
+            {
+              'zoom_level': tile.z,
+              'tile_column': tile.x,
+              'tile_row': tile.tileRow,
+              'tile_data': tile.data,
+              'provider_id': tile.providerId,
+              'cached_at': DateTime.now().millisecondsSinceEpoch,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Batch save failed: $e');
+    } finally {
+      _isFlushing = false;
+    }
+  }
+
+  /// タイルを取得
+  Future<Uint8List?> getTile({
+    required String providerId,
+    required int z,
+    required int x,
+    required int y,
+  }) async {
+    if (_database == null) {
+      // 初期化前は静かにnullを返す（キャッシュなしとして扱われる）
+      return null;
+    }
+    
+    // XYZ → TMS 座標変換
+    final tileRow = (1 << z) - 1 - y;
+    
+    try {
+      final results = await _database!.query(
+        _tilesTableName,
+        columns: ['id', 'tile_data'],
+        where: 'provider_id = ? AND zoom_level = ? AND tile_column = ? AND tile_row = ?',
+        whereArgs: [providerId, z, x, tileRow],
+        limit: 1,
+      );
+      
+      if (results.isNotEmpty) {
+        final id = results.first['id'] as int;
+        final data = results.first['tile_data'] as Uint8List;
+        
+        // データサイズチェック
+        if (data.length < 100) {
+          // 破損データを自動削除
+          await _database!.delete(_tilesTableName, where: 'id = ?', whereArgs: [id]);
+          print('[TILE-CACHE] 🗑️ Deleted corrupted tile (too small)');
+          return null;
+        }
+        
+        // PNGヘッダーチェック
+        if (data.length >= 8) {
+          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+          bool isValidPng = true;
+          for (int i = 0; i < 8; i++) {
+            if (data[i] != pngSignature[i]) {
+              isValidPng = false;
+              break;
+            }
+          }
+          
+          if (!isValidPng) {
+            // 破損データを自動削除
+            await _database!.delete(_tilesTableName, where: 'id = ?', whereArgs: [id]);
+            print('[TILE-CACHE] 🗑️ Deleted corrupted tile (invalid PNG)');
+            return null;
+          }
+        }
+        
+        return data;
+      }
+      
+      return null;
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Get tile error: $e');
+      return null;
+    }
+  }
+
+  /// プロバイダー別のタイル数を取得
+  Future<Map<String, int>> getStatistics() async {
+    if (_database == null) {
+      return {}; // 初期化前は空の統計を返す
+    }
+    
+    try {
+      final results = await _database!.rawQuery('''
+        SELECT provider_id, COUNT(*) as count
+        FROM $_tilesTableName
+        GROUP BY provider_id
+      ''');
+      
+      final stats = <String, int>{};
+      for (final row in results) {
+        stats[row['provider_id'] as String] = row['count'] as int;
+      }
+      
+      return stats;
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Statistics error: $e');
+      return {};
+    }
+  }
+
+  /// 総タイル数を取得
+  Future<int> getTotalTileCount() async {
+    if (_database == null) return 0;
+    
+    try {
+      final result = await _database!.rawQuery(
+        'SELECT COUNT(*) as count FROM $_tilesTableName',
+      );
+      return Sqflite.firstIntValue(result) ?? 0;
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Count error: $e');
+      return 0;
+    }
+  }
+
+  /// キャッシュサイズを取得（バイト）
+  Future<int> getCacheSize() async {
+    if (_databasePath == null) return 0;
+    
+    try {
+      final file = File(_databasePath!);
+      if (file.existsSync()) {
+        return await file.length();
+      }
+      return 0;
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Size error: $e');
+      return 0;
+    }
+  }
+
+  /// キャッシュをクリア（プロバイダー指定可能）
+  Future<void> clearCache({String? providerId}) async {
+    if (_database == null) return;
+    
+    try {
+      await _database!.delete(
+        _tilesTableName,
+        where: providerId != null ? 'provider_id = ?' : null,
+        whereArgs: providerId != null ? [providerId] : null,
+      );
+      
+      // VACUUM実行でディスク容量を回収
+      await _database!.rawQuery('VACUUM');
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Clear error: $e');
+      rethrow;
+    }
+  }
+
+  /// 破損タイル検証・修復
+  Future<Map<String, dynamic>> validateAndRepair() async {
+    if (_database == null) {
+      return {
+        'totalTiles': 0,
+        'validTiles': 0,
+        'invalidTiles': 0,
+        'removedTiles': 0,
+      }; // 初期化前は空の結果を返す
+    }
+    
+    final result = {
+      'totalTiles': 0,
+      'validTiles': 0,
+      'invalidTiles': 0,
+      'removedTiles': 0,
+    };
+    
+    try {
+      // 全タイルを取得
+      final tiles = await _database!.query(_tilesTableName);
+      result['totalTiles'] = tiles.length;
+      
+      final idsToDelete = <int>[];
+      
+      for (final tile in tiles) {
+        final id = tile['id'] as int;
+        final tileData = tile['tile_data'] as Uint8List;
+        
+        // サイズチェック
+        if (tileData.length < 100) {
+          idsToDelete.add(id);
+          result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
+          continue;
+        }
+        
+        // PNGヘッダーチェック
+        if (tileData.length >= 8) {
+          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+          bool isValidPng = true;
+          
+          for (int i = 0; i < 8; i++) {
+            if (tileData[i] != pngSignature[i]) {
+              isValidPng = false;
+              break;
+            }
+          }
+          
+          if (!isValidPng) {
+            idsToDelete.add(id);
+            result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
+            continue;
+          }
+        }
+        
+        result['validTiles'] = (result['validTiles'] as int) + 1;
+      }
+      
+      // 破損タイルを削除
+      if (idsToDelete.isNotEmpty) {
+        for (final id in idsToDelete) {
+          await _database!.delete(
+            _tilesTableName,
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+        result['removedTiles'] = idsToDelete.length;
+        
+        // VACUUM実行
+        await _database!.rawQuery('VACUUM');
+      }
+    } catch (e) {
+      print('[TILE-CACHE] ❌ Validation error: $e');
+    }
+    
+    return result;
+  }
+
+  /// データベースを閉じる
+  Future<void> close() async {
+    // 残りのバッチを保存
+    _batchTimer?.cancel();
+    await _flushBatch();
+    
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+
+  /// データベースパスを取得
+  String? get databasePath => _databasePath;
+}
+

@@ -330,21 +330,10 @@ class TileCacheGeoPackage {
         
         // PNGヘッダーチェック
         if (data.length >= 8) {
-          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-          bool isValidPng = true;
-          for (int i = 0; i < 8; i++) {
-            if (data[i] != pngSignature[i]) {
-              isValidPng = false;
-              break;
-            }
-          }
-          
-          if (!isValidPng) {
-            // 破損データを自動削除
-            await _database!.delete(_tilesTableName, where: 'id = ?', whereArgs: [id]);
-            print('[TILE-CACHE] 🗑️ Deleted corrupted tile (invalid PNG)');
-            return null;
-          }
+          // 以前はここでPNGシグネチャのチェックを行っていたが、
+          // JPEGやWebPなどの他の画像形式を許容するため、
+          // ヘッダーチェックは廃止する。
+          // if (!isValidPng) { ... }
         }
         
         return data;
@@ -470,21 +459,10 @@ class TileCacheGeoPackage {
         
         // PNGヘッダーチェック
         if (tileData.length >= 8) {
-          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-          bool isValidPng = true;
-          
-          for (int i = 0; i < 8; i++) {
-            if (tileData[i] != pngSignature[i]) {
-              isValidPng = false;
-              break;
-            }
-          }
-          
-          if (!isValidPng) {
-            idsToDelete.add(id);
-            result['invalidTiles'] = (result['invalidTiles'] as int) + 1;
-            continue;
-          }
+          // 以前はここでPNGシグネチャのチェックを行っていたが、
+          // JPEGやWebPなどの他の画像形式を許容するため、
+          // ヘッダーチェックは廃止する。
+          // if (!isValidPng) { ... }
         }
         
         result['validTiles'] = (result['validTiles'] as int) + 1;

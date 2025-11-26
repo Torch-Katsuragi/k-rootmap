@@ -299,19 +299,10 @@ class BaseMapService extends ChangeNotifier {
         
         // PNGヘッダーチェック
         if (data.length >= 8) {
-          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-          bool isValidPng = true;
-          for (int i = 0; i < 8; i++) {
-            if (data[i] != pngSignature[i]) {
-              isValidPng = false;
-              break;
-            }
-          }
-          
-          if (!isValidPng) {
-            print('[TILE] ⚠️ Corrupted cache (invalid PNG header)');
-            return null;
-          }
+          // ヘッダーチェックは行わず、データサイズのみで簡易チェックとする
+          // サーバーによっては異なるフォーマット（WebPなど）を返す可能性や、
+          // ヘッダーが微妙に異なる場合も考慮して、厳密なチェックは廃止する。
+          // decodeImageで失敗すれば最終的に弾かれるため問題ない。
         }
         
         return data;
@@ -399,18 +390,10 @@ class BaseMapService extends ChangeNotifier {
         
         // PNGヘッダーチェック
         if (data.length >= 8) {
-          final pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-          bool isValidPng = true;
-          for (int i = 0; i < 8; i++) {
-            if (data[i] != pngSignature[i]) {
-              isValidPng = false;
-              break;
-            }
-          }
-          
-          if (!isValidPng) {
-            return null;
-          }
+          // ヘッダーチェックは行わず、データサイズのみで簡易チェックとする
+          // サーバーによっては異なるフォーマット（WebPなど）を返す可能性や、
+          // ヘッダーが微妙に異なる場合も考慮して、厳密なチェックは廃止する。
+          // decodeImageで失敗すれば最終的に弾かれるため問題ない。
         }
 
         // キャッシュに保存

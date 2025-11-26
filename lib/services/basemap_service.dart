@@ -12,6 +12,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+
 import 'package:image/image.dart' as img;
 import '../models/basemap_provider.dart';
 import 'tile_cache_geopackage.dart';
@@ -107,6 +109,11 @@ class BaseMapService extends ChangeNotifier {
   bool _isOfflineMode = false;
   String? _cacheDirectory;
   TileCacheGeoPackage? _tileCacheDb;
+  
+  // ネットワーク状態監視
+  final Connectivity _connectivity = Connectivity();
+  bool _isNetworkAvailable = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   // キャンセルトークン用
   bool _isDownloading = false;
@@ -136,9 +143,34 @@ class BaseMapService extends ChangeNotifier {
 
       // 設定の読み込み
       await _loadSettings();
+      
+      // ネットワーク状態の監視開始
+      _initConnectivity();
     } catch (e) {
       print('[BaseMapService] ❌ Init error: $e');
       _currentProvider = BaseMapProvider.defaultProvider;
+    }
+  }
+
+  /// ネットワーク状態の監視初期化
+  void _initConnectivity() async {
+    try {
+      final result = await _connectivity.checkConnectivity();
+      _updateConnectionStatus(result);
+      
+      _connectivitySubscription = _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
+    } catch (e) {
+      print('[BaseMapService] ❌ Connectivity init error: $e');
+    }
+  }
+
+  /// 接続状態更新
+  void _updateConnectionStatus(List<ConnectivityResult> result) {
+    final hasConnection = !result.contains(ConnectivityResult.none);
+    if (_isNetworkAvailable != hasConnection) {
+      _isNetworkAvailable = hasConnection;
+      print('[BaseMapService] Network status changed: ${_isNetworkAvailable ? "Online" : "Offline (No Interface)"}');
+      notifyListeners();
     }
   }
 
@@ -332,6 +364,12 @@ class BaseMapService extends ChangeNotifier {
 
       // オフラインモードまたはネットワークアクセス禁止の場合はここで終了
       if (_isOfflineMode || !allowNetworkAccess) {
+        return null;
+      }
+      
+      // ネットワークインターフェースがない場合は即座に終了（無駄なリクエスト防止）
+      if (!_isNetworkAvailable) {
+        // print('[TILE] ⚠️ No network interface');
         return null;
       }
 
@@ -836,6 +874,7 @@ class BaseMapService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     _tileCacheDb?.close();
     super.dispose();
   }

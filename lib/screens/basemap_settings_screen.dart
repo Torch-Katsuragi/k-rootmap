@@ -1,8 +1,10 @@
 /// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/basemap_provider.dart';
 import '../services/basemap_service.dart';
+import '../utils/global_config.dart';
 
 class BaseMapSettingsScreen extends StatefulWidget {
   const BaseMapSettingsScreen({super.key});
@@ -252,6 +254,78 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
     }
   }
 
+  /// ダウンロード設定ダイアログを表示
+  Future<void> _showDownloadDialog() async {
+    // 現在の地図中心座標を取得
+    LatLng center;
+    try {
+      final mapState = GlobalConfig.instance.mapState;
+      if (mapState != null) {
+        // dynamic型を通じてアクセス
+        center = mapState.mapController.camera.center;
+      } else {
+        // フォールバック: 東京駅
+        center = const LatLng(35.681236, 139.767125);
+      }
+    } catch (e) {
+      center = const LatLng(35.681236, 139.767125);
+    }
+
+    final provider = _baseMapService.currentProvider;
+    
+    // デフォルト設定
+    // 初期ズーム範囲: 現在のズームレベル前後
+    double currentZoom = 15.0;
+    try {
+      final mapState = GlobalConfig.instance.mapState;
+      if (mapState != null) {
+        currentZoom = mapState.mapController.camera.zoom;
+      }
+    } catch (_) {}
+
+    double minZoom = (currentZoom - 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
+    double maxZoom = (currentZoom + 2).clamp(provider.minZoom.toDouble(), provider.maxZoom.toDouble());
+    if (minZoom > maxZoom) minZoom = maxZoom;
+
+    RangeValues zoomRange = RangeValues(minZoom, maxZoom);
+    double radius = 1000; // 1km
+
+    // ダイアログ表示
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _DownloadSettingsDialog(
+        center: center,
+        provider: provider,
+        initialRadius: radius,
+        initialZoomRange: zoomRange,
+        baseMapService: _baseMapService,
+        onStartDownload: (r, zMin, zMax) {
+            Navigator.pop(context); // 設定ダイアログを閉じる
+            _startDownload(center, r, zMin, zMax); // ダウンロード開始
+        },
+      ),
+    );
+  }
+
+  /// ダウンロード実行と進捗ダイアログ
+  void _startDownload(LatLng center, double radius, int minZoom, int maxZoom) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 背景タップで閉じない
+      builder: (context) => _DownloadProgressDialog(
+        center: center,
+        radius: radius,
+        minZoom: minZoom,
+        maxZoom: maxZoom,
+        baseMapService: _baseMapService,
+      ),
+    ).then((_) {
+        // ダイアログが閉じたらキャッシュ情報を更新
+        _loadCacheInfo();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -277,6 +351,10 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
                     _buildCurrentSettingsSection(),
                     const SizedBox(height: 24),
 
+                    // ダウンロードセクション (追加)
+                    _buildDownloadSection(),
+                    const SizedBox(height: 24),
+
                     // 背景地図選択セクション
                     _buildProviderSelectionSection(),
                     const SizedBox(height: 24),
@@ -290,6 +368,51 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
                   ],
                 ),
               ),
+    );
+  }
+
+  /// 一括ダウンロードセクション
+  Widget _buildDownloadSection() {
+    return Card(
+      elevation: 4,
+      color: Colors.blue[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.download_for_offline, color: Colors.blue),
+                SizedBox(width: 8),
+                Text(
+                  '地図の一括ダウンロード',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '現在表示している場所を中心に、指定した範囲の地図データを一括で保存します。オフライン環境に行く前に実行してください。',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showDownloadDialog,
+                icon: const Icon(Icons.download),
+                label: const Text('ダウンロード設定を開く'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -499,6 +622,301 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
               }).toList(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ダウンロード設定ダイアログ
+class _DownloadSettingsDialog extends StatefulWidget {
+  final LatLng center;
+  final BaseMapProvider provider;
+  final double initialRadius;
+  final RangeValues initialZoomRange;
+  final BaseMapService baseMapService;
+  final Function(double, int, int) onStartDownload;
+
+  const _DownloadSettingsDialog({
+    required this.center,
+    required this.provider,
+    required this.initialRadius,
+    required this.initialZoomRange,
+    required this.baseMapService,
+    required this.onStartDownload,
+  });
+
+  @override
+  State<_DownloadSettingsDialog> createState() => _DownloadSettingsDialogState();
+}
+
+class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
+  late double _radius;
+  late RangeValues _zoomRange;
+  int _estimatedTiles = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _radius = widget.initialRadius;
+    _zoomRange = widget.initialZoomRange;
+    _calculateTiles();
+  }
+
+  void _calculateTiles() {
+    final result = widget.baseMapService.estimateDownloadSize(
+      center: widget.center,
+      radiusMeters: _radius,
+      minZoom: _zoomRange.start.round(),
+      maxZoom: _zoomRange.end.round(),
+    );
+    setState(() {
+      _estimatedTiles = result['totalTiles'] ?? 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('ダウンロード設定'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('地図: ${widget.provider.name}'),
+            const SizedBox(height: 4),
+            Text('中心: ${widget.center.latitude.toStringAsFixed(4)}, ${widget.center.longitude.toStringAsFixed(4)}'),
+            const Divider(),
+            
+            const Text('範囲 (半径)', style: TextStyle(fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: _radius,
+                    min: 100,
+                    max: 10000,
+                    divisions: 99,
+                    label: '${(_radius / 1000).toStringAsFixed(1)} km',
+                    onChanged: (value) {
+                      setState(() {
+                        _radius = value;
+                      });
+                      _calculateTiles();
+                    },
+                  ),
+                ),
+                Text('${(_radius / 1000).toStringAsFixed(1)} km'),
+              ],
+            ),
+            
+            const Text('ズームレベル範囲', style: TextStyle(fontWeight: FontWeight.bold)),
+            RangeSlider(
+              values: _zoomRange,
+              min: widget.provider.minZoom.toDouble(),
+              max: widget.provider.maxZoom.toDouble(),
+              divisions: widget.provider.maxZoom - widget.provider.minZoom,
+              labels: RangeLabels(
+                _zoomRange.start.round().toString(),
+                _zoomRange.end.round().toString(),
+              ),
+              onChanged: (values) {
+                setState(() {
+                  _zoomRange = values;
+                });
+                _calculateTiles();
+              },
+            ),
+            Center(child: Text('${_zoomRange.start.round()} 〜 ${_zoomRange.end.round()}')),
+            
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.image, size: 20, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text(
+                  '推定タイル数: $_estimatedTiles 枚',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _estimatedTiles > 1000 ? Colors.red : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+            if (_estimatedTiles > 1000)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  '注意: タイル数が多すぎます。時間がかかり、サーバー負荷の原因となります。範囲かズームレベルを絞ってください。',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton(
+          onPressed: _estimatedTiles > 0 && _estimatedTiles < 5000 
+            ? () => widget.onStartDownload(
+                _radius, 
+                _zoomRange.start.round(), 
+                _zoomRange.end.round()
+              ) 
+            : null,
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+          child: const Text('ダウンロード開始', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+}
+
+/// ダウンロード進捗ダイアログ
+class _DownloadProgressDialog extends StatefulWidget {
+  final LatLng center;
+  final double radius;
+  final int minZoom;
+  final int maxZoom;
+  final BaseMapService baseMapService;
+
+  const _DownloadProgressDialog({
+    required this.center,
+    required this.radius,
+    required this.minZoom,
+    required this.maxZoom,
+    required this.baseMapService,
+  });
+
+  @override
+  State<_DownloadProgressDialog> createState() => _DownloadProgressDialogState();
+}
+
+class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
+  Map<String, dynamic> _status = {};
+  bool _isFinished = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _startDownload();
+  }
+
+  void _startDownload() async {
+    final stream = widget.baseMapService.downloadArea(
+      center: widget.center,
+      radiusMeters: widget.radius,
+      minZoom: widget.minZoom,
+      maxZoom: widget.maxZoom,
+    );
+
+    stream.listen((status) {
+      if (mounted) {
+        setState(() {
+          _status = status;
+        });
+        
+        if (status['status'] == 'completed' || 
+            status['status'] == 'cancelled' || 
+            status['status'] == 'error') {
+          setState(() {
+            _isFinished = true;
+          });
+        }
+      }
+    }, onError: (e) {
+      if (mounted) {
+        setState(() {
+          _status = {'status': 'error', 'message': e.toString()};
+          _isFinished = true;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _status['total'] as int? ?? 0;
+    final processed = _status['processed'] as int? ?? 0;
+    final downloaded = _status['downloaded'] as int? ?? 0;
+    final skipped = _status['skipped'] as int? ?? 0;
+    final errors = _status['errors'] as int? ?? 0;
+    final percent = total > 0 ? processed / total : 0.0;
+    final statusStr = _status['status'] as String? ?? 'init';
+
+    return AlertDialog(
+      title: const Text('ダウンロード中...'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!_isFinished) ...[
+            LinearProgressIndicator(value: percent, minHeight: 10),
+            const SizedBox(height: 8),
+            Text('${(percent * 100).toStringAsFixed(1)}% 完了 ($processed / $total)'),
+          ],
+          const SizedBox(height: 16),
+          
+          if (statusStr == 'completed')
+            const Center(
+              child: Text(
+                'ダウンロード完了！', 
+                style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            )
+          else if (statusStr == 'cancelled')
+            const Center(
+              child: Text(
+                'キャンセルされました', 
+                style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            )
+          else if (statusStr == 'error')
+             Text(
+                'エラーが発生しました: ${_status['message']}', 
+                style: const TextStyle(color: Colors.red),
+              ),
+              
+          const Divider(),
+          _buildStatRow('成功 (ダウンロード)', downloaded.toString(), Colors.blue),
+          _buildStatRow('済み (スキップ)', skipped.toString(), Colors.grey),
+          _buildStatRow('エラー', errors.toString(), Colors.red),
+        ],
+      ),
+      actions: [
+        if (!_isFinished)
+          TextButton(
+            onPressed: () {
+              widget.baseMapService.cancelDownload();
+            },
+            child: const Text('キャンセル', style: TextStyle(color: Colors.red)),
+          )
+        else
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('閉じる'),
+          ),
+      ],
+    );
+  }
+  
+  Widget _buildStatRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(
+            value,
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
+          ),
+        ],
       ),
     );
   }

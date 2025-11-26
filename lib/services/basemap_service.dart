@@ -1,6 +1,8 @@
 /// 背景地図管理サービス
 /// 背景地図の選択、切り替え、オフラインキャッシュ機能を提供
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'package:image/image.dart' as img;
 import '../models/basemap_provider.dart';
@@ -105,11 +108,18 @@ class BaseMapService extends ChangeNotifier {
   String? _cacheDirectory;
   TileCacheGeoPackage? _tileCacheDb;
 
+  // キャンセルトークン用
+  bool _isDownloading = false;
+  bool _cancelDownload = false;
+
   /// 現在の背景地図プロバイダー
   BaseMapProvider get currentProvider => _currentProvider;
 
   /// オフラインモードかどうか
   bool get isOfflineMode => _isOfflineMode;
+
+  /// ダウンロード中かどうか
+  bool get isDownloading => _isDownloading;
 
   /// 利用可能なプロバイダー一覧
   List<BaseMapProvider> get availableProviders =>
@@ -602,9 +612,240 @@ class BaseMapService extends ChangeNotifier {
     }
   }
 
+  /// 緯度経度からタイル座標を取得
+  math.Point<int> _getTileCoordinates(double lat, double lon, int zoom) {
+    final n = math.pow(2, zoom);
+    final x = ((lon + 180.0) / 360.0 * n).floor();
+    final latRad = lat * math.pi / 180.0;
+    final y = ((1.0 - math.log(math.tan(latRad) + 1.0 / math.cos(latRad)) / math.pi) / 2.0 * n).floor();
+    return math.Point(x, y);
+  }
+
+  /// ダウンロードキャンセル
+  void cancelDownload() {
+    if (_isDownloading) {
+      _cancelDownload = true;
+      notifyListeners();
+    }
+  }
+
+  /// エリア推定（タイル数を計算）
+  Map<String, int> estimateDownloadSize({
+    required LatLng center,
+    required double radiusMeters,
+    required int minZoom,
+    required int maxZoom,
+  }) {
+    int totalTiles = 0;
+    
+    // 半径を緯度経度の差分に変換（概算）
+    // 緯度1度 ≒ 111km, 経度1度 ≒ 111km * cos(lat)
+    final latDiff = radiusMeters / 111000.0;
+    final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
+
+    final north = center.latitude + latDiff;
+    final south = center.latitude - latDiff;
+    final east = center.longitude + lonDiff;
+    final west = center.longitude - lonDiff;
+
+    for (var z = minZoom; z <= maxZoom; z++) {
+      final topLeft = _getTileCoordinates(north, west, z);
+      final bottomRight = _getTileCoordinates(south, east, z);
+      
+      final tilesX = (bottomRight.x - topLeft.x).abs() + 1;
+      final tilesY = (bottomRight.y - topLeft.y).abs() + 1;
+      
+      totalTiles += tilesX * tilesY;
+    }
+
+    return {
+      'totalTiles': totalTiles,
+    };
+  }
+
+  /// エリア一括ダウンロード実行 (並列処理対応)
+  Stream<Map<String, dynamic>> downloadArea({
+    required LatLng center,
+    required double radiusMeters,
+    required int minZoom,
+    required int maxZoom,
+  }) async* {
+    if (_isDownloading) {
+      yield {'status': 'error', 'message': 'すでにダウンロードが実行中です'};
+      return;
+    }
+
+    _isDownloading = true;
+    _cancelDownload = false;
+    notifyListeners();
+
+    // 半径を緯度経度の差分に変換
+    final latDiff = radiusMeters / 111000.0;
+    final lonDiff = radiusMeters / (111000.0 * math.cos(center.latitude * math.pi / 180.0));
+
+    final north = center.latitude + latDiff;
+    final south = center.latitude - latDiff;
+    final east = center.longitude + lonDiff;
+    final west = center.longitude - lonDiff;
+
+    // ダウンロード対象のタイルリストを作成
+    final tilesToDownload = <_TileRequest>[];
+    
+    for (var z = minZoom; z <= maxZoom; z++) {
+      final topLeft = _getTileCoordinates(north, west, z);
+      final bottomRight = _getTileCoordinates(south, east, z);
+
+      final minX = math.min(topLeft.x, bottomRight.x);
+      final maxX = math.max(topLeft.x, bottomRight.x);
+      final minY = math.min(topLeft.y, bottomRight.y);
+      final maxY = math.max(topLeft.y, bottomRight.y);
+
+      for (var x = minX; x <= maxX; x++) {
+        for (var y = minY; y <= maxY; y++) {
+          tilesToDownload.add(_TileRequest(z, x, y));
+        }
+      }
+    }
+
+    final totalTiles = tilesToDownload.length;
+    int processedTiles = 0;
+    int downloadedTiles = 0;
+    int skippedTiles = 0;
+    int errorTiles = 0;
+
+    yield {
+      'status': 'start',
+      'total': totalTiles,
+      'processed': 0,
+    };
+
+    final provider = _currentProvider;
+    
+    // 並列処理の設定
+    // OpenStreetMapの推奨は最大2スレッドだが、ユーザーの要望により4スレッドまで許可
+    // 待機時間を短くしてスループットを上げる
+    const int maxConcurrentDownloads = 4;
+    final activeFutures = <Future<void>>[];
+    final queue = List<_TileRequest>.from(tilesToDownload);
+
+    try {
+      while (queue.isNotEmpty || activeFutures.isNotEmpty) {
+        if (_cancelDownload) break;
+
+        // キューから取り出して並列実行数までタスクを追加
+        while (activeFutures.length < maxConcurrentDownloads && queue.isNotEmpty) {
+          final tile = queue.removeAt(0);
+          
+          late final Future<void> future;
+          future = _processSingleTile(
+            provider, 
+            tile, 
+            (result) {
+              // 完了コールバック
+              processedTiles++;
+              if (result == 'downloaded') downloadedTiles++;
+              else if (result == 'skipped') skippedTiles++;
+              else errorTiles++;
+            }
+          ).then((_) {
+            // 完了したらリストから自分自身を削除
+            activeFutures.remove(future);
+          });
+          
+          activeFutures.add(future);
+        }
+        
+        // スロットが空くか、全タスク完了まで待機
+        if (activeFutures.isNotEmpty) {
+          await Future.any(activeFutures);
+          
+          // 進捗通知 (高頻度すぎると重くなるので間引く)
+          if (processedTiles % 5 == 0 || processedTiles == totalTiles) {
+             yield {
+              'status': 'progress',
+              'total': totalTiles,
+              'processed': processedTiles,
+              'downloaded': downloadedTiles,
+              'skipped': skippedTiles,
+              'errors': errorTiles,
+              'percent': (processedTiles / totalTiles * 100).toStringAsFixed(1),
+            };
+          }
+        }
+      }
+
+      yield {
+        'status': _cancelDownload ? 'cancelled' : 'completed',
+        'total': totalTiles,
+        'processed': processedTiles,
+        'downloaded': downloadedTiles,
+        'skipped': skippedTiles,
+        'errors': errorTiles,
+      };
+
+    } catch (e) {
+      print('[Downloader] Critical error: $e');
+      yield {
+        'status': 'error',
+        'message': e.toString(),
+      };
+    } finally {
+      _isDownloading = false;
+      _cancelDownload = false;
+      notifyListeners();
+    }
+  }
+
+  /// 単一タイルの処理（並列実行用）
+  Future<void> _processSingleTile(
+    BaseMapProvider provider, 
+    _TileRequest tile,
+    Function(String) onComplete,
+  ) async {
+    try {
+      // キャッシュ確認
+      final cached = await _getCachedTile(provider.id, tile.z, tile.x, tile.y);
+      
+      if (cached != null) {
+        onComplete('skipped');
+        return;
+      }
+      
+      // ダウンロード実行
+      final data = await _getTileInternal(
+        provider, 
+        tile.z, tile.x, tile.y, 
+        allowNetworkAccess: true,
+        retryCount: 2,
+      );
+      
+      if (data != null) {
+        // BAN対策: 短い待機時間を入れる
+        // 4並列 × 50ms待機 = 理論最大80req/sec (通信時間除く)
+        // 実際は通信時間があるため、サーバー負荷はそこまで高くならないはず
+        await Future.delayed(const Duration(milliseconds: 50));
+        onComplete('downloaded');
+      } else {
+        onComplete('error');
+      }
+    } catch (e) {
+      print('[Downloader] Error at ${tile.z}/${tile.x}/${tile.y}: $e');
+      onComplete('error');
+    }
+  }
+
   @override
   void dispose() {
     _tileCacheDb?.close();
     super.dispose();
   }
+}
+
+/// タイルリクエスト管理用クラス
+class _TileRequest {
+  final int z;
+  final int x;
+  final int y;
+  
+  _TileRequest(this.z, this.x, this.y);
 }

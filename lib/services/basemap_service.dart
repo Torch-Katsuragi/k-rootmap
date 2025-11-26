@@ -410,8 +410,8 @@ class BaseMapService extends ChangeNotifier {
         return null;
       }
     } catch (e) {
-      print('[TILE] ❌ Network error: $e');
-
+      print('[TILE] ❌ Network error');
+      
       // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
       final errorFallbackData = await _getCachedTile(
         provider.id,
@@ -829,7 +829,7 @@ class BaseMapService extends ChangeNotifier {
         onComplete('error');
       }
     } catch (e) {
-      print('[Downloader] Error at ${tile.z}/${tile.x}/${tile.y}: $e');
+      print('[Downloader] ❌ Download failed (Offline/Network Error)');
       onComplete('error');
     }
   }

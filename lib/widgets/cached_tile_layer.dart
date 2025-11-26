@@ -106,7 +106,8 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
           
           return ImageInfo(image: frame.image);
         } catch (decodeError) {
-          print('[TILE-UI] ❌ Decode error: $decodeError');
+          // 無効な画像データの場合は透明タイルを返し、ログは最小限にする
+          // print('[TILE-UI] ❌ Decode error: $decodeError');
           return await _createTransparentTile(decode);
         }
       } else {
@@ -114,7 +115,8 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
         return await _createTransparentTile(decode);
       }
     } catch (e) {
-      print('[TILE-UI] ❌ Load error: $e');
+      // ロードエラー時も静かに透明タイルを返す
+      // print('[TILE-UI] ❌ Load error: $e');
       return await _createErrorTile(decode);
     }
   }

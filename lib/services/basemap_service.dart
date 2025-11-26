@@ -13,11 +13,92 @@ import 'package:image/image.dart' as img;
 import '../models/basemap_provider.dart';
 import 'tile_cache_geopackage.dart';
 
+/// Isolateで実行するための画像処理関数（トップレベル関数）
+Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
+  try {
+    final parentTileData = params['parentTileData'] as Uint8List;
+    final targetZ = params['targetZ'] as int;
+    final targetX = params['targetX'] as int;
+    final targetY = params['targetY'] as int;
+    final parentZ = params['parentZ'] as int;
+    final parentX = params['parentX'] as int;
+    final parentY = params['parentY'] as int;
+
+    // 親タイル画像をデコード
+    final parentImage = img.decodeImage(parentTileData);
+    if (parentImage == null) {
+      return null;
+    }
+
+    // ズーム差を計算
+    final zoomDiff = targetZ - parentZ;
+    final scale = 1 << zoomDiff; // 2^(zoom差)
+
+    // 親タイル内での相対座標を計算
+    final relativeX = targetX - parentX * scale;
+    final relativeY = targetY - parentY * scale;
+
+    // 切り出し範囲を計算（親タイルのサイズを基準）
+    final parentTileSize = parentImage.width;
+    final cropSize = parentTileSize ~/ scale;
+    final cropX = relativeX * cropSize;
+    final cropY = relativeY * cropSize;
+
+    // 範囲チェック
+    if (cropX < 0 ||
+        cropY < 0 ||
+        cropX + cropSize > parentTileSize ||
+        cropY + cropSize > parentTileSize) {
+      // 範囲外の場合は親タイル全体をスケールして返す
+      final resizedImage = img.copyResize(
+        parentImage,
+        width: 256,
+        height: 256,
+      );
+      return Uint8List.fromList(img.encodePng(resizedImage));
+    }
+
+    // 指定領域を切り出し
+    final croppedImage = img.copyCrop(
+      parentImage,
+      x: cropX,
+      y: cropY,
+      width: cropSize,
+      height: cropSize,
+    );
+
+    // 256x256にリサイズ
+    final resizedImage = img.copyResize(
+      croppedImage,
+      width: 256,
+      height: 256,
+      interpolation: img.Interpolation.linear,
+    );
+
+    // PNG形式でエンコード
+    return Uint8List.fromList(img.encodePng(resizedImage));
+  } catch (e) {
+    print('[TILE-ISO] ❌ Scaling error: $e');
+    return null;
+  }
+}
+
 /// 背景地図管理サービス
 class BaseMapService extends ChangeNotifier {
   static final BaseMapService _instance = BaseMapService._internal();
   factory BaseMapService() => _instance;
   BaseMapService._internal();
+
+  /// 透明なタイル（256x256 PNG）
+  static final Uint8List transparentTile = Uint8List.fromList([
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00,
+    0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x08, 0x04, 0x00, 0x00, 0x00, 0x5C,
+    0x72, 0xA8, 0x66, 0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0x9C, 0x63, 0xF8, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x01, 0x02, 0x9A, 0x65, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x49,
+    0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+  ]);
 
   BaseMapProvider _currentProvider = BaseMapProvider.defaultProvider;
   bool _isOfflineMode = false;
@@ -414,6 +495,8 @@ class BaseMapService extends ChangeNotifier {
   }
 
   /// 親タイルから指定領域を切り出してスケールアップ
+  /// 
+  /// 画像処理はCPU負荷が高いため、compute関数を使用して別Isolateで実行します。
   Future<Uint8List?> _extractAndScaleTile(
     Uint8List parentTileData,
     int targetZ,
@@ -424,61 +507,17 @@ class BaseMapService extends ChangeNotifier {
     int parentY,
   ) async {
     try {
-      // 親タイル画像をデコード
-      final parentImage = img.decodeImage(parentTileData);
-      if (parentImage == null) {
-        return null;
-      }
-
-      // ズーム差を計算
-      final zoomDiff = targetZ - parentZ;
-      final scale = 1 << zoomDiff; // 2^(zoom差)
-
-      // 親タイル内での相対座標を計算
-      final relativeX = targetX - parentX * scale;
-      final relativeY = targetY - parentY * scale;
-
-      // 切り出し範囲を計算（親タイルのサイズを基準）
-      final parentTileSize = parentImage.width;
-      final cropSize = parentTileSize ~/ scale;
-      final cropX = relativeX * cropSize;
-      final cropY = relativeY * cropSize;
-
-      // 範囲チェック
-      if (cropX < 0 ||
-          cropY < 0 ||
-          cropX + cropSize > parentTileSize ||
-          cropY + cropSize > parentTileSize) {
-        // 範囲外の場合は親タイル全体をスケールして返す
-        final resizedImage = img.copyResize(
-          parentImage,
-          width: 256,
-          height: 256,
-        );
-        return Uint8List.fromList(img.encodePng(resizedImage));
-      }
-
-      // 指定領域を切り出し
-      final croppedImage = img.copyCrop(
-        parentImage,
-        x: cropX,
-        y: cropY,
-        width: cropSize,
-        height: cropSize,
-      );
-
-      // 256x256にリサイズ
-      final resizedImage = img.copyResize(
-        croppedImage,
-        width: 256,
-        height: 256,
-        interpolation: img.Interpolation.linear,
-      );
-
-      // PNG形式でエンコード
-      return Uint8List.fromList(img.encodePng(resizedImage));
+      return await compute(_processTileExtraction, {
+        'parentTileData': parentTileData,
+        'targetZ': targetZ,
+        'targetX': targetX,
+        'targetY': targetY,
+        'parentZ': parentZ,
+        'parentX': parentX,
+        'parentY': parentY,
+      });
     } catch (e) {
-      print('[TILE] ❌ Scaling error: $e');
+      print('[TILE] ❌ Scaling error (compute): $e');
       return null;
     }
   }
@@ -576,4 +615,3 @@ class BaseMapService extends ChangeNotifier {
     super.dispose();
   }
 }
-

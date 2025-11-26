@@ -7,6 +7,7 @@ import 'screens/home_screen.dart';
 import 'screens/map_page.dart';
 import 'services/foreground_service.dart';
 import 'services/gps_manager_service.dart';
+import 'services/basemap_service.dart'; // 追加
 
 void main() async {
   // sqflite使用前に必須の初期化処理
@@ -26,6 +27,16 @@ void main() async {
       debugPrint('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
     } catch (e) {
       debugPrint('[K-MAPS] GPS管理サービス初期化エラー: $e');
+    }
+  });
+
+  // 背景地図サービスの初期化
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    try {
+      await BaseMapService().initialize();
+      debugPrint('[K-MAPS] 背景地図サービス初期化完了');
+    } catch (e) {
+      debugPrint('[K-MAPS] 背景地図サービス初期化エラー: $e');
     }
   });
 

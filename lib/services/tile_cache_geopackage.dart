@@ -30,6 +30,129 @@ class _PendingTile {
 class TileCacheGeoPackage {
   static const String _databaseName = 'tile_cache.gpkg';
   static const String _tilesTableName = 'map_tiles';
+
+  // SQL Definitions
+  static const String _sqlPragmaAppId = 'PRAGMA application_id = 0x47504B47'; // GPKG
+  
+  static const String _sqlCreateSpatialRefSys = '''
+    CREATE TABLE gpkg_spatial_ref_sys (
+      srs_name TEXT NOT NULL,
+      srs_id INTEGER NOT NULL PRIMARY KEY,
+      organization TEXT NOT NULL,
+      organization_coordsys_id INTEGER NOT NULL,
+      definition TEXT NOT NULL,
+      description TEXT
+    )
+  ''';
+
+  static const String _sqlInsertWebMercator = '''
+    INSERT INTO gpkg_spatial_ref_sys (
+      srs_name, srs_id, organization, organization_coordsys_id, definition, description
+    ) VALUES (
+      'WGS 84 / Pseudo-Mercator',
+      3857,
+      'EPSG',
+      3857,
+      'PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_easting",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]',
+      'Web Mercator projection used by most web mapping applications'
+    )
+  ''';
+
+  static const String _sqlCreateContents = '''
+    CREATE TABLE gpkg_contents (
+      table_name TEXT NOT NULL PRIMARY KEY,
+      data_type TEXT NOT NULL,
+      identifier TEXT UNIQUE,
+      description TEXT DEFAULT '',
+      last_change TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      min_x REAL,
+      min_y REAL,
+      max_x REAL,
+      max_y REAL,
+      srs_id INTEGER,
+      CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+    )
+  ''';
+
+  static const String _sqlCreateTileMatrixSet = '''
+    CREATE TABLE gpkg_tile_matrix_set (
+      table_name TEXT NOT NULL PRIMARY KEY,
+      srs_id INTEGER NOT NULL,
+      min_x REAL NOT NULL,
+      min_y REAL NOT NULL,
+      max_x REAL NOT NULL,
+      max_y REAL NOT NULL,
+      CONSTRAINT fk_gtms_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
+      CONSTRAINT fk_gtms_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+    )
+  ''';
+
+  static const String _sqlCreateTileMatrix = '''
+    CREATE TABLE gpkg_tile_matrix (
+      table_name TEXT NOT NULL,
+      zoom_level INTEGER NOT NULL,
+      matrix_width INTEGER NOT NULL,
+      matrix_height INTEGER NOT NULL,
+      tile_width INTEGER NOT NULL,
+      tile_height INTEGER NOT NULL,
+      pixel_x_size REAL NOT NULL,
+      pixel_y_size REAL NOT NULL,
+      CONSTRAINT pk_ttm PRIMARY KEY (table_name, zoom_level),
+      CONSTRAINT fk_tmm_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name)
+    )
+  ''';
+
+  static String get _sqlCreateTilesTable => '''
+    CREATE TABLE $_tilesTableName (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      zoom_level INTEGER NOT NULL,
+      tile_column INTEGER NOT NULL,
+      tile_row INTEGER NOT NULL,
+      tile_data BLOB NOT NULL,
+      provider_id TEXT NOT NULL,
+      cached_at INTEGER NOT NULL
+    )
+  ''';
+
+  static String get _sqlCreateIndexLookup => '''
+    CREATE UNIQUE INDEX idx_tiles_lookup 
+    ON $_tilesTableName(provider_id, zoom_level, tile_column, tile_row)
+  ''';
+
+  static String get _sqlCreateIndexProvider => '''
+    CREATE INDEX idx_tiles_provider 
+    ON $_tilesTableName(provider_id)
+  ''';
+
+  static String get _sqlInsertContents => '''
+    INSERT INTO gpkg_contents (
+      table_name, data_type, identifier, description, srs_id,
+      min_x, min_y, max_x, max_y
+    ) VALUES (
+      '$_tilesTableName',
+      'tiles',
+      'map_tiles',
+      'Cached map tiles from various providers',
+      3857,
+      -20037508.342789244,
+      -20037508.342789244,
+      20037508.342789244,
+      20037508.342789244
+    )
+  ''';
+
+  static String get _sqlInsertTileMatrixSet => '''
+    INSERT INTO gpkg_tile_matrix_set (
+      table_name, srs_id, min_x, min_y, max_x, max_y
+    ) VALUES (
+      '$_tilesTableName',
+      3857,
+      -20037508.342789244,
+      -20037508.342789244,
+      20037508.342789244,
+      20037508.342789244
+    )
+  ''';
   
   Database? _database;
   String? _databasePath;
@@ -56,142 +179,26 @@ class TileCacheGeoPackage {
 
   /// データベース作成時の処理
   Future<void> _onCreate(Database db, int version) async {
-    // 1. GeoPackageアプリケーションID設定（必須）
-    await db.rawQuery('PRAGMA application_id = 0x47504B47'); // 'GPKG' in hex
+    // 1. GeoPackageアプリケーションID設定
+    await db.rawQuery(_sqlPragmaAppId);
     
-    // 2. gpkg_spatial_ref_sys テーブル（必須）
-    await db.execute('''
-      CREATE TABLE gpkg_spatial_ref_sys (
-        srs_name TEXT NOT NULL,
-        srs_id INTEGER NOT NULL PRIMARY KEY,
-        organization TEXT NOT NULL,
-        organization_coordsys_id INTEGER NOT NULL,
-        definition TEXT NOT NULL,
-        description TEXT
-      )
-    ''');
+    // 2. メタデータテーブル作成
+    await db.execute(_sqlCreateSpatialRefSys);
+    await db.execute(_sqlInsertWebMercator);
+    await db.execute(_sqlCreateContents);
+    await db.execute(_sqlCreateTileMatrixSet);
+    await db.execute(_sqlCreateTileMatrix);
     
-    // Web Mercator (EPSG:3857) の定義を追加
-    await db.execute('''
-      INSERT INTO gpkg_spatial_ref_sys (
-        srs_name, srs_id, organization, organization_coordsys_id, definition, description
-      ) VALUES (
-        'WGS 84 / Pseudo-Mercator',
-        3857,
-        'EPSG',
-        3857,
-        'PROJCS["WGS 84 / Pseudo-Mercator",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_easting",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["X",EAST],AXIS["Y",NORTH],EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]',
-        'Web Mercator projection used by most web mapping applications'
-      )
-    ''');
+    // 3. タイルテーブル作成
+    await db.execute(_sqlCreateTilesTable);
+    await db.execute(_sqlCreateIndexLookup);
+    await db.execute(_sqlCreateIndexProvider);
     
-    // 3. gpkg_contents テーブル（必須）
-    await db.execute('''
-      CREATE TABLE gpkg_contents (
-        table_name TEXT NOT NULL PRIMARY KEY,
-        data_type TEXT NOT NULL,
-        identifier TEXT UNIQUE,
-        description TEXT DEFAULT '',
-        last_change TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-        min_x REAL,
-        min_y REAL,
-        max_x REAL,
-        max_y REAL,
-        srs_id INTEGER,
-        CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
-      )
-    ''');
+    // 4. メタデータ登録
+    await db.execute(_sqlInsertContents);
+    await db.execute(_sqlInsertTileMatrixSet);
     
-    // 4. gpkg_tile_matrix_set テーブル（タイル用必須）
-    await db.execute('''
-      CREATE TABLE gpkg_tile_matrix_set (
-        table_name TEXT NOT NULL PRIMARY KEY,
-        srs_id INTEGER NOT NULL,
-        min_x REAL NOT NULL,
-        min_y REAL NOT NULL,
-        max_x REAL NOT NULL,
-        max_y REAL NOT NULL,
-        CONSTRAINT fk_gtms_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
-        CONSTRAINT fk_gtms_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
-      )
-    ''');
-    
-    // 5. gpkg_tile_matrix テーブル（タイル用必須）
-    await db.execute('''
-      CREATE TABLE gpkg_tile_matrix (
-        table_name TEXT NOT NULL,
-        zoom_level INTEGER NOT NULL,
-        matrix_width INTEGER NOT NULL,
-        matrix_height INTEGER NOT NULL,
-        tile_width INTEGER NOT NULL,
-        tile_height INTEGER NOT NULL,
-        pixel_x_size REAL NOT NULL,
-        pixel_y_size REAL NOT NULL,
-        CONSTRAINT pk_ttm PRIMARY KEY (table_name, zoom_level),
-        CONSTRAINT fk_tmm_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name)
-      )
-    ''');
-    
-    // 6. タイルデータテーブル
-    await db.execute('''
-      CREATE TABLE $_tilesTableName (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        zoom_level INTEGER NOT NULL,
-        tile_column INTEGER NOT NULL,
-        tile_row INTEGER NOT NULL,
-        tile_data BLOB NOT NULL,
-        provider_id TEXT NOT NULL,
-        cached_at INTEGER NOT NULL
-      )
-    ''');
-    
-    // タイル検索用インデックス（重要）
-    await db.execute('''
-      CREATE UNIQUE INDEX idx_tiles_lookup 
-      ON $_tilesTableName(provider_id, zoom_level, tile_column, tile_row)
-    ''');
-    
-    // プロバイダー別インデックス
-    await db.execute('''
-      CREATE INDEX idx_tiles_provider 
-      ON $_tilesTableName(provider_id)
-    ''');
-    
-    // 7. gpkg_contents にタイルテーブルを登録
-    // Web Mercator の範囲: EPSG:3857
-    await db.execute('''
-      INSERT INTO gpkg_contents (
-        table_name, data_type, identifier, description, srs_id,
-        min_x, min_y, max_x, max_y
-      ) VALUES (
-        '$_tilesTableName',
-        'tiles',
-        'map_tiles',
-        'Cached map tiles from various providers',
-        3857,
-        -20037508.342789244,
-        -20037508.342789244,
-        20037508.342789244,
-        20037508.342789244
-      )
-    ''');
-    
-    // 8. gpkg_tile_matrix_set にタイルマトリックスセットを登録
-    await db.execute('''
-      INSERT INTO gpkg_tile_matrix_set (
-        table_name, srs_id, min_x, min_y, max_x, max_y
-      ) VALUES (
-        '$_tilesTableName',
-        3857,
-        -20037508.342789244,
-        -20037508.342789244,
-        20037508.342789244,
-        20037508.342789244
-      )
-    ''');
-    
-    // 9. gpkg_tile_matrix にズームレベル情報を登録（0-22レベル）
-    // Web Mercator 標準タイルマトリックス
+    // 5. ズームレベル情報登録（0-22レベル）
     for (int zoom = 0; zoom <= 22; zoom++) {
       final matrixSize = 1 << zoom; // 2^zoom
       final pixelSize = (20037508.342789244 * 2) / (matrixSize * 256);

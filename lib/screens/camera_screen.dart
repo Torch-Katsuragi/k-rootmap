@@ -1,10 +1,11 @@
 // K-MAPS: カメラ撮影画面
-// スマホカメラと同様のUI、ズーム機能付き
+// camerawesomeパッケージを使用して、安定したカメラ機能を提供
+import 'dart:async';
+import 'dart:io';
+import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:native_exif/native_exif.dart';
-import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 import '../models/nodes/folder_node.dart';
@@ -24,181 +25,170 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver {
-  CameraController? _controller;
-  List<CameraDescription>? _cameras;
-  bool _isInitialized = false;
-  bool _isTakingPicture = false;
-  double _currentZoom = 1.0;
-  double _minZoom = 1.0;
-  double _maxZoom = 1.0;
-  int _currentCameraIndex = 0;
-
+class _CameraScreenState extends State<CameraScreen> {
+  
+  // 処理中のフラグ
+  bool _isProcessing = false;
+  
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? controller = _controller;
-    if (controller == null || !controller.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
-      controller.dispose();
-    } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
-    }
-  }
-
-  /// カメラの初期化
-  Future<void> _initializeCamera() async {
-    try {
-      // 利用可能なカメラを取得
-      _cameras = await availableCameras();
-
-      if (_cameras == null || _cameras!.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('カメラが見つかりません'),
-              backgroundColor: Colors.red,
-            ),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CameraAwesomeBuilder.custom(
+        saveConfig: SaveConfig.photo(
+          pathBuilder: (sensors) async {
+            // 一時ファイルパスを生成
+            final now = DateTime.now();
+            final timestamp = now.toIso8601String().replaceAll(':', '-').split('.').first;
+            final fileName = 'IMG_$timestamp.jpg';
+            
+            final folderPath = widget.targetFolder.getAbsoluteFilePath();
+            final dirPath = folderPath ?? Directory.systemTemp.path;
+            
+            // 決定前の仮ファイルとして保存
+            return SingleCaptureRequest(p.join(dirPath, 'TEMP_$fileName'), sensors.first);
+          },
+        ),
+        sensorConfig: SensorConfig.single(
+          sensor: Sensor.position(SensorPosition.back),
+          flashMode: FlashMode.auto,
+          aspectRatio: CameraAspectRatios.ratio_4_3,
+          zoom: 0.0,
+        ),
+        // CameraLayoutBuilderのシグネチャに合わせる
+        builder: (state, preview) {
+          // カスタムUIを構築
+          return Stack(
+            children: [
+              // 上部アクション（フラッシュ切り替えなど）
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AwesomeTopActions(state: state),
+              ),
+              
+              // 下部アクション（撮影ボタンなど）
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black54,
+                  padding: const EdgeInsets.only(bottom: 32, top: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // 戻るボタン
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      
+                      // 撮影ボタン
+                      AwesomeCaptureButton(state: state),
+                      
+                      // カメラ切り替えボタン
+                      AwesomeCameraSwitchButton(state: state),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // メディア撮影後の処理をフックするためのリスナー
+              StreamBuilder<MediaCapture?>(
+                stream: state.captureState$,
+                builder: (context, snapshot) {
+                  if (snapshot.hasData && snapshot.data != null) {
+                    final mediaCapture = snapshot.data!;
+                    // 処理中でなく、かつ撮影成功時のみ処理を実行
+                    if (!_isProcessing && mediaCapture.status == MediaCaptureStatus.success && mediaCapture.isPicture) {
+                      // ビルド完了後に処理を実行するためにaddPostFrameCallbackを使用
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                         // 重複実行防止のためフラグをチェック（コールバック登録までの間に変わる可能性も考慮）
+                         if (!_isProcessing) {
+                           _processCapturedImage(mediaCapture.captureRequest.path!);
+                         }
+                      });
+                    }
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
           );
-        }
-        return;
-      }
-
-      // カメラコントローラーを初期化
-      final camera = _cameras![_currentCameraIndex];
-      _controller = CameraController(
-        camera,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-
-      await _controller!.initialize();
-
-      if (!mounted) return;
-
-      // ズームレベルの範囲を取得
-      _minZoom = await _controller!.getMinZoomLevel();
-      _maxZoom = await _controller!.getMaxZoomLevel();
-      _currentZoom = _minZoom;
-
-      setState(() {
-        _isInitialized = true;
-      });
-    } catch (e) {
-      print('[CameraScreen] カメラ初期化エラー: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('カメラの初期化に失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+        },
+      ),
+    );
   }
 
-  /// カメラを切り替え（前面/背面）
-  Future<void> _switchCamera() async {
-    if (_cameras == null || _cameras!.length < 2) return;
-
-    _currentCameraIndex = (_currentCameraIndex + 1) % _cameras!.length;
+  /// 撮影後の画像処理
+  Future<void> _processCapturedImage(String tempPath) async {
+    // 連続処理を防ぐ
+    if (_isProcessing) return;
     
     setState(() {
-      _isInitialized = false;
-    });
-
-    await _controller?.dispose();
-    await _initializeCamera();
-  }
-
-  /// ズームレベルを設定
-  Future<void> _setZoomLevel(double zoom) async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-
-    final clampedZoom = zoom.clamp(_minZoom, _maxZoom);
-    await _controller!.setZoomLevel(clampedZoom);
-    
-    setState(() {
-      _currentZoom = clampedZoom;
-    });
-  }
-
-  /// 写真を撮影
-  Future<void> _takePicture() async {
-    if (_controller == null || !_controller!.value.isInitialized || _isTakingPicture) {
-      return;
-    }
-
-    setState(() {
-      _isTakingPicture = true;
+      _isProcessing = true;
     });
 
     try {
-      // 写真を撮影
-      final XFile image = await _controller!.takePicture();
-
       // GPS座標を取得
       Position? position;
       try {
         position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.best,
-        ).timeout(const Duration(seconds: 5));
+        ).timeout(const Duration(seconds: 3));
       } catch (e) {
         print('[CameraScreen] GPS取得エラー: $e');
-        // GPS取得失敗時は座標なしで保存
       }
 
-      // ファイル名を生成（タイムスタンプ）
       final now = DateTime.now();
       final timestamp = now.toIso8601String().replaceAll(':', '-').split('.').first;
       final defaultFileName = 'IMG_$timestamp';
 
-      // ユーザーにファイル名を入力してもらう
       if (!mounted) return;
+      
+      // ファイル名入力ダイアログ表示
+      // 注: カメラプレビューの上にダイアログを出す
       final fileName = await _showFileNameDialog(defaultFileName);
       
-      // キャンセルされた場合は処理を中止
+      // キャンセルされた場合、一時ファイルを削除して終了
       if (fileName == null) {
-        setState(() {
-          _isTakingPicture = false;
-        });
+        final file = File(tempPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+        // キャンセル時は処理フラグを戻して終了
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+        }
         return;
       }
 
-      // 保存先パスを取得
+      // 正式なパス
       final folderPath = widget.targetFolder.getAbsoluteFilePath();
       if (folderPath == null) {
-        throw Exception('フォルダパスの取得に失敗しました');
+         throw Exception('フォルダパスの取得に失敗しました');
       }
       final targetPath = p.join(folderPath, '$fileName.jpg');
+      
+      // リネーム（移動）
+      final tempFile = File(tempPath);
+      if (await tempFile.exists()) {
+        await tempFile.rename(targetPath);
+      } else {
+        throw Exception('撮影されたファイルが見つかりません');
+      }
+      
+      final targetFile = File(targetPath);
 
-      // 画像ファイルをコピー
-      final File sourceFile = File(image.path);
-      final File targetFile = File(targetPath);
-      await sourceFile.copy(targetPath);
-
-      // EXIF情報を確認
+      // EXIF情報を付与
       if (position != null) {
         await _addExifData(targetFile, position, now);
       }
 
-      // PhotoNodeとして登録（GPS座標がある場合のみ）
+      // PhotoNodeとして登録
       if (position != null) {
         final stats = await targetFile.stat();
         final photoNode = PhotoNode(
@@ -218,32 +208,27 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       }
 
       if (mounted) {
-        // 成功メッセージを表示
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('写真を保存しました: $fileName.jpg'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
           ),
         );
-
-        // 画面を閉じる（更新が必要であることを通知）
         Navigator.pop(context, true);
       }
+
     } catch (e) {
-      print('[CameraScreen] 撮影エラー: $e');
+      print('[CameraScreen] 画像処理エラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('撮影に失敗しました: $e'),
+            content: Text('保存処理に失敗しました: $e'),
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
+        // エラー時もフラグを戻す
         setState(() {
-          _isTakingPicture = false;
+          _isProcessing = false;
         });
       }
     }
@@ -253,10 +238,15 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   Future<String?> _showFileNameDialog(String defaultName) async {
     final controller = TextEditingController(text: defaultName);
     
+    // ナビゲーションのロックを回避するために、少し遅延させてダイアログを表示することを検討する余地もあるが、
+    // ここでは標準的なshowDialogを使用。
+    // !debugLockedエラーが出る場合、非同期処理の中でNavigatorの状態が不安定な可能性がある。
+    // 特にビルドフェーズ中に呼ばれると危険。
+    
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('ファイル名を入力'),
         content: TextField(
           controller: controller,
@@ -267,7 +257,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             border: OutlineInputBorder(),
           ),
           onTap: () {
-            // フォーカス時に全選択
             controller.selection = TextSelection(
               baseOffset: 0,
               extentOffset: controller.text.length,
@@ -276,14 +265,14 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, null),
+            onPressed: () => Navigator.of(dialogContext).pop(null),
             child: const Text('キャンセル'),
           ),
           ElevatedButton(
             onPressed: () {
               final fileName = controller.text.trim();
               if (fileName.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('ファイル名を入力してください'),
                     backgroundColor: Colors.orange,
@@ -291,7 +280,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 );
                 return;
               }
-              Navigator.pop(context, fileName);
+              Navigator.of(dialogContext).pop(fileName);
             },
             child: const Text('決定'),
           ),
@@ -301,14 +290,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   /// EXIF情報を画像ファイルに追加
-  /// 
-  /// native_exifパッケージを使用してGPS座標と撮影日時をEXIFデータとして書き込みます。
   Future<void> _addExifData(File imageFile, Position position, DateTime timestamp) async {
     try {
-      // native_exifを使用してEXIFデータにアクセス
       final exif = await Exif.fromPath(imageFile.path);
       
-      // 撮影日時を設定（EXIF標準形式: "YYYY:MM:DD HH:MM:SS"）
       final dateTimeStr = '${timestamp.year}:${timestamp.month.toString().padLeft(2, '0')}:${timestamp.day.toString().padLeft(2, '0')} '
           '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
       
@@ -316,17 +301,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         'DateTimeOriginal': dateTimeStr,
         'DateTime': dateTimeStr,
         'DateTimeDigitized': dateTimeStr,
-      });
-      
-      // GPS座標を設定
-      await exif.writeAttributes({
         'GPSLatitude': position.latitude.abs(),
         'GPSLatitudeRef': position.latitude >= 0 ? 'N' : 'S',
         'GPSLongitude': position.longitude.abs(),
         'GPSLongitudeRef': position.longitude >= 0 ? 'E' : 'W',
       });
       
-      // 高度を設定
       if (position.altitude != 0) {
         await exif.writeAttributes({
           'GPSAltitude': position.altitude.abs(),
@@ -334,143 +314,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         });
       }
       
-      // EXIF情報をファイルに保存
       await exif.close();
-      
-      print('[CameraScreen] EXIF情報を書き込みました');
-      print('  GPS: ${position.latitude}, ${position.longitude}');
-      print('  高度: ${position.altitude}m');
-      print('  精度: ±${position.accuracy}m');
-      print('  撮影日時: $dateTimeStr');
       
     } catch (e) {
       print('[CameraScreen] EXIF書き込みエラー: $e');
-      // EXIF書き込みに失敗しても、位置情報はPhotoNodeに保存済み
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isInitialized || _controller == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('カメラ'),
-          backgroundColor: Colors.black,
-        ),
-        backgroundColor: Colors.black,
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('カメラ'),
-        backgroundColor: Colors.black,
-        actions: [
-          // カメラ切り替えボタン
-          if (_cameras != null && _cameras!.length > 1)
-            IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
-              onPressed: _switchCamera,
-              tooltip: 'カメラ切り替え',
-            ),
-        ],
-      ),
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // カメラプレビュー
-          Positioned.fill(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio,
-                child: CameraPreview(_controller!),
-              ),
-            ),
-          ),
-
-          // ズームスライダー
-          Positioned(
-            right: 16,
-            top: 16,
-            bottom: 100,
-            child: RotatedBox(
-              quarterTurns: 3,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: Colors.white,
-                  inactiveTrackColor: Colors.white38,
-                  thumbColor: Colors.white,
-                  overlayColor: Colors.white24,
-                  trackHeight: 3.0,
-                ),
-                child: Slider(
-                  value: _currentZoom,
-                  min: _minZoom,
-                  max: _maxZoom,
-                  onChanged: _setZoomLevel,
-                ),
-              ),
-            ),
-          ),
-
-          // ズーム表示
-          Positioned(
-            right: 16,
-            top: MediaQuery.of(context).size.height / 2 - 30,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${_currentZoom.toStringAsFixed(1)}x',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-
-          // 撮影ボタン
-          Positioned(
-            bottom: 32,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: _isTakingPicture ? null : _takePicture,
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isTakingPicture ? Colors.grey : Colors.white,
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 4,
-                    ),
-                  ),
-                  child: _isTakingPicture
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
-

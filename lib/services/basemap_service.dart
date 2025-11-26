@@ -237,14 +237,10 @@ class BaseMapService extends ChangeNotifier {
     int y, {
     bool allowCrossPlatformCache = false,
   }) async {
-    if (_tileCacheDb == null) {
-      print('[TILE] ⚠️ Cache DB not initialized');
-      return null;
-    }
+    if (_tileCacheDb == null) return null;
     
     try {
       // 指定プロバイダーのキャッシュを取得
-      print('[TILE] 🔍 Cache lookup: $providerId z=$z x=$x y=$y');
       final data = await _tileCacheDb!.getTile(
         providerId: providerId,
         z: z,
@@ -253,8 +249,6 @@ class BaseMapService extends ChangeNotifier {
       );
       
       if (data != null) {
-        print('[TILE] ✓ Cache HIT: ${data.length} bytes');
-        
         // データサイズチェック
         if (data.length < 100) {
           print('[TILE] ⚠️ Corrupted cache (too small)');
@@ -279,8 +273,6 @@ class BaseMapService extends ChangeNotifier {
         }
         
         return data;
-      } else {
-        print('[TILE] ✗ Cache MISS');
       }
       
       return null;
@@ -375,6 +367,7 @@ class BaseMapService extends ChangeNotifier {
 
         // キャッシュに保存
         await _cacheTile(provider.id, z, x, y, data);
+        print('[TILE] 📥 Downloaded: ${provider.id}');
 
         return data;
       } else {

@@ -1,4 +1,4 @@
-package com.example.k_maps
+package com.k_root.k_maps
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -27,3 +27,4 @@ class MainActivity : FlutterActivity() {
         }
     }
 }
+

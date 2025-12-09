@@ -1589,7 +1589,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             context: context,
             showAttributeTable: _showAttributeTable,
             drawerOpen: drawerOpen,
-            currentFolder: _currentNode is FolderNode ? _currentNode as FolderNode : null,
             onAttributeTableToggle: () {
               if (_showAttributeTable) {
                 _closeAttributeTable();
@@ -1619,7 +1618,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         body: Stack(
           children: [
             // 左側ツールバー
-            MapToolbar(onToolChanged: () => setState(() {})),
+            MapToolbar(
+              onToolChanged: () => setState(() {}),
+              currentFolder:
+                  _currentNode is FolderNode ? _currentNode as FolderNode : null,
+            ),
             // --- Main map ---
             Positioned.fill(
               left: 44, // Move map to right of toolbar

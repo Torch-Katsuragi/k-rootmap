@@ -8,6 +8,7 @@ import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage_file.dart';
 import 'folder_node.dart';
+import '../../utils/global_config.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
 /// LayerTreeNodeの共通機能はoverrideせず、GeoPackageFile参照のみ追加
@@ -113,6 +114,48 @@ class GeoPackageNode extends LayerTreeNode {
       '[DEBUG] GeoPackageNode.loadNodes: found ${nodes.length} .gpkg files, returning',
     );
     return nodes;
+  }
+
+  /// リネーム処理
+  /// 戻り値: リネーム後の新しいファイル名（拡張子付き）
+  Future<String> rename(String newName) async {
+    try {
+      // まずコネクションを閉じる
+      await geoPackageFile.dispose();
+
+      // 現在のパスを取得
+      final baseDir = GlobalConfig.instance.projectRootDir;
+      if (baseDir == null) {
+        throw Exception('projectRootDirが未設定です');
+      }
+      final currentPath = p.joinAll([baseDir, ...geoPackageFile.pathList]);
+      
+      final file = File(currentPath);
+      if (!file.existsSync()) {
+        throw Exception('ファイルが存在しません: $currentPath');
+      }
+
+      final directory = p.dirname(currentPath);
+      final extension = '.gpkg';
+      // 拡張子が含まれていない場合は付与
+      final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
+      final newPath = p.join(directory, newFileName);
+
+      if (File(newPath).existsSync()) {
+        throw Exception('同名のファイルが既に存在します: $newFileName');
+      }
+
+      // リネーム実行
+      await file.rename(newPath);
+      
+      // 注意: parent.updateChildren()は呼び出し元で行う
+      // これにより、呼び出し元で展開状態の管理などを適切に行える
+      
+      return newFileName;
+    } catch (e) {
+      print('[ERROR] GeoPackageNode.rename: $e');
+      rethrow;
+    }
   }
 
   /// GeoPackageファイルを含む削除処理（ファイル自体も削除）

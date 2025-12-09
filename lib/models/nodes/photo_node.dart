@@ -32,6 +32,12 @@ class PhotoNode extends LayerTreeNode {
     this.takenAt,
     bool visible = true,
     LayerTreeNode? parent,
+    // 以下はコンストラクタで受け取るが、PhotoNodeでは使用しない可能性があるため、
+    // 将来的な拡張性として残すか、削除する。
+    // 今回はCameraScreenからの呼び出しでisPhotoという名前付き引数が渡されているため、
+    // それに対応するために追加する。ただし、PhotoNode自体がPhotoであることを示すクラスなので、
+    // 本来的には不要。
+    bool isPhoto = true,
   }) : super(
          p.basename(filePath),
          visible: visible,
@@ -564,6 +570,37 @@ class PhotoNode extends LayerTreeNode {
   static double _dmsToDecimal(List<double> dms) {
     if (dms.length < 3) return 0.0;
     return dms[0] + (dms[1] / 60.0) + (dms[2] / 3600.0);
+  }
+
+  /// リネーム処理
+  Future<void> rename(String newName) async {
+    try {
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        throw Exception('ファイルが存在しません: $filePath');
+      }
+
+      final directory = p.dirname(filePath);
+      final extension = p.extension(filePath);
+      // 拡張子が含まれていない場合は付与
+      final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
+      final newPath = p.join(directory, newFileName);
+
+      if (File(newPath).existsSync()) {
+        throw Exception('同名のファイルが既に存在します: $newFileName');
+      }
+
+      await file.rename(newPath);
+      
+      // 親フォルダを更新して反映させる
+      if (parent != null) {
+        await parent!.updateChildren();
+      }
+      
+    } catch (e) {
+      print('[ERROR] PhotoNode.rename: $e');
+      rethrow;
+    }
   }
 
   @override

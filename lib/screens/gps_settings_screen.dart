@@ -19,7 +19,12 @@ import '../widgets/gps_info_widget.dart';
 
 /// GPS設定画面
 class GpsSettingsScreen extends StatefulWidget {
-  const GpsSettingsScreen({super.key});
+  final bool isEmbedded;
+
+  const GpsSettingsScreen({
+    super.key,
+    this.isEmbedded = false,
+  });
 
   @override
   State<GpsSettingsScreen> createState() => _GpsSettingsScreenState();
@@ -480,6 +485,7 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
         title: const Text('GPS設定'),
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: !widget.isEmbedded,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

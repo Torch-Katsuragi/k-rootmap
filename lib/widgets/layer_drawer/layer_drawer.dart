@@ -5,18 +5,14 @@ library;
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:k_maps/utils/global_config.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
-import 'package:collection/collection.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/layer_node.dart';
-import '../../models/nodes/feature_node.dart';
+import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
 import '../../models/nodes/photo_node.dart';
 import '../../models/geopackage_file.dart';
-import '../../services/import_export_service.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
 import 'layer_drawer_utils.dart';
@@ -56,17 +52,12 @@ class _LayerDrawerState extends State<LayerDrawer>
   @override
   final Set<String> expandedGpkgPaths = {};
 
-  /// 初回の自動展開が完了したかを追跡
-  bool _hasPerformedInitialExpansion = false;
-
   /// ユーザーが明示的に閉じたGeoPackageノードのパスを記録
   final Set<String> _userClosedGpkgPaths = {};
 
   /// ドラッグ中のファイル管理
   bool _isDragging = false;
-  String? _draggedFilePath;
   GeoPackageNode? _dragTargetGeoPackageNode;
-  int? _dragInsertIndex;
 
   @override
   void Function(void Function()) get setStateCallback =>
@@ -110,7 +101,6 @@ class _LayerDrawerState extends State<LayerDrawer>
     super.initState();
     // デフォルトで全gpkgノードを展開状態に
     expandAllGeoPackageNodes(widget.currentNode, expandedGpkgPaths);
-    _hasPerformedInitialExpansion = true;
   }
 
   @override
@@ -120,7 +110,6 @@ class _LayerDrawerState extends State<LayerDrawer>
     if (oldWidget.currentNode != widget.currentNode) {
       _userClosedGpkgPaths.clear(); // 新しいディレクトリでは閉じた履歴をリセット
       expandAllGeoPackageNodes(widget.currentNode, expandedGpkgPaths);
-      _hasPerformedInitialExpansion = true;
     }
   }
 
@@ -196,10 +185,18 @@ class _LayerDrawerState extends State<LayerDrawer>
                       node,
                       () => widget.onDirChanged(node),
                     );
-                  } else if (node is GeoPackageNode) {
-                    return buildGeoPackageTile(context, node);
                   } else if (node is PhotoNode) {
-                    return buildPhotoTile(context, node);
+                    return buildPhotoTile(
+                      context,
+                      node,
+                      onRename: () => _renamePhoto(context, node),
+                    );
+                  } else if (node is GeoPackageNode) {
+                    return buildGeoPackageTile(
+                      context,
+                      node,
+                      onRename: () => _renameGeoPackage(context, node),
+                    );
                   }
                   // LayerNodeはここで描画しない
                   return const SizedBox.shrink();
@@ -210,6 +207,149 @@ class _LayerDrawerState extends State<LayerDrawer>
         ],
       ),
     );
+  }
+
+  /// 写真のリネーム処理
+  Future<void> _renamePhoto(BuildContext context, PhotoNode node) async {
+    String input = p.basenameWithoutExtension(node.name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('写真のリネーム'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: '新しいファイル名'),
+            controller: TextEditingController(text: input),
+            onChanged: (v) => input = v,
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('キャンセル'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, input),
+              child: const Text('変更'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty && result != p.basenameWithoutExtension(node.name)) {
+      try {
+        final newName = result;
+        await node.rename(newName);
+        
+        // 親フォルダの再スキャンを確実に行うために
+        // node.rename() 内で parent.updateChildren() が呼ばれているが
+        // ここでも明示的に呼び、UI更新コールバックを実行する
+        if (node.parent != null) {
+          await node.parent!.updateChildren();
+        }
+        
+        widget.setStateCallback(() {});
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('写真をリネームしました: $newName')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('リネームに失敗しました: $e')),
+        );
+      }
+    }
+  }
+
+  /// GeoPackageのリネーム処理
+  Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) async {
+    String input = p.basenameWithoutExtension(node.name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('GeoPackageのリネーム'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: '新しいファイル名'),
+            controller: TextEditingController(text: input),
+            onChanged: (v) => input = v,
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('キャンセル'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, input),
+              child: const Text('変更'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty && result != p.basenameWithoutExtension(node.name)) {
+      try {
+        // リネーム前のパスと展開状態を保持
+        final oldPath = node.geoPackageFile.getAbsolutePath();
+        final wasExpanded = oldPath != null && expandedGpkgPaths.contains(oldPath);
+        final parentNode = node.parent;
+        
+        // リネーム実行（新しいファイル名が返される）
+        final newFileName = await node.rename(result);
+        
+        // 親フォルダの再スキャンを実行（新しいノードが生成される）
+        if (parentNode != null) {
+          await parentNode.updateChildren();
+        }
+        
+        // 展開状態を新しいパスに引き継ぐ
+        if (oldPath != null && wasExpanded) {
+          expandedGpkgPaths.remove(oldPath);
+          final parentPath = p.dirname(oldPath);
+          final newPath = p.join(parentPath, newFileName);
+          expandedGpkgPaths.add(newPath);
+          
+          // 新しいノードを探してレイヤー情報をロード
+          if (parentNode != null) {
+            for (final child in parentNode.children) {
+              if (child is GeoPackageNode) {
+                final childPath = child.geoPackageFile.getAbsolutePath();
+                if (childPath == newPath) {
+                  await child.updateChildren();
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        widget.setStateCallback(() {});
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('GeoPackageをリネームしました: $newFileName')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('リネームに失敗しました: $e')),
+          );
+        }
+      }
+    }
   }
 
   /// フォルダ追加処理

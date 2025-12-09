@@ -68,7 +68,11 @@ mixin LayerDrawerTiles {
   }
 
   /// 写真タイルを構築（位置情報付き画像ファイル）
-  Widget buildPhotoTile(BuildContext context, PhotoNode node) {
+  Widget buildPhotoTile(
+    BuildContext context,
+    PhotoNode node, {
+    VoidCallback? onRename,
+  }) {
     return ListTile(
       leading: _buildIconWithVisibility(node),
       title: Text(node.name),
@@ -86,7 +90,10 @@ mixin LayerDrawerTiles {
       },
       trailing: PopupMenuButton<String>(
         onSelected: (value) async {
-          if (value == 'delete') {
+          if (value == 'rename') {
+            // リネーム処理（onRenameコールバックを実行）
+            if (onRename != null) onRename();
+          } else if (value == 'delete') {
             final confirm = await showDialog<bool>(
               context: context,
               builder:
@@ -147,6 +154,7 @@ mixin LayerDrawerTiles {
         },
         itemBuilder:
             (context) => [
+              const PopupMenuItem(value: 'rename', child: Text('名前の変更')),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
@@ -154,7 +162,11 @@ mixin LayerDrawerTiles {
   }
 
   /// GeoPackageタイルを構築
-  Widget buildGeoPackageTile(BuildContext context, GeoPackageNode node) {
+  Widget buildGeoPackageTile(
+    BuildContext context,
+    GeoPackageNode node, {
+    VoidCallback? onRename,
+  }) {
     final absPath = node.geoPackageFile.getAbsolutePath();
     final isExpanded = absPath != null && expandedGpkgPaths.contains(absPath);
     final isDropTarget = isDragging && dragTargetGeoPackageNode == node;
@@ -207,7 +219,9 @@ mixin LayerDrawerTiles {
             children: [
               PopupMenuButton<String>(
                 onSelected: (value) async {
-                  if (value == 'delete') {
+                  if (value == 'rename') {
+                    if (onRename != null) onRename();
+                  } else if (value == 'delete') {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder:
@@ -270,6 +284,7 @@ mixin LayerDrawerTiles {
                 },
                 itemBuilder:
                     (context) => [
+                      const PopupMenuItem(value: 'rename', child: Text('名前の変更')),
                       const PopupMenuItem(value: 'delete', child: Text('削除')),
                     ],
               ),

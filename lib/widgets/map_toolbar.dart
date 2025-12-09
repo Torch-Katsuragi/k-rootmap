@@ -1,19 +1,27 @@
 // 地図画面の左側ツールバーウィジェット
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 import '../utils/global_config.dart';
+import '../models/nodes/folder_node.dart';
+import '../screens/camera_screen.dart';
 
-/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン）
+/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン, カメラ）
 class MapToolbar extends StatelessWidget {
   final VoidCallback onToolChanged;
+  final FolderNode? currentFolder;
 
   const MapToolbar({
     super.key,
     required this.onToolChanged,
+    this.currentFolder,
   });
 
   @override
   Widget build(BuildContext context) {
     final currentTool = GlobalConfig.instance.currentTool;
+    // プラットフォーム判定: モバイル（Android/iOS）のみカメラ使用可能
+    final isMobilePlatform = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     return Positioned(
       left: 0,
@@ -69,6 +77,39 @@ class MapToolbar extends StatelessWidget {
                 onToolChanged();
               },
             ),
+            // カメラボタン（モバイルのみ表示）
+            if (isMobilePlatform) ...[
+              const SizedBox(height: 8),
+              _ToolButton(
+                icon: Icons.camera_alt,
+                tooltip: '写真撮影',
+                isSelected: false, // ツールではないので選択状態にはならない
+                onPressed: currentFolder != null
+                    ? () async {
+                        // カメラ画面へ遷移
+                        final result = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CameraScreen(
+                              targetFolder: currentFolder!,
+                            ),
+                          ),
+                        );
+                        
+                        // 撮影成功時にフォルダを更新してPhotoNodeを読み込む
+                        if (result == true) {
+                          // FolderNodeの子ノードを更新（PhotoNodeを再読み込み）
+                          await currentFolder!.updateChildren();
+                        }
+                      }
+                    : () {
+                      // フォルダ未選択時のフィードバック（オプション）
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('写真を保存するフォルダを選択してください')),
+                      );
+                    },
+              ),
+            ],
           ],
         ),
       ),

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // SystemChrome用
 import 'package:geolocator/geolocator.dart';
 import 'package:native_exif/native_exif.dart';
 import 'package:path/path.dart' as p;
@@ -29,12 +30,47 @@ class _CameraScreenState extends State<CameraScreen> {
   
   // 処理中のフラグ
   bool _isProcessing = false;
+  // 撮影が行われたかどうか（戻るボタンで更新をかけるため）
+  bool _hasCaptured = false;
+  // 処理済みの画像パスを保持するセット（重複処理防止）
+  final Set<String> _processedPaths = {};
+
+  // ズーム制御用
+  double _currentZoom = 0.0;
+  double _startZoom = 0.0;
   
+  @override
+  void initState() {
+    super.initState();
+    // 画面回転を許可
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    // 必要であれば固定に戻すが、地図アプリなので全方向許可のままで良いかもしれない
+    // SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CameraAwesomeBuilder.custom(
-        saveConfig: SaveConfig.photo(
+      backgroundColor: Colors.black, // ステータスバー領域などの背景色
+      // 戻るボタンでの終了時に撮影フラグを返す
+      body: PopScope(
+        canPop: false,
+        onPopInvoked: (didPop) async {
+          if (didPop) return;
+          Navigator.pop(context, _hasCaptured);
+        },
+        child: CameraAwesomeBuilder.custom(
+          saveConfig: SaveConfig.photo(
           pathBuilder: (sensors) async {
             // 一時ファイルパスを生成
             final now = DateTime.now();
@@ -59,12 +95,40 @@ class _CameraScreenState extends State<CameraScreen> {
           // カスタムUIを構築
           return Stack(
             children: [
+              // ピンチズーム用ジェスチャー検知（プレビューの上に配置）
+              Positioned.fill(
+                child: GestureDetector(
+                  onScaleStart: (details) {
+                    // ジェスチャー開始時のズームレベルを保持
+                    _startZoom = _currentZoom;
+                  },
+                  onScaleUpdate: (details) {
+                    // details.scale は開始時からの累積拡大率 (1.0基準)
+                    // 線形で加算する方式に変更 (指に追従しやすくする)
+                    
+                    // 感度係数: 画面サイズやセンサー特性によるが、1.0前後が自然
+                    const sensitivity = 0.8; 
+                    
+                    final delta = (details.scale - 1.0) * sensitivity;
+                    final newZoom = (_startZoom + delta).clamp(0.0, 1.0);
+                    
+                    // 状態更新して反映
+                    if (newZoom != _currentZoom) {
+                      state.sensorConfig.setZoom(newZoom);
+                      _currentZoom = newZoom;
+                    }
+                  },
+                ),
+              ),
+
               // 上部アクション（フラッシュ切り替えなど）
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
-                child: AwesomeTopActions(state: state),
+                child: SafeArea(
+                  child: AwesomeTopActions(state: state),
+                ),
               ),
               
               // 下部アクション（撮影ボタンなど）
@@ -72,24 +136,26 @@ class _CameraScreenState extends State<CameraScreen> {
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: Container(
-                  color: Colors.black54,
-                  padding: const EdgeInsets.only(bottom: 32, top: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // 戻るボタン
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      
-                      // 撮影ボタン
-                      AwesomeCaptureButton(state: state),
-                      
-                      // カメラ切り替えボタン
-                      AwesomeCameraSwitchButton(state: state),
-                    ],
+                child: SafeArea(
+                  child: Container(
+                    color: Colors.transparent, // 背景色なしに変更（プレビューを隠さないため）
+                    padding: const EdgeInsets.only(bottom: 16, top: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // 戻るボタン
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
+                          onPressed: () => Navigator.pop(context, _hasCaptured),
+                        ),
+                        
+                        // 撮影ボタン
+                        AwesomeCaptureButton(state: state),
+                        
+                        // カメラ切り替えボタン
+                        AwesomeCameraSwitchButton(state: state),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -103,25 +169,46 @@ class _CameraScreenState extends State<CameraScreen> {
                     // 処理中でなく、かつ撮影成功時のみ処理を実行
                     if (!_isProcessing && mediaCapture.status == MediaCaptureStatus.success && mediaCapture.isPicture) {
                       // ビルド完了後に処理を実行するためにaddPostFrameCallbackを使用
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                         // 重複実行防止のためフラグをチェック（コールバック登録までの間に変わる可能性も考慮）
-                         if (!_isProcessing) {
-                           _processCapturedImage(mediaCapture.captureRequest.path!);
-                         }
-                      });
+                      // 注: StreamBuilderは何度もイベントを受け取る可能性があるため、
+                      // 一度処理を開始したらフラグでガードし、かつキャプチャIDなどを確認するのがベストだが、
+                      // ここでは簡易的にフラグでガードする。
+                      
+                      // 重要な修正: 
+                      // _isProcessingフラグのチェックは addPostFrameCallback の外で行わないと、
+                      // 複数回のイベントに対してすべてコールバックが登録されてしまう可能性がある。
+                      // さらに、処理が完了して _isProcessing が false になった直後に
+                      // まだ古いイベントが流れてくると再実行される恐れがある。
+                      // これを防ぐために、撮影リクエストIDなどを管理する必要があるが、
+                      // camerawesomeの仕様上、MediaCaptureオブジェクトが更新されるたびに呼ばれる。
+                      
+                      // ここでの根本的な問題は、StreamBuilderが再ビルドされるたびに、
+                      // またはStreamから同じキャプチャ状態が複数回流れてくるたびに
+                      // 処理が走ってしまうこと。
+                      
+                      // 対策: 処理済みのパスを記録しておく
+                      if (!_processedPaths.contains(mediaCapture.captureRequest.path)) {
+                         _processedPaths.add(mediaCapture.captureRequest.path!);
+                         
+                         WidgetsBinding.instance.addPostFrameCallback((_) {
+                           if (!_isProcessing) {
+                             _processCapturedImage(mediaCapture.captureRequest.path!);
+                           }
+                         });
+                      }
                     }
                   }
                   return const SizedBox.shrink();
                 },
               ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+          ],
+        );
+      },
+    ),
+  ),
+);
+}
 
-  /// 撮影後の画像処理
+/// 撮影後の画像処理
   Future<void> _processCapturedImage(String tempPath) async {
     // 連続処理を防ぐ
     if (_isProcessing) return;
@@ -147,24 +234,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (!mounted) return;
       
-      // ファイル名入力ダイアログ表示
-      // 注: カメラプレビューの上にダイアログを出す
-      final fileName = await _showFileNameDialog(defaultFileName);
-      
-      // キャンセルされた場合、一時ファイルを削除して終了
-      if (fileName == null) {
-        final file = File(tempPath);
-        if (await file.exists()) {
-          await file.delete();
-        }
-        // キャンセル時は処理フラグを戻して終了
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
-        }
-        return;
-      }
+      // 自動命名（ファイル名入力ダイアログを削除）
+      final fileName = defaultFileName;
 
       // 正式なパス
       final folderPath = widget.targetFolder.getAbsoluteFilePath();
@@ -203,6 +274,7 @@ class _CameraScreenState extends State<CameraScreen> {
           takenAt: now,
           visible: true,
           parent: widget.targetFolder,
+          isPhoto: true,
         );
         widget.targetFolder.addChild(photoNode);
       }
@@ -212,9 +284,11 @@ class _CameraScreenState extends State<CameraScreen> {
           SnackBar(
             content: Text('写真を保存しました: $fileName.jpg'),
             backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 1500),
           ),
         );
-        Navigator.pop(context, true);
+        // 撮影フラグを立てる
+        _hasCaptured = true;
       }
 
     } catch (e) {
@@ -226,7 +300,10 @@ class _CameraScreenState extends State<CameraScreen> {
             backgroundColor: Colors.red,
           ),
         );
-        // エラー時もフラグを戻す
+      }
+    } finally {
+      // 成功・失敗・キャンセルに関わらず、必ず処理中フラグを下ろす
+      if (mounted) {
         setState(() {
           _isProcessing = false;
         });
@@ -234,60 +311,8 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  /// ファイル名入力ダイアログを表示
-  Future<String?> _showFileNameDialog(String defaultName) async {
-    final controller = TextEditingController(text: defaultName);
-    
-    // ナビゲーションのロックを回避するために、少し遅延させてダイアログを表示することを検討する余地もあるが、
-    // ここでは標準的なshowDialogを使用。
-    // !debugLockedエラーが出る場合、非同期処理の中でNavigatorの状態が不安定な可能性がある。
-    // 特にビルドフェーズ中に呼ばれると危険。
-    
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('ファイル名を入力'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'ファイル名（拡張子なし）',
-            hintText: 'IMG_2025-11-16T12-00-00',
-            border: OutlineInputBorder(),
-          ),
-          onTap: () {
-            controller.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: controller.text.length,
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(null),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final fileName = controller.text.trim();
-              if (fileName.isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('ファイル名を入力してください'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-              Navigator.of(dialogContext).pop(fileName);
-            },
-            child: const Text('決定'),
-          ),
-        ],
-      ),
-    );
-  }
+  // ファイル名入力ダイアログメソッドは削除
+
 
   /// EXIF情報を画像ファイルに追加
   Future<void> _addExifData(File imageFile, Position position, DateTime timestamp) async {

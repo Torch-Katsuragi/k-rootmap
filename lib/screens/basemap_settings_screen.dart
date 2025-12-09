@@ -7,7 +7,12 @@ import '../services/basemap_service.dart';
 import '../utils/global_config.dart';
 
 class BaseMapSettingsScreen extends StatefulWidget {
-  const BaseMapSettingsScreen({super.key});
+  final bool isEmbedded;
+
+  const BaseMapSettingsScreen({
+    super.key,
+    this.isEmbedded = false,
+  });
 
   @override
   State<BaseMapSettingsScreen> createState() => _BaseMapSettingsScreenState();
@@ -331,6 +336,7 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('背景地図設定'),
+        automaticallyImplyLeading: !widget.isEmbedded,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

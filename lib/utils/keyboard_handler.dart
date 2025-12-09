@@ -1,6 +1,7 @@
 // K-MAPS: キーボードショートカットハンドラー
 // Deleteキーなどのグローバルキーボードイベントを処理
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'global_config.dart';
@@ -14,35 +15,35 @@ class KeyboardHandler {
     BuildContext context,
     dynamic mapState,
   ) async {
-    print('[KeyboardHandler] Deleteキーが押されました');
+    AppLogger.debug('[KeyboardHandler] Deleteキーが押されました');
 
     // 選択されたフィーチャがあるかチェック
     if (GlobalConfig.instance.selectedFeatures.isEmpty) {
-      print('[KeyboardHandler] 削除対象のフィーチャが選択されていません');
+      AppLogger.debug('[KeyboardHandler] 削除対象のフィーチャが選択されていません');
       return;
     }
 
     final featureCount = GlobalConfig.instance.selectedFeatures.length;
-    print('[KeyboardHandler] 削除対象: ${featureCount}個のフィーチャ');
+    AppLogger.debug('[KeyboardHandler] 削除対象: $featureCount個のフィーチャ');
 
     try {
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
 
-      print('[KeyboardHandler] フィーチャ削除完了: ${featureCount}個');
+      AppLogger.debug('[KeyboardHandler] フィーチャ削除完了: $featureCount個');
 
       // 成功メッセージ
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${featureCount}個のフィーチャを削除しました'),
+            content: Text('$featureCount個のフィーチャを削除しました'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print('[KeyboardHandler] フィーチャ削除エラー: $e');
+      AppLogger.debug('[KeyboardHandler] フィーチャ削除エラー: $e');
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -68,7 +69,7 @@ class KeyboardHandler {
       return false;
     }
 
-    print('[KeyboardHandler] キー押下: ${event.logicalKey}');
+    AppLogger.debug('[KeyboardHandler] キー押下: ${event.logicalKey}');
 
     // Deleteキーまたはバックスペースキー
     // 属性テーブル編集中は無効化（GlobalConfigのフラグをチェック）
@@ -76,7 +77,7 @@ class KeyboardHandler {
         event.logicalKey == LogicalKeyboardKey.backspace) {
       // 属性テーブル編集中は削除しない
       if (GlobalConfig.instance.isAttributeTableEditing) {
-        print('[KeyboardHandler] 属性テーブル編集中のため削除をスキップ');
+        AppLogger.debug('[KeyboardHandler] 属性テーブル編集中のため削除をスキップ');
         return false; // イベントを伝播させる
       }
 
@@ -142,7 +143,7 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
           handled,
         ) {
           if (handled) {
-            print('[KeyboardShortcutWrapper] キーイベント処理済み');
+            AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理済み');
           }
         });
 
@@ -162,3 +163,4 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
     );
   }
 }
+

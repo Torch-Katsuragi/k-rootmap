@@ -1,3 +1,4 @@
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:latlong2/latlong.dart';
 import 'address_converter.dart';
@@ -59,12 +60,12 @@ class CoordinateConverter {
   static CoordinateSystem? getJGD2011ZoneFromAddress(Address address) {
     // まず直接的なstateフィールドをチェック
     String? prefecture = address.state;
-    print('[CoordinateConverter] 住所情報: state=$prefecture');
+    AppLogger.debug('[CoordinateConverter] 住所情報: state=$prefecture');
 
     // stateがnullの場合、他のフィールドから都道府県を推定
     if (prefecture == null) {
       prefecture = _extractPrefectureFromAddress(address);
-      print('[CoordinateConverter] 推定された都道府県: $prefecture');
+      AppLogger.debug('[CoordinateConverter] 推定された都道府県: $prefecture');
     }
 
     if (prefecture == null) return null;
@@ -125,7 +126,7 @@ class CoordinateConverter {
       case '三重県':
       case '奈良県':
       case '和歌山県':
-        print('[CoordinateConverter] JGD2011 CS VI を選択 (和歌山県)');
+        AppLogger.debug('[CoordinateConverter] JGD2011 CS VI を選択 (和歌山県)');
         return CoordinateSystem(
           name: 'JGD2011 / Japan Plane Rectangular CS VI',
           epsgCode: 'EPSG:6674',
@@ -193,7 +194,7 @@ class CoordinateConverter {
               '+proj=tmerc +lat_0=26 +lon_0=127.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
         );
       default:
-        print('[CoordinateConverter] 未対応の都道府県: $prefecture');
+        AppLogger.debug('[CoordinateConverter] 未対応の都道府県: $prefecture');
         return null;
     }
   }
@@ -202,7 +203,7 @@ class CoordinateConverter {
   static String? _extractPrefectureFromAddress(Address address) {
     // displayNameから都道府県を抽出
     final displayName = address.displayName;
-    print('[CoordinateConverter] displayName解析: $displayName');
+    AppLogger.debug('[CoordinateConverter] displayName解析: $displayName');
 
     // 東京都の特別区を判定
     final tokyoWards = [
@@ -233,7 +234,7 @@ class CoordinateConverter {
 
     for (final ward in tokyoWards) {
       if (displayName.contains(ward)) {
-        print('[CoordinateConverter] 東京都の特別区を検出: $ward');
+        AppLogger.debug('[CoordinateConverter] 東京都の特別区を検出: $ward');
         return '東京都';
       }
     }
@@ -291,7 +292,7 @@ class CoordinateConverter {
 
     for (final prefecture in prefecturePatterns) {
       if (displayName.contains(prefecture)) {
-        print('[CoordinateConverter] 都道府県を検出: $prefecture');
+        AppLogger.debug('[CoordinateConverter] 都道府県を検出: $prefecture');
         return prefecture;
       }
     }
@@ -299,12 +300,12 @@ class CoordinateConverter {
     // cityフィールドから推定
     final city = address.city;
     if (city != null) {
-      print('[CoordinateConverter] city解析: $city');
+      AppLogger.debug('[CoordinateConverter] city解析: $city');
 
       // 東京都の特別区をチェック
       for (final ward in tokyoWards) {
         if (city.contains(ward)) {
-          print('[CoordinateConverter] cityから東京都の特別区を検出: $ward');
+          AppLogger.debug('[CoordinateConverter] cityから東京都の特別区を検出: $ward');
           return '東京都';
         }
       }
@@ -335,7 +336,7 @@ class CoordinateConverter {
 
       for (final entry in cityToPrefecture.entries) {
         if (city.contains(entry.key)) {
-          print(
+          AppLogger.debug(
             '[CoordinateConverter] 政令指定都市から都道府県を推定: ${entry.key} -> ${entry.value}',
           );
           return entry.value;
@@ -343,7 +344,7 @@ class CoordinateConverter {
       }
     }
 
-    print('[CoordinateConverter] 都道府県の推定に失敗');
+    AppLogger.debug('[CoordinateConverter] 都道府県の推定に失敗');
     return null;
   }
 
@@ -355,10 +356,10 @@ class CoordinateConverter {
     try {
       // キャッシュされたstateがある場合はそれを使用
       if (cachedState != null) {
-        print('[CoordinateConverter] キャッシュされたstate使用: $cachedState');
+        AppLogger.debug('[CoordinateConverter] キャッシュされたstate使用: $cachedState');
         final jgd2011Zone = getJGD2011ZoneFromState(cachedState);
         if (jgd2011Zone != null) {
-          print(
+          AppLogger.debug(
             '[CoordinateConverter] キャッシュからJGD2011座標系: ${jgd2011Zone.name} (${jgd2011Zone.epsgCode})',
           );
           return Future.value(jgd2011Zone);
@@ -370,7 +371,7 @@ class CoordinateConverter {
       if (address != null) {
         // 住所から平面直角座標系を判定
         final jgd2011Zone = getJGD2011ZoneFromAddress(address);
-        print(
+        AppLogger.debug(
           '[CoordinateConverter] JGD2011座標系: ${jgd2011Zone?.name} (${jgd2011Zone?.epsgCode})',
         );
         if (jgd2011Zone != null) {
@@ -390,19 +391,19 @@ class CoordinateConverter {
         proj4String: proj4String,
       );
 
-      print(
+      AppLogger.debug(
         '[CoordinateConverter] UTM座標系を動的生成: ${utmSystem.name} (${utmSystem.epsgCode})',
       );
       return Future.value(utmSystem);
     } catch (e) {
-      print('座標系判定エラー: $e');
+      AppLogger.debug('座標系判定エラー: $e');
       return Future.value(null);
     }
   }
 
   /// stateからJGD2011座標系を取得
   static CoordinateSystem? getJGD2011ZoneFromState(String state) {
-    print('[CoordinateConverter] state情報: $state');
+    AppLogger.debug('[CoordinateConverter] state情報: $state');
 
     // 都道府県名からJGD2011座標系を判定
     if (state.contains('北海道')) {
@@ -535,7 +536,7 @@ class CoordinateConverter {
       );
     }
 
-    print('[CoordinateConverter] 該当するJGD2011座標系が見つかりませんでした: $state');
+    AppLogger.debug('[CoordinateConverter] 該当するJGD2011座標系が見つかりませんでした: $state');
     return null;
   }
 
@@ -549,7 +550,7 @@ class CoordinateConverter {
       state = _extractPrefectureFromDisplayName(address.displayName);
     }
 
-    print('[CoordinateConverter] 住所から取得したstate: $state');
+    AppLogger.debug('[CoordinateConverter] 住所から取得したstate: $state');
     return state;
   }
 
@@ -631,7 +632,7 @@ class CoordinateConverter {
         );
       }
 
-      print(
+      AppLogger.debug(
         '[CoordinateConverter] 座標変換: ${coordinateSystem.epsgCode} (${coordinateSystem.proj4String})',
       );
 
@@ -643,23 +644,23 @@ class CoordinateConverter {
 
       // 目標座標系のProjectionを取得または作成
       Projection? target = Projection.get(coordinateSystem.epsgCode);
-      print(
+      AppLogger.debug(
         '[CoordinateConverter] 既存Projection取得: ${target != null ? "成功" : "失敗"}',
       );
 
       if (target == null && coordinateSystem.proj4String.isNotEmpty) {
-        print(
+        AppLogger.debug(
           '[CoordinateConverter] 新規Projection作成: ${coordinateSystem.epsgCode}',
         );
-        print(
+        AppLogger.debug(
           '[CoordinateConverter] proj4文字列: ${coordinateSystem.proj4String}',
         );
         target = Projection.add(
           coordinateSystem.epsgCode,
           coordinateSystem.proj4String,
         );
-        print(
-          '[CoordinateConverter] 新規Projection作成結果: ${target != null ? "成功" : "失敗"}',
+        AppLogger.debug(
+          '[CoordinateConverter] 新規Projection作成結果: ${"成功"}',
         );
       }
 
@@ -669,20 +670,20 @@ class CoordinateConverter {
 
       // WGS84から目標座標系への変換
       final p = Point(x: point.longitude, y: point.latitude);
-      print(
+      AppLogger.debug(
         '[CoordinateConverter] 変換前座標: (${point.latitude}, ${point.longitude})',
       );
 
       final result = source.transform(target, p);
 
-      print(
+      AppLogger.debug(
         '[CoordinateConverter] 変換後座標: (${result.x.toStringAsFixed(3)}, ${result.y.toStringAsFixed(3)})',
       );
 
       // JGD2011の場合、座標軸の順序を修正
       if (coordinateSystem.epsgCode.startsWith('EPSG:667')) {
-        print('[CoordinateConverter] JGD2011座標系検出 - 座標軸順序修正');
-        print(
+        AppLogger.debug('[CoordinateConverter] JGD2011座標系検出 - 座標軸順序修正');
+        AppLogger.debug(
           '[CoordinateConverter] 変換前: X=${result.x.toStringAsFixed(3)}, Y=${result.y.toStringAsFixed(3)}',
         );
 
@@ -690,7 +691,7 @@ class CoordinateConverter {
         // proj4dartの結果では順序が逆になっている可能性がある
         final correctedResult = Point(x: result.y, y: result.x);
 
-        print(
+        AppLogger.debug(
           '[CoordinateConverter] 修正後: X(Northing)=${correctedResult.x.toStringAsFixed(3)}, Y(Easting)=${correctedResult.y.toStringAsFixed(3)}',
         );
         return correctedResult;
@@ -698,7 +699,7 @@ class CoordinateConverter {
 
       return result;
     } catch (e) {
-      print('[CoordinateConverter] 座標変換エラー: $e');
+      AppLogger.debug('[CoordinateConverter] 座標変換エラー: $e');
       rethrow;
     }
   }
@@ -728,7 +729,7 @@ class CoordinateConverter {
       final result = source.transform(target, point);
       return LatLng(result.y, result.x);
     } catch (e) {
-      print('[CoordinateConverter] 逆変換エラー: $e');
+      AppLogger.debug('[CoordinateConverter] 逆変換エラー: $e');
       rethrow;
     }
   }
@@ -823,3 +824,4 @@ class CoordinateConverter {
     }
   }
 }
+

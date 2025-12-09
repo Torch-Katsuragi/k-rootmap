@@ -1,17 +1,14 @@
 // lib/tools/select_tool.dart
 // オブジェクト選択ツール
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart'; // PointerScrollEvent用
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/global_config.dart';
 import '../utils/feature_calc_utils.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import 'dart:math' as math;
 
 /// オブジェクト選択ツール
@@ -22,10 +19,7 @@ class SelectTool extends MapTool {
   @override
   IconData get icon => Icons.select_all;
 
-  Offset? _startPosition;
   int _pointerCount = 0;
-  Offset? _dragStart;
-  Offset? _dragEnd;
   List<Offset> _lassoPoints = [];
   List<Offset> get lassoPoints => _lassoPoints;
 
@@ -51,11 +45,11 @@ class SelectTool extends MapTool {
     required dynamic mapState,
     double? range,
   }) async {
-    print('[DEBUG] SelectTool.selectFeatureAtLatLng: selecting at $tapLatLng');
+    AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: selecting at $tapLatLng');
 
     final layer = GlobalConfig.instance.selectedLayerNode;
     if (layer == null) {
-      print('[DEBUG] SelectTool.selectFeatureAtLatLng: no layer selected');
+      AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: no layer selected');
       return;
     }
 
@@ -67,7 +61,7 @@ class SelectTool extends MapTool {
     } else if (layer is PolygonLayerNode) {
       featureType = 'polygon';
     } else {
-      print('[DEBUG] SelectTool.selectFeatureAtLatLng: unsupported layer type');
+      AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: unsupported layer type');
       return;
     }
 
@@ -78,14 +72,14 @@ class SelectTool extends MapTool {
     if (layerFeatures.isNotEmpty) {
       // childrenにFeatureNodeがある場合は直接使用（高速）
       features = layerFeatures;
-      print(
+      AppLogger.debug(
         '[DEBUG] SelectTool.selectFeatureAtLatLng: using ${features.length} features from children',
       );
     } else {
       // childrenが空の場合のみDBから読み込み（初回読み込み時）
       final dbFeatures = layer.features;
       features = dbFeatures.whereType<FeatureNode>().toList();
-      print(
+      AppLogger.debug(
         '[DEBUG] SelectTool.selectFeatureAtLatLng: loaded ${features.length} features from DB',
       );
       // DBから読み込んだFeatureNodeをlayerのchildrenに追加
@@ -95,7 +89,7 @@ class SelectTool extends MapTool {
     }
 
     if (features.isEmpty) {
-      print('[DEBUG] SelectTool.selectFeatureAtLatLng: no features found');
+      AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: no features found');
       GlobalConfig.instance.selectedFeatures = [];
       mapState.setState(() {});
       return;
@@ -104,7 +98,7 @@ class SelectTool extends MapTool {
     // ズーム率からrange(m)を計算（未指定時は通常の範囲）
     final double selectRange =
         range ?? SelectTool()._calcSelectRange(mapState) * 3;
-    print(
+    AppLogger.debug(
       '[DEBUG] SelectTool.selectFeatureAtLatLng: search range = ${selectRange}m',
     );
 
@@ -116,7 +110,7 @@ class SelectTool extends MapTool {
     );
 
     if (result == null) {
-      print(
+      AppLogger.debug(
         '[DEBUG] SelectTool.selectFeatureAtLatLng: no feature found in range',
       );
       GlobalConfig.instance.selectedFeatures = [];
@@ -124,7 +118,7 @@ class SelectTool extends MapTool {
       return;
     }
 
-    print(
+    AppLogger.debug(
       '[DEBUG] SelectTool.selectFeatureAtLatLng: selected feature ${result.key.name}',
     );
     GlobalConfig.instance.selectedFeatures = [result.key];
@@ -153,7 +147,7 @@ class SelectTool extends MapTool {
     if (mapState == null) return;
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
-    _pointerCount = details.pointerCount ?? 1;
+    _pointerCount = details.pointerCount;
     if (_pointerCount == 2) {
       GlobalConfig.instance.panTool.onScaleStart(details, mapState);
       return;
@@ -212,13 +206,13 @@ class SelectTool extends MapTool {
 
         if (layerFeatures.isNotEmpty) {
           features = layerFeatures;
-          print(
+          AppLogger.debug(
             '[DEBUG] SelectTool.onScaleEnd: using ${features.length} features from children',
           );
         } else {
           final dbFeatures = layer.features;
           features = dbFeatures.whereType<FeatureNode>().toList();
-          print(
+          AppLogger.debug(
             '[DEBUG] SelectTool.onScaleEnd: loaded ${features.length} features from DB',
           );
           for (final feature in features) {
@@ -293,3 +287,4 @@ class SelectTool extends MapTool {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }
+

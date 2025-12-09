@@ -1,12 +1,9 @@
+import 'package:k_maps/utils/app_logger.dart';
+
 /// K-MAPS: LayerDrawer用ユーティリティ関数
-library;
 
 import '../../models/nodes/layer_tree_node.dart';
-import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/layer_node.dart';
-import '../../models/nodes/feature_node.dart';
-import '../../models/nodes/photo_node.dart';
 import '../../utils/global_config.dart';
 import 'layer_drawer_extensions.dart';
 
@@ -20,12 +17,12 @@ mixin LayerDrawerUtils {
       if (mapState != null && mapState.mounted) {
         // レイヤ削除時は強制的にマップを更新（フィーチャキャッシュクリア）
         (mapState as dynamic).forceMapRefresh();
-        print('[LayerDrawer] マップ強制更新をトリガーしました');
+        AppLogger.debug('[LayerDrawer] マップ強制更新をトリガーしました');
       } else {
-        print('[LayerDrawer] マップページが見つからないか、マウントされていません');
+        AppLogger.debug('[LayerDrawer] マップページが見つからないか、マウントされていません');
       }
     } catch (e) {
-      print('[LayerDrawer] マップ更新エラー: $e');
+      AppLogger.debug('[LayerDrawer] マップ更新エラー: $e');
     }
   }
 
@@ -65,3 +62,4 @@ mixin LayerDrawerUtils {
     }
   }
 }
+

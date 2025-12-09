@@ -1,9 +1,8 @@
 // lib/tools/pen_tool.dart
 // ペンツール（レイヤ描画）
-import 'package:flutter/widgets.dart';
 import 'map_tool.dart';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import '../utils/global_config.dart';
 import '../utils/global_drawing_state.dart';
@@ -47,18 +46,18 @@ class PenTool extends MapTool {
   /// タップイベント
   @override
   void onTap(TapUpDetails details, dynamic mapState) {
-    print('[DEBUG] PenTool.onTap: タップイベント開始');
+    AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント開始');
 
     // フロートボタン押下時は消しゴム動作
     if (GlobalConfig.instance.isFabActive) {
       final latlng = mapState.offsetToLatLng(details.localPosition);
-      print(
+      AppLogger.debug(
         '[DEBUG] PenTool.onTap: eraser mode - selecting feature at $latlng',
       );
 
       // フィーチャーを選択
       SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
-      print(
+      AppLogger.debug(
         '[DEBUG] PenTool.onTap: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
       );
 
@@ -66,7 +65,7 @@ class PenTool extends MapTool {
       if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
         _disposeSelectedFeatures(mapState);
       } else {
-        print('[DEBUG] PenTool.onTap: no features selected for deletion');
+        AppLogger.debug('[DEBUG] PenTool.onTap: no features selected for deletion');
       }
       return;
     }
@@ -74,12 +73,12 @@ class PenTool extends MapTool {
     // 通常は描画
     final selected = GlobalConfig.instance.selectedLayerNode;
     if (selected == null) {
-      print('[DEBUG] PenTool.onTap: 選択されたレイヤーがありません');
+      AppLogger.debug('[DEBUG] PenTool.onTap: 選択されたレイヤーがありません');
       return;
     }
 
     if (!selected.isVisibleRecursive()) {
-      print('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
+      AppLogger.debug('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
       // 警告ポップアップ
       final context = mapState.context;
       ScaffoldMessenger.of(
@@ -89,22 +88,22 @@ class PenTool extends MapTool {
     }
 
     final latlng = mapState.offsetToLatLng(details.localPosition);
-    print('[DEBUG] PenTool.onTap: 座標取得完了 $latlng');
+    AppLogger.debug('[DEBUG] PenTool.onTap: 座標取得完了 $latlng');
 
     if (selected is PointLayerNode) {
-      print('[DEBUG] PenTool.onTap: ポイントレイヤー処理');
+      AppLogger.debug('[DEBUG] PenTool.onTap: ポイントレイヤー処理');
       PointFeatureNode.createIn(selected, latlng, '', '').then((_) {
         // フィーチャー作成完了後にUI更新
         mapState.refreshFeatures();
       });
       mapState.setState(() {});
     } else if (selected is LineLayerNode) {
-      print('[DEBUG] PenTool.onTap: ラインレイヤー処理');
+      AppLogger.debug('[DEBUG] PenTool.onTap: ラインレイヤー処理');
 
       drawingState.addLinePoint(latlng, null);
       mapState.setState(() {});
     } else if (selected is PolygonLayerNode) {
-      print(
+      AppLogger.debug(
         '[DEBUG] PenTool.onTap: ポリゴンレイヤー処理開始 - 現在の点数: ${drawingPolygon.length}',
       );
 
@@ -118,15 +117,15 @@ class PenTool extends MapTool {
           mapState.setState(() {});
         });
 
-        print(
+        AppLogger.debug(
           '[DEBUG] PenTool.onTap: ポリゴン点追加完了 - 新しい点数: ${drawingPolygon.length}',
         );
       } catch (e) {
-        print('[ERROR] PenTool.onTap: ポリゴン点追加エラー: $e');
+        AppLogger.debug('[ERROR] PenTool.onTap: ポリゴン点追加エラー: $e');
       }
     }
 
-    print('[DEBUG] PenTool.onTap: タップイベント完了');
+    AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント完了');
   }
 
   /// スケール開始イベント
@@ -224,13 +223,13 @@ class PenTool extends MapTool {
       // フロートボタン押下時は消しゴム動作
       if (GlobalConfig.instance.isFabActive) {
         final latlng = mapState.offsetToLatLng(details.localFocalPoint);
-        print(
+        AppLogger.debug(
           '[DEBUG] PenTool.onScaleUpdate: eraser mode - selecting feature at $latlng',
         );
 
         // フィーチャーを選択
         SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
-        print(
+        AppLogger.debug(
           '[DEBUG] PenTool.onScaleUpdate: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
         );
 
@@ -238,7 +237,7 @@ class PenTool extends MapTool {
         if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
           _disposeSelectedFeatures(mapState);
         } else {
-          print(
+          AppLogger.debug(
             '[DEBUG] PenTool.onScaleUpdate: no features selected for deletion',
           );
         }
@@ -329,7 +328,7 @@ class PenTool extends MapTool {
 
   /// 選択されたフィーチャーを削除（GlobalConfig統一処理を使用）
   void _disposeSelectedFeatures(dynamic mapState) async {
-    print('[DEBUG] PenTool._disposeSelectedFeatures: using GlobalConfig unified deletion');
+    AppLogger.debug('[DEBUG] PenTool._disposeSelectedFeatures: using GlobalConfig unified deletion');
     
     // GlobalConfigの統一削除処理を使用
     await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
@@ -361,3 +360,4 @@ class PenTool extends MapTool {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }
+

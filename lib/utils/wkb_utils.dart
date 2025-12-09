@@ -1,6 +1,7 @@
 // K-MAPS: WKBユーティリティ
 // ジオメトリのWKBエンコード・デコード関数群
 import 'dart:typed_data';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 
 /// GeoPackage GPBinaryヘッダーを生成
@@ -37,7 +38,7 @@ Uint8List _createGpbHeader({
     envelopeBytes.setFloat64(16, minY, Endian.little);
     envelopeBytes.setFloat64(24, maxY, Endian.little);
     header.add(envelopeBytes.buffer.asUint8List());
-    print(
+    AppLogger.debug(
       '[GPB] Envelope bytes added, total header size: ${header.length + 32}',
     );
   }
@@ -219,7 +220,7 @@ List<LatLng> parseWkbLineString(Uint8List wkb) {
   try {
     final pureWkb = _skipGpbHeader(wkb);
     if (pureWkb.length < 9) {
-      print('[WKB] LineString: データサイズ不足');
+      AppLogger.debug('[WKB] LineString: データサイズ不足');
       return [];
     }
     
@@ -227,7 +228,7 @@ List<LatLng> parseWkbLineString(Uint8List wkb) {
     
     // ポイント数の妥当性チェック（異常に大きい値を検出）
     if (n > 1000000) {
-      print('[WKB] ⚠️ 警告: LineStringのポイント数が異常です: $n');
+      AppLogger.debug('[WKB] ⚠️ 警告: LineStringのポイント数が異常です: $n');
       return [];
     }
     
@@ -249,8 +250,8 @@ List<LatLng> parseWkbLineString(Uint8List wkb) {
       
       // 座標値の妥当性チェック
       if (!_isValidCoordinate(lat, lon)) {
-        print('[WKB] ⚠️ 警告: 無効な座標値を検出しました（ポイント${i + 1}/$n）: lat=$lat, lon=$lon');
-        print('[WKB] ⚠️ このフィーチャは破損している可能性があります。スキップします。');
+        AppLogger.debug('[WKB] ⚠️ 警告: 無効な座標値を検出しました（ポイント${i + 1}/$n）: lat=$lat, lon=$lon');
+        AppLogger.debug('[WKB] ⚠️ このフィーチャは破損している可能性があります。スキップします。');
         return []; // 無効な座標が含まれる場合は全体を無効とする
       }
       
@@ -258,7 +259,7 @@ List<LatLng> parseWkbLineString(Uint8List wkb) {
     }
     return pts;
   } catch (e) {
-    print('[WKB] LineString解析エラー: $e');
+    AppLogger.debug('[WKB] LineString解析エラー: $e');
     return [];
   }
 }
@@ -268,7 +269,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
   try {
     final pureWkb = _skipGpbHeader(wkb);
     if (pureWkb.length < 9) {
-      print('[WKB] Polygon: データサイズ不足');
+      AppLogger.debug('[WKB] Polygon: データサイズ不足');
       return [];
     }
     
@@ -280,7 +281,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
     
     // リング数の妥当性チェック（異常に大きい値を検出）
     if (nRings > 10000) {
-      print('[WKB] ⚠️ 警告: Polygonのリング数が異常です: $nRings');
+      AppLogger.debug('[WKB] ⚠️ 警告: Polygonのリング数が異常です: $nRings');
       return [];
     }
     
@@ -297,7 +298,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
       
       // ポイント数の妥当性チェック
       if (nPts > 1000000) {
-        print('[WKB] ⚠️ 警告: リング${r + 1}のポイント数が異常です: $nPts');
+        AppLogger.debug('[WKB] ⚠️ 警告: リング${r + 1}のポイント数が異常です: $nPts');
         return [];
       }
       
@@ -321,7 +322,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
         
         // 座標値の妥当性チェック
         if (!_isValidCoordinate(lat, lon)) {
-          print('[WKB] ⚠️ 警告: 無効な座標値を検出しました（リング${r + 1}, ポイント${i + 1}/$nPts）: lat=$lat, lon=$lon');
+          AppLogger.debug('[WKB] ⚠️ 警告: 無効な座標値を検出しました（リング${r + 1}, ポイント${i + 1}/$nPts）: lat=$lat, lon=$lon');
           hasInvalidCoordinate = true;
           break; // このリングは無効
         }
@@ -332,7 +333,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
       
       // 無効な座標が含まれる場合、このポリゴン全体をスキップ
       if (hasInvalidCoordinate) {
-        print('[WKB] ⚠️ このPolygonフィーチャは破損している可能性があります。スキップします。');
+        AppLogger.debug('[WKB] ⚠️ このPolygonフィーチャは破損している可能性があります。スキップします。');
         return [];
       }
       
@@ -340,7 +341,7 @@ List<List<LatLng>> parseWkbPolygon(Uint8List wkb) {
     }
     return rings;
   } catch (e) {
-    print('[WKB] Polygon解析エラー: $e');
+    AppLogger.debug('[WKB] Polygon解析エラー: $e');
     return [];
   }
 }
@@ -350,7 +351,7 @@ bool validateWkbData(Uint8List wkb) {
   try {
     // 最小サイズチェック
     if (wkb.length < 8) {
-      print('[WKB検証] データサイズ不足: ${wkb.length}バイト');
+      AppLogger.debug('[WKB検証] データサイズ不足: ${wkb.length}バイト');
       return false;
     }
 
@@ -359,7 +360,7 @@ bool validateWkbData(Uint8List wkb) {
       // GPBinaryヘッダー検出済み（正常）
       if (wkb.length < 29) {
         // GPB(8) + WKB最小(21)
-        print('[WKB検証] GPBinary + WKBデータサイズ不足');
+        AppLogger.debug('[WKB検証] GPBinary + WKBデータサイズ不足');
         return false;
       }
 
@@ -370,22 +371,22 @@ bool validateWkbData(Uint8List wkb) {
       return wkb.length >= 21; // WKB最小サイズ
     }
   } catch (e) {
-    print('[WKB検証] エラー: $e');
+    AppLogger.debug('[WKB検証] エラー: $e');
     return false;
   }
 }
 
 /// WKBデータの詳細情報を出力（デバッグ用）
 void debugWkbData(Uint8List wkb, String context) {
-  print('=== WKBデバッグ情報 [$context] ===');
-  print('データサイズ: ${wkb.length}バイト');
-  print(
+  AppLogger.debug('=== WKBデバッグ情報 [$context] ===');
+  AppLogger.debug('データサイズ: ${wkb.length}バイト');
+  AppLogger.debug(
     '先頭16バイト: ${wkb.take(16).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
   );
 
   if (wkb.length >= 8 && wkb[0] == 0x47 && wkb[1] == 0x50) {
     final srsId = ByteData.sublistView(wkb, 4, 8).getUint32(0, Endian.little);
-    print('GPBinaryヘッダー: あり（SRS ID: $srsId）');
+    AppLogger.debug('GPBinaryヘッダー: あり（SRS ID: $srsId）');
 
     if (wkb.length > 8) {
       final wkbPart = wkb.sublist(8);
@@ -395,20 +396,21 @@ void debugWkbData(Uint8List wkb, String context) {
           1,
           5,
         ).getUint32(0, Endian.little);
-        print('ジオメトリタイプ: $geomType');
+        AppLogger.debug('ジオメトリタイプ: $geomType');
       }
     }
   } else {
-    print('GPBinaryヘッダー: なし');
+    AppLogger.debug('GPBinaryヘッダー: なし');
     if (wkb.length >= 5) {
       final geomType = ByteData.sublistView(
         wkb,
         1,
         5,
       ).getUint32(0, Endian.little);
-      print('ジオメトリタイプ: $geomType');
+      AppLogger.debug('ジオメトリタイプ: $geomType');
     }
   }
-  print('妥当性: ${validateWkbData(wkb) ? "OK" : "NG"}');
-  print('==============================');
+  AppLogger.debug('妥当性: ${validateWkbData(wkb) ? "OK" : "NG"}');
+  AppLogger.debug('==============================');
 }
+

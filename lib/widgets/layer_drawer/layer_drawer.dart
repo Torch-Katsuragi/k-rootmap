@@ -4,6 +4,7 @@
 library;
 
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
@@ -256,13 +257,17 @@ class _LayerDrawerState extends State<LayerDrawer>
         
         widget.setStateCallback(() {});
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('写真をリネームしました: $newName')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('写真をリネームしました: $newName')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('リネームに失敗しました: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('リネームに失敗しました: $e')),
+          );
+        }
       }
     }
   }
@@ -389,9 +394,11 @@ class _LayerDrawerState extends State<LayerDrawer>
       final dir = folderNode.getAbsoluteFilePath();
       final path = p.join(dir ?? '', result);
       if (Directory(path).existsSync()) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('同名のフォルダが既に存在します')));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('同名のフォルダが既に存在します')));
+        }
         return;
       }
       Directory(path).createSync();
@@ -435,31 +442,33 @@ class _LayerDrawerState extends State<LayerDrawer>
       },
     );
     if (result != null && result.isNotEmpty) {
-      print('[LayerDrawer] GeoPackage作成開始: $result');
+      AppLogger.debug('[LayerDrawer] GeoPackage作成開始: $result');
 
       final folderNode = widget.currentNode as FolderNode;
       final dir = folderNode.getAbsoluteFilePath();
       final fileName = result.endsWith('.gpkg') ? result : '$result.gpkg';
       final path = p.join(dir ?? '', fileName);
 
-      print('[LayerDrawer] 作成予定パス: $path');
-      print('[LayerDrawer] 親ディレクトリ: $dir');
+      AppLogger.debug('[LayerDrawer] 作成予定パス: $path');
+      AppLogger.debug('[LayerDrawer] 親ディレクトリ: $dir');
 
       if (File(path).existsSync()) {
-        print('[LayerDrawer] 同名ファイルが既に存在します');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('同名のGeoPackageファイルが既に存在します')),
-        );
+        AppLogger.debug('[LayerDrawer] 同名ファイルが既に存在します');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('同名のGeoPackageファイルが既に存在します')),
+          );
+        }
         return;
       }
 
-      print('[LayerDrawer] GeoPackageNodeを作成中...');
+      AppLogger.debug('[LayerDrawer] GeoPackageNodeを作成中...');
       final parentNode = widget.currentNode as FolderNode;
       final parentPath = parentNode.getAbsolutePathSegments();
       final fileNameList = [fileName];
       final gpkgFile = GeoPackageFile([...parentPath, ...fileNameList]);
 
-      print('[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}');
+      AppLogger.debug('[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}');
 
       final newNode = GeoPackageNode(
         gpkgFile,
@@ -469,13 +478,15 @@ class _LayerDrawerState extends State<LayerDrawer>
       folderNode.addChild(newNode);
 
       // 空のGeoPackageファイルを即座に作成
-      print('[LayerDrawer] 空のGeoPackageファイル作成中...');
+      AppLogger.debug('[LayerDrawer] 空のGeoPackageファイル作成中...');
       final createSuccess = await gpkgFile.createEmptyDatabase();
       if (!createSuccess) {
-        print('[LayerDrawer] 空のGeoPackageファイル作成失敗');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
-        );
+        AppLogger.debug('[LayerDrawer] 空のGeoPackageファイル作成失敗');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
+          );
+        }
         // 作成失敗時はノードを削除
         folderNode.removeChild(newNode);
         return;
@@ -483,14 +494,15 @@ class _LayerDrawerState extends State<LayerDrawer>
 
       // 新規作成されたGeoPackageを自動展開
       final newAbsPath = gpkgFile.getAbsolutePath();
-      print('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
+      AppLogger.debug('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
       if (newAbsPath != null) {
         expandedGpkgPaths.add(newAbsPath);
       }
 
-      print('[LayerDrawer] UI更新中...');
+      AppLogger.debug('[LayerDrawer] UI更新中...');
       widget.setStateCallback(() {});
-      print('[LayerDrawer] GeoPackage作成完了');
+      AppLogger.debug('[LayerDrawer] GeoPackage作成完了');
     }
   }
 }
+

@@ -2,6 +2,7 @@
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
 // turf_dartのFeatureオブジェクトをメインデータとして使用
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
@@ -45,12 +46,12 @@ abstract class FeatureNode extends LayerTreeNode {
     final feature = parent.getFeatureById(_rowId);
     if (feature == null) {
       // より詳細なエラー情報を提供
-      print('[ERROR] Feature not found in parent map');
-      print('[ERROR]   rowId: $_rowId');
-      print('[ERROR]   parent layer: ${parent.layerName}');
-      print('[ERROR]   isDisposed: $_isDisposed');
-      print('[ERROR]   parent isDisposed: ${parent.isDisposed}');
-      print('[ERROR]   parent._featureMap size: ${parent.features.length}');
+      AppLogger.debug('[ERROR] Feature not found in parent map');
+      AppLogger.debug('[ERROR]   rowId: $_rowId');
+      AppLogger.debug('[ERROR]   parent layer: ${parent.layerName}');
+      AppLogger.debug('[ERROR]   isDisposed: $_isDisposed');
+      AppLogger.debug('[ERROR]   parent isDisposed: ${parent.isDisposed}');
+      AppLogger.debug('[ERROR]   parent._featureMap size: ${parent.features.length}');
       throw StateError('Feature not found in parent map: rowId=$_rowId, layer=${parent.layerName}');
     }
     return feature;
@@ -116,6 +117,7 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 名前のsetter（親のMapを更新）
+  @override
   set name(String value) {
     if (_isDisposed) return;
     parent.updateFeatureAttribute(_rowId, 'name', value);
@@ -145,7 +147,7 @@ abstract class FeatureNode extends LayerTreeNode {
       try {
         return Map<String, dynamic>.from(json.decode(value));
       } catch (e) {
-        print('[WARNING] FeatureNode: Failed to parse metadata JSON: $e');
+        AppLogger.debug('[WARNING] FeatureNode: Failed to parse metadata JSON: $e');
         return null;
       }
     }
@@ -161,7 +163,7 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 変更フラグをセット
   void _markDirty() {
-    print('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
+    AppLogger.debug('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
     _isDirty = true;
     
     if (_isDisposed) return;
@@ -169,11 +171,11 @@ abstract class FeatureNode extends LayerTreeNode {
     // GeoPackageFileの遅延保存キューに追加
     final rowData = TurfConverter.featureToRowData(turfFeature);
     if (rowData != null) {
-      print('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
-      print('[DEBUG] FeatureNode: rowData内容: $rowData');
+      AppLogger.debug('[DEBUG] FeatureNode: rowData変換成功 - 属性数:${rowData.length}');
+      AppLogger.debug('[DEBUG] FeatureNode: rowData内容: $rowData');
       geoPackageFile.queueAttributeUpdates(layerName, rowId, rowData);
     } else {
-      print('[ERROR] FeatureNode: rowData変換に失敗しました');
+      AppLogger.debug('[ERROR] FeatureNode: rowData変換に失敗しました');
     }
   }
 
@@ -185,18 +187,18 @@ abstract class FeatureNode extends LayerTreeNode {
 
   /// 属性値の設定（親のMapを更新し、バックグラウンドでDB書き込み）
   Future<void> setAttributeValue(String attributeName, dynamic value) async {
-    print('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
+    AppLogger.debug('[DEBUG] FeatureNode: Setting attribute $attributeName = $value');
 
     if (_isDisposed) {
-      print('[WARNING] FeatureNode is disposed, cannot set attribute');
+      AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attribute');
       return;
     }
     
     // 親のMapを更新（失敗した場合はfalseを返す）
     final success = parent.updateFeatureAttribute(_rowId, attributeName, value);
     if (!success) {
-      print('[WARNING] FeatureNode: updateFeatureAttribute failed for rowId=$_rowId, attribute=$attributeName');
-      print('[WARNING] Feature may not be registered in parent._featureMap yet');
+      AppLogger.debug('[WARNING] FeatureNode: updateFeatureAttribute failed for rowId=$_rowId, attribute=$attributeName');
+      AppLogger.debug('[WARNING] Feature may not be registered in parent._featureMap yet');
       return;
     }
     
@@ -206,10 +208,10 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 複数の属性値を一括設定
   /// カラムが存在しない場合は自動的に作成する（TEXT型）
   Future<void> setAttributeValues(Map<String, dynamic> attributes) async {
-    print('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
+    AppLogger.debug('[DEBUG] FeatureNode: Setting ${attributes.length} attributes');
 
     if (_isDisposed) {
-      print('[WARNING] FeatureNode is disposed, cannot set attributes');
+      AppLogger.debug('[WARNING] FeatureNode is disposed, cannot set attributes');
       return;
     }
     
@@ -228,7 +230,7 @@ abstract class FeatureNode extends LayerTreeNode {
     ).toList();
     
     if (missingColumns.isNotEmpty) {
-      print('[DEBUG] FeatureNode: 以下のカラムを自動作成します: $missingColumns');
+      AppLogger.debug('[DEBUG] FeatureNode: 以下のカラムを自動作成します: $missingColumns');
       for (final columnName in missingColumns) {
         try {
           await geoPackageFile.addAttributeColumn(
@@ -236,9 +238,9 @@ abstract class FeatureNode extends LayerTreeNode {
             columnName,
             'TEXT', // デフォルトでTEXT型
           );
-          print('[DEBUG] FeatureNode: カラム作成成功 - $columnName');
+          AppLogger.debug('[DEBUG] FeatureNode: カラム作成成功 - $columnName');
         } catch (e) {
-          print('[WARNING] FeatureNode: カラム作成失敗 - $columnName: $e');
+          AppLogger.debug('[WARNING] FeatureNode: カラム作成失敗 - $columnName: $e');
           // カラム作成に失敗しても処理は続行（既に存在する場合など）
         }
       }
@@ -314,7 +316,7 @@ abstract class FeatureNode extends LayerTreeNode {
   @override
   Future<void> dispose() async {
     if (_isDisposed) {
-      print('[WARNING] FeatureNode already disposed');
+      AppLogger.debug('[WARNING] FeatureNode already disposed');
       return;
     }
     
@@ -323,35 +325,35 @@ abstract class FeatureNode extends LayerTreeNode {
     
     try {
       // nameアクセス時のエラーを回避するため、try-catchで囲む
-      print('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId ($runtimeType)');
+      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId ($runtimeType)');
     } catch (e) {
-      print('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId (name取得失敗)');
+      AppLogger.debug('[DEBUG] FeatureNode.dispose: disposing rowId=$rowId (name取得失敗)');
     }
 
     try {
       // 保留中の変更を即座に保存（エラーが発生しても続行）
       await flushChanges();
     } catch (e) {
-      print('[WARNING] FeatureNode.dispose: flushChanges failed: $e');
+      AppLogger.debug('[WARNING] FeatureNode.dispose: flushChanges failed: $e');
     }
 
     // 即座に親子関係を切断し、親の_featureMapからも削除（UI更新を優先）
     // LayerNode.removeFeature()を使用することで、childrenと_featureMapの両方から削除される
     try {
       parent.removeFeature(this);
-      print('[DEBUG] FeatureNode.dispose: removed from parent children and featureMap');
+      AppLogger.debug('[DEBUG] FeatureNode.dispose: removed from parent children and featureMap');
     } catch (e) {
-      print('[WARNING] FeatureNode.dispose: removeFeature failed: $e');
+      AppLogger.debug('[WARNING] FeatureNode.dispose: removeFeature failed: $e');
       // フォールバック: 直接削除を試みる
       parent.children.remove(this);
-      print('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
+      AppLogger.debug('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
     }
 
     // 選択状態からも除去
     final globalConfig = GlobalConfig.instance;
     if (globalConfig.selectedFeatures.contains(this)) {
       globalConfig.selectedFeatures.remove(this);
-      print('[DEBUG] FeatureNode.dispose: removed from selected features');
+      AppLogger.debug('[DEBUG] FeatureNode.dispose: removed from selected features');
     }
 
     // 子ノードはFeatureNodeにはないが、安全のためクリア
@@ -362,24 +364,24 @@ abstract class FeatureNode extends LayerTreeNode {
     geoPackageFile
         .removeFeature(layerName, rowId)
         .then((_) {
-          print(
+          AppLogger.debug(
             '[DEBUG] FeatureNode.dispose: DB deletion completed (rowId=$rowId)',
           );
         })
         .catchError((e) {
-          print(
+          AppLogger.debug(
             '[ERROR] FeatureNode.dispose: DB deletion failed (rowId=$rowId): $e',
           );
           // エラーが発生しても処理は続行（壊れたデータでも削除できるようにする）
         });
 
-    print('[DEBUG] FeatureNode.dispose: base dispose completed');
+    AppLogger.debug('[DEBUG] FeatureNode.dispose: base dispose completed');
 
     // 基底クラスのdisposeを呼び出し
     try {
       await super.dispose();
     } catch (e) {
-      print('[WARNING] FeatureNode.dispose: super.dispose failed: $e');
+      AppLogger.debug('[WARNING] FeatureNode.dispose: super.dispose failed: $e');
     }
   }
 
@@ -458,8 +460,8 @@ class PointFeatureNode extends FeatureNode {
     : super(row, parent, 'Point');
 
   /// turf_dartのFeatureから点フィーチャノードを作成
-  PointFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
-    : super.fromTurfFeature(feature, parent);
+  PointFeatureNode.fromTurfFeature(super.feature, super.parent)
+    : super.fromTurfFeature();
 
   /// 点座標（単一座標）
   LatLng get point {
@@ -532,7 +534,7 @@ class PointFeatureNode extends FeatureNode {
     );
 
     if (actualRowId == null) {
-      print('[ERROR] PointFeatureNode: DB保存に失敗しました - $name');
+      AppLogger.debug('[ERROR] PointFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
 
@@ -547,7 +549,7 @@ class PointFeatureNode extends FeatureNode {
     final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
 
-    print('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
+    AppLogger.debug('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
 
@@ -586,9 +588,9 @@ class PointFeatureNode extends FeatureNode {
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
 
-      print('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
+      AppLogger.debug('[DEBUG] PointFeatureNode: ジオメトリ更新成功 - $name');
     } else {
-      print('[ERROR] PointFeatureNode: ジオメトリ更新失敗 - $name');
+      AppLogger.debug('[ERROR] PointFeatureNode: ジオメトリ更新失敗 - $name');
     }
 
     return success;
@@ -613,9 +615,9 @@ class PointFeatureNode extends FeatureNode {
       );
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
-      print('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
+      AppLogger.debug('[DEBUG] PointFeatureNode: 位置更新成功 - $name to $newLocation');
     } else {
-      print('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
+      AppLogger.debug('[ERROR] PointFeatureNode: 位置更新失敗 - $name');
     }
 
     return success;
@@ -629,8 +631,8 @@ class LineFeatureNode extends FeatureNode {
     : super(row, parent, 'LineString');
 
   /// turf_dartのFeatureから線フィーチャノードを作成
-  LineFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
-    : super.fromTurfFeature(feature, parent);
+  LineFeatureNode.fromTurfFeature(super.feature, super.parent)
+    : super.fromTurfFeature();
 
   /// 単一の線分（頂点リスト）
   List<LatLng> get line {
@@ -740,7 +742,7 @@ class LineFeatureNode extends FeatureNode {
     );
 
     if (actualRowId == null) {
-      print('[ERROR] LineFeatureNode: DB保存に失敗しました - $name');
+      AppLogger.debug('[ERROR] LineFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
 
@@ -755,7 +757,7 @@ class LineFeatureNode extends FeatureNode {
     final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
 
-    print('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
+    AppLogger.debug('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
 
@@ -794,9 +796,9 @@ class LineFeatureNode extends FeatureNode {
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
 
-      print('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
+      AppLogger.debug('[DEBUG] LineFeatureNode: ジオメトリ更新成功 - $name');
     } else {
-      print('[ERROR] LineFeatureNode: ジオメトリ更新失敗 - $name');
+      AppLogger.debug('[ERROR] LineFeatureNode: ジオメトリ更新失敗 - $name');
     }
 
     return success;
@@ -821,11 +823,11 @@ class LineFeatureNode extends FeatureNode {
       );
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
-      print(
+      AppLogger.debug(
         '[DEBUG] LineFeatureNode: 線更新成功 - $name (${newLine.length} vertices)',
       );
     } else {
-      print('[ERROR] LineFeatureNode: 線更新失敗 - $name');
+      AppLogger.debug('[ERROR] LineFeatureNode: 線更新失敗 - $name');
     }
 
     return success;
@@ -839,8 +841,8 @@ class PolygonFeatureNode extends FeatureNode {
     : super(row, parent, 'Polygon');
 
   /// turf_dartのFeatureから面フィーチャノードを作成
-  PolygonFeatureNode.fromTurfFeature(turf.Feature feature, LayerNode parent)
-    : super.fromTurfFeature(feature, parent);
+  PolygonFeatureNode.fromTurfFeature(super.feature, super.parent)
+    : super.fromTurfFeature();
 
   /// 単一のポリゴン（外環＋穴リスト）
   List<List<LatLng>> get polygon {
@@ -966,14 +968,14 @@ class PolygonFeatureNode extends FeatureNode {
     );
 
     if (actualRowId == null) {
-      print('[ERROR] PolygonFeatureNode: DB保存に失敗しました - $name');
+      AppLogger.debug('[ERROR] PolygonFeatureNode: DB保存に失敗しました - $name');
       return null;
     }
 
     // DBから実際のrowデータを取得
     final row = await gpkgFile.getFeature(layerName, actualRowId);
     if (row == null) {
-      print('[ERROR] PolygonFeatureNode: 作成後のrow取得に失敗しました - $name');
+      AppLogger.debug('[ERROR] PolygonFeatureNode: 作成後のrow取得に失敗しました - $name');
       return null;
     }
 
@@ -981,7 +983,7 @@ class PolygonFeatureNode extends FeatureNode {
     final node = PolygonFeatureNode(row, parent);
     parent.addChild(node);
 
-    print('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
+    AppLogger.debug('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
 
@@ -1020,9 +1022,9 @@ class PolygonFeatureNode extends FeatureNode {
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
 
-      print('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
+      AppLogger.debug('[DEBUG] PolygonFeatureNode: ジオメトリ更新成功 - $name');
     } else {
-      print('[ERROR] PolygonFeatureNode: ジオメトリ更新失敗 - $name');
+      AppLogger.debug('[ERROR] PolygonFeatureNode: ジオメトリ更新失敗 - $name');
     }
 
     return success;
@@ -1047,13 +1049,14 @@ class PolygonFeatureNode extends FeatureNode {
       );
       parent.addFeatureToMap(_rowId, updatedFeature);
       _markDirty();
-      print(
+      AppLogger.debug(
         '[DEBUG] PolygonFeatureNode: ポリゴン更新成功 - $name (${newPolygon.length} rings)',
       );
     } else {
-      print('[ERROR] PolygonFeatureNode: ポリゴン更新失敗 - $name');
+      AppLogger.debug('[ERROR] PolygonFeatureNode: ポリゴン更新失敗 - $name');
     }
 
     return success;
   }
 }
+

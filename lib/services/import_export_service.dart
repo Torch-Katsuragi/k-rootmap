@@ -4,10 +4,12 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math' as Math;
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:proj4dart/proj4dart.dart';
-// import 'package:enough_convert/enough_convert.dart';  // TODO: 文字コード対応を改善
+// import 'package:k_maps/utils/app_logger.dart';
+import 'package:charset_converter/charset_converter.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
@@ -178,18 +180,18 @@ class SmartCoordinateSystemManager {
   /// WKT文字列から座標系を解析（proj4dartを最大限活用）
   Future<CoordinateSystem?> parseWktToCoordinateSystem(String wkt) async {
     try {
-      print('[SmartCRS] WKT座標系解析開始');
-      print('[SmartCRS] WKT文字列長: ${wkt.length}文字');
+      AppLogger.debug('[SmartCRS] WKT座標系解析開始');
+      AppLogger.debug('[SmartCRS] WKT文字列長: ${wkt.length}文字');
 
       // Step 1: WKT文字列からEPSGコードを直接抽出
       final epsgCode = _extractEpsgCodeFromWkt(wkt);
       if (epsgCode != null) {
-        print('[SmartCRS] WKTからEPSGコード抽出成功: $epsgCode');
+        AppLogger.debug('[SmartCRS] WKTからEPSGコード抽出成功: $epsgCode');
 
         // 既知のEPSG定義を使用
         if (_commonEpsgDefinitions.containsKey(epsgCode)) {
           final proj4String = _commonEpsgDefinitions[epsgCode]!;
-          print('[SmartCRS] 既知のEPSG定義を使用: $epsgCode');
+          AppLogger.debug('[SmartCRS] 既知のEPSG定義を使用: $epsgCode');
 
           return CoordinateSystem(
             name: _getEpsgName(epsgCode),
@@ -201,57 +203,53 @@ class SmartCoordinateSystemManager {
 
       // Step 2: proj4dartのWKT解析機能を使用
       try {
-        print('[SmartCRS] proj4dartでWKT直接解析を試行');
-        final projection = Projection.parse(wkt);
+        AppLogger.debug('[SmartCRS] proj4dartでWKT直接解析を試行');
+        // Projection.parseは常にnon-nullを返す（失敗時は例外）
+        Projection.parse(wkt);
+        AppLogger.debug('[SmartCRS] proj4dartWKT解析成功');
 
-        // proj4dartが正常に解析できた場合
-        if (projection != null) {
-          print('[SmartCRS] proj4dartWKT解析成功');
-
-          return CoordinateSystem(
-            name: epsgCode != null ? _getEpsgName(epsgCode) : 'WKT Projection',
-            epsgCode: epsgCode ?? 'WKT',
-            proj4String: wkt, // WKTをそのまま保存（proj4dartが対応）
-          );
-        }
+        return CoordinateSystem(
+          name: epsgCode != null ? _getEpsgName(epsgCode) : 'WKT Projection',
+          epsgCode: epsgCode ?? 'WKT',
+          proj4String: wkt, // WKTをそのまま保存（proj4dartが対応）
+        );
       } catch (e) {
-        print('[SmartCRS] proj4dartでのWKT解析失敗: $e');
+        AppLogger.debug('[SmartCRS] proj4dartでのWKT解析失敗: $e');
       }
 
       // Step 3: WKTからProj4文字列への変換を試行（フォールバック）
       final proj4String = await _convertWktToProj4String(wkt);
       if (proj4String != null) {
-        print('[SmartCRS] WKT→Proj4変換成功');
+        AppLogger.debug('[SmartCRS] WKT→Proj4変換成功');
 
         try {
-          final projection = Projection.parse(proj4String);
-          if (projection != null) {
-            return CoordinateSystem(
-              name:
-                  epsgCode != null
-                      ? _getEpsgName(epsgCode)
-                      : 'Converted Projection',
-              epsgCode: epsgCode ?? 'CONVERTED',
-              proj4String: proj4String,
-            );
-          }
+          // Projection.parseは常にnon-nullを返す（失敗時は例外）
+          Projection.parse(proj4String);
+          return CoordinateSystem(
+            name:
+                epsgCode != null
+                    ? _getEpsgName(epsgCode)
+                    : 'Converted Projection',
+            epsgCode: epsgCode ?? 'CONVERTED',
+            proj4String: proj4String,
+          );
         } catch (e) {
-          print('[SmartCRS] 変換されたProj4文字列の解析失敗: $e');
+          AppLogger.debug('[SmartCRS] 変換されたProj4文字列の解析失敗: $e');
         }
       }
 
       // Step 4: 最後の手段として投影法タイプから推定
       final projectionInfo = _inferProjectionFromWkt(wkt);
       if (projectionInfo != null) {
-        print('[SmartCRS] 投影法推定による座標系生成');
+        AppLogger.debug('[SmartCRS] 投影法推定による座標系生成');
         return projectionInfo;
       }
 
-      print('[SmartCRS] 全ての解析手法が失敗');
+      AppLogger.debug('[SmartCRS] 全ての解析手法が失敗');
       return null;
     } catch (e, stack) {
-      print('[SmartCRS] WKT解析エラー: $e');
-      print('[SmartCRS] スタックトレース: $stack');
+      AppLogger.debug('[SmartCRS] WKT解析エラー: $e');
+      AppLogger.debug('[SmartCRS] スタックトレース: $stack');
       return null;
     }
   }
@@ -359,7 +357,7 @@ class SmartCoordinateSystemManager {
 
       return parts.join(' ');
     } catch (e) {
-      print('[SmartCRS] WKT→Proj4変換エラー: $e');
+      AppLogger.debug('[SmartCRS] WKT→Proj4変換エラー: $e');
       return null;
     }
   }
@@ -415,13 +413,11 @@ class SmartCoordinateSystemManager {
         projection = Projection.parse(epsgCodeOrProj4String);
       }
 
-      if (projection != null) {
-        _projectionCache[epsgCodeOrProj4String] = projection;
-      }
-
+      // Projection.parseは常にnon-nullを返す（失敗時は例外）
+      _projectionCache[epsgCodeOrProj4String] = projection;
       return projection;
     } catch (e) {
-      print('[SmartCRS] 投影作成エラー: $e');
+      AppLogger.debug('[SmartCRS] 投影作成エラー: $e');
       return null;
     }
   }
@@ -433,12 +429,12 @@ class SmartCoordinateSystemManager {
 
   /// 座標系情報の詳細表示
   void printCoordinateSystemInfo(CoordinateSystem coordinateSystem) {
-    print('[SmartCRS] =====================================');
-    print('[SmartCRS] 座標系情報:');
-    print('[SmartCRS]   名前: ${coordinateSystem.name}');
-    print('[SmartCRS]   EPSGコード: ${coordinateSystem.epsgCode}');
-    print('[SmartCRS]   Proj4文字列: ${coordinateSystem.proj4String}');
-    print('[SmartCRS] =====================================');
+    AppLogger.debug('[SmartCRS] =====================================');
+    AppLogger.debug('[SmartCRS] 座標系情報:');
+    AppLogger.debug('[SmartCRS]   名前: ${coordinateSystem.name}');
+    AppLogger.debug('[SmartCRS]   EPSGコード: ${coordinateSystem.epsgCode}');
+    AppLogger.debug('[SmartCRS]   Proj4文字列: ${coordinateSystem.proj4String}');
+    AppLogger.debug('[SmartCRS] =====================================');
   }
 }
 
@@ -453,6 +449,49 @@ class ImportExportService {
   final SmartCoordinateSystemManager _smartCrsManager =
       SmartCoordinateSystemManager();
 
+  /// バイト列を指定エンコーディングでデコード（非同期版）
+  /// charset_converterを使用（プラットフォームネイティブAPI）
+  Future<String> _decodeBytes(List<int> bytes, String encoding) async {
+    // 空のバイト列は空文字列を返す
+    if (bytes.isEmpty) return '';
+    
+    // エンコーディング名を正規化（プラットフォームで認識される形式に）
+    final charset = _normalizeCharset(encoding);
+    
+    try {
+      final result = await CharsetConverter.decode(
+        charset,
+        Uint8List.fromList(bytes),
+      );
+      return result;
+    } catch (e) {
+      AppLogger.debug('[ImportExportService] CharsetConverter.decode失敗 ($charset): $e');
+      // フォールバック: UTF-8 → Latin1
+      try {
+        return utf8.decode(bytes, allowMalformed: true);
+      } catch (_) {
+        return latin1.decode(bytes);
+      }
+    }
+  }
+
+  /// エンコーディング名をプラットフォームで認識される形式に正規化
+  String _normalizeCharset(String encoding) {
+    final enc = encoding.toUpperCase().replaceAll('-', '').replaceAll('_', '');
+    if (enc.contains('SHIFTJIS') || enc.contains('SJIS') || enc.contains('CP932')) {
+      // WindowsではShift_JISまたはCP932
+      return 'Shift_JIS';
+    } else if (enc.contains('UTF8')) {
+      return 'UTF-8';
+    } else if (enc.contains('EUCJP')) {
+      return 'EUC-JP';
+    } else if (enc.contains('ISO2022JP')) {
+      return 'ISO-2022-JP';
+    }
+    return encoding; // そのまま返す
+  }
+
+
   /// ファイルをGeoPackageレイヤとしてインポート
   /// [filePath] インポート対象のファイルパス
   /// [targetGeoPackage] インポート先のGeoPackageNode
@@ -463,7 +502,7 @@ class ImportExportService {
     String? layerName,
   }) async {
     try {
-      print('[ImportExportService] インポート開始: $filePath');
+      AppLogger.debug('[ImportExportService] インポート開始: $filePath');
 
       // ファイル存在確認
       final file = File(filePath);
@@ -511,8 +550,8 @@ class ImportExportService {
           return ImportExportResult.error('未実装のファイル形式です: $format');
       }
     } catch (e, stack) {
-      print('[ImportExportService] インポートエラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] インポートエラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       return ImportExportResult.error('インポート処理でエラーが発生しました: $e');
     }
   }
@@ -525,7 +564,7 @@ class ImportExportService {
     String layerName,
   ) async {
     try {
-      print('[ImportExportService] シェープファイル読み込み開始: $shpFilePath');
+      AppLogger.debug('[ImportExportService] シェープファイル読み込み開始: $shpFilePath');
 
       // ファイルの存在確認（.shp, .dbf, .shx）
       final shpFile = File(shpFilePath);
@@ -539,21 +578,21 @@ class ImportExportService {
       final prjFile = File('$basePath.prj');
       final cpgFile = File('$basePath.cpg'); // 文字コード指定ファイル
 
-      print('[ImportExportService] 関連ファイル確認:');
-      print('  .shp: ${shpFile.existsSync()}');
-      print('  .dbf: ${dbfFile.existsSync()}');
-      print('  .shx: ${shxFile.existsSync()}');
-      print('  .prj: ${prjFile.existsSync()}');
-      print('  .cpg: ${cpgFile.existsSync()}');
+      AppLogger.debug('[ImportExportService] 関連ファイル確認:');
+      AppLogger.debug('  .shp: ${shpFile.existsSync()}');
+      AppLogger.debug('  .dbf: ${dbfFile.existsSync()}');
+      AppLogger.debug('  .shx: ${shxFile.existsSync()}');
+      AppLogger.debug('  .prj: ${prjFile.existsSync()}');
+      AppLogger.debug('  .cpg: ${cpgFile.existsSync()}');
 
       // CPGファイルから文字コードを読み取り
       String? dbfEncoding;
       if (cpgFile.existsSync()) {
         try {
           dbfEncoding = (await cpgFile.readAsString()).trim();
-          print('[ImportExportService] CPGファイルから文字コード取得: $dbfEncoding');
+          AppLogger.debug('[ImportExportService] CPGファイルから文字コード取得: $dbfEncoding');
         } catch (e) {
-          print('[ImportExportService] CPGファイル読み込みエラー: $e');
+          AppLogger.debug('[ImportExportService] CPGファイル読み込みエラー: $e');
         }
       }
 
@@ -566,21 +605,21 @@ class ImportExportService {
             encoding: dbfEncoding ?? 'Shift_JIS', // デフォルトはShift_JIS
           );
           if (dbfData != null) {
-            print('[ImportExportService] DBF属性データ読み込み成功:');
-            print('  フィールド数: ${dbfData.keys.length}');
-            print('  レコード数: ${dbfData.values.firstOrNull?.length ?? 0}');
-            print('  フィールド名: ${dbfData.keys.toList()}');
+            AppLogger.debug('[ImportExportService] DBF属性データ読み込み成功:');
+            AppLogger.debug('  フィールド数: ${dbfData.keys.length}');
+            AppLogger.debug('  レコード数: ${dbfData.values.firstOrNull?.length ?? 0}');
+            AppLogger.debug('  フィールド名: ${dbfData.keys.toList()}');
           }
         } catch (e) {
-          print('[ImportExportService] DBF読み込みエラー（属性なしで続行）: $e');
+          AppLogger.debug('[ImportExportService] DBF読み込みエラー（属性なしで続行）: $e');
         }
       }
 
       final fileSize = shpFile.lengthSync();
       final fileName = p.basenameWithoutExtension(shpFilePath);
 
-      print('[ImportExportService] ファイル名: $fileName');
-      print('[ImportExportService] ファイルサイズ: ${fileSize}bytes');
+      AppLogger.debug('[ImportExportService] ファイル名: $fileName');
+      AppLogger.debug('[ImportExportService] ファイルサイズ: ${fileSize}bytes');
 
       // レイヤ名をファイル名に設定（拡張子なし）
       final baseLayerName = fileName;
@@ -590,7 +629,7 @@ class ImportExportService {
         targetGeoPackage,
         baseLayerName,
       );
-      print('[ImportExportService] 作成するレイヤ名: $actualLayerName');
+      AppLogger.debug('[ImportExportService] 作成するレイヤ名: $actualLayerName');
 
       // 既存の「___」という名前のレイヤがある場合は削除
       await _removeInvalidLayers(targetGeoPackage);
@@ -600,22 +639,22 @@ class ImportExportService {
       if (prjFile.existsSync()) {
         sourceCoordinateSystem = await _readPrjFile(prjFile.path);
         if (sourceCoordinateSystem != null) {
-          print(
+          AppLogger.debug(
             '[ImportExportService] 座標系情報読み取り成功: ${sourceCoordinateSystem.name}',
           );
-          print(
+          AppLogger.debug(
             '[ImportExportService] EPSG: ${sourceCoordinateSystem.epsgCode}',
           );
         } else {
-          print('[ImportExportService] 座標系情報の読み取りに失敗、デフォルト処理を実行');
+          AppLogger.debug('[ImportExportService] 座標系情報の読み取りに失敗、デフォルト処理を実行');
         }
       } else {
-        print('[ImportExportService] .prjファイルが見つからない、座標系を推定します');
+        AppLogger.debug('[ImportExportService] .prjファイルが見つからない、座標系を推定します');
       }
 
       // シェープファイルのバイナリ解析によるデータ読み込み
       try {
-        print('[ImportExportService] シェープファイルバイナリ解析でデータを読み込みます');
+        AppLogger.debug('[ImportExportService] シェープファイルバイナリ解析でデータを読み込みます');
 
         // まず基本情報を読み込み（段階的実装）
         final shapeInfo = await _readShapefileInfo(shpFilePath);
@@ -628,10 +667,10 @@ class ImportExportService {
           );
         }
 
-        print('[ImportExportService] シェープファイル基本情報:');
-        print('  ジオメトリタイプ: ${shapeInfo['geometryType']}');
-        print('  フィーチャ数: ${shapeInfo['featureCount']}');
-        print('  バウンディングボックス: ${shapeInfo['bounds']}');
+        AppLogger.debug('[ImportExportService] シェープファイル基本情報:');
+        AppLogger.debug('  ジオメトリタイプ: ${shapeInfo['geometryType']}');
+        AppLogger.debug('  フィーチャ数: ${shapeInfo['featureCount']}');
+        AppLogger.debug('  バウンディングボックス: ${shapeInfo['bounds']}');
 
         // ジオメトリタイプをGeometryTypeに変換
         final geometryType = _convertShapeTypeToGeometryType(
@@ -665,7 +704,7 @@ class ImportExportService {
             dbfData: dbfData, // DBF属性データを渡す
           );
         } catch (e) {
-          print('[ImportExportService] フィーチャ読み込みエラー（サンプルデータで代替）: $e');
+          AppLogger.debug('[ImportExportService] フィーチャ読み込みエラー（サンプルデータで代替）: $e');
           // フィーチャ読み込みに失敗した場合は基本情報を使ってサンプルデータを作成
           featureCount = await _createSampleFeaturesFromInfo(
             shapeInfo,
@@ -695,7 +734,7 @@ class ImportExportService {
           );
         }
 
-        print('[ImportExportService] シェープファイル読み込み完了: $featureCount個のフィーチャを追加');
+        AppLogger.debug('[ImportExportService] シェープファイル読み込み完了: $featureCount個のフィーチャを追加');
 
         return ImportExportResult.success(
           createdLayer: createdLayer,
@@ -711,7 +750,7 @@ class ImportExportService {
           },
         );
       } catch (e) {
-        print('[ImportExportService] シェープファイル読み込みエラー（サンプルデータで代替）: $e');
+        AppLogger.debug('[ImportExportService] シェープファイル読み込みエラー（サンプルデータで代替）: $e');
         // バイナリ解析での読み込みに失敗した場合はサンプルデータで代替
         return await _createSampleDataShapefile(
           shpFilePath,
@@ -720,8 +759,8 @@ class ImportExportService {
         );
       }
     } catch (e, stack) {
-      print('[ImportExportService] シェープファイルインポートエラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] シェープファイルインポートエラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       return ImportExportResult.error('シェープファイルの読み込みでエラーが発生しました: $e');
     }
   }
@@ -733,7 +772,7 @@ class ImportExportService {
     String layerName,
   ) async {
     try {
-      print('[ImportExportService] GeoJSON読み込み開始: $geoJsonFilePath');
+      AppLogger.debug('[ImportExportService] GeoJSON読み込み開始: $geoJsonFilePath');
 
       // ファイル読み込み
       final file = File(geoJsonFilePath);
@@ -746,7 +785,7 @@ class ImportExportService {
       final fileContent = await file.readAsString();
       final jsonData = json.decode(fileContent) as Map<String, dynamic>;
 
-      print('[ImportExportService] GeoJSON解析成功');
+      AppLogger.debug('[ImportExportService] GeoJSON解析成功');
 
       // FeatureCollectionかどうか確認
       if (jsonData['type'] != 'FeatureCollection') {
@@ -760,7 +799,7 @@ class ImportExportService {
         return ImportExportResult.error('フィーチャが含まれていません');
       }
 
-      print('[ImportExportService] フィーチャ数: ${features.length}');
+      AppLogger.debug('[ImportExportService] フィーチャ数: ${features.length}');
 
       // 最初のフィーチャからジオメトリタイプを判定
       final firstFeature = features.first as Map<String, dynamic>;
@@ -773,7 +812,7 @@ class ImportExportService {
         firstGeometry['type'] as String,
       );
 
-      print('[ImportExportService] ジオメトリタイプ: ${geometryType.value}');
+      AppLogger.debug('[ImportExportService] ジオメトリタイプ: ${geometryType.value}');
 
       // レイヤー作成
       await targetGeoPackage.geoPackageFile.addLayer(layerName, geometryType);
@@ -800,7 +839,7 @@ class ImportExportService {
               feature['properties'] as Map<String, dynamic>? ?? {};
 
           if (geometry == null) {
-            print('[ImportExportService] フィーチャ[$i]: ジオメトリなし、スキップ');
+            AppLogger.debug('[ImportExportService] フィーチャ[$i]: ジオメトリなし、スキップ');
             skipCount++;
             continue;
           }
@@ -838,10 +877,10 @@ class ImportExportService {
               if ((featureGeomType == 'LineString' ||
                       featureGeomType == 'MultiLineString') &&
                   coordinates is List) {
-                // LineStringの場合
+                // LineStringの場合（coordinatesはList型として確定）
                 if (featureGeomType == 'LineString') {
                   final line =
-                      (coordinates as List)
+                      coordinates
                           .map(
                             (coord) =>
                                 LatLng(coord[1] as double, coord[0] as double),
@@ -868,10 +907,10 @@ class ImportExportService {
               if ((featureGeomType == 'Polygon' ||
                       featureGeomType == 'MultiPolygon') &&
                   coordinates is List) {
-                // Polygonの場合
+                // Polygonの場合（coordinatesはList型として確定）
                 if (featureGeomType == 'Polygon' && coordinates.isNotEmpty) {
                   final rings =
-                      (coordinates as List).map((ring) {
+                      coordinates.map((ring) {
                         return (ring as List)
                             .map(
                               (coord) => LatLng(
@@ -910,10 +949,10 @@ class ImportExportService {
               batchData,
             );
             batchData.clear();
-            print('[ImportExportService] バッチ処理完了: ${successCount}個まで処理済み');
+            AppLogger.debug('[ImportExportService] バッチ処理完了: $successCount個まで処理済み');
           }
         } catch (e) {
-          print('[ImportExportService] フィーチャ[$i]の処理エラー: $e');
+          AppLogger.debug('[ImportExportService] フィーチャ[$i]の処理エラー: $e');
           skipCount++;
         }
       }
@@ -928,8 +967,8 @@ class ImportExportService {
         );
       }
 
-      print(
-        '[ImportExportService] GeoJSONインポート完了: ${successCount}個成功, ${skipCount}個スキップ',
+      AppLogger.debug(
+        '[ImportExportService] GeoJSONインポート完了: $successCount個成功, $skipCount個スキップ',
       );
 
       // レイヤーノードの更新
@@ -957,8 +996,8 @@ class ImportExportService {
         },
       );
     } catch (e, stack) {
-      print('[ImportExportService] GeoJSONインポートエラー: $e');
-      print('[ImportExportService] スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] GeoJSONインポートエラー: $e');
+      AppLogger.debug('[ImportExportService] スタックトレース: $stack');
       return ImportExportResult.error('GeoJSONの読み込みでエラーが発生しました: $e');
     }
   }
@@ -976,7 +1015,7 @@ class ImportExportService {
       case 'MultiPolygon':
         return GeometryType.polygon;
       default:
-        print('[WARNING] 未知のGeoJSONジオメトリタイプ: $geoJsonType、Pointとして処理');
+        AppLogger.debug('[WARNING] 未知のGeoJSONジオメトリタイプ: $geoJsonType、Pointとして処理');
         return GeometryType.point;
     }
   }
@@ -1003,7 +1042,7 @@ class ImportExportService {
       counter++;
     } while (existingLayerNames.contains(candidateName));
 
-    print('[ImportExportService] レイヤ名重複のため「$candidateName」を使用');
+    AppLogger.debug('[ImportExportService] レイヤ名重複のため「$candidateName」を使用');
     return candidateName;
   }
 
@@ -1018,7 +1057,7 @@ class ImportExportService {
         if (layerName.startsWith('___') ||
             layerName.trim().isEmpty ||
             layerName == '___') {
-          print('[ImportExportService] 無効なレイヤを削除: $layerName');
+          AppLogger.debug('[ImportExportService] 無効なレイヤを削除: $layerName');
           await geoPackageNode.geoPackageFile.removeLayer(layerName);
         }
       }
@@ -1026,7 +1065,7 @@ class ImportExportService {
       // レイヤー更新
       await geoPackageNode.updateChildren();
     } catch (e) {
-      print('[ImportExportService] 無効レイヤ削除でエラー: $e');
+      AppLogger.debug('[ImportExportService] 無効レイヤ削除でエラー: $e');
     }
   }
 
@@ -1035,7 +1074,7 @@ class ImportExportService {
   // ignore: unused_element
   Future<GeometryType?> _showGeometryTypeSelectionDialog() async {
     // TODO: 将来的にUIダイアログを実装予定
-    print('[ImportExportService] ジオメトリタイプ選択: デフォルトでPointを選択');
+    AppLogger.debug('[ImportExportService] ジオメトリタイプ選択: デフォルトでPointを選択');
     return GeometryType.point;
   }
 
@@ -1045,11 +1084,11 @@ class ImportExportService {
   // ignore: unused_element
   Uint8List? _convertPointShapeToWkb(dynamic shape) {
     try {
-      print('[ImportExportService] Point変換（未実装）: ${shape.runtimeType}');
+      AppLogger.debug('[ImportExportService] Point変換（未実装）: ${shape.runtimeType}');
       // TODO: 実際のdart_shpライブラリAPIに合わせて実装
       return null;
     } catch (e) {
-      print('[ImportExportService] Point WKB変換エラー: $e');
+      AppLogger.debug('[ImportExportService] Point WKB変換エラー: $e');
       return null;
     }
   }
@@ -1058,11 +1097,11 @@ class ImportExportService {
   // ignore: unused_element
   Uint8List? _convertLineStringShapeToWkb(dynamic shape) {
     try {
-      print('[ImportExportService] LineString変換（未実装）: ${shape.runtimeType}');
+      AppLogger.debug('[ImportExportService] LineString変換（未実装）: ${shape.runtimeType}');
       // TODO: 実際のdart_shpライブラリAPIに合わせて実装
       return null;
     } catch (e) {
-      print('[ImportExportService] LineString WKB変換エラー: $e');
+      AppLogger.debug('[ImportExportService] LineString WKB変換エラー: $e');
       return null;
     }
   }
@@ -1071,11 +1110,11 @@ class ImportExportService {
   // ignore: unused_element
   Uint8List? _convertPolygonShapeToWkb(dynamic shape) {
     try {
-      print('[ImportExportService] Polygon変換（未実装）: ${shape.runtimeType}');
+      AppLogger.debug('[ImportExportService] Polygon変換（未実装）: ${shape.runtimeType}');
       // TODO: 実際のdart_shpライブラリAPIに合わせて実装
       return null;
     } catch (e) {
-      print('[ImportExportService] Polygon WKB変換エラー: $e');
+      AppLogger.debug('[ImportExportService] Polygon WKB変換エラー: $e');
       return null;
     }
   }
@@ -1087,8 +1126,8 @@ class ImportExportService {
     FileFormat format,
   ) async {
     try {
-      print('[ImportExportService] エクスポート開始: ${layer.layerName} → $format');
-      print('  出力先: $outputPath');
+      AppLogger.debug('[ImportExportService] エクスポート開始: ${layer.layerName} → $format');
+      AppLogger.debug('  出力先: $outputPath');
 
       switch (format) {
         case FileFormat.shapefile:
@@ -1105,8 +1144,8 @@ class ImportExportService {
           );
       }
     } catch (e, stack) {
-      print('[ImportExportService] エクスポートエラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] エクスポートエラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       return ImportExportResult.error('Export failed: $e');
     }
   }
@@ -1117,7 +1156,7 @@ class ImportExportService {
     String outputPath,
   ) async {
     try {
-      print('[ImportExportService] Shapefileエクスポート開始: ${layer.layerName}');
+      AppLogger.debug('[ImportExportService] Shapefileエクスポート開始: ${layer.layerName}');
 
       // レイヤからフィーチャを取得
       final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
@@ -1132,14 +1171,14 @@ class ImportExportService {
         );
       }
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] フィーチャ変換開始: ${features.length}個のフィーチャ (タイプ: ${geometryType?.value})',
       );
       // フィーチャサンプル情報（簡略化）
       final sampleFeature = features.first;
       final sampleId = sampleFeature['id'] ?? 'unknown';
       final sampleName = sampleFeature['name']?.toString() ?? '';
-      print(
+      AppLogger.debug(
         '[ImportExportService] 生フィーチャサンプル: ID=$sampleId, Name="$sampleName", Keys=${sampleFeature.keys.toList()}',
       );
 
@@ -1149,7 +1188,7 @@ class ImportExportService {
         geometryType,
       );
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] GeoJSON変換完了: ${geoJsonFeatures.length}個のフィーチャ',
       );
       if (geoJsonFeatures.isNotEmpty) {
@@ -1160,11 +1199,11 @@ class ImportExportService {
           final geometryType = sampleGeometry['type'] ?? 'unknown';
           final coordinates = sampleGeometry['coordinates'];
           final coordLength = coordinates is List ? coordinates.length : 0;
-          print(
+          AppLogger.debug(
             '[ImportExportService] GeoJSONサンプル: $geometryType, 座標要素数=$coordLength',
           );
         } else {
-          print('[ImportExportService] GeoJSONサンプル: ジオメトリなし');
+          AppLogger.debug('[ImportExportService] GeoJSONサンプル: ジオメトリなし');
         }
       }
 
@@ -1175,31 +1214,31 @@ class ImportExportService {
       }
 
       // FeatureExportConverterを使用（元の形状を保持）
-      print('[ImportExportService] FeatureExportConverter初期化中...');
+      AppLogger.debug('[ImportExportService] FeatureExportConverter初期化中...');
       final converter = FeatureExportConverter(
         exportFormat: FileFormat.shapefile,
         outputPath: outputPath,
         convertToPointCloud: false, // 元の形状を保持
       );
 
-      print('[ImportExportService] 変換パラメータ作成中...');
+      AppLogger.debug('[ImportExportService] 変換パラメータ作成中...');
       final conversionParams = FeatureConversionParams(
         targetLayer: layer,
         features: geoJsonFeatures,
       );
 
-      print('[ImportExportService] FeatureExportConverter実行中...');
+      AppLogger.debug('[ImportExportService] FeatureExportConverter実行中...');
       final result = await converter.convert(conversionParams);
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] FeatureExportConverter結果: success=${result.success}',
       );
       if (!result.success) {
-        print('[ImportExportService] エラー詳細: ${result.errorMessage}');
+        AppLogger.debug('[ImportExportService] エラー詳細: ${result.errorMessage}');
       }
 
       if (result.success) {
-        print(
+        AppLogger.debug(
           '[ImportExportService] Shapefileエクスポート完了: ${geoJsonFeatures.length}個のフィーチャ',
         );
 
@@ -1207,8 +1246,8 @@ class ImportExportService {
         final outputFile = File(outputPath);
         final fileExists = await outputFile.exists();
         final fileSize = fileExists ? await outputFile.length() : 0;
-        print(
-          '[ImportExportService] 出力ファイル存在: $fileExists, サイズ: ${fileSize}バイト',
+        AppLogger.debug(
+          '[ImportExportService] 出力ファイル存在: $fileExists, サイズ: $fileSizeバイト',
         );
 
         return ImportExportResult.success(
@@ -1227,8 +1266,8 @@ class ImportExportService {
         );
       }
     } catch (e, stackTrace) {
-      print('[ImportExportService] Shapefileエクスポートエラー: $e');
-      print('[ImportExportService] スタックトレース: $stackTrace');
+      AppLogger.debug('[ImportExportService] Shapefileエクスポートエラー: $e');
+      AppLogger.debug('[ImportExportService] スタックトレース: $stackTrace');
       return ImportExportResult.error('Shapefile export failed: $e');
     }
   }
@@ -1238,7 +1277,7 @@ class ImportExportService {
     List<Map<String, dynamic>> features,
     GeometryType? geometryType,
   ) async {
-    print('[ImportExportService] GeoJSON変換開始: ${features.length}個のフィーチャ');
+    AppLogger.debug('[ImportExportService] GeoJSON変換開始: ${features.length}個のフィーチャ');
     final geoJsonFeatures = <Map<String, dynamic>>[];
 
     for (int index = 0; index < features.length; index++) {
@@ -1247,7 +1286,7 @@ class ImportExportService {
       final featureName = feature['name']?.toString() ?? '';
       final featureDescription = feature['description']?.toString() ?? '';
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] フィーチャ変換中[$index]: ID=$featureId, Name=$featureName',
       );
 
@@ -1267,11 +1306,11 @@ class ImportExportService {
               'type': 'Point',
               'coordinates': [point.longitude, point.latitude],
             };
-            print(
+            AppLogger.debug(
               '[ImportExportService] Point geometry作成: [${point.longitude}, ${point.latitude}]',
             );
           } else {
-            print('[ImportExportService] フィーチャ[$index]: pointsデータが見つかりません');
+            AppLogger.debug('[ImportExportService] フィーチャ[$index]: pointsデータが見つかりません');
           }
           break;
 
@@ -1286,11 +1325,11 @@ class ImportExportService {
                     .toList();
 
             geometry = {'type': 'LineString', 'coordinates': coordinates};
-            print(
+            AppLogger.debug(
               '[ImportExportService] LineString geometry作成: ${coordinates.length}個の座標',
             );
           } else {
-            print('[ImportExportService] フィーチャ[$index]: linesデータが見つかりません');
+            AppLogger.debug('[ImportExportService] フィーチャ[$index]: linesデータが見つかりません');
           }
           break;
 
@@ -1300,7 +1339,7 @@ class ImportExportService {
             // 全てのリングを処理（外側リング + 穴）
             final List<List<List<double>>> allRings = [];
 
-            print(
+            AppLogger.debug(
               '[ImportExportService] Polygon処理: ${polygons.length}個のリングを検出',
             );
 
@@ -1322,22 +1361,22 @@ class ImportExportService {
               }
 
               allRings.add(ringCoordinates);
-              print(
+              AppLogger.debug(
                 '[ImportExportService] リング$ringIndex処理完了: ${ringCoordinates.length}個の座標 (${ringIndex == 0 ? "外側" : "穴"})',
               );
             }
 
             geometry = {'type': 'Polygon', 'coordinates': allRings};
-            print(
+            AppLogger.debug(
               '[ImportExportService] Polygon geometry作成: ${allRings.length}個のリング（外側1 + 穴${allRings.length - 1}）',
             );
           } else {
-            print('[ImportExportService] フィーチャ[$index]: polygonsデータが見つかりません');
+            AppLogger.debug('[ImportExportService] フィーチャ[$index]: polygonsデータが見つかりません');
           }
           break;
 
         default:
-          print(
+          AppLogger.debug(
             '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
           );
           continue;
@@ -1350,15 +1389,15 @@ class ImportExportService {
           'metadata': metadata,
         };
         geoJsonFeatures.add(geoJsonFeature);
-        print(
+        AppLogger.debug(
           '[ImportExportService] GeoJSONフィーチャ追加[$index]: ${geometry['type']}',
         );
       } else {
-        print('[ImportExportService] フィーチャ[$index]のジオメトリ変換に失敗');
+        AppLogger.debug('[ImportExportService] フィーチャ[$index]のジオメトリ変換に失敗');
       }
     }
 
-    print(
+    AppLogger.debug(
       '[ImportExportService] GeoJSON変換完了: ${geoJsonFeatures.length}個のフィーチャが変換されました',
     );
     return geoJsonFeatures;
@@ -1373,7 +1412,7 @@ class ImportExportService {
     final pointFeatures = <Map<String, dynamic>>[];
     int pointId = 1;
 
-    print(
+    AppLogger.debug(
       '[ImportExportService] 点群変換開始: ${features.length}個のフィーチャ (タイプ: ${geometryType?.value})',
     );
 
@@ -1382,7 +1421,7 @@ class ImportExportService {
       final featureName = feature['name']?.toString() ?? '';
       final featureDescription = feature['description']?.toString() ?? '';
 
-      print('[ImportExportService] フィーチャ変換中: ID=$featureId, Name=$featureName');
+      AppLogger.debug('[ImportExportService] フィーチャ変換中: ID=$featureId, Name=$featureName');
 
       switch (geometryType) {
         case GeometryType.point:
@@ -1424,7 +1463,7 @@ class ImportExportService {
                     i < lines.length - 1 ? i + 1 : null, // 次の点へのセグメント番号
               });
             }
-            print('[ImportExportService] ライン変換完了: ${lines.length}個の点を生成');
+            AppLogger.debug('[ImportExportService] ライン変換完了: ${lines.length}個の点を生成');
           }
           break;
 
@@ -1449,7 +1488,7 @@ class ImportExportService {
                   'is_hole': polyIndex > 0, // 最初の輪郭以外は穴と仮定
                 });
               }
-              print(
+              AppLogger.debug(
                 '[ImportExportService] ポリゴン変換完了: ${polygon.length}個の点を生成 (輪郭 $polyIndex)',
               );
             }
@@ -1457,14 +1496,14 @@ class ImportExportService {
           break;
 
         default:
-          print(
+          AppLogger.debug(
             '[ImportExportService] サポートされていないジオメトリタイプ: ${geometryType?.value}',
           );
           break;
       }
     }
 
-    print('[ImportExportService] 点群変換完了: ${pointFeatures.length}個の点データを生成');
+    AppLogger.debug('[ImportExportService] 点群変換完了: ${pointFeatures.length}個の点データを生成');
     return pointFeatures;
   }
 
@@ -1475,7 +1514,7 @@ class ImportExportService {
     String outputPath,
     String layerName,
   ) async {
-    print('[ImportExportService] Shapefile作成開始: $outputPath');
+    AppLogger.debug('[ImportExportService] Shapefile作成開始: $outputPath');
 
     // .shpファイルのパス設定
     final basePath = outputPath.replaceAll('.shp', '');
@@ -1488,7 +1527,7 @@ class ImportExportService {
     await _createShxFile(pointFeatures, shxPath);
     await _createDbfFile(pointFeatures, dbfPath);
 
-    print('[ImportExportService] Shapefile作成完了: $shpPath, $shxPath, $dbfPath');
+    AppLogger.debug('[ImportExportService] Shapefile作成完了: $shpPath, $shxPath, $dbfPath');
   }
 
   /// .shpファイルを作成（点データ）
@@ -1496,7 +1535,7 @@ class ImportExportService {
     List<Map<String, dynamic>> pointFeatures,
     String shpPath,
   ) async {
-    print('[ImportExportService] .shpファイル作成開始: $shpPath');
+    AppLogger.debug('[ImportExportService] .shpファイル作成開始: $shpPath');
 
     final file = File(shpPath);
     final buffer = BytesBuilder();
@@ -1569,7 +1608,7 @@ class ImportExportService {
     }
 
     await file.writeAsBytes(buffer.toBytes());
-    print('[ImportExportService] .shpファイル作成完了: ${pointFeatures.length}個の点');
+    AppLogger.debug('[ImportExportService] .shpファイル作成完了: ${pointFeatures.length}個の点');
   }
 
   /// .shxファイルを作成（インデックスファイル）
@@ -1577,7 +1616,7 @@ class ImportExportService {
     List<Map<String, dynamic>> pointFeatures,
     String shxPath,
   ) async {
-    print('[ImportExportService] .shxファイル作成開始: $shxPath');
+    AppLogger.debug('[ImportExportService] .shxファイル作成開始: $shxPath');
 
     final file = File(shxPath);
     final buffer = BytesBuilder();
@@ -1639,7 +1678,7 @@ class ImportExportService {
     }
 
     await file.writeAsBytes(buffer.toBytes());
-    print(
+    AppLogger.debug(
       '[ImportExportService] .shxファイル作成完了: ${pointFeatures.length}個のインデックス',
     );
   }
@@ -1649,7 +1688,7 @@ class ImportExportService {
     List<Map<String, dynamic>> pointFeatures,
     String dbfPath,
   ) async {
-    print('[ImportExportService] .dbfファイル作成開始: $dbfPath');
+    AppLogger.debug('[ImportExportService] .dbfファイル作成開始: $dbfPath');
 
     final file = File(dbfPath);
     final buffer = BytesBuilder();
@@ -1787,7 +1826,7 @@ class ImportExportService {
     buffer.addByte(0x1A);
 
     await file.writeAsBytes(buffer.toBytes());
-    print('[ImportExportService] .dbfファイル作成完了: ${pointFeatures.length}個のレコード');
+    AppLogger.debug('[ImportExportService] .dbfファイル作成完了: ${pointFeatures.length}個のレコード');
   }
 
   /// GeoJSON形式でエクスポート
@@ -1796,7 +1835,7 @@ class ImportExportService {
     String outputPath,
   ) async {
     try {
-      print('[ImportExportService] GeoJSONエクスポート開始: ${layer.layerName}');
+      AppLogger.debug('[ImportExportService] GeoJSONエクスポート開始: ${layer.layerName}');
 
       // レイヤからフィーチャを取得
       final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
@@ -1849,7 +1888,7 @@ class ImportExportService {
       ).convert(geoJsonData);
       await file.writeAsString(jsonString);
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] GeoJSONエクスポート完了: ${geoJsonFeatures.length}個のフィーチャ',
       );
 
@@ -1863,7 +1902,7 @@ class ImportExportService {
         },
       );
     } catch (e) {
-      print('[ImportExportService] GeoJSONエクスポートエラー: $e');
+      AppLogger.debug('[ImportExportService] GeoJSONエクスポートエラー: $e');
       return ImportExportResult.error('GeoJSON export failed: $e');
     }
   }
@@ -1874,7 +1913,7 @@ class ImportExportService {
     String outputPath,
   ) async {
     try {
-      print('[ImportExportService] CSVエクスポート開始: ${layer.layerName}');
+      AppLogger.debug('[ImportExportService] CSVエクスポート開始: ${layer.layerName}');
 
       final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
         layer.layerName,
@@ -1948,7 +1987,7 @@ class ImportExportService {
       final file = File(outputPath);
       await file.writeAsString(csvLines.join('\n'));
 
-      print('[ImportExportService] CSVエクスポート完了: ${features.length}個のフィーチャ');
+      AppLogger.debug('[ImportExportService] CSVエクスポート完了: ${features.length}個のフィーチャ');
 
       return ImportExportResult.success(
         metadata: {
@@ -1960,7 +1999,7 @@ class ImportExportService {
         },
       );
     } catch (e) {
-      print('[ImportExportService] CSVエクスポートエラー: $e');
+      AppLogger.debug('[ImportExportService] CSVエクスポートエラー: $e');
       return ImportExportResult.error('CSV export failed: $e');
     }
   }
@@ -1971,7 +2010,7 @@ class ImportExportService {
     String outputPath,
   ) async {
     try {
-      print('[ImportExportService] KMLエクスポート開始: ${layer.layerName}');
+      AppLogger.debug('[ImportExportService] KMLエクスポート開始: ${layer.layerName}');
 
       final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
         layer.layerName,
@@ -2029,7 +2068,7 @@ class ImportExportService {
       final file = File(outputPath);
       await file.writeAsString(kmlContent.toString());
 
-      print('[ImportExportService] KMLエクスポート完了: ${features.length}個のフィーチャ');
+      AppLogger.debug('[ImportExportService] KMLエクスポート完了: ${features.length}個のフィーチャ');
 
       return ImportExportResult.success(
         metadata: {
@@ -2041,7 +2080,7 @@ class ImportExportService {
         },
       );
     } catch (e) {
-      print('[ImportExportService] KMLエクスポートエラー: $e');
+      AppLogger.debug('[ImportExportService] KMLエクスポートエラー: $e');
       return ImportExportResult.error('KML export failed: $e');
     }
   }
@@ -2056,8 +2095,8 @@ class ImportExportService {
     String? layerName,
   }) async {
     try {
-      print('[ImportExportService] currentLayerからインポート開始');
-      print(
+      AppLogger.debug('[ImportExportService] currentLayerからインポート開始');
+      AppLogger.debug(
         'currentLayer: ${currentLayer?.name}, type: ${currentLayer?.nodeType}',
       );
 
@@ -2081,13 +2120,13 @@ class ImportExportService {
         return ImportExportResult.error('選択されたレイヤーからGeoPackageファイルを特定できませんでした');
       }
 
-      print('[ImportExportService] 対象GeoPackage: ${targetGeoPackage.name}');
+      AppLogger.debug('[ImportExportService] 対象GeoPackage: ${targetGeoPackage.name}');
 
       // 通常のインポート処理を実行
       return await importFile(filePath, targetGeoPackage, layerName: layerName);
     } catch (e, stack) {
-      print('[ImportExportService] currentLayerからのインポートエラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] currentLayerからのインポートエラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       return ImportExportResult.error('インポート処理でエラーが発生しました: $e');
     }
   }
@@ -2152,9 +2191,9 @@ class ImportExportService {
     CoordinateSystem? sourceCoordinateSystem,
     Map<String, List<dynamic>>? dbfData, // DBF属性データ
   }) async {
-    print('[ImportExportService] 実際の座標データ抽出開始');
-    print('  シェープタイプ: $shapeType');
-    print('  ファイルサイズ: ${bytes.length}bytes');
+    AppLogger.debug('[ImportExportService] 実際の座標データ抽出開始');
+    AppLogger.debug('  シェープタイプ: $shapeType');
+    AppLogger.debug('  ファイルサイズ: ${bytes.length}bytes');
 
     if (bytes.length < 100) {
       throw Exception('ファイルが小さすぎて座標データが含まれていません');
@@ -2189,7 +2228,7 @@ class ImportExportService {
         if (featureCount < 10 ||
             (featureCount < 1000 && featureCount % 100 == 0) ||
             (featureCount >= 1000 && featureCount % 500 == 0)) {
-          print(
+          AppLogger.debug(
             '[ImportExportService] レコード $recordNumber: 長さ $contentLength (進捗: ${featureCount + 1})',
           );
         }
@@ -2197,7 +2236,7 @@ class ImportExportService {
         offset += 8; // ヘッダー分を進める
 
         if (contentLength <= 0 || offset + (contentLength * 2) > bytes.length) {
-          print('[ImportExportService] 不正なレコード長、スキップ');
+          AppLogger.debug('[ImportExportService] 不正なレコード長、スキップ');
           break;
         }
 
@@ -2285,7 +2324,7 @@ class ImportExportService {
           }
           offset += (contentLength * 2) - 4; // コンテンツ長から既に読んだシェープタイプを除く
         } else {
-          print('[ImportExportService] 未対応のシェープタイプ: $recordShapeType');
+          AppLogger.debug('[ImportExportService] 未対応のシェープタイプ: $recordShapeType');
           offset += (contentLength * 2) - 4; // レコードをスキップ
         }
 
@@ -2303,11 +2342,11 @@ class ImportExportService {
               batchData,
             );
             batchData.clear();
-            print('[ImportExportService] バッチ処理完了: ${featureCount}個まで処理済み');
+            AppLogger.debug('[ImportExportService] バッチ処理完了: $featureCount個まで処理済み');
           }
         }
       } catch (e) {
-        print('[ImportExportService] レコード解析エラー（offset: $offset）: $e');
+        AppLogger.debug('[ImportExportService] レコード解析エラー（offset: $offset）: $e');
         break;
       }
     }
@@ -2320,14 +2359,14 @@ class ImportExportService {
         geometryType,
         batchData,
       );
-      print('[ImportExportService] 最終バッチ処理完了: ${batchData.length}個');
+      AppLogger.debug('[ImportExportService] 最終バッチ処理完了: ${batchData.length}個');
     }
 
-    print('[ImportExportService] 座標データ抽出完了: $featureCount個のフィーチャ');
+    AppLogger.debug('[ImportExportService] 座標データ抽出完了: $featureCount個のフィーチャ');
 
     // 大量フィーチャの場合は処理時間も表示
     if (featureCount > 1000) {
-      print('[ImportExportService] 大量データ処理完了: ${featureCount}個のフィーチャを処理');
+      AppLogger.debug('[ImportExportService] 大量データ処理完了: $featureCount個のフィーチャを処理');
     }
 
     return featureCount;
@@ -2354,23 +2393,23 @@ class ImportExportService {
       } else if (sampleData.containsKey('rings')) {
         actualGeometryType = GeometryType.polygon;
       } else {
-        print('[ImportExportService] 不明なバッチデータ形式: ${sampleData.keys}');
+        AppLogger.debug('[ImportExportService] 不明なバッチデータ形式: ${sampleData.keys}');
         actualGeometryType = geometryType; // フォールバック
       }
 
-      print(
+      AppLogger.debug(
         '[ImportExportService] バッチ処理: ${actualGeometryType.value}, ${batchData.length}個のフィーチャ',
       );
 
       // デバッグ: 最初のバッチアイテムの構造を確認
       if (batchData.isNotEmpty) {
-        print('[DEBUG] バッチデータサンプル（最初の1件）:');
-        print('  キー: ${batchData.first.keys.toList()}');
+        AppLogger.debug('[DEBUG] バッチデータサンプル（最初の1件）:');
+        AppLogger.debug('  キー: ${batchData.first.keys.toList()}');
         batchData.first.forEach((key, value) {
           if (key != 'rings' && key != 'line' && key != 'point') {
             final valueStr = value?.toString() ?? 'null';
-            print(
-              '  $key: ${valueStr.length > 50 ? valueStr.substring(0, 50) + '...' : valueStr}',
+            AppLogger.debug(
+              '  $key: ${valueStr.length > 50 ? '${valueStr.substring(0, 50)}...' : valueStr}',
             );
           }
         });
@@ -2400,13 +2439,11 @@ class ImportExportService {
             batchData,
           );
           break;
-
-        default:
-          print('[ImportExportService] 未対応のジオメトリタイプ: $actualGeometryType');
+        // GeometryType enumはpoint, linestring, polygonの3種のみなので、全てカバー済み
       }
     } catch (e) {
-      print('[ImportExportService] バッチデータ処理エラー: $e');
-      print(
+      AppLogger.debug('[ImportExportService] バッチデータ処理エラー: $e');
+      AppLogger.debug(
         '[ImportExportService] エラーデータサンプル: ${batchData.isNotEmpty ? batchData.first.keys : 'empty'}',
       );
     }
@@ -2462,15 +2499,15 @@ class ImportExportService {
                   latLng.longitude <= 180) {
                 // 最初の1回だけ詳細ログ出力
                 if (!_hasLoggedFirstPointConversion) {
-                  print('[DEBUG] 【最初のPoint座標変換詳細】');
-                  print(
+                  AppLogger.debug('[DEBUG] 【最初のPoint座標変換詳細】');
+                  AppLogger.debug(
                     '  元座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
                   );
-                  print('  元座標: X=$x, Y=$y');
-                  print(
+                  AppLogger.debug('  元座標: X=$x, Y=$y');
+                  AppLogger.debug(
                     '  変換後座標: 緯度=${latLng.latitude}, 経度=${latLng.longitude}',
                   );
-                  print(
+                  AppLogger.debug(
                     '  変換後座標（表示用）: (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
                   );
                   _hasLoggedFirstPointConversion = true;
@@ -2478,7 +2515,7 @@ class ImportExportService {
                 return latLng;
               } else {
                 if (!_hasLoggedFirstPointConversion) {
-                  print(
+                  AppLogger.debug(
                     '[DEBUG] 変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
                   );
                 }
@@ -2486,13 +2523,13 @@ class ImportExportService {
               }
             } else {
               if (!_hasLoggedFirstPointConversion) {
-                print('[DEBUG] 投影オブジェクトの作成に失敗');
+                AppLogger.debug('[DEBUG] 投影オブジェクトの作成に失敗');
               }
               return null;
             }
           } catch (e) {
             if (!_hasLoggedFirstPointConversion) {
-              print('[DEBUG] Point座標変換エラー: $e (元座標: $x, $y)');
+              AppLogger.debug('[DEBUG] Point座標変換エラー: $e (元座標: $x, $y)');
             }
             return null;
           }
@@ -2500,25 +2537,25 @@ class ImportExportService {
           // 座標変換なし、WGS84範囲チェック
           if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
             if (!_hasLoggedFirstPointConversion) {
-              print('[DEBUG] Point座標抽出（変換なし）: ($y, $x)');
+              AppLogger.debug('[DEBUG] Point座標抽出（変換なし）: ($y, $x)');
               _hasLoggedFirstPointConversion = true;
             }
             return LatLng(y, x); // LatLng(緯度, 経度)
           } else {
             if (!_hasLoggedFirstPointConversion) {
-              print('[DEBUG] WGS84範囲外座標を検出、座標系が未定義です: X=$x, Y=$y');
+              AppLogger.debug('[DEBUG] WGS84範囲外座標を検出、座標系が未定義です: X=$x, Y=$y');
             }
             return null;
           }
         }
       } else {
         if (!_hasLoggedFirstPointConversion) {
-          print('[DEBUG] 無効な座標値: X=$x, Y=$y');
+          AppLogger.debug('[DEBUG] 無効な座標値: X=$x, Y=$y');
         }
         return null;
       }
     } catch (e) {
-      print('[ImportExportService] Point座標抽出エラー: $e');
+      AppLogger.debug('[ImportExportService] Point座標抽出エラー: $e');
       return null;
     }
   }
@@ -2550,14 +2587,14 @@ class ImportExportService {
 
       // 最初の1回だけ詳細ログ出力
       if (!_hasLoggedFirstPolylineConversion) {
-        print('[DEBUG] 【最初のPolyline座標変換詳細】');
-        print('  Parts: $numParts, Points: $numPoints');
+        AppLogger.debug('[DEBUG] 【最初のPolyline座標変換詳細】');
+        AppLogger.debug('  Parts: $numParts, Points: $numPoints');
         if (sourceCoordinateSystem != null) {
-          print(
+          AppLogger.debug(
             '  座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
           );
         } else {
-          print('  座標系: 変換なし（WGS84想定）');
+          AppLogger.debug('  座標系: 変換なし（WGS84想定）');
         }
       }
 
@@ -2609,25 +2646,25 @@ class ImportExportService {
                   // 最初の1回だけ変換結果を詳細出力
                   if (!_hasLoggedFirstPolylineConversion &&
                       coordinates.length == 1) {
-                    print(
+                    AppLogger.debug(
                       '  最初の点の変換結果: ($x, $y) -> (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
                     );
                   }
                 } else {
                   if (!_hasLoggedFirstPolylineConversion) {
-                    print(
+                    AppLogger.debug(
                       '[DEBUG] Polyline変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
                     );
                   }
                 }
               } else {
                 if (!_hasLoggedFirstPolylineConversion) {
-                  print('[DEBUG] Polyline投影オブジェクトの作成に失敗');
+                  AppLogger.debug('[DEBUG] Polyline投影オブジェクトの作成に失敗');
                 }
               }
             } catch (e) {
               if (!_hasLoggedFirstPolylineConversion) {
-                print('[DEBUG] Polyline座標変換エラー: $e (元座標: $x, $y)');
+                AppLogger.debug('[DEBUG] Polyline座標変換エラー: $e (元座標: $x, $y)');
               }
             }
           } else {
@@ -2636,7 +2673,7 @@ class ImportExportService {
               coordinates.add(LatLng(y, x));
             } else {
               if (!_hasLoggedFirstPolylineConversion) {
-                print('[DEBUG] Polyline WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
+                AppLogger.debug('[DEBUG] Polyline WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
               }
             }
           }
@@ -2646,12 +2683,12 @@ class ImportExportService {
 
       // 最初の1回のフラグを設定
       if (!_hasLoggedFirstPolylineConversion) {
-        print('  Polyline座標抽出完了: ${coordinates.length}点');
+        AppLogger.debug('  Polyline座標抽出完了: ${coordinates.length}点');
         _hasLoggedFirstPolylineConversion = true;
       }
       return coordinates.isNotEmpty ? coordinates : null;
     } catch (e) {
-      print('[ImportExportService] Polyline座標抽出エラー: $e');
+      AppLogger.debug('[ImportExportService] Polyline座標抽出エラー: $e');
       return null;
     }
   }
@@ -2683,14 +2720,14 @@ class ImportExportService {
 
       // 最初の1回だけ詳細ログ出力
       if (!_hasLoggedFirstPolygonConversion) {
-        print('[DEBUG] 【最初のPolygon座標変換詳細】');
-        print('  Rings: $numParts, Points: $numPoints');
+        AppLogger.debug('[DEBUG] 【最初のPolygon座標変換詳細】');
+        AppLogger.debug('  Rings: $numParts, Points: $numPoints');
         if (sourceCoordinateSystem != null) {
-          print(
+          AppLogger.debug(
             '  座標系: ${sourceCoordinateSystem.name} (${sourceCoordinateSystem.epsgCode})',
           );
         } else {
-          print('  座標系: 変換なし（WGS84想定）');
+          AppLogger.debug('  座標系: 変換なし（WGS84想定）');
         }
       }
 
@@ -2752,25 +2789,25 @@ class ImportExportService {
                   // 最初の1回だけ変換結果を詳細出力
                   if (!_hasLoggedFirstPolygonConversion &&
                       allPoints.length == 1) {
-                    print(
+                    AppLogger.debug(
                       '  最初の点の変換結果: ($x, $y) -> (${latLng.latitude.toStringAsFixed(6)}, ${latLng.longitude.toStringAsFixed(6)})',
                     );
                   }
                 } else {
                   if (!_hasLoggedFirstPolygonConversion) {
-                    print(
+                    AppLogger.debug(
                       '[DEBUG] 変換後座標が範囲外: ${latLng.latitude}, ${latLng.longitude}',
                     );
                   }
                 }
               } else {
                 if (!_hasLoggedFirstPolygonConversion) {
-                  print('[DEBUG] Polygon投影オブジェクトの作成に失敗');
+                  AppLogger.debug('[DEBUG] Polygon投影オブジェクトの作成に失敗');
                 }
               }
             } catch (e) {
               if (!_hasLoggedFirstPolygonConversion) {
-                print('[DEBUG] Polygon座標変換エラー: $e (元座標: $x, $y)');
+                AppLogger.debug('[DEBUG] Polygon座標変換エラー: $e (元座標: $x, $y)');
               }
             }
           } else {
@@ -2779,7 +2816,7 @@ class ImportExportService {
               allPoints.add(LatLng(y, x));
             } else {
               if (!_hasLoggedFirstPolygonConversion) {
-                print('[DEBUG] Polygon WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
+                AppLogger.debug('[DEBUG] Polygon WGS84範囲外座標を検出、座標系が未定義です: $x, $y');
               }
             }
           }
@@ -2804,17 +2841,17 @@ class ImportExportService {
 
       // 最初の1回のフラグを設定
       if (!_hasLoggedFirstPolygonConversion) {
-        print('  Polygon座標抽出完了: ${rings.length}リング, 総${allPoints.length}点');
+        AppLogger.debug('  Polygon座標抽出完了: ${rings.length}リング, 総${allPoints.length}点');
         if (rings.isNotEmpty && rings.first.isNotEmpty) {
           final firstRing = rings.first;
-          print('  最初のリング: ${firstRing.length}点');
-          print('  バウンディングボックス推定:');
+          AppLogger.debug('  最初のリング: ${firstRing.length}点');
+          AppLogger.debug('  バウンディングボックス推定:');
           final latitudes = firstRing.map((p) => p.latitude);
           final longitudes = firstRing.map((p) => p.longitude);
-          print(
+          AppLogger.debug(
             '    緯度範囲: ${latitudes.reduce((a, b) => a < b ? a : b).toStringAsFixed(6)} ~ ${latitudes.reduce((a, b) => a > b ? a : b).toStringAsFixed(6)}',
           );
-          print(
+          AppLogger.debug(
             '    経度範囲: ${longitudes.reduce((a, b) => a < b ? a : b).toStringAsFixed(6)} ~ ${longitudes.reduce((a, b) => a > b ? a : b).toStringAsFixed(6)}',
           );
         }
@@ -2822,7 +2859,7 @@ class ImportExportService {
       }
       return rings.isNotEmpty ? rings : null;
     } catch (e) {
-      print('[ImportExportService] Polygon座標抽出エラー: $e');
+      AppLogger.debug('[ImportExportService] Polygon座標抽出エラー: $e');
       return null;
     }
   }
@@ -2831,7 +2868,7 @@ class ImportExportService {
   /// 実際のSHPヘッダーから正確なジオメトリタイプを判定
   Future<Map<String, dynamic>?> _readShapefileInfo(String shpFilePath) async {
     try {
-      print('[ImportExportService] シェープファイル基本情報読み込み: $shpFilePath');
+      AppLogger.debug('[ImportExportService] シェープファイル基本情報読み込み: $shpFilePath');
 
       final shpFile = File(shpFilePath);
       if (!shpFile.existsSync()) {
@@ -2839,7 +2876,7 @@ class ImportExportService {
       }
 
       final fileSize = shpFile.lengthSync();
-      print('[ImportExportService] SHPファイルサイズ: ${fileSize}bytes');
+      AppLogger.debug('[ImportExportService] SHPファイルサイズ: ${fileSize}bytes');
 
       // SHPバイナリヘッダーから実際のシェープタイプを読み取り
       String geometryTypeString;
@@ -2855,7 +2892,7 @@ class ImportExportService {
             36,
           ).getInt32(0, Endian.little);
 
-          print('[ImportExportService] SHPヘッダーからシェープタイプ読み取り: $shapeType');
+          AppLogger.debug('[ImportExportService] SHPヘッダーからシェープタイプ読み取り: $shapeType');
 
           // シェープタイプから正確なジオメトリタイプを判定
           switch (shapeType) {
@@ -2900,18 +2937,18 @@ class ImportExportService {
               estimatedFeatureCount = (fileSize / 550).round().clamp(1, 45);
               break;
             default:
-              print('[ImportExportService] 未知のシェープタイプ: $shapeType、Pointとして処理');
+              AppLogger.debug('[ImportExportService] 未知のシェープタイプ: $shapeType、Pointとして処理');
               geometryTypeString = 'Point';
               estimatedFeatureCount = (fileSize / 50).round().clamp(1, 1000);
               break;
           }
         } else {
-          print('[ImportExportService] SHPファイルが小さすぎるため、デフォルト推定を使用');
+          AppLogger.debug('[ImportExportService] SHPファイルが小さすぎるため、デフォルト推定を使用');
           geometryTypeString = 'Point';
           estimatedFeatureCount = 1;
         }
       } catch (e) {
-        print('[ImportExportService] SHPヘッダー読み取りエラー、ファイルサイズで推定: $e');
+        AppLogger.debug('[ImportExportService] SHPヘッダー読み取りエラー、ファイルサイズで推定: $e');
         // フォールバック：ファイルサイズベース推定
         if (fileSize < 5000) {
           geometryTypeString = 'Point';
@@ -2931,9 +2968,9 @@ class ImportExportService {
       final shxExists = File('$basePath.shx').existsSync();
       final prjExists = File('$basePath.prj').existsSync();
 
-      print('[ImportExportService] 正確なジオメトリタイプ: $geometryTypeString');
-      print('[ImportExportService] 推定フィーチャ数: $estimatedFeatureCount');
-      print(
+      AppLogger.debug('[ImportExportService] 正確なジオメトリタイプ: $geometryTypeString');
+      AppLogger.debug('[ImportExportService] 推定フィーチャ数: $estimatedFeatureCount');
+      AppLogger.debug(
         '[ImportExportService] 関連ファイル - DBF: $dbfExists, SHX: $shxExists, PRJ: $prjExists',
       );
 
@@ -2951,7 +2988,7 @@ class ImportExportService {
         'estimationMethod': 'shp_header_analysis',
       };
     } catch (e) {
-      print('[ImportExportService] シェープファイル基本情報読み込みエラー: $e');
+      AppLogger.debug('[ImportExportService] シェープファイル基本情報読み込みエラー: $e');
       return null;
     }
   }
@@ -2982,7 +3019,7 @@ class ImportExportService {
     Map<String, List<dynamic>>? dbfData, // DBF属性データ
   }) async {
     try {
-      print('[ImportExportService] シェープファイル構造解析開始: $shpFilePath');
+      AppLogger.debug('[ImportExportService] シェープファイル構造解析開始: $shpFilePath');
 
       final shpFile = File(shpFilePath);
       final bytes = await shpFile.readAsBytes();
@@ -2991,7 +3028,7 @@ class ImportExportService {
         throw Exception('SHPファイルが小さすぎます（${bytes.length}bytes）');
       }
 
-      print('[ImportExportService] SHPファイル読み込み成功: ${bytes.length}bytes');
+      AppLogger.debug('[ImportExportService] SHPファイル読み込み成功: ${bytes.length}bytes');
 
       // バイナリヘッダーから基本情報を取得（段階的実装）
       final fileCode = ByteData.sublistView(
@@ -3010,10 +3047,10 @@ class ImportExportService {
         36,
       ).getInt32(0, Endian.little);
 
-      print('[ImportExportService] SHPヘッダー解析:');
-      print('  ファイルコード: 0x${fileCode.toRadixString(16)}');
-      print('  ファイル長: $fileLength');
-      print('  シェープタイプ: $shapeType');
+      AppLogger.debug('[ImportExportService] SHPヘッダー解析:');
+      AppLogger.debug('  ファイルコード: 0x${fileCode.toRadixString(16)}');
+      AppLogger.debug('  ファイル長: $fileLength');
+      AppLogger.debug('  シェープタイプ: $shapeType');
 
       // 実際のシェープファイルレコードを読み込み
       int featureCount = 0;
@@ -3032,22 +3069,22 @@ class ImportExportService {
         );
 
         if (featureCount > 0) {
-          print('[ImportExportService] 実際の座標データ抽出成功: $featureCount個');
+          AppLogger.debug('[ImportExportService] 実際の座標データ抽出成功: $featureCount個');
           return featureCount;
         } else {
-          print('[WARNING] フィーチャが1つも抽出できませんでした');
-          print('[WARNING] ファイルが破損しているか、サポートされていない形式の可能性があります');
+          AppLogger.debug('[WARNING] フィーチャが1つも抽出できませんでした');
+          AppLogger.debug('[WARNING] ファイルが破損しているか、サポートされていない形式の可能性があります');
           throw Exception('フィーチャデータが抽出できませんでした');
         }
       } catch (e) {
-        print('[ImportExportService] 実際の座標データ抽出に失敗、フォールバック処理実行: $e');
+        AppLogger.debug('[ImportExportService] 実際の座標データ抽出に失敗、フォールバック処理実行: $e');
       }
 
       // フォールバック: 推定フィーチャを作成
-      print('[WARNING] ========================================');
-      print('[WARNING] 実データの読み込みに失敗しました');
-      print('[WARNING] サンプルデータで代替します（実際のデータではありません）');
-      print('[WARNING] ========================================');
+      AppLogger.debug('[WARNING] ========================================');
+      AppLogger.debug('[WARNING] 実データの読み込みに失敗しました');
+      AppLogger.debug('[WARNING] サンプルデータで代替します（実際のデータではありません）');
+      AppLogger.debug('[WARNING] ========================================');
 
       final maxFeatures = 8; // 段階的実装として8個まで
       final baseLatitude = 35.6812;
@@ -3124,11 +3161,11 @@ class ImportExportService {
         }
       }
 
-      print('[ImportExportService] バイナリ解析によるフィーチャ作成完了: $featureCount個');
+      AppLogger.debug('[ImportExportService] バイナリ解析によるフィーチャ作成完了: $featureCount個');
       return featureCount;
     } catch (e) {
-      print('[ImportExportService] バイナリ解析エラー: $e');
-      throw e;
+      AppLogger.debug('[ImportExportService] バイナリ解析エラー: $e');
+      rethrow;
     }
   }
 
@@ -3142,10 +3179,10 @@ class ImportExportService {
     String shpFilePath,
     int fileSize,
   ) async {
-    print('[ImportExportService] シェープファイル情報を元にサンプルデータ作成');
+    AppLogger.debug('[ImportExportService] シェープファイル情報を元にサンプルデータ作成');
 
     final estimatedCount = shapeInfo['featureCount'] as int? ?? 5;
-    final bounds = shapeInfo['bounds'];
+    // shapeInfo['bounds']は将来の機能拡張用（現在は未使用）
 
     int createdCount = 0;
     final maxSamples = estimatedCount > 20 ? 20 : estimatedCount;
@@ -3189,10 +3226,10 @@ class ImportExportService {
     GeoPackageNode targetGeoPackage,
     String layerName,
   ) async {
-    print('[WARNING] ========================================');
-    print('[WARNING] サンプルデータでシェープファイル代替');
-    print('[WARNING] 実際のデータは読み込まれていません');
-    print('[WARNING] ========================================');
+    AppLogger.debug('[WARNING] ========================================');
+    AppLogger.debug('[WARNING] サンプルデータでシェープファイル代替');
+    AppLogger.debug('[WARNING] 実際のデータは読み込まれていません');
+    AppLogger.debug('[WARNING] ========================================');
 
     // デフォルトでPointレイヤを作成
     final geometryType = GeometryType.point;
@@ -3282,7 +3319,7 @@ class ImportExportService {
             // 全てのリングを処理（外側リング + 穴）
             final List<List<List<double>>> allRings = [];
 
-            print(
+            AppLogger.debug(
               '[ImportExportService] Polygon処理: ${polygons.length}個のリングを検出',
             );
 
@@ -3304,7 +3341,7 @@ class ImportExportService {
               }
 
               allRings.add(ringCoordinates);
-              print(
+              AppLogger.debug(
                 '[ImportExportService] リング$ringIndex処理完了: ${ringCoordinates.length}個の座標 (${ringIndex == 0 ? "外側" : "穴"})',
               );
             }
@@ -3317,7 +3354,7 @@ class ImportExportService {
       }
       return null;
     } catch (e) {
-      print('[ImportExportService] GeoJSONジオメトリ作成エラー: $e');
+      AppLogger.debug('[ImportExportService] GeoJSONジオメトリ作成エラー: $e');
       return null;
     }
   }
@@ -3347,7 +3384,7 @@ class ImportExportService {
     List<dynamic> features,
   ) async {
     try {
-      print('[ImportExportService] GeoJSONスキーマをGeoPackageに追加: $layerName');
+      AppLogger.debug('[ImportExportService] GeoJSONスキーマをGeoPackageに追加: $layerName');
 
       // 全フィーチャのpropertiesからフィールド名と型を収集
       final attributeSchema = <String, String>{};
@@ -3376,7 +3413,7 @@ class ImportExportService {
         }
       }
 
-      print('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
+      AppLogger.debug('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
 
       if (attributeSchema.isNotEmpty) {
         // GeoPackageFileのaddAttributeColumnsを使用
@@ -3386,10 +3423,10 @@ class ImportExportService {
         );
       }
 
-      print('[ImportExportService] GeoJSONスキーマ追加完了');
+      AppLogger.debug('[ImportExportService] GeoJSONスキーマ追加完了');
     } catch (e, stack) {
-      print('[ImportExportService] GeoJSONスキーマ追加エラー: $e');
-      print('[ImportExportService] スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] GeoJSONスキーマ追加エラー: $e');
+      AppLogger.debug('[ImportExportService] スタックトレース: $stack');
       // エラーが発生してもインポート処理は続行
     }
   }
@@ -3401,7 +3438,7 @@ class ImportExportService {
     Map<String, List<dynamic>> dbfData,
   ) async {
     try {
-      print('[ImportExportService] DBFスキーマをGeoPackageに追加: $layerName');
+      AppLogger.debug('[ImportExportService] DBFスキーマをGeoPackageに追加: $layerName');
 
       // DBFファイルからフィールドタイプを読み取るため、一時的に再パース
       // （将来的には_readDbfFileでフィールド定義も返すように改善）
@@ -3426,7 +3463,7 @@ class ImportExportService {
         attributeSchema[fieldName] = sqliteType;
       }
 
-      print('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
+      AppLogger.debug('[ImportExportService] 追加するカラム数: ${attributeSchema.length}');
 
       // GeoPackageFileのaddAttributeColumnsを使用
       await targetGeoPackage.geoPackageFile.addAttributeColumns(
@@ -3434,10 +3471,10 @@ class ImportExportService {
         attributeSchema,
       );
 
-      print('[ImportExportService] DBFスキーマ追加完了');
+      AppLogger.debug('[ImportExportService] DBFスキーマ追加完了');
     } catch (e, stack) {
-      print('[ImportExportService] DBFスキーマ追加エラー: $e');
-      print('[ImportExportService] スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] DBFスキーマ追加エラー: $e');
+      AppLogger.debug('[ImportExportService] スタックトレース: $stack');
       // エラーが発生してもインポート処理は続行（基本属性のみで保存）
     }
   }
@@ -3475,44 +3512,22 @@ class ImportExportService {
     String encoding = 'Shift_JIS',
   }) async {
     try {
-      print('[ImportExportService] DBF読み込み開始: $dbfFilePath');
-      print('[ImportExportService] 文字コード: $encoding');
+      AppLogger.debug('[ImportExportService] DBF読み込み開始: $dbfFilePath');
+      AppLogger.debug('[ImportExportService] 文字コード: $encoding');
 
       final dbfFile = File(dbfFilePath);
       if (!dbfFile.existsSync()) {
-        print('[ImportExportService] DBFファイルが見つかりません');
+        AppLogger.debug('[ImportExportService] DBFファイルが見つかりません');
         return null;
       }
 
       final bytes = await dbfFile.readAsBytes();
       if (bytes.length < 32) {
-        print('[ImportExportService] DBFファイルが小さすぎます: ${bytes.length}bytes');
+        AppLogger.debug('[ImportExportService] DBFファイルが小さすぎます: ${bytes.length}bytes');
         return null;
       }
 
-      // 文字コードの変換関数を取得
-      // TODO: Shift_JIS対応を改善（現在はUTF-8/Latin1のみ）
-      String Function(List<int>) decodeFunc;
-
-      if (encoding.toUpperCase().contains('UTF-8')) {
-        decodeFunc = (bytes) => utf8.decode(bytes, allowMalformed: true);
-        print('[ImportExportService] UTF-8 Codec使用');
-      } else if (encoding.toUpperCase().contains('SHIFT') ||
-          encoding.toUpperCase().contains('SJIS')) {
-        // TODO: Shift_JIS対応を実装（現在はUTF-8で試行、失敗時はLatin1）
-        decodeFunc = (bytes) {
-          try {
-            return utf8.decode(bytes, allowMalformed: true);
-          } catch (e) {
-            return latin1.decode(bytes);
-          }
-        };
-        print('[ImportExportService] UTF-8試行（Shift_JIS対応は後で実装）');
-      } else {
-        // フォールバック: Latin1
-        decodeFunc = (bytes) => latin1.decode(bytes);
-        print('[ImportExportService] Latin1 Codec使用');
-      }
+      AppLogger.debug('[ImportExportService] 文字コード「$encoding」でデコード');
 
       // ヘッダー解析
       final version = bytes[0];
@@ -3532,11 +3547,11 @@ class ImportExportService {
         12,
       ).getUint16(0, Endian.little);
 
-      print('[ImportExportService] DBFヘッダー情報:');
-      print('  バージョン: 0x${version.toRadixString(16)}');
-      print('  レコード数: $recordCount');
-      print('  ヘッダー長: $headerLength bytes');
-      print('  レコード長: $recordLength bytes');
+      AppLogger.debug('[ImportExportService] DBFヘッダー情報:');
+      AppLogger.debug('  バージョン: 0x${version.toRadixString(16)}');
+      AppLogger.debug('  レコード数: $recordCount');
+      AppLogger.debug('  ヘッダー長: $headerLength bytes');
+      AppLogger.debug('  レコード長: $recordLength bytes');
 
       // フィールド記述子を読み込み（32バイトから開始、0x0Dまで）
       final fields = <Map<String, dynamic>>[];
@@ -3553,8 +3568,8 @@ class ImportExportService {
           nameEndIndex >= 0 ? nameEndIndex : 11,
         );
 
-        // 文字コード変換を適用
-        final fieldName = decodeFunc(fieldNameBytes).trim();
+        // 文字コード変換を適用（非同期）
+        final fieldName = await _decodeBytes(fieldNameBytes, encoding);
 
         // フィールドタイプ（1バイト）
         final fieldType = String.fromCharCode(bytes[offset + 11]);
@@ -3606,8 +3621,8 @@ class ImportExportService {
           if (offset + fieldLength > bytes.length) break;
 
           final valueBytes = bytes.sublist(offset, offset + fieldLength);
-          // 文字コード変換を適用
-          final valueString = decodeFunc(valueBytes).trim();
+          // 文字コード変換を適用（非同期）
+          final valueString = (await _decodeBytes(valueBytes, encoding)).trim();
 
           // タイプに応じて値を変換
           dynamic value;
@@ -3646,11 +3661,11 @@ class ImportExportService {
         }
       }
 
-      print('[ImportExportService] DBFデータ読み込み完了: ${recordCount}レコード');
+      AppLogger.debug('[ImportExportService] DBFデータ読み込み完了: $recordCountレコード');
       return data;
     } catch (e, stack) {
-      print('[ImportExportService] DBF読み込みエラー: $e');
-      print('[ImportExportService] スタックトレース: $stack');
+      AppLogger.debug('[ImportExportService] DBF読み込みエラー: $e');
+      AppLogger.debug('[ImportExportService] スタックトレース: $stack');
       return null;
     }
   }
@@ -3660,14 +3675,14 @@ class ImportExportService {
     try {
       final prjFile = File(prjFilePath);
       if (!prjFile.existsSync()) {
-        print('[ImportExportService] .prjファイルが見つかりません: $prjFilePath');
+        AppLogger.debug('[ImportExportService] .prjファイルが見つかりません: $prjFilePath');
         return null;
       }
 
       final prjContent = await prjFile.readAsString();
-      print('[ImportExportService] .prjファイル読み込み成功');
-      print('[ImportExportService] ファイルパス: $prjFilePath');
-      print('[ImportExportService] 文字数: ${prjContent.length}文字');
+      AppLogger.debug('[ImportExportService] .prjファイル読み込み成功');
+      AppLogger.debug('[ImportExportService] ファイルパス: $prjFilePath');
+      AppLogger.debug('[ImportExportService] 文字数: ${prjContent.length}文字');
 
       // スマート座標系マネージャーを使用してWKTを解析
       final coordinateSystem = await _smartCrsManager
@@ -3677,11 +3692,11 @@ class ImportExportService {
         _smartCrsManager.printCoordinateSystemInfo(coordinateSystem);
         return coordinateSystem;
       } else {
-        print('[ImportExportService] スマート座標系解析に失敗');
+        AppLogger.debug('[ImportExportService] スマート座標系解析に失敗');
         return null;
       }
     } catch (e) {
-      print('[ImportExportService] .prjファイル読み取りエラー: $e');
+      AppLogger.debug('[ImportExportService] .prjファイル読み取りエラー: $e');
       return null;
     }
   }

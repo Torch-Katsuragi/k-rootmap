@@ -42,7 +42,7 @@ dependencies:
   proj4dart: ^2.1.0  # 座標変換用
   desktop_drop: ^0.4.4  # デスクトップでのファイルドラッグ&ドロップ用
   cross_file: ^0.3.4+2  # クロスプラットフォームファイル操作用
-  # enough_convert: ^1.6.0  # TODO: Shift_JIS対応を改善（APIが不明瞭なため一旦保留）
+  charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
   
   # オフライン機能・キャッシュ用パッケージ
   path_provider: ^2.1.4              # アプリディレクトリ取得用

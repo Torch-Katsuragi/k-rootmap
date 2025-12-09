@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:location/location.dart';
@@ -78,23 +79,23 @@ class BluetoothGnssService extends ChangeNotifier {
   /// Returns: ペアリング済みのBluetoothデバイスリスト
   Future<List<BluetoothDevice>> scanDevices() async {
     try {
-      debugPrint('$_logTag: デバイススキャンを開始');
+      AppLogger.debug('$_logTag: デバイススキャンを開始');
 
       // Bluetooth許可を確認
       bool isEnabled = await FlutterBluetoothSerial.instance.isEnabled ?? false;
       if (!isEnabled) {
-        debugPrint('$_logTag: Bluetoothが無効です');
+        AppLogger.debug('$_logTag: Bluetoothが無効です');
         throw Exception('Bluetoothが無効です。設定でBluetoothを有効にしてください。');
       }
 
       // ペアリング済みデバイスを取得
       List<BluetoothDevice> devices =
           await FlutterBluetoothSerial.instance.getBondedDevices();
-      debugPrint('$_logTag: ${devices.length}個のペアリング済みデバイスを発見');
+      AppLogger.debug('$_logTag: ${devices.length}個のペアリング済みデバイスを発見');
 
       return devices;
     } catch (e) {
-      debugPrint('$_logTag: デバイススキャンエラー: $e');
+      AppLogger.debug('$_logTag: デバイススキャンエラー: $e');
       rethrow;
     }
   }
@@ -108,7 +109,7 @@ class BluetoothGnssService extends ChangeNotifier {
     bool enableMockLocation = true,
   }) async {
     if (_isConnecting || _isConnected) {
-      debugPrint('$_logTag: 既に接続中または接続済みです');
+      AppLogger.debug('$_logTag: 既に接続中または接続済みです');
       return;
     }
 
@@ -116,7 +117,7 @@ class BluetoothGnssService extends ChangeNotifier {
       _isConnecting = true;
       notifyListeners();
 
-      debugPrint('$_logTag: ${device.name} (${device.address}) に接続中...');
+      AppLogger.debug('$_logTag: ${device.name} (${device.address}) に接続中...');
 
       // Mock Location許可を設定
       if (enableMockLocation) {
@@ -129,7 +130,7 @@ class BluetoothGnssService extends ChangeNotifier {
       _isConnected = true;
       _isConnecting = false;
 
-      debugPrint('$_logTag: ${device.name}に接続成功');
+      AppLogger.debug('$_logTag: ${device.name}に接続成功');
 
       // データ受信開始
       _startDataReceiving();
@@ -139,7 +140,7 @@ class BluetoothGnssService extends ChangeNotifier {
       _isConnecting = false;
       _isConnected = false;
       _connectedDevice = null;
-      debugPrint('$_logTag: 接続エラー: $e');
+      AppLogger.debug('$_logTag: 接続エラー: $e');
       notifyListeners();
       rethrow;
     }
@@ -148,7 +149,7 @@ class BluetoothGnssService extends ChangeNotifier {
   /// 接続を切断
   Future<void> disconnect() async {
     try {
-      debugPrint('$_logTag: 接続を切断中...');
+      AppLogger.debug('$_logTag: 接続を切断中...');
 
       // データ受信停止
       await _dataSubscription?.cancel();
@@ -164,10 +165,10 @@ class BluetoothGnssService extends ChangeNotifier {
       _connectedDevice = null;
       _partialData = '';
 
-      debugPrint('$_logTag: 接続を切断しました');
+      AppLogger.debug('$_logTag: 接続を切断しました');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: 切断エラー: $e');
+      AppLogger.debug('$_logTag: 切断エラー: $e');
     }
   }
 
@@ -192,9 +193,9 @@ class BluetoothGnssService extends ChangeNotifier {
       }
 
       _isMockLocationEnabled = true;
-      debugPrint('$_logTag: Mock Location Providerを設定しました');
+      AppLogger.debug('$_logTag: Mock Location Providerを設定しました');
     } catch (e) {
-      debugPrint('$_logTag: Mock Location設定エラー: $e');
+      AppLogger.debug('$_logTag: Mock Location設定エラー: $e');
       _isMockLocationEnabled = false;
       rethrow;
     }
@@ -205,16 +206,16 @@ class BluetoothGnssService extends ChangeNotifier {
     _dataSubscription = _connection!.input!.listen(
       _onDataReceived,
       onError: (error) {
-        debugPrint('$_logTag: データ受信エラー: $error');
+        AppLogger.debug('$_logTag: データ受信エラー: $error');
         disconnect();
       },
       onDone: () {
-        debugPrint('$_logTag: データストリーム終了');
+        AppLogger.debug('$_logTag: データストリーム終了');
         disconnect();
       },
     );
 
-    debugPrint('$_logTag: データ受信を開始しました');
+    AppLogger.debug('$_logTag: データ受信を開始しました');
   }
 
   /// 受信データの処理
@@ -234,7 +235,7 @@ class BluetoothGnssService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('$_logTag: データ処理エラー: $e');
+      AppLogger.debug('$_logTag: データ処理エラー: $e');
     }
   }
 
@@ -251,7 +252,7 @@ class BluetoothGnssService extends ChangeNotifier {
         _processRmcSentence(sentence);
       }
     } catch (e) {
-      debugPrint('$_logTag: NMEA処理エラー: $sentence - $e');
+      AppLogger.debug('$_logTag: NMEA処理エラー: $sentence - $e');
     }
   }
 
@@ -311,7 +312,7 @@ class BluetoothGnssService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('$_logTag: GGA処理エラー: $e');
+      AppLogger.debug('$_logTag: GGA処理エラー: $e');
     }
   }
 
@@ -368,7 +369,7 @@ class BluetoothGnssService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('$_logTag: RMC処理エラー: $e');
+      AppLogger.debug('$_logTag: RMC処理エラー: $e');
     }
   }
 
@@ -381,7 +382,7 @@ class BluetoothGnssService extends ChangeNotifier {
       // 小数点の位置を見つけて正確に分割
       int dotIndex = dms.indexOf('.');
       if (dotIndex == -1) {
-        debugPrint('$_logTag: DMS変換エラー - 小数点が見つかりません: $dms');
+        AppLogger.debug('$_logTag: DMS変換エラー - 小数点が見つかりません: $dms');
         return 0.0;
       }
 
@@ -392,7 +393,7 @@ class BluetoothGnssService extends ChangeNotifier {
       } else if (dotIndex == 5) {
         degreeLength = 3; // 経度: dddmm.mmmm
       } else {
-        debugPrint('$_logTag: DMS変換エラー - 無効なフォーマット: $dms');
+        AppLogger.debug('$_logTag: DMS変換エラー - 無効なフォーマット: $dms');
         return 0.0;
       }
 
@@ -407,7 +408,7 @@ class BluetoothGnssService extends ChangeNotifier {
 
       return result;
     } catch (e) {
-      debugPrint('$_logTag: DMS変換エラー: $dms - $e');
+      AppLogger.debug('$_logTag: DMS変換エラー: $dms - $e');
       return 0.0;
     }
   }
@@ -445,7 +446,7 @@ class BluetoothGnssService extends ChangeNotifier {
       // Androidのネイティブコードを呼び出してMock Locationを設定
       // 実装はAndroidプラットフォーム固有のコードが必要
     } catch (e) {
-      debugPrint('$_logTag: Mock Location送信エラー: $e');
+      AppLogger.debug('$_logTag: Mock Location送信エラー: $e');
     }
   }
 
@@ -478,3 +479,5 @@ class BluetoothGnssService extends ChangeNotifier {
     super.dispose();
   }
 }
+
+

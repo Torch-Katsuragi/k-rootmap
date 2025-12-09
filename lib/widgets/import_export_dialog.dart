@@ -6,16 +6,13 @@
 // - LayerImportExportDialog: レイヤー全体の操作用
 // - FeatureImportExportDialog: 個別フィーチャの操作用
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
 import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import '../utils/global_config.dart';
 
 /// Import/Export機能を提供するダイアログ
@@ -59,7 +56,6 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
 
   // インポート設定オプション
   bool _showImportOptions = false;
-  String _layerNamePrefix = '';
   bool _createNewGeoPackage = false;
   int _maxFeaturesToImport = 50; // デフォルトで50個まで
 
@@ -221,19 +217,6 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // レイヤ名プリフィックス
-                          TextField(
-                            decoration: const InputDecoration(
-                              labelText: 'Layer Name Prefix',
-                              hintText: 'Optional prefix for layer names',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged:
-                                (value) =>
-                                    setState(() => _layerNamePrefix = value),
-                          ),
-                          const SizedBox(height: 12),
-
                           // 最大フィーチャ数
                           Row(
                             children: [
@@ -445,7 +428,7 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
       }
 
       // ファイル情報を取得
-      final fileInfo = File(filePath);
+      // final fileInfo = File(filePath);
 
       setState(() {
         _selectedFilePath = filePath;
@@ -455,7 +438,7 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
         _lastResult = null;
       });
 
-      print(
+      AppLogger.debug(
         '[ImportExportDialog] Selected file: $filePath (${file.size} bytes)',
       );
     } catch (e) {
@@ -484,12 +467,12 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
     final droppedFile = details.files.first;
     final filePath = droppedFile.path;
 
-    print('[ImportExportDialog] Dropped file: $filePath');
+    AppLogger.debug('[ImportExportDialog] Dropped file: $filePath');
 
     // ファイル拡張子をチェック
     final supportedExtensions =
         _importExportService.getSupportedImportExtensions();
-    final fileExtension = '.' + filePath.split('.').last.toLowerCase();
+    final fileExtension = '.${filePath.split('.').last.toLowerCase()}';
 
     if (!supportedExtensions.contains(fileExtension)) {
       setState(() {
@@ -510,7 +493,7 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
         _lastResult = null;
       });
 
-      print(
+      AppLogger.debug(
         '[ImportExportDialog] File dropped and selected: $_selectedFileName (${fileStat.size} bytes)',
       );
     } catch (e) {
@@ -586,8 +569,8 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
         }
       }
     } catch (e, stack) {
-      print('[ImportExportDialog] Import error: $e');
-      print('Stack trace: $stack');
+      AppLogger.debug('[ImportExportDialog] Import error: $e');
+      AppLogger.debug('Stack trace: $stack');
 
       setState(() {
         _isProcessing = false;
@@ -605,12 +588,12 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
       if (mapState != null && mapState.mounted) {
         // マップページのrefreshFeaturesメソッドを呼び出し
         (mapState as dynamic).refreshFeatures();
-        print('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
+        AppLogger.debug('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
       } else {
-        print('[ImportExportDialog] マップページが見つからないか、マウントされていません');
+        AppLogger.debug('[ImportExportDialog] マップページが見つからないか、マウントされていません');
       }
     } catch (e) {
-      print('[ImportExportDialog] マップ更新エラー: $e');
+      AppLogger.debug('[ImportExportDialog] マップ更新エラー: $e');
     }
   }
 
@@ -690,8 +673,8 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
         }
       }
     } catch (e, stack) {
-      print('[ImportExportDialog] Export error: $e');
-      print('Stack trace: $stack');
+      AppLogger.debug('[ImportExportDialog] Export error: $e');
+      AppLogger.debug('Stack trace: $stack');
 
       setState(() {
         _isProcessing = false;
@@ -701,3 +684,4 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
     }
   }
 }
+

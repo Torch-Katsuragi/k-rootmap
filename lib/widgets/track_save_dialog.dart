@@ -2,11 +2,7 @@
 // GPS軌跡保存ダイアログ
 import 'package:flutter/material.dart';
 import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
-import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import '../models/gps_track.dart';
 
 /// GPS軌跡保存ダイアログ

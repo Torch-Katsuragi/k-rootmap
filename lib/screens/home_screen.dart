@@ -1,15 +1,11 @@
 // K-MAPS: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/global_config.dart';
-import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
-import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import 'map_page.dart';
 
 /// ホーム画面（最小構成）
@@ -52,86 +48,86 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _checkPermissions() async {
     // 既に権限チェック中の場合はスキップ
     if (_isCheckingPermissions) {
-      print('[HomeScreen] 権限チェックが既に実行中のため、スキップします');
+      AppLogger.debug('[HomeScreen] 権限チェックが既に実行中のため、スキップします');
       return;
     }
 
     _isCheckingPermissions = true; // フラグをセット
-    print('[HomeScreen] 権限チェック開始');
+    AppLogger.debug('[HomeScreen] 権限チェック開始');
 
     try {
       // Android 11 (API level 30) 以降での権限管理
       final manageStorageGranted =
           await Permission.manageExternalStorage.isGranted;
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted');
+      AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted');
 
       if (manageStorageGranted) {
-        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
+        AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
         // ストレージ権限OK後、Bluetooth権限をチェック
         await _checkBluetoothPermissions();
         return;
       }
 
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限をリクエスト中...');
+      AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限をリクエスト中...');
       // MANAGE_EXTERNAL_STORAGE権限をリクエスト
       final status = await Permission.manageExternalStorage.request();
-      print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限リクエスト結果: $status');
+      AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限リクエスト結果: $status');
 
       if (status.isGranted) {
-        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
+        AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
         // ストレージ権限OK後、Bluetooth権限をチェック
         await _checkBluetoothPermissions();
       } else if (status.isPermanentlyDenied) {
-        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
+        AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
         // 権限が恒久的に拒否された場合、設定画面を開く
         _showPermissionDeniedDialog();
       } else {
-        print('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行');
+        AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行');
         // 従来のストレージ権限を試行
         await _requestLegacyStoragePermissions();
       }
     } catch (e) {
-      print('[HomeScreen] 権限チェック中にエラーが発生: $e');
+      AppLogger.debug('[HomeScreen] 権限チェック中にエラーが発生: $e');
     } finally {
       _isCheckingPermissions = false; // フラグをクリア
-      print('[HomeScreen] 権限チェック終了');
+      AppLogger.debug('[HomeScreen] 権限チェック終了');
     }
   }
 
   /// 従来のストレージ権限をリクエスト
   Future<void> _requestLegacyStoragePermissions() async {
-    print('[HomeScreen] 従来のストレージ権限チェック開始');
+    AppLogger.debug('[HomeScreen] 従来のストレージ権限チェック開始');
 
     final permissions = [Permission.storage];
 
-    print('[HomeScreen] ストレージ権限をリクエスト中...');
+    AppLogger.debug('[HomeScreen] ストレージ権限をリクエスト中...');
     final statuses = await permissions.request();
-    print('[HomeScreen] ストレージ権限リクエスト結果: $statuses');
+    AppLogger.debug('[HomeScreen] ストレージ権限リクエスト結果: $statuses');
 
     if (statuses[Permission.storage]?.isGranted == true) {
-      print('[HomeScreen] ストレージ権限が許可されました');
+      AppLogger.debug('[HomeScreen] ストレージ権限が許可されました');
       // ストレージ権限OK後、Bluetooth権限をチェック
       await _checkBluetoothPermissions();
     } else {
-      print('[HomeScreen] ストレージ権限が拒否されました');
+      AppLogger.debug('[HomeScreen] ストレージ権限が拒否されました');
       _showPermissionDeniedDialog();
     }
   }
 
   /// Bluetooth権限の確認・リクエスト（ストレージ権限の後に実行）
   Future<void> _checkBluetoothPermissions() async {
-    print('[HomeScreen] Bluetooth権限チェック開始');
+    AppLogger.debug('[HomeScreen] Bluetooth権限チェック開始');
 
     // Android 12以降で必要な権限
     final bluetoothScan = await Permission.bluetoothScan.status;
     final bluetoothConnect = await Permission.bluetoothConnect.status;
     
-    print('[HomeScreen] BLUETOOTH_SCAN状態: $bluetoothScan');
-    print('[HomeScreen] BLUETOOTH_CONNECT状態: $bluetoothConnect');
+    AppLogger.debug('[HomeScreen] BLUETOOTH_SCAN状態: $bluetoothScan');
+    AppLogger.debug('[HomeScreen] BLUETOOTH_CONNECT状態: $bluetoothConnect');
 
     // 両方の権限が許可されている場合
     if (bluetoothScan.isGranted && bluetoothConnect.isGranted) {
-      print('[HomeScreen] Bluetooth権限が既に許可済み');
+      AppLogger.debug('[HomeScreen] Bluetooth権限が既に許可済み');
       setState(() {
         _permissionsGranted = true;
       });
@@ -139,14 +135,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     // 複数の権限を一度にリクエスト（プラグイン側が適切に管理）
-    print('[HomeScreen] Bluetooth権限をリクエスト中...');
+    AppLogger.debug('[HomeScreen] Bluetooth権限をリクエスト中...');
     
     final statuses = await [
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
     ].request();
     
-    print('[HomeScreen] Bluetooth権限リクエスト結果: $statuses');
+    AppLogger.debug('[HomeScreen] Bluetooth権限リクエスト結果: $statuses');
 
     // 結果を確認
     final scanGranted = statuses[Permission.bluetoothScan]?.isGranted ?? false;
@@ -154,12 +150,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final bluetoothGranted = scanGranted && connectGranted;
 
     if (bluetoothGranted) {
-      print('[HomeScreen] 全てのBluetooth権限が許可されました');
+      AppLogger.debug('[HomeScreen] 全てのBluetooth権限が許可されました');
       setState(() {
         _permissionsGranted = true;
       });
     } else {
-      print('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
+      AppLogger.debug('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
       // Bluetooth権限がなくてもアプリは動作可能なので、警告のみ表示してストレージ権限で起動許可
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,11 +203,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _pickProjectDir() async {
-    print('[HomeScreen] プロジェクトフォルダ選択開始');
-    print('[HomeScreen] 権限状態: $_permissionsGranted');
+    AppLogger.debug('[HomeScreen] プロジェクトフォルダ選択開始');
+    AppLogger.debug('[HomeScreen] 権限状態: $_permissionsGranted');
 
     if (!_permissionsGranted) {
-      print('[HomeScreen] 権限が許可されていません');
+      AppLogger.debug('[HomeScreen] 権限が許可されていません');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('まずストレージ権限を許可してください'),
@@ -221,25 +217,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    print('[HomeScreen] ファイルピッカーを開いています...');
+    AppLogger.debug('[HomeScreen] ファイルピッカーを開いています...');
     String? dir = await FilePicker.platform.getDirectoryPath();
-    print('[HomeScreen] 選択されたディレクトリ: $dir');
+    AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {
       setState(() {
         _projectDir = dir;
       });
       // グローバル初期化
-      print('[HomeScreen] GlobalConfigを初期化中...');
+      AppLogger.debug('[HomeScreen] GlobalConfigを初期化中...');
       GlobalConfig.instance.projectRootDir = dir;
       GlobalConfig.instance.folderTree = FolderNode('rootNode', visible: true);
-      print(
+      AppLogger.debug(
         '[HomeScreen] GlobalConfig初期化完了: ${GlobalConfig.instance.folderTree?.toMap()}',
       );
 
       // フォルダ選択後すぐ地図編集画面へ遷移
       if (mounted) {
-        print('[HomeScreen] 地図画面に遷移中...');
+        AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const KMapsHomePage()),
@@ -374,3 +370,4 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 }
+

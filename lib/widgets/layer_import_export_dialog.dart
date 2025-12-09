@@ -5,13 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
-import '../utils/global_config.dart';
 
 /// レイヤー全体のImport/Export機能を提供するダイアログ
 class LayerImportExportDialog extends StatefulWidget {
@@ -72,8 +67,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   bool _isDragging = false;
 
   // インポート設定
-  String _layerNamePrefix = '';
-  bool _createNewGeoPackage = false;
   int _maxFeaturesToImport = 50;
 
   // エクスポート設定
@@ -221,7 +214,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       Text('Export Format:', style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 8),
       DropdownButtonFormField<FileFormat>(
-        value: _exportFormat,
+        initialValue: _exportFormat,
         decoration: const InputDecoration(
           border: OutlineInputBorder(),
           labelText: 'Select Export Format',
@@ -371,15 +364,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Layer Name Prefix',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged:
-                      (value) => setState(() => _layerNamePrefix = value),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
                     const Text('Max Features: '),

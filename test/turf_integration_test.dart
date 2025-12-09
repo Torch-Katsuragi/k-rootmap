@@ -4,7 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
-import '../lib/converters/turf_converter.dart';
+import 'package:k_maps/converters/turf_converter.dart';
 
 void main() {
   group('TurfConverter Tests', () {

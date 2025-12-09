@@ -1,5 +1,6 @@
 // K-MAPS: エントリーポイント
 // 本ファイルはアプリ起動・ルーティングのみを担当
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
@@ -24,9 +25,9 @@ void main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     try {
       await GpsManagerService().initialize();
-      debugPrint('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
+      AppLogger.debug('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
     } catch (e) {
-      debugPrint('[K-MAPS] GPS管理サービス初期化エラー: $e');
+      AppLogger.debug('[K-MAPS] GPS管理サービス初期化エラー: $e');
     }
   });
 
@@ -34,9 +35,9 @@ void main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     try {
       await BaseMapService().initialize();
-      debugPrint('[K-MAPS] 背景地図サービス初期化完了');
+      AppLogger.debug('[K-MAPS] 背景地図サービス初期化完了');
     } catch (e) {
-      debugPrint('[K-MAPS] 背景地図サービス初期化エラー: $e');
+      AppLogger.debug('[K-MAPS] 背景地図サービス初期化エラー: $e');
     }
   });
 
@@ -45,9 +46,9 @@ void main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     try {
       await ForegroundServiceManager.initializeService();
-      debugPrint('[K-MAPS] フォアグラウンドサービス初期化完了');
+      AppLogger.debug('[K-MAPS] フォアグラウンドサービス初期化完了');
     } catch (e) {
-      debugPrint('[K-MAPS] フォアグラウンドサービス初期化エラー: $e');
+      AppLogger.debug('[K-MAPS] フォアグラウンドサービス初期化エラー: $e');
     }
   });
 
@@ -70,3 +71,5 @@ class KMapsApp extends StatelessWidget {
     );
   }
 }
+
+

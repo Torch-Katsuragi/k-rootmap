@@ -2,6 +2,7 @@
 // GeoPackage内のレイヤに対応するレイヤツリーノード
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
@@ -91,7 +92,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// Featureを追加（FeatureNodeから呼ばれる、null参照対策含む）
   void addFeatureToMap(int rowId, turf.Feature feature) {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot add feature');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot add feature');
       return;
     }
     _featureMap[rowId] = feature;
@@ -101,7 +102,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// Featureを削除（内部用、null参照対策含む）
   void _removeFeatureFromMap(int rowId) {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot remove feature');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot remove feature');
       return;
     }
     _featureMap.remove(rowId);
@@ -111,7 +112,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// Featureの属性を更新（内部用、null参照対策含む）
   bool updateFeatureAttribute(int rowId, String key, dynamic value) {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot update attribute');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot update attribute');
       return false;
     }
     final feature = _featureMap[rowId];
@@ -147,12 +148,10 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 属性テーブルのカラム名を取得（キャッシュ機能付き）
   Future<List<String>> getAttributeColumnNames({bool getAll = false}) async {
-    if (_cachedColumnNames == null) {
-      _cachedColumnNames = await geoPackageFile.getColumnNames(
+    _cachedColumnNames ??= await geoPackageFile.getColumnNames(
         layerName,
         getAll: getAll,
       );
-    }
     return _cachedColumnNames!;
   }
 
@@ -170,7 +169,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// FeatureNodeを安全に追加するメソッド
   void addFeature(FeatureNode feature) {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot add feature');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot add feature');
       return;
     }
     super.addChild(feature);
@@ -181,7 +180,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// FeatureNodeを安全に削除するメソッド
   void removeFeature(FeatureNode feature) {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot remove feature');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot remove feature');
       return;
     }
     super.removeChild(feature);
@@ -307,7 +306,7 @@ abstract class LayerNode extends LayerTreeNode {
   @override
   Future<void> dispose() async {
     if (_isDisposed) {
-      print('[WARNING] LayerNode already disposed');
+      AppLogger.debug('[WARNING] LayerNode already disposed');
       return;
     }
     
@@ -328,29 +327,29 @@ abstract class LayerNode extends LayerTreeNode {
   @override
   Future<void> updateChildren() async {
     if (_isDisposed) {
-      print('[WARNING] LayerNode is disposed, cannot update children');
+      AppLogger.debug('[WARNING] LayerNode is disposed, cannot update children');
       return;
     }
     
     // 競合状態を防止：既に実行中の場合はスキップ
     if (_isUpdatingChildren) {
-      print('[LayerNode] updateChildren already in progress for $layerName, skipping');
+      AppLogger.debug('[LayerNode] updateChildren already in progress for $layerName, skipping');
       return;
     }
     
     _isUpdatingChildren = true;
     
     try {
-      print('[LayerNode] updateChildren開始: $layerName');
+      AppLogger.debug('[LayerNode] updateChildren開始: $layerName');
       
       children.clear();
       _featureMap.clear();  // Mapもクリア
       
-      print('[LayerNode] children.clear()完了: $layerName');
+      AppLogger.debug('[LayerNode] children.clear()完了: $layerName');
       
       // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
       final featureList = await _loadFeaturesFromDB();
-      print('[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)');
+      AppLogger.debug('[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)');
       
       for (final node in featureList) {
         addChild(node);
@@ -358,7 +357,7 @@ abstract class LayerNode extends LayerTreeNode {
         addFeatureToMap(node.rowId, node.turfFeature);
       }
       
-      print('[LayerNode] updateChildren完了: $layerName (${children.length}個)');
+      AppLogger.debug('[LayerNode] updateChildren完了: $layerName (${children.length}個)');
       
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
@@ -379,7 +378,7 @@ abstract class LayerNode extends LayerTreeNode {
     bool moveLayer = true,
   }) async {
     try {
-      print('[LayerNode] レイヤ移植開始: ${layerName} → ${targetGeoPackage.name}');
+      AppLogger.debug('[LayerNode] レイヤ移植開始: $layerName → ${targetGeoPackage.name}');
 
       // 移植先のレイヤ名を決定
       final targetLayerName = newLayerName ?? layerName;
@@ -388,14 +387,14 @@ abstract class LayerNode extends LayerTreeNode {
       final existingLayers =
           await targetGeoPackage.geoPackageFile.getLayerNames();
       if (existingLayers.contains(targetLayerName)) {
-        print('[LayerNode] 移植失敗: レイヤ名 "$targetLayerName" は既に存在します');
+        AppLogger.debug('[LayerNode] 移植失敗: レイヤ名 "$targetLayerName" は既に存在します');
         return null;
       }
 
       // 移植元のジオメトリタイプを取得
       final geometryType = await geoPackageFile.getGeometryType(layerName);
       if (geometryType == null) {
-        print('[LayerNode] 移植失敗: ジオメトリタイプを取得できません');
+        AppLogger.debug('[LayerNode] 移植失敗: ジオメトリタイプを取得できません');
         return null;
       }
 
@@ -404,7 +403,7 @@ abstract class LayerNode extends LayerTreeNode {
         targetLayerName,
         geometryType,
       );
-      print('[LayerNode] 移植先レイヤ作成完了: $targetLayerName (${geometryType.value})');
+      AppLogger.debug('[LayerNode] 移植先レイヤ作成完了: $targetLayerName (${geometryType.value})');
 
       // 移植元の属性スキーマを取得して移植先に適用
       await _migrateAttributeSchema(targetGeoPackage, targetLayerName);
@@ -416,14 +415,14 @@ abstract class LayerNode extends LayerTreeNode {
         geometryType,
       );
 
-      print('[LayerNode] フィーチャデータ移植完了: $migratedFeatureCount個のフィーチャ');
+      AppLogger.debug('[LayerNode] フィーチャデータ移植完了: $migratedFeatureCount個のフィーチャ');
 
       // 移植先のレイヤツリーを更新
-      print('[LayerNode] 移植先レイヤツリー更新開始');
+      AppLogger.debug('[LayerNode] 移植先レイヤツリー更新開始');
       await targetGeoPackage.updateChildren();
 
       // 移植されたレイヤノードを取得
-      print(
+      AppLogger.debug(
         '[LayerNode] 移植先の子ノード確認: ${targetGeoPackage.children.map((c) => c.name).toList()}',
       );
       final migratedLayerNode =
@@ -433,32 +432,32 @@ abstract class LayerNode extends LayerTreeNode {
               .firstOrNull;
 
       if (migratedLayerNode == null) {
-        print('[LayerNode] 移植失敗: 移植先レイヤノードが見つかりません');
-        print('[LayerNode] 期待されるレイヤ名: $targetLayerName');
-        print(
+        AppLogger.debug('[LayerNode] 移植失敗: 移植先レイヤノードが見つかりません');
+        AppLogger.debug('[LayerNode] 期待されるレイヤ名: $targetLayerName');
+        AppLogger.debug(
           '[LayerNode] 利用可能なレイヤ: ${targetGeoPackage.children.whereType<LayerNode>().map((l) => l.layerName).toList()}',
         );
         return null;
       }
 
       // 移植されたレイヤのフィーチャを読み込み
-      print('[LayerNode] 移植されたレイヤのフィーチャ読み込み開始');
+      AppLogger.debug('[LayerNode] 移植されたレイヤのフィーチャ読み込み開始');
       await migratedLayerNode.updateChildren();
-      print(
+      AppLogger.debug(
         '[LayerNode] 移植されたレイヤのフィーチャ数: ${migratedLayerNode.features.length}',
       );
 
       // 移植元を削除（移動の場合）
       if (moveLayer) {
         await _removeSelfFromParent();
-        print('[LayerNode] 移植元レイヤ削除完了');
+        AppLogger.debug('[LayerNode] 移植元レイヤ削除完了');
       }
 
-      print('[LayerNode] レイヤ移植成功: $migratedFeatureCount個のフィーチャを移植');
+      AppLogger.debug('[LayerNode] レイヤ移植成功: $migratedFeatureCount個のフィーチャを移植');
       return migratedLayerNode;
     } catch (e, stack) {
-      print('[LayerNode] レイヤ移植エラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[LayerNode] レイヤ移植エラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       return null;
     }
   }
@@ -476,7 +475,7 @@ abstract class LayerNode extends LayerTreeNode {
       );
 
       if (sourceColumnInfo.isEmpty) {
-        print('[LayerNode] 移植する属性カラムがありません');
+        AppLogger.debug('[LayerNode] 移植する属性カラムがありません');
         return;
       }
 
@@ -494,9 +493,9 @@ abstract class LayerNode extends LayerTreeNode {
         attributeSchema,
       );
 
-      print('[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個のカラム');
+      AppLogger.debug('[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個のカラム');
     } catch (e) {
-      print('[LayerNode] 属性スキーマ移植エラー: $e');
+      AppLogger.debug('[LayerNode] 属性スキーマ移植エラー: $e');
       // エラーが発生しても継続（基本的な属性は移植可能）
     }
   }
@@ -512,11 +511,11 @@ abstract class LayerNode extends LayerTreeNode {
       final sourceFeatures = await geoPackageFile.getFeatures(layerName);
 
       if (sourceFeatures.isEmpty) {
-        print('[LayerNode] 移植するフィーチャがありません');
+        AppLogger.debug('[LayerNode] 移植するフィーチャがありません');
         return 0;
       }
 
-      print('[LayerNode] 移植対象フィーチャ数: ${sourceFeatures.length}個');
+      AppLogger.debug('[LayerNode] 移植対象フィーチャ数: ${sourceFeatures.length}個');
 
       // バッチ処理でフィーチャを移植
       final batchData = <Map<String, dynamic>>[];
@@ -527,7 +526,7 @@ abstract class LayerNode extends LayerTreeNode {
       for (final sourceFeature in sourceFeatures) {
         final featureId = sourceFeature['id'] as int?;
         if (featureId == null) {
-          print('[LayerNode] フィーチャIDがnull: $sourceFeature');
+          AppLogger.debug('[LayerNode] フィーチャIDがnull: $sourceFeature');
           skippedCount++;
           continue;
         }
@@ -538,12 +537,12 @@ abstract class LayerNode extends LayerTreeNode {
           featureId,
         );
         if (completeFeature == null) {
-          print('[LayerNode] フィーチャ取得失敗 ID=$featureId');
+          AppLogger.debug('[LayerNode] フィーチャ取得失敗 ID=$featureId');
           skippedCount++;
           continue;
         }
 
-        print('[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}');
+        AppLogger.debug('[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}');
 
         // ジオメトリデータを取得
         final geometryData = _extractGeometryData(
@@ -551,13 +550,13 @@ abstract class LayerNode extends LayerTreeNode {
           geometryType,
         );
         if (geometryData == null) {
-          print('[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType');
-          print('[LayerNode] フィーチャ内容: $completeFeature');
+          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType');
+          AppLogger.debug('[LayerNode] フィーチャ内容: $completeFeature');
           skippedCount++;
           continue;
         }
 
-        print('[LayerNode] 抽出されたジオメトリ: $geometryData');
+        AppLogger.debug('[LayerNode] 抽出されたジオメトリ: $geometryData');
 
         // 属性データを取得（idとgeomを除く）
         final attributes = Map<String, dynamic>.from(completeFeature);
@@ -568,12 +567,12 @@ abstract class LayerNode extends LayerTreeNode {
         attributes.remove('lines'); // 変換済みlinesも除外
         attributes.remove('polygons'); // 変換済みpolygonsも除外
 
-        print('[LayerNode] 抽出された属性: $attributes');
+        AppLogger.debug('[LayerNode] 抽出された属性: $attributes');
 
         // バッチデータに追加
         final batchItem = {...geometryData, ...attributes};
         batchData.add(batchItem);
-        print('[LayerNode] バッチアイテム: $batchItem');
+        AppLogger.debug('[LayerNode] バッチアイテム: $batchItem');
 
         // バッチサイズに達したら処理
         if (batchData.length >= batchSize) {
@@ -587,7 +586,7 @@ abstract class LayerNode extends LayerTreeNode {
           batchData.clear();
 
           if (migratedCount % 5000 == 0) {
-            print('[LayerNode] 移植進捗: $migratedCount個完了');
+            AppLogger.debug('[LayerNode] 移植進捗: $migratedCount個完了');
           }
         }
       }
@@ -603,11 +602,11 @@ abstract class LayerNode extends LayerTreeNode {
         migratedCount += processedCount;
       }
 
-      print('[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ');
+      AppLogger.debug('[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ');
       return migratedCount;
     } catch (e, stack) {
-      print('[LayerNode] フィーチャデータ移植エラー: $e');
-      print('[LayerNode] スタックトレース: $stack');
+      AppLogger.debug('[LayerNode] フィーチャデータ移植エラー: $e');
+      AppLogger.debug('[LayerNode] スタックトレース: $stack');
       return 0;
     }
   }
@@ -618,13 +617,13 @@ abstract class LayerNode extends LayerTreeNode {
     GeometryType geometryType,
   ) {
     try {
-      print(
+      AppLogger.debug(
         '[LayerNode] ジオメトリ抽出開始: type=$geometryType, 利用可能なキー=${feature.keys}',
       );
 
       // getFeatureメソッドは'geometry'キーにデータを格納する
       final geometryData = feature['geometry'];
-      print(
+      AppLogger.debug(
         '[LayerNode] geometryデータ: $geometryData (型: ${geometryData.runtimeType})',
       );
 
@@ -632,13 +631,13 @@ abstract class LayerNode extends LayerTreeNode {
         case GeometryType.point:
           // ポイントの場合：[LatLng] の配列で返される
           if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            print('[LayerNode] ポイント抽出成功: ${geometryData.first}');
+            AppLogger.debug('[LayerNode] ポイント抽出成功: ${geometryData.first}');
             return {'point': geometryData.first};
           }
           // 旧形式との互換性
           final points = feature['points'] as List<LatLng>?;
           if (points != null && points.isNotEmpty) {
-            print('[LayerNode] ポイント抽出成功（旧形式）: ${points.first}');
+            AppLogger.debug('[LayerNode] ポイント抽出成功（旧形式）: ${points.first}');
             return {'point': points.first};
           }
           break;
@@ -646,13 +645,13 @@ abstract class LayerNode extends LayerTreeNode {
         case GeometryType.linestring:
           // ラインの場合：List<LatLng> で返される
           if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
-            print('[LayerNode] ライン抽出成功: ${geometryData.length}個の頂点');
+            AppLogger.debug('[LayerNode] ライン抽出成功: ${geometryData.length}個の頂点');
             return {'line': geometryData};
           }
           // 旧形式との互換性
           final lines = feature['lines'] as List<LatLng>?;
           if (lines != null && lines.isNotEmpty) {
-            print('[LayerNode] ライン抽出成功（旧形式）: ${lines.length}個の頂点');
+            AppLogger.debug('[LayerNode] ライン抽出成功（旧形式）: ${lines.length}個の頂点');
             return {'line': lines};
           }
           break;
@@ -660,23 +659,23 @@ abstract class LayerNode extends LayerTreeNode {
         case GeometryType.polygon:
           // ポリゴンの場合：List<List<LatLng>> で返される
           if (geometryData is List<List<LatLng>> && geometryData.isNotEmpty) {
-            print('[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング');
+            AppLogger.debug('[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング');
             return {'rings': geometryData};
           }
           // 旧形式との互換性
           final polygons = feature['polygons'] as List<List<LatLng>>?;
           if (polygons != null && polygons.isNotEmpty) {
-            print('[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング');
+            AppLogger.debug('[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング');
             return {'rings': polygons};
           }
           break;
       }
 
-      print('[LayerNode] ジオメトリデータの抽出に失敗');
+      AppLogger.debug('[LayerNode] ジオメトリデータの抽出に失敗');
       return null;
     } catch (e, stack) {
-      print('[LayerNode] ジオメトリデータ抽出エラー: $e');
-      print('[LayerNode] スタックトレース: $stack');
+      AppLogger.debug('[LayerNode] ジオメトリデータ抽出エラー: $e');
+      AppLogger.debug('[LayerNode] スタックトレース: $stack');
       return null;
     }
   }
@@ -689,7 +688,7 @@ abstract class LayerNode extends LayerTreeNode {
     List<Map<String, dynamic>> batchData,
   ) async {
     try {
-      print(
+      AppLogger.debug(
         '[LayerNode] バッチ処理開始: ${batchData.length}個のフィーチャ, タイプ=$geometryType',
       );
 
@@ -697,7 +696,7 @@ abstract class LayerNode extends LayerTreeNode {
 
       switch (geometryType) {
         case GeometryType.point:
-          print('[LayerNode] ポイントバッチ処理実行');
+          AppLogger.debug('[LayerNode] ポイントバッチ処理実行');
           insertedIds = await targetGeoPackage.geoPackageFile.addPointsBatch(
             targetLayerName,
             batchData,
@@ -705,7 +704,7 @@ abstract class LayerNode extends LayerTreeNode {
           break;
 
         case GeometryType.linestring:
-          print('[LayerNode] ラインバッチ処理実行');
+          AppLogger.debug('[LayerNode] ラインバッチ処理実行');
           insertedIds = await targetGeoPackage.geoPackageFile.addLinesBatch(
             targetLayerName,
             batchData,
@@ -713,7 +712,7 @@ abstract class LayerNode extends LayerTreeNode {
           break;
 
         case GeometryType.polygon:
-          print('[LayerNode] ポリゴンバッチ処理実行');
+          AppLogger.debug('[LayerNode] ポリゴンバッチ処理実行');
           insertedIds = await targetGeoPackage.geoPackageFile.addPolygonsBatch(
             targetLayerName,
             batchData,
@@ -721,15 +720,15 @@ abstract class LayerNode extends LayerTreeNode {
           break;
       }
 
-      print('[LayerNode] バッチ処理完了: ${insertedIds.length}個挿入');
-      print('[LayerNode] 挿入されたID: $insertedIds');
+      AppLogger.debug('[LayerNode] バッチ処理完了: ${insertedIds.length}個挿入');
+      AppLogger.debug('[LayerNode] 挿入されたID: $insertedIds');
 
       return insertedIds.length;
     } catch (e, stack) {
-      print('[LayerNode] バッチ処理エラー: $e');
-      print('[LayerNode] バッチデータサンプル: ${batchData.take(3).toList()}');
-      print('[LayerNode] スタックトレース: $stack');
-      throw e;
+      AppLogger.debug('[LayerNode] バッチ処理エラー: $e');
+      AppLogger.debug('[LayerNode] バッチデータサンプル: ${batchData.take(3).toList()}');
+      AppLogger.debug('[LayerNode] スタックトレース: $stack');
+      rethrow;
     }
   }
 
@@ -745,8 +744,8 @@ abstract class LayerNode extends LayerTreeNode {
       // 親のレイヤツリーを更新
       await parentGeoPackage.updateChildren();
     } catch (e) {
-      print('[LayerNode] 自己削除エラー: $e');
-      throw e;
+      AppLogger.debug('[LayerNode] 自己削除エラー: $e');
+      rethrow;
     }
   }
 }
@@ -897,3 +896,4 @@ class PolygonLayerNode extends LayerNode {
     return node;
   }
 }
+

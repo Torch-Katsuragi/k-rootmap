@@ -1,17 +1,13 @@
 // K-MAPS: レイヤツリー共通ノード基底クラス
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
-import 'dart:io';
-import 'dart:convert'; // JSON処理のため追加
-import 'dart:typed_data'; // EXIF処理のため追加
+// JSON処理のため追加
+// EXIF処理のため追加
 import 'package:path/path.dart' as p;
 import '../../utils/global_config.dart';
-import '../geopackage_file.dart';
-import '../geometry_type.dart'; // ジオメトリタイプenumをインポート
+// ジオメトリタイプenumをインポート
 import 'package:flutter/material.dart';
-import 'package:meta/meta.dart';
-import 'package:latlong2/latlong.dart';
-import '../../utils/feature_calc_utils.dart'; // centroid計算用
+// centroid計算用
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -65,14 +61,6 @@ abstract class LayerTreeNode {
     await updateChildren();
   }
 
-  /// 非同期で子ノードを初期化（従来の_initializeChildrenをリネーム）
-  /// @deprecated ensureInitialized()を使用してください
-  void _initializeChildren() async {
-    if (_initialized) return; // 既に初期化済みなら何もしない
-    _initialized = true;
-    await updateChildren();
-  }
-
   /// ノードのリソース解放・削除処理（サブクラスで必ずsuper.dispose()を呼ぶこと）
   @mustCallSuper
   Future<void> dispose() async {
@@ -88,7 +76,7 @@ abstract class LayerTreeNode {
       pathList.insert(0, current.name);
       current = current.parent;
     }
-    // print('getPathFromRoot result: $pathList'); // 最終結果のデバッグ出力
+    // AppLogger.debug('getPathFromRoot result: $pathList'); // 最終結果のデバッグ出力
     return pathList;
   }
 
@@ -239,3 +227,4 @@ abstract class LayerTreeNode {
     return <LayerTreeNode>[];
   }
 }
+

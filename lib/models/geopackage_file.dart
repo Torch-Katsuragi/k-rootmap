@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert'; // JSON処理のため追加
 import 'dart:async';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/wkb_utils.dart'; // WKBユーティリティをインポート
@@ -104,7 +105,7 @@ class GeoPackageFile {
             value is Uint8List) {
           filteredAttributes[key] = value;
         } else {
-          print('[GeoPackageFile] ⚠️ サポートされていない型: $key = ${value.runtimeType}');
+          AppLogger.debug('[GeoPackageFile] ⚠️ サポートされていない型: $key = ${value.runtimeType}');
         }
       }
       
@@ -128,7 +129,7 @@ class GeoPackageFile {
       
       return rowsUpdated > 0;
     } catch (e) {
-      print('[ERROR] GeoPackageFile: _updateFeatureAttributes failed: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile: _updateFeatureAttributes failed: $e');
       return false;
     }
   }
@@ -159,7 +160,7 @@ class GeoPackageFile {
 
       // WKBデータの妥当性チェック（デバッグ）
       if (!validateWkbData(wkb)) {
-        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
+        AppLogger.debug('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
         debugWkbData(
           wkb,
           'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
@@ -183,7 +184,7 @@ class GeoPackageFile {
 
       return rowId;
     } catch (e) {
-      print('[ERROR] GeoPackageFile: addPointWithAttributes failed: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile: addPointWithAttributes failed: $e');
       return null;
     }
   }
@@ -223,7 +224,7 @@ class GeoPackageFile {
 
       return rowId;
     } catch (e) {
-      print('[ERROR] GeoPackageFile: addLineWithAttributes failed: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile: addLineWithAttributes failed: $e');
       return null;
     }
   }
@@ -265,7 +266,7 @@ class GeoPackageFile {
 
       return rowId;
     } catch (e) {
-      print('[ERROR] GeoPackageFile: addPolygonWithAttributes failed: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile: addPolygonWithAttributes failed: $e');
       return null;
     }
   }
@@ -280,7 +281,7 @@ class GeoPackageFile {
     final baseDir = GlobalConfig.instance.projectRootDir;
 
     if (baseDir == null) {
-      print('[GeoPackageFile] 初期化失敗: projectRootDirが未設定');
+      AppLogger.debug('[GeoPackageFile] 初期化失敗: projectRootDirが未設定');
       return;
     }
 
@@ -290,11 +291,11 @@ class GeoPackageFile {
     final dir = file.parent;
 
     if (!dir.existsSync()) {
-      print('[GeoPackageFile] 親ディレクトリを作成: ${dir.path}');
+      AppLogger.debug('[GeoPackageFile] 親ディレクトリを作成: ${dir.path}');
       try {
         dir.createSync(recursive: true);
       } catch (e) {
-        print('[GeoPackageFile] 初期化失敗: 親ディレクトリ作成エラー - $e');
+        AppLogger.debug('[GeoPackageFile] 初期化失敗: 親ディレクトリ作成エラー - $e');
         return;
       }
     }
@@ -315,16 +316,16 @@ class GeoPackageFile {
       _isInitialized = true;
       // 正常時のログは不要（異常時のみ出力）
     } catch (e, stack) {
-      print('[GeoPackageFile] 初期化時にエラー発生:');
-      print('  パス: $absPath');
-      print('  エラー: $e');
-      print('  スタックトレース: $stack');
+      AppLogger.debug('[GeoPackageFile] 初期化時にエラー発生:');
+      AppLogger.debug('  パス: $absPath');
+      AppLogger.debug('  エラー: $e');
+      AppLogger.debug('  スタックトレース: $stack');
 
       try {
         final dirWritable = await Directory(dir.path).stat();
-        print('  親ディレクトリ情報: ${dirWritable.type}');
+        AppLogger.debug('  親ディレクトリ情報: ${dirWritable.type}');
       } catch (dirError) {
-        print('  親ディレクトリアクセスエラー: $dirError');
+        AppLogger.debug('  親ディレクトリアクセスエラー: $dirError');
       }
     }
   }
@@ -351,8 +352,8 @@ class GeoPackageFile {
       final missingTables = requiredTables.difference(tableNames);
       
       if (missingTables.isNotEmpty) {
-        print('[GeoPackageFile] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables');
-        print('[GeoPackageFile] ⚠️ これはK-MAPS標準形式ではない可能性があります。');
+        AppLogger.debug('[GeoPackageFile] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables');
+        AppLogger.debug('[GeoPackageFile] ⚠️ これはK-MAPS標準形式ではない可能性があります。');
         return; // 必須テーブルがない場合は以降のチェックをスキップ
       }
 
@@ -370,15 +371,15 @@ class GeoPackageFile {
       final missingContentsColumns = requiredContentsColumns.difference(contentsColumnNames);
       
       if (missingContentsColumns.isNotEmpty) {
-        print('[GeoPackageFile] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns');
-        print('[GeoPackageFile] ⚠️ このファイルは破損している可能性があります。');
+        AppLogger.debug('[GeoPackageFile] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns');
+        AppLogger.debug('[GeoPackageFile] ⚠️ このファイルは破損している可能性があります。');
       }
 
       // フィーチャテーブルの存在チェック（正常時はログ不要）
       // 異常がなければ検証完了
     } catch (e) {
-      print('[GeoPackageFile] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e');
-      print('[GeoPackageFile] ⚠️ このファイルは標準的なGeoPackage形式ではない可能性があります。');
+      AppLogger.debug('[GeoPackageFile] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e');
+      AppLogger.debug('[GeoPackageFile] ⚠️ このファイルは標準的なGeoPackage形式ではない可能性があります。');
     }
   }
 
@@ -485,7 +486,7 @@ class GeoPackageFile {
     int newVersion,
   ) async {
     // 将来のスキーマ更新時に実装
-    print('データベースをバージョン $oldVersion から $newVersion にアップグレード');
+    AppLogger.debug('データベースをバージョン $oldVersion から $newVersion にアップグレード');
   }
 
   /// データベース接続取得（初期化を含む）
@@ -528,9 +529,9 @@ class GeoPackageFile {
       // QGIS標準形式（fid PRIMARY KEY）以外の場合は情報ログ出力
       if (primaryKeyColumn != 'fid') {
         if (primaryKeyColumn == 'id') {
-          print('[GeoPackageFile] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のK-MAPS標準は "fid"）');
+          AppLogger.debug('[GeoPackageFile] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のK-MAPS標準は "fid"）');
         } else {
-          print('[GeoPackageFile] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用');
+          AppLogger.debug('[GeoPackageFile] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用');
         }
       }
       _primaryKeyCache[tableName] = primaryKeyColumn;
@@ -538,8 +539,8 @@ class GeoPackageFile {
     }
 
     // PRIMARY KEYがない場合の処理
-    print('[GeoPackageFile] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！');
-    print('[GeoPackageFile] ⚠️ データが破損している可能性があります。');
+    AppLogger.debug('[GeoPackageFile] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！');
+    AppLogger.debug('[GeoPackageFile] ⚠️ データが破損している可能性があります。');
     
     try {
       // テーブルのレコード数をチェック（大きなテーブルの進行状況表示のため）
@@ -554,9 +555,9 @@ class GeoPackageFile {
       if (!hasFidColumn && !hasIdColumn) {
         // 大容量テーブルの場合は進行状況を表示
         if (rowCount > 10000) {
-          print('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...');
+          AppLogger.debug('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...');
         } else {
-          print('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...');
+          AppLogger.debug('[GeoPackageFile] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...');
         }
         
         // fidカラムを追加（QGIS標準）
@@ -569,23 +570,23 @@ class GeoPackageFile {
           'UPDATE "$tableName" SET fid = rowid;',
         );
         
-        print('[GeoPackageFile] ✓ fidカラムを追加し、rowidから値をコピーしました。');
+        AppLogger.debug('[GeoPackageFile] ✓ fidカラムを追加し、rowidから値をコピーしました。');
         _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else if (hasFidColumn) {
         // fidカラムは存在するが、PRIMARY KEYではない場合
-        print('[GeoPackageFile] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        AppLogger.debug('[GeoPackageFile] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。');
         _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else {
         // idカラムが存在する場合（旧形式）
-        print('[GeoPackageFile] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        AppLogger.debug('[GeoPackageFile] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。');
         _primaryKeyCache[tableName] = 'id';
         return 'id';
       }
     } catch (e, stackTrace) {
-      print('[GeoPackageFile] ❌ エラー: PRIMARY KEY処理中に問題が発生しました: $e');
-      print('[GeoPackageFile] スタックトレース: $stackTrace');
+      AppLogger.debug('[GeoPackageFile] ❌ エラー: PRIMARY KEY処理中に問題が発生しました: $e');
+      AppLogger.debug('[GeoPackageFile] スタックトレース: $stackTrace');
       
       // フォールバック: fid > id > rowid の優先順位
       final hasFidColumn = columns.any((col) => col['name'] == 'fid');
@@ -598,7 +599,7 @@ class GeoPackageFile {
         _primaryKeyCache[tableName] = 'id';
         return 'id';
       } else {
-        print('[GeoPackageFile] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。');
+        AppLogger.debug('[GeoPackageFile] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。');
         _primaryKeyCache[tableName] = 'rowid';
         return 'rowid';
       }
@@ -613,11 +614,11 @@ class GeoPackageFile {
       if (_database != null && _isInitialized) {
         return true;
       } else {
-        print('[GeoPackageFile] 空のGeoPackageファイル作成失敗: 初期化未完了');
+        AppLogger.debug('[GeoPackageFile] 空のGeoPackageファイル作成失敗: 初期化未完了');
         return false;
       }
     } catch (e) {
-      print('[GeoPackageFile] 空のGeoPackageファイル作成エラー: $e');
+      AppLogger.debug('[GeoPackageFile] 空のGeoPackageファイル作成エラー: $e');
       return false;
     }
   }
@@ -653,7 +654,7 @@ class GeoPackageFile {
 
       return await addPointWithAttributes(tableName, pt, attributes);
     } catch (e) {
-      print('[ERROR] GeoPackageFile: addPoint failed: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile: addPoint failed: $e');
       return null;
     }
   }
@@ -671,7 +672,7 @@ class GeoPackageFile {
       
       await db.delete(tableName, where: whereClause, whereArgs: [id]);
     } catch (e) {
-      print('removeFeature: エラー発生 - $e');
+      AppLogger.debug('removeFeature: エラー発生 - $e');
     }
   }
 
@@ -688,7 +689,7 @@ class GeoPackageFile {
       final typeString = rows.first['geometry_type_name'] as String?;
       return typeString != null ? GeometryType.fromString(typeString) : null;
     } catch (e) {
-      print('getGeometryType: エラー発生 - $e');
+      AppLogger.debug('getGeometryType: エラー発生 - $e');
       return null;
     }
   }
@@ -720,7 +721,7 @@ class GeoPackageFile {
           row['id'] = row[pkColumn];
         } else {
           // PRIMARY KEYカラムが存在しない場合（異常事態）
-          print('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
+          AppLogger.debug('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
           row['id'] = 0; // フォールバック値
         }
       }
@@ -777,8 +778,8 @@ class GeoPackageFile {
                 !lat.isInfinite && !lon.isInfinite) {
               row['geometry'] = [LatLng(lat, lon)];
             } else {
-              print('[GeoPackageFile] ⚠️ 警告: 無効なPoint座標値を検出: lat=$lat, lon=$lon (rowId=$rowId)');
-              print('[GeoPackageFile] ⚠️ このフィーチャは破損している可能性があります。');
+              AppLogger.debug('[GeoPackageFile] ⚠️ 警告: 無効なPoint座標値を検出: lat=$lat, lon=$lon (rowId=$rowId)');
+              AppLogger.debug('[GeoPackageFile] ⚠️ このフィーチャは破損している可能性があります。');
             }
           }
         } else if (geomType == GeometryType.linestring) {
@@ -801,13 +802,13 @@ class GeoPackageFile {
           row['kmaps_metadata'] =
               jsonDecode(metadataStr) as Map<String, dynamic>;
         } catch (e) {
-          print('getFeature: メタデータのJSONパースエラー - $e');
+          AppLogger.debug('getFeature: メタデータのJSONパースエラー - $e');
         }
       }
 
       return row;
     } catch (e) {
-      print('getFeature: エラー発生 - $e');
+      AppLogger.debug('getFeature: エラー発生 - $e');
       return null;
     }
   }
@@ -838,7 +839,7 @@ class GeoPackageFile {
             normalizedRow['id'] = row[pkColumn];
           } else {
             // PRIMARY KEYカラムが存在しない場合（異常事態）
-            print('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
+            AppLogger.debug('[GeoPackageFile] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
             normalizedRow['id'] = 0; // フォールバック値
           }
         }
@@ -846,7 +847,7 @@ class GeoPackageFile {
         return normalizedRow;
       }).toList();
     } catch (e) {
-      print('getFeatures: エラー発生 - $e');
+      AppLogger.debug('getFeatures: エラー発生 - $e');
       return [];
     }
   }
@@ -862,7 +863,7 @@ class GeoPackageFile {
       );
       return contents.map((row) => row['table_name'] as String).toList();
     } catch (e) {
-      print('getLayerNames: エラー発生 - $e');
+      AppLogger.debug('getLayerNames: エラー発生 - $e');
       return [];
     }
   }
@@ -908,7 +909,7 @@ class GeoPackageFile {
       // 空間インデックスを作成（QGISでの認識を改善）
       await _createSpatialIndex(name);
     } catch (e) {
-      print('addLayer: エラー発生 - $e');
+      AppLogger.debug('addLayer: エラー発生 - $e');
     }
   }
 
@@ -925,7 +926,7 @@ class GeoPackageFile {
       ''');
 
     } catch (e) {
-      print('[ERROR] GeoPackageFile._createSpatialIndex: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile._createSpatialIndex: $e');
     }
   }
 
@@ -990,7 +991,7 @@ class GeoPackageFile {
 
       // 正常時のログは不要（異常時のみ出力）
     } catch (e) {
-      print('[GeoPackageFile] エンベロープ更新エラー: $e');
+      AppLogger.debug('[GeoPackageFile] エンベロープ更新エラー: $e');
     }
   }
 
@@ -1014,7 +1015,7 @@ class GeoPackageFile {
         whereArgs: [name],
       );
     } catch (e) {
-      print('removeLayer: エラー発生 - $e');
+      AppLogger.debug('removeLayer: エラー発生 - $e');
     }
   }
 
@@ -1078,7 +1079,7 @@ class GeoPackageFile {
       // supportedAttributesに含まれるものだけ返す
       return filteredColumns.where((c) => supportedAttributes.contains(c)).toList();
     } catch (e) {
-      print('getColumnNames: エラー発生 - $e');
+      AppLogger.debug('getColumnNames: エラー発生 - $e');
       return [];
     }
   }
@@ -1108,7 +1109,7 @@ class GeoPackageFile {
       }
       return null;
     } catch (e) {
-      print('getFeatureAttribute: エラー発生 - $e');
+      AppLogger.debug('getFeatureAttribute: エラー発生 - $e');
       return null;
     }
   }
@@ -1137,7 +1138,7 @@ class GeoPackageFile {
       }
       return null;
     } catch (e) {
-      print('getFeatureAttributes: エラー発生 - $e');
+      AppLogger.debug('getFeatureAttributes: エラー発生 - $e');
       return null;
     }
   }
@@ -1164,7 +1165,7 @@ class GeoPackageFile {
       );
       return rowsUpdated > 0;
     } catch (e) {
-      print('updateFeatureAttribute: エラー発生 - $e');
+      AppLogger.debug('updateFeatureAttribute: エラー発生 - $e');
       return false;
     }
   }
@@ -1182,8 +1183,10 @@ class GeoPackageFile {
     try {
       final db = await _getDatabase();
 
-      // カラム名の安全性チェック（SQLインジェクション対策）
-      if (!RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$').hasMatch(columnName)) {
+      // カラム名の安全性チェック（QGIS準拠 - 日本語・スペース・数字始まりも許可）
+      // SQLインジェクション対策として最小限の危険文字のみ禁止
+      final sanitizedName = _sanitizeColumnName(columnName);
+      if (sanitizedName.isEmpty) {
         throw Exception('無効なカラム名です: $columnName');
       }
 
@@ -1191,15 +1194,30 @@ class GeoPackageFile {
       final result = await db.rawQuery('PRAGMA table_info("$tableName");');
       final columns = result.map((row) => row['name'] as String).toList();
 
-      if (!columns.contains(columnName)) {
+      if (!columns.contains(sanitizedName)) {
         await db.execute(
-          'ALTER TABLE "$tableName" ADD COLUMN "$columnName" $columnType;',
+          'ALTER TABLE "$tableName" ADD COLUMN "$sanitizedName" $columnType;',
         );
       }
     } catch (e) {
-      print('[GeoPackageFile] addAttributeColumn エラー発生 - $e');
-      throw e;
+      AppLogger.debug('[GeoPackageFile] addAttributeColumn エラー発生 - $e');
+      rethrow;
     }
+  }
+
+  /// カラム名をQGIS準拠でサニタイズ（SQLインジェクション対策）
+  /// 日本語・スペース・数字始まりを許可、危険な文字のみ置換
+  String _sanitizeColumnName(String name) {
+    if (name.isEmpty) return '';
+    // SQLインジェクションに使われる危険な文字を除去/置換
+    return name
+        .replaceAll('"', '')      // ダブルクォート
+        .replaceAll("'", '')      // シングルクォート
+        .replaceAll(';', '_')     // セミコロン
+        .replaceAll('--', '_')    // SQLコメント
+        .replaceAll('\n', ' ')    // 改行
+        .replaceAll('\r', ' ')    // 復帰
+        .trim();
   }
 
   /// シェープファイルの属性構造を元にGeoPackageテーブルを拡張
@@ -1216,8 +1234,8 @@ class GeoPackageFile {
         await addAttributeColumn(tableName, columnName, columnType);
       }
     } catch (e) {
-      print('[GeoPackageFile] addAttributeColumns エラー発生 - $e');
-      throw e;
+      AppLogger.debug('[GeoPackageFile] addAttributeColumns エラー発生 - $e');
+      rethrow;
     }
   }
 
@@ -1241,7 +1259,7 @@ class GeoPackageFile {
       final rowId = await db.insert(tableName, data);
       return rowId;
     } catch (e) {
-      print('[GeoPackageFile] addFeatureWithAttributes エラー発生 - $e');
+      AppLogger.debug('[GeoPackageFile] addFeatureWithAttributes エラー発生 - $e');
       return null;
     }
   }
@@ -1281,7 +1299,7 @@ class GeoPackageFile {
 
       return columnInfo;
     } catch (e) {
-      print('[GeoPackageFile] getAttributeColumnInfo エラー発生 - $e');
+      AppLogger.debug('[GeoPackageFile] getAttributeColumnInfo エラー発生 - $e');
       return [];
     }
   }
@@ -1294,7 +1312,7 @@ class GeoPackageFile {
 
       final baseDir = GlobalConfig.instance.projectRootDir;
       if (baseDir == null) {
-        print('[GeoPackageFile] deleteFile: projectRootDirが未設定');
+        AppLogger.debug('[GeoPackageFile] deleteFile: projectRootDirが未設定');
         return false;
       }
 
@@ -1302,16 +1320,16 @@ class GeoPackageFile {
       final file = File(absPath);
 
       if (!file.existsSync()) {
-        print('[GeoPackageFile] deleteFile: ファイルが存在しません - $absPath');
+        AppLogger.debug('[GeoPackageFile] deleteFile: ファイルが存在しません - $absPath');
         return true; // 既に存在しないので成功とみなす
       }
 
       await file.delete();
-      print('[GeoPackageFile] deleteFile: ファイル削除完了 - $absPath');
+      AppLogger.debug('[GeoPackageFile] deleteFile: ファイル削除完了 - $absPath');
       return true;
     } catch (e, stack) {
-      print('[GeoPackageFile] deleteFile: ファイル削除エラー - $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[GeoPackageFile] deleteFile: ファイル削除エラー - $e');
+      AppLogger.debug('スタックトレース: $stack');
       return false;
     }
   }
@@ -1332,7 +1350,7 @@ class GeoPackageFile {
 
       // WKBデータの妥当性チェック（デバッグ）
       if (!validateWkbData(wkb)) {
-        print('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
+        AppLogger.debug('[GeoPackageFile] 警告: 無効なWKBデータが生成されました');
         debugWkbData(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
       }
 
@@ -1374,7 +1392,7 @@ class GeoPackageFile {
 
       return affectedRows > 0;
     } catch (e) {
-      print('updatePoint: エラー発生 - $e');
+      AppLogger.debug('updatePoint: エラー発生 - $e');
       return false;
     }
   }
@@ -1431,7 +1449,7 @@ class GeoPackageFile {
 
       return affectedRows > 0;
     } catch (e) {
-      print('updateLine: エラー発生 - $e');
+      AppLogger.debug('updateLine: エラー発生 - $e');
       return false;
     }
   }
@@ -1488,7 +1506,7 @@ class GeoPackageFile {
 
       return affectedRows > 0;
     } catch (e) {
-      print('updatePolygon: エラー発生 - $e');
+      AppLogger.debug('updatePolygon: エラー発生 - $e');
       return false;
     }
   }
@@ -1548,7 +1566,7 @@ class GeoPackageFile {
 
       return insertedIds;
     } catch (e) {
-      print('[ERROR] GeoPackageFile.addPolygonsBatch: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile.addPolygonsBatch: $e');
       return [];
     }
   }
@@ -1608,7 +1626,7 @@ class GeoPackageFile {
 
       return insertedIds;
     } catch (e) {
-      print('[ERROR] GeoPackageFile.addPointsBatch: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile.addPointsBatch: $e');
       return [];
     }
   }
@@ -1668,7 +1686,7 @@ class GeoPackageFile {
 
       return insertedIds;
     } catch (e) {
-      print('[ERROR] GeoPackageFile.addLinesBatch: $e');
+      AppLogger.debug('[ERROR] GeoPackageFile.addLinesBatch: $e');
       return [];
     }
   }
@@ -1701,8 +1719,9 @@ class GeoPackageFile {
       // 正常時のログは不要（異常時のみ出力）
       return result;
     } catch (e) {
-      print('[GeoPackageFile] getAllFeatureAttributes エラー発生 - $e');
+      AppLogger.debug('[GeoPackageFile] getAllFeatureAttributes エラー発生 - $e');
       return [];
     }
   }
 }
+

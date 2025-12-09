@@ -2,7 +2,7 @@
 // 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装（内蔵GPS専用）
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/material.dart';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/gps_track.dart';
@@ -106,19 +106,19 @@ class ForegroundServiceManager {
             );
             GpsTrackManager().addPoint(point);
           } catch (e) {
-            debugPrint('[ForegroundService] 軌跡ポイント追加エラー: $e');
+            AppLogger.debug('[ForegroundService] 軌跡ポイント追加エラー: $e');
           }
         }
       });
 
       await FlutterBackgroundService().startService();
       _isServiceRunning = true;
-      debugPrint('[ForegroundService] GPS追跡サービス開始');
+      AppLogger.debug('[ForegroundService] GPS追跡サービス開始');
     } catch (e) {
-      debugPrint('[ForegroundService] サービス開始エラー: $e');
+      AppLogger.debug('[ForegroundService] サービス開始エラー: $e');
       // Android 12以降でフォアグラウンドサービス開始が失敗する場合、
       // ユーザーに通知を表示（デバッグ情報）
-      debugPrint('[ForegroundService] エラー詳細: ${e.toString()}');
+      AppLogger.debug('[ForegroundService] エラー詳細: ${e.toString()}');
       // サービスが開始できなくてもアプリはクラッシュさせない
       rethrow; // エラーを呼び出し元に伝播して、ユーザーにメッセージを表示
     }
@@ -136,9 +136,9 @@ class ForegroundServiceManager {
 
       FlutterBackgroundService().invoke("stopService");
       _isServiceRunning = false;
-      debugPrint('[ForegroundService] GPS追跡サービス停止');
+      AppLogger.debug('[ForegroundService] GPS追跡サービス停止');
     } catch (e) {
-      debugPrint('[ForegroundService] サービス停止エラー: $e');
+      AppLogger.debug('[ForegroundService] サービス停止エラー: $e');
     }
   }
 
@@ -147,7 +147,7 @@ class ForegroundServiceManager {
     final track = GpsTrackManager().stopTracking();
     if (track != null) {
       final stats = track.getStatistics();
-      debugPrint(
+      AppLogger.debug(
         '[ForegroundService] 軌跡記録完了: ${stats['pointCount']}ポイント、距離: ${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
       );
     }
@@ -233,19 +233,19 @@ void onStart(ServiceInstance service) async {
             } catch (notificationError) {
               // Android 12以降で通知更新が失敗する場合があるが、
               // GPS追跡自体は継続するためエラーを無視
-              debugPrint('[ForegroundService] 通知更新エラー（継続）: $notificationError');
+              AppLogger.debug('[ForegroundService] 通知更新エラー（継続）: $notificationError');
             }
           }
         }
       } catch (e) {
-        debugPrint('[ForegroundService] タイマー処理エラー: $e');
+        AppLogger.debug('[ForegroundService] タイマー処理エラー: $e');
         timer.cancel();
         positionSubscription?.cancel();
         service.stopSelf();
       }
     });
   } catch (e) {
-    debugPrint('[ForegroundService] エントリーポイントエラー: $e');
+    AppLogger.debug('[ForegroundService] エントリーポイントエラー: $e');
     service.stopSelf();
   }
 }
@@ -255,3 +255,5 @@ void onStart(ServiceInstance service) async {
 Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
+
+

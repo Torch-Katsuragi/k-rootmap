@@ -1,5 +1,6 @@
 // K-MAPS: バックグラウンド保存管理クラス（シングルトン）
 // 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
+import 'package:k_maps/utils/app_logger.dart';
 import 'dart:async';
 import '../models/geopackage_file.dart';
 
@@ -46,7 +47,7 @@ class BackgroundSaveManager {
     int rowId,
     Map<String, dynamic> attributes,
   ) {
-    print('[DEBUG] BackgroundSaveManager: キューに追加 - テーブル:$tableName, 行ID:$rowId, 属性数:${attributes.length}');
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: キューに追加 - テーブル:$tableName, 行ID:$rowId, 属性数:${attributes.length}');
     
     // GeoPackageFileごとの変更キューを取得または作成
     _pendingChanges.putIfAbsent(geoPackageFile, () => {});
@@ -54,23 +55,23 @@ class BackgroundSaveManager {
     for (final entry in attributes.entries) {
       final key = '$tableName:$rowId:${entry.key}';
       _pendingChanges[geoPackageFile]![key] = entry.value;
-      print('[DEBUG] BackgroundSaveManager: キューエントリ追加 - $key = ${entry.value}');
+      AppLogger.debug('[DEBUG] BackgroundSaveManager: キューエントリ追加 - $key = ${entry.value}');
     }
     
-    print('[DEBUG] BackgroundSaveManager: 現在のキューサイズ: ${_pendingChanges[geoPackageFile]?.length ?? 0}');
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: 現在のキューサイズ: ${_pendingChanges[geoPackageFile]?.length ?? 0}');
     _scheduleSave();
   }
 
   /// 遅延保存のスケジュール
   void _scheduleSave() {
-    print('[DEBUG] BackgroundSaveManager: 保存タイマーをスケジュール ($_saveDelayMs ms後)');
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: 保存タイマーをスケジュール ($_saveDelayMs ms後)');
     
     // 既存のタイマーをキャンセル
     _saveTimer?.cancel();
 
     // 新しいタイマーを設定
     _saveTimer = Timer(Duration(milliseconds: _saveDelayMs), () {
-      print('[DEBUG] BackgroundSaveManager: タイマー満了 - 保存処理開始');
+      AppLogger.debug('[DEBUG] BackgroundSaveManager: タイマー満了 - 保存処理開始');
       // 非同期関数を呼び出し（戻り値は無視）
       _saveChangesToDB();
     });
@@ -85,7 +86,7 @@ class BackgroundSaveManager {
       (sum, changes) => sum + changes.length,
     );
 
-    print(
+    AppLogger.debug(
       '[DEBUG] BackgroundSaveManager: Saving $totalChanges pending changes across ${_pendingChanges.length} GeoPackage files',
     );
 
@@ -105,7 +106,7 @@ class BackgroundSaveManager {
       try {
         await _saveChangesForGeoPackage(geoPackageFile, changes);
       } catch (e) {
-        print(
+        AppLogger.debug(
           '[ERROR] BackgroundSaveManager: Failed to save changes for GeoPackage: $e',
         );
         // 失敗した場合は変更キューに戻す
@@ -114,7 +115,7 @@ class BackgroundSaveManager {
       }
     }
 
-    print('[DEBUG] BackgroundSaveManager: Background save completed');
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: Background save completed');
   }
 
   /// 特定のGeoPackageFileの変更を保存
@@ -125,7 +126,7 @@ class BackgroundSaveManager {
     if (changes.isEmpty) return;
 
     try {
-      print(
+      AppLogger.debug(
         '[DEBUG] BackgroundSaveManager: Saving ${changes.length} changes for GeoPackage',
       );
 
@@ -161,7 +162,7 @@ class BackgroundSaveManager {
           );
 
           if (!success) {
-            print(
+            AppLogger.debug(
               '[ERROR] BackgroundSaveManager: Failed to save attributes for $tableName:$rowId',
             );
             throw Exception('Failed to save attributes for $tableName:$rowId');
@@ -169,11 +170,11 @@ class BackgroundSaveManager {
         }
       }
 
-      print(
+      AppLogger.debug(
         '[DEBUG] BackgroundSaveManager: Successfully saved changes for GeoPackage',
       );
     } catch (e) {
-      print(
+      AppLogger.debug(
         '[ERROR] BackgroundSaveManager: _saveChangesForGeoPackage failed: $e',
       );
       rethrow;
@@ -192,7 +193,7 @@ class BackgroundSaveManager {
       try {
         await _saveChangesForGeoPackage(geoPackageFile, changesToSave);
       } catch (e) {
-        print('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
+        AppLogger.debug('[ERROR] BackgroundSaveManager: Failed to flush changes: $e');
         // 失敗した場合は変更キューに戻す
         _pendingChanges[geoPackageFile]!.addAll(changesToSave);
       }
@@ -208,7 +209,7 @@ class BackgroundSaveManager {
   /// 指定されたGeoPackageFileの変更キューをクリア（dispose時）
   void clearPendingChanges(GeoPackageFile geoPackageFile) {
     _pendingChanges.remove(geoPackageFile);
-    print(
+    AppLogger.debug(
       '[DEBUG] BackgroundSaveManager: Cleared pending changes for GeoPackage',
     );
   }
@@ -220,3 +221,4 @@ class BackgroundSaveManager {
     );
   }
 }
+

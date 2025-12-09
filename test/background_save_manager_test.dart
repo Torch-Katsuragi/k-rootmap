@@ -2,10 +2,10 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:latlong2/latlong.dart';
-import '../lib/models/geopackage_file.dart';
-import '../lib/models/geometry_type.dart';
-import '../lib/utils/background_save_manager.dart';
-import '../lib/utils/global_config.dart';
+import 'package:k_maps/models/geopackage_file.dart';
+import 'package:k_maps/models/geometry_type.dart';
+import 'package:k_maps/utils/background_save_manager.dart';
+import 'package:k_maps/utils/global_config.dart';
 
 void main() {
   group('BackgroundSaveManager Tests', () {

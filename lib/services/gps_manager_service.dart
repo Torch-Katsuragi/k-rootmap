@@ -13,6 +13,7 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
@@ -120,7 +121,7 @@ class GpsManagerService extends ChangeNotifier {
   // 連続測量（長押し測量）関連
   bool _isContinuousSurvey = false;
   Function? _onContinuousSurveyUpdate;
-  List<Map<String, dynamic>> _continuousSurveyData = [];
+  final List<Map<String, dynamic>> _continuousSurveyData = [];
   DateTime? _continuousSurveyStartTime;
 
   // Getters
@@ -193,21 +194,21 @@ class GpsManagerService extends ChangeNotifier {
   /// GPS管理サービスを初期化（待機状態）
   Future<void> initialize() async {
     if (_isInitialized) {
-      debugPrint('$_logTag: 既に初期化済みです');
+      AppLogger.debug('$_logTag: 既に初期化済みです');
       return;
     }
 
     try {
-      debugPrint('$_logTag: GPS管理サービスを初期化中...');
+      AppLogger.debug('$_logTag: GPS管理サービスを初期化中...');
 
       // グローバル設定から前回の設定を読み込み（GPS開始はしない）
       await _loadSourceConfigOnly();
 
       _isInitialized = true;
-      debugPrint('$_logTag: GPS管理サービスの初期化完了（待機状態）');
+      AppLogger.debug('$_logTag: GPS管理サービスの初期化完了（待機状態）');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: GPS管理サービス初期化エラー: $e');
+      AppLogger.debug('$_logTag: GPS管理サービス初期化エラー: $e');
       _isInitialized = false;
       rethrow;
     }
@@ -220,12 +221,12 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     if (_isGpsActive) {
-      debugPrint('$_logTag: GPS位置情報取得は既に開始されています');
+      AppLogger.debug('$_logTag: GPS位置情報取得は既に開始されています');
       return;
     }
 
     try {
-      debugPrint('$_logTag: GPS位置情報取得を開始中...');
+      AppLogger.debug('$_logTag: GPS位置情報取得を開始中...');
 
       switch (_currentSource) {
         case GpsSourceType.internal:
@@ -236,7 +237,7 @@ class GpsManagerService extends ChangeNotifier {
             await _startExternalGnss(_selectedGnssDevice!);
           } else {
             // 外部GNSS設定されているが機器がない場合は内蔵GPSにフォールバック
-            debugPrint('$_logTag: 外部GNSS機器が設定されていないため内蔵GPSにフォールバック');
+            AppLogger.debug('$_logTag: 外部GNSS機器が設定されていないため内蔵GPSにフォールバック');
             _currentSource = GpsSourceType.internal;
             await _startInternalGps();
           }
@@ -244,10 +245,10 @@ class GpsManagerService extends ChangeNotifier {
       }
 
       _isGpsActive = true;
-      debugPrint('$_logTag: GPS位置情報取得開始完了: ${_currentSource.displayName}');
+      AppLogger.debug('$_logTag: GPS位置情報取得開始完了: ${_currentSource.displayName}');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: GPS位置情報取得開始エラー: $e');
+      AppLogger.debug('$_logTag: GPS位置情報取得開始エラー: $e');
       _isGpsActive = false;
       rethrow;
     }
@@ -256,19 +257,19 @@ class GpsManagerService extends ChangeNotifier {
   /// GPS位置情報取得を停止
   Future<void> stopGps() async {
     if (!_isGpsActive) {
-      debugPrint('$_logTag: GPS位置情報取得は既に停止されています');
+      AppLogger.debug('$_logTag: GPS位置情報取得は既に停止されています');
       return;
     }
 
     try {
-      debugPrint('$_logTag: GPS位置情報取得を停止中...');
+      AppLogger.debug('$_logTag: GPS位置情報取得を停止中...');
       await _stopCurrentSource();
       _isGpsActive = false;
       _isSurveyMode = false; // 測量モードも終了
-      debugPrint('$_logTag: GPS位置情報取得停止完了');
+      AppLogger.debug('$_logTag: GPS位置情報取得停止完了');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: GPS位置情報取得停止エラー: $e');
+      AppLogger.debug('$_logTag: GPS位置情報取得停止エラー: $e');
     }
   }
 
@@ -281,11 +282,11 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     try {
-      debugPrint('$_logTag: GPS測量開始 - 測量専用GPS位置取得...');
+      AppLogger.debug('$_logTag: GPS測量開始 - 測量専用GPS位置取得...');
       _isSurveyMode = true;
 
       // GPS測量専用開始（フォアグラウンドサービスとは独立）
-      debugPrint('$_logTag: 測量専用GPS開始');
+      AppLogger.debug('$_logTag: 測量専用GPS開始');
 
       // 外部GNSS接続が既にある場合は再利用
       if (!_isGpsActive) {
@@ -293,7 +294,7 @@ class GpsManagerService extends ChangeNotifier {
             _externalGnssService != null &&
             _externalGnssService!.isConnected) {
           // 既に外部GNSS接続があるので、位置監視のみ再開
-          debugPrint('$_logTag: 外部GNSS接続済み、位置監視のみ再開');
+          AppLogger.debug('$_logTag: 外部GNSS接続済み、位置監視のみ再開');
           _isGpsActive = true;
           notifyListeners();
         } else {
@@ -310,7 +311,7 @@ class GpsManagerService extends ChangeNotifier {
         if (gpsInfo['isActive'] == true &&
             gpsInfo['latitude'] != null &&
             gpsInfo['longitude'] != null) {
-          debugPrint('$_logTag: GPS測量用位置取得成功（測量専用GPS）');
+          AppLogger.debug('$_logTag: GPS測量用位置取得成功（測量専用GPS）');
           notifyListeners();
           return gpsInfo;
         }
@@ -319,10 +320,10 @@ class GpsManagerService extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      debugPrint('$_logTag: GPS測量用位置取得タイムアウト');
+      AppLogger.debug('$_logTag: GPS測量用位置取得タイムアウト');
       return null;
     } catch (e) {
-      debugPrint('$_logTag: GPS測量開始エラー: $e');
+      AppLogger.debug('$_logTag: GPS測量開始エラー: $e');
       _isSurveyMode = false;
       rethrow;
     }
@@ -331,14 +332,14 @@ class GpsManagerService extends ChangeNotifier {
   /// GPS測量専用停止
   Future<void> stopGpsSurvey() async {
     try {
-      debugPrint('$_logTag: GPS測量停止中...');
+      AppLogger.debug('$_logTag: GPS測量停止中...');
       _isSurveyMode = false;
 
       final serviceManager = ForegroundServiceManager();
 
       // フォアグラウンドサービス（軌跡記録）が動作中の場合は何もしない
       if (serviceManager.isServiceRunning) {
-        debugPrint('$_logTag: GPS測量停止 - フォアグラウンドサービス（軌跡記録）継続中のためGPS継続');
+        AppLogger.debug('$_logTag: GPS測量停止 - フォアグラウンドサービス（軌跡記録）継続中のためGPS継続');
         notifyListeners();
         return;
       }
@@ -347,15 +348,15 @@ class GpsManagerService extends ChangeNotifier {
       if (!_isRecording) {
         // 外部GNSS接続は維持し、内部GPSのみ停止
         await _stopGpsKeepingBluetoothConnection();
-        debugPrint('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持（データ蓄積なし）');
+        AppLogger.debug('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持（データ蓄積なし）');
       } else {
-        debugPrint('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
+        AppLogger.debug('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
       }
 
-      debugPrint('$_logTag: GPS測量停止完了 - 測量モード: $_isSurveyMode');
+      AppLogger.debug('$_logTag: GPS測量停止完了 - 測量モード: $_isSurveyMode');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: GPS測量停止エラー: $e');
+      AppLogger.debug('$_logTag: GPS測量停止エラー: $e');
     }
   }
 
@@ -365,13 +366,13 @@ class GpsManagerService extends ChangeNotifier {
   /// フォアグラウンドサービス追跡開始通知
   void notifyForegroundTrackingStarted() {
     _foregroundServiceTracking = true;
-    debugPrint('$_logTag: フォアグラウンドサービス追跡開始を通知');
+    AppLogger.debug('$_logTag: フォアグラウンドサービス追跡開始を通知');
   }
 
   /// フォアグラウンドサービス追跡停止通知
   void notifyForegroundTrackingStopped() {
     _foregroundServiceTracking = false;
-    debugPrint('$_logTag: フォアグラウンドサービス追跡停止を通知');
+    AppLogger.debug('$_logTag: フォアグラウンドサービス追跡停止を通知');
   }
 
   /// フォアグラウンドサービス追跡状態取得
@@ -380,15 +381,15 @@ class GpsManagerService extends ChangeNotifier {
   /// 外部GNSS機器をスキャン
   Future<void> scanExternalGnssDevices() async {
     try {
-      debugPrint('$_logTag: 外部GNSS機器をスキャン中...');
+      AppLogger.debug('$_logTag: 外部GNSS機器をスキャン中...');
 
       _externalGnssService ??= BluetoothGnssService();
       _availableGnssDevices = await _externalGnssService!.scanDevices();
 
-      debugPrint('$_logTag: ${_availableGnssDevices.length}個の外部GNSS機器を発見');
+      AppLogger.debug('$_logTag: ${_availableGnssDevices.length}個の外部GNSS機器を発見');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: 外部GNSS機器スキャンエラー: $e');
+      AppLogger.debug('$_logTag: 外部GNSS機器スキャンエラー: $e');
       rethrow;
     }
   }
@@ -403,7 +404,7 @@ class GpsManagerService extends ChangeNotifier {
     }
 
     try {
-      debugPrint('$_logTag: GPSソースを${sourceType.displayName}に切り替え中...');
+      AppLogger.debug('$_logTag: GPSソースを${sourceType.displayName}に切り替え中...');
 
       // 現在のソースを停止
       await _stopCurrentSource();
@@ -426,10 +427,10 @@ class GpsManagerService extends ChangeNotifier {
       // グローバル設定に保存
       await _saveSourceToGlobalConfig();
 
-      debugPrint('$_logTag: GPSソース切り替え完了: ${sourceType.displayName}');
+      AppLogger.debug('$_logTag: GPSソース切り替え完了: ${sourceType.displayName}');
       notifyListeners();
     } catch (e) {
-      debugPrint('$_logTag: GPSソース切り替えエラー: $e');
+      AppLogger.debug('$_logTag: GPSソース切り替えエラー: $e');
       rethrow;
     }
   }
@@ -458,13 +459,13 @@ class GpsManagerService extends ChangeNotifier {
     GpsSourceType sourceType, [
     BluetoothDevice? device,
   ]) async {
-    debugPrint('$_logTag: 参照GPS（基準GPS）を${sourceType.displayName}に切り替え...');
+    AppLogger.debug('$_logTag: 参照GPS（基準GPS）を${sourceType.displayName}に切り替え...');
 
     final serviceManager = ForegroundServiceManager();
 
     if (serviceManager.isServiceRunning) {
       // フォアグラウンドサービスが動作中の場合は、まず停止
-      debugPrint('$_logTag: フォアグラウンドサービス動作中のため一時停止して切り替え');
+      AppLogger.debug('$_logTag: フォアグラウンドサービス動作中のため一時停止して切り替え');
       await serviceManager.stopService();
 
       // 少し待機してリソース解放を確保
@@ -475,13 +476,13 @@ class GpsManagerService extends ChangeNotifier {
 
       // フォアグラウンドサービス再開
       await serviceManager.startService();
-      debugPrint('$_logTag: 参照GPS切り替え後、フォアグラウンドサービス再開');
+      AppLogger.debug('$_logTag: 参照GPS切り替え後、フォアグラウンドサービス再開');
     } else {
       // フォアグラウンドサービス未動作時は直接切り替え
       await switchGpsSource(sourceType, device);
     }
 
-    debugPrint('$_logTag: 参照GPS（基準GPS）切り替え完了: ${sourceType.displayName}');
+    AppLogger.debug('$_logTag: 参照GPS（基準GPS）切り替え完了: ${sourceType.displayName}');
   }
 
   /// 内蔵GPS開始
@@ -550,7 +551,7 @@ class GpsManagerService extends ChangeNotifier {
     } else if (_currentSource == GpsSourceType.external) {
       // 外部GNSSの場合は接続を維持したまま位置監視のみ停止
       _isGpsActive = false;
-      debugPrint('$_logTag: 外部GNSS接続は維持、位置監視のみ停止');
+      AppLogger.debug('$_logTag: 外部GNSS接続は維持、位置監視のみ停止');
       notifyListeners();
     }
   }
@@ -676,7 +677,7 @@ class GpsManagerService extends ChangeNotifier {
 
     _continuousSurveyData.add(gpsData);
 
-    debugPrint(
+    AppLogger.debug(
       '$_logTag: 連続測量データ収集 - ${_continuousSurveyData.length}ポイント目 '
       '(Lat: ${latitude.toStringAsFixed(6)}, Lon: ${longitude.toStringAsFixed(6)})',
     );
@@ -756,7 +757,7 @@ class GpsManagerService extends ChangeNotifier {
       (_) => _recordCurrentPosition(),
     );
 
-    debugPrint(
+    AppLogger.debug(
       '$_logTag: GPS記録開始 - インターバル: ${_recordingOptions.intervalSeconds}秒, '
       '最短移動距離: ${_recordingOptions.minDistanceMeters}m',
     );
@@ -786,7 +787,7 @@ class GpsManagerService extends ChangeNotifier {
       'sourceName': _currentSource.displayName,
     };
 
-    debugPrint('$_logTag: GPS記録停止 - ${_gpsHistory.length}ポイント記録');
+    AppLogger.debug('$_logTag: GPS記録停止 - ${_gpsHistory.length}ポイント記録');
     notifyListeners();
 
     return recordingSummary;
@@ -802,7 +803,7 @@ class GpsManagerService extends ChangeNotifier {
     if (_recordingOptions.requiredAccuracy != null &&
         _accuracy != null &&
         _accuracy! > _recordingOptions.requiredAccuracy!) {
-      debugPrint('$_logTag: 精度不足のため記録スキップ - 現在精度: ${_accuracy}m');
+      AppLogger.debug('$_logTag: 精度不足のため記録スキップ - 現在精度: ${_accuracy}m');
       return;
     }
 
@@ -844,7 +845,7 @@ class GpsManagerService extends ChangeNotifier {
       _gpsHistory.removeAt(0); // 古いデータを削除
     }
 
-    debugPrint('$_logTag: 位置記録 - ${_gpsHistory.length}ポイント目');
+    AppLogger.debug('$_logTag: 位置記録 - ${_gpsHistory.length}ポイント目');
   }
 
   /// 総移動距離を計算
@@ -895,7 +896,7 @@ class GpsManagerService extends ChangeNotifier {
     config.selectedGnssDeviceAddress = _selectedGnssDevice?.address;
     config.selectedGnssDeviceName = _selectedGnssDevice?.name;
 
-    debugPrint('$_logTag: GPS設定をグローバル設定に保存: ${config.preferredGpsSourceType}');
+    AppLogger.debug('$_logTag: GPS設定をグローバル設定に保存: ${config.preferredGpsSourceType}');
   }
 
   /// グローバル設定からソース設定のみ読み込み（GPS開始はしない）
@@ -905,7 +906,7 @@ class GpsManagerService extends ChangeNotifier {
     if (config.preferredGpsSourceType == null) {
       // 初回起動時はデフォルト（内蔵GPS）を設定
       _currentSource = GpsSourceType.internal;
-      debugPrint('$_logTag: 初回起動のため内蔵GPSを設定');
+      AppLogger.debug('$_logTag: 初回起動のため内蔵GPSを設定');
       return;
     }
 
@@ -926,17 +927,17 @@ class GpsManagerService extends ChangeNotifier {
         if (targetDevice != null) {
           _currentSource = GpsSourceType.external;
           _selectedGnssDevice = targetDevice;
-          debugPrint('$_logTag: 外部GNSS設定を復元: ${targetDevice.name}');
+          AppLogger.debug('$_logTag: 外部GNSS設定を復元: ${targetDevice.name}');
         } else {
-          debugPrint('$_logTag: 保存されたGNSS機器が見つからないため内蔵GPSにフォールバック');
+          AppLogger.debug('$_logTag: 保存されたGNSS機器が見つからないため内蔵GPSにフォールバック');
           _currentSource = GpsSourceType.internal;
         }
       } else if (config.preferredGpsSourceType == 'internal') {
         _currentSource = GpsSourceType.internal;
-        debugPrint('$_logTag: 内蔵GPS設定を復元');
+        AppLogger.debug('$_logTag: 内蔵GPS設定を復元');
       }
     } catch (e) {
-      debugPrint('$_logTag: GPS設定の復元に失敗、内蔵GPSを使用: $e');
+      AppLogger.debug('$_logTag: GPS設定の復元に失敗、内蔵GPSを使用: $e');
       _currentSource = GpsSourceType.internal;
     }
   }
@@ -962,13 +963,13 @@ class GpsManagerService extends ChangeNotifier {
         );
 
         await switchGpsSource(GpsSourceType.external, targetDevice);
-        debugPrint('$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})');
+        AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})');
       } else if (config.preferredGpsSourceType == 'internal') {
         await switchGpsSource(GpsSourceType.internal);
-        debugPrint('$_logTag: 保存されたGPS設定を復元: 内蔵GPS');
+        AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 内蔵GPS');
       }
     } catch (e) {
-      debugPrint('$_logTag: 保存されたGPS設定の復元に失敗、内蔵GPSを使用: $e');
+      AppLogger.debug('$_logTag: 保存されたGPS設定の復元に失敗、内蔵GPSを使用: $e');
       await switchGpsSource(GpsSourceType.internal);
     }
   }
@@ -983,7 +984,7 @@ class GpsManagerService extends ChangeNotifier {
     _lastRecordedPoint = null;
     _recordingStartTime = null;
 
-    debugPrint('$_logTag: GPS記録履歴をクリア');
+    AppLogger.debug('$_logTag: GPS記録履歴をクリア');
     notifyListeners();
   }
 
@@ -1017,7 +1018,7 @@ class GpsManagerService extends ChangeNotifier {
 
   /// 連続測量開始（位置更新ベース）
   void startContinuousSurvey({Function? onPositionUpdate}) {
-    debugPrint('$_logTag: 連続測量開始（位置更新ベース）');
+    AppLogger.debug('$_logTag: 連続測量開始（位置更新ベース）');
     _isContinuousSurvey = true;
     _onContinuousSurveyUpdate = onPositionUpdate;
     _continuousSurveyData.clear();
@@ -1027,7 +1028,7 @@ class GpsManagerService extends ChangeNotifier {
 
   /// 連続測量停止
   void stopContinuousSurvey() {
-    debugPrint('$_logTag: 連続測量停止 - ${_continuousSurveyData.length}ポイント収集');
+    AppLogger.debug('$_logTag: 連続測量停止 - ${_continuousSurveyData.length}ポイント収集');
     _isContinuousSurvey = false;
     _onContinuousSurveyUpdate = null;
     notifyListeners();
@@ -1037,7 +1038,7 @@ class GpsManagerService extends ChangeNotifier {
   void clearContinuousSurveyData() {
     _continuousSurveyData.clear();
     _continuousSurveyStartTime = null;
-    debugPrint('$_logTag: 連続測量データをクリア');
+    AppLogger.debug('$_logTag: 連続測量データをクリア');
     notifyListeners();
   }
 
@@ -1048,7 +1049,7 @@ class GpsManagerService extends ChangeNotifier {
 
   @override
   void dispose() {
-    debugPrint('$_logTag: GPS管理サービスを停止中...');
+    AppLogger.debug('$_logTag: GPS管理サービスを停止中...');
 
     _recordingTimer?.cancel();
     _stopCurrentSource();
@@ -1061,3 +1062,5 @@ class GpsManagerService extends ChangeNotifier {
     super.dispose();
   }
 }
+
+

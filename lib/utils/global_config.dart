@@ -1,6 +1,7 @@
+import 'package:k_maps/utils/app_logger.dart';
+
 /// プロジェクト全体のグローバル変数・設定を管理する最小クラス
 /// 例: プロジェクトのルートディレクトリパスなど
-library;
 
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
@@ -54,42 +55,42 @@ class GlobalConfig {
   /// pen_tool、AttributeTableなど全ての削除処理で使用
   Future<void> disposeSelectedFeatures({dynamic mapState}) async {
     final selectedFeaturesToDispose = List.from(selectedFeatures);
-    print('[GlobalConfig] 削除処理開始: ${selectedFeaturesToDispose.length}個のフィーチャ');
+    AppLogger.debug('[GlobalConfig] 削除処理開始: ${selectedFeaturesToDispose.length}個のフィーチャ');
 
     if (selectedFeaturesToDispose.isEmpty) {
-      print('[GlobalConfig] 削除するフィーチャがありません');
+      AppLogger.debug('[GlobalConfig] 削除するフィーチャがありません');
       return;
     }
 
     // 即座に選択状態をクリア（UI更新優先）
     selectedFeatures.clear();
-    print('[GlobalConfig] 選択状態をクリアしました');
+    AppLogger.debug('[GlobalConfig] 選択状態をクリアしました');
 
     // 即座にUI更新（選択表示を確実にクリア）
     if (mapState != null) {
       mapState.setState(() {});
       mapState.refreshFeatures();
-      print('[GlobalConfig] UI更新をトリガーしました');
+      AppLogger.debug('[GlobalConfig] UI更新をトリガーしました');
     }
 
     // 各フィーチャーを非同期で削除（並行処理）
     final disposeFutures =
         selectedFeaturesToDispose.map((feature) async {
           try {
-            print(
+            AppLogger.debug(
               '[GlobalConfig] フィーチャ削除中: ${feature.name} (ID: ${feature.rowId})',
             );
             await feature.dispose();
-            print('[GlobalConfig] フィーチャ削除完了: ${feature.name}');
+            AppLogger.debug('[GlobalConfig] フィーチャ削除完了: ${feature.name}');
           } catch (e) {
-            print('[ERROR] GlobalConfig: フィーチャ削除失敗 ${feature.name}: $e');
+            AppLogger.debug('[ERROR] GlobalConfig: フィーチャ削除失敗 ${feature.name}: $e');
           }
         }).toList();
 
     // バックグラウンドで削除処理完了を待機（UIには影響しない）
     await Future.wait(disposeFutures)
         .then((_) {
-          print(
+          AppLogger.debug(
             '[GlobalConfig] 全${selectedFeaturesToDispose.length}個のフィーチャ削除完了',
           );
           // 削除完了後に最終的なUI更新
@@ -98,7 +99,7 @@ class GlobalConfig {
           }
         })
         .catchError((e) {
-          print('[ERROR] GlobalConfig: バッチ削除エラー: $e');
+          AppLogger.debug('[ERROR] GlobalConfig: バッチ削除エラー: $e');
         });
   }
 
@@ -135,3 +136,4 @@ extension LayerTreeNodeUtils on LayerTreeNode {
     return result;
   }
 }
+

@@ -3,6 +3,7 @@
 
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
@@ -68,8 +69,9 @@ class PhotoNode extends LayerTreeNode {
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024)
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
@@ -84,13 +86,13 @@ class PhotoNode extends LayerTreeNode {
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、位置情報付きのPhotoNodeリストを返す
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    print('[DEBUG] PhotoNode.loadNodes: called with parent=${parent?.name}');
+    AppLogger.debug('[DEBUG] PhotoNode.loadNodes: called with parent=${parent?.name}');
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) {
-      print(
+      AppLogger.debug(
         '[DEBUG] PhotoNode.loadNodes: absPath is null for parent ${parent.name}',
       );
       return nodes;
@@ -98,11 +100,11 @@ class PhotoNode extends LayerTreeNode {
 
     final dir = Directory(absPath);
     if (!dir.existsSync()) {
-      print('[DEBUG] PhotoNode.loadNodes: directory does not exist: $absPath');
+      AppLogger.debug('[DEBUG] PhotoNode.loadNodes: directory does not exist: $absPath');
       return nodes;
     }
 
-    print('[DEBUG] PhotoNode.loadNodes: scanning directory: $absPath');
+    AppLogger.debug('[DEBUG] PhotoNode.loadNodes: scanning directory: $absPath');
     // ディレクトリ内の画像ファイルをスキャンして名前順にソート
     final supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
     
@@ -115,7 +117,7 @@ class PhotoNode extends LayerTreeNode {
 
     for (var entity in imageFiles) {
       final fileName = p.basename(entity.path);
-      print('[DEBUG] PhotoNode.loadNodes: found image file: $fileName');
+      AppLogger.debug('[DEBUG] PhotoNode.loadNodes: found image file: $fileName');
 
       try {
         // EXIFデータから位置情報を抽出
@@ -130,22 +132,22 @@ class PhotoNode extends LayerTreeNode {
             parent: parent,
           );
           nodes.add(photoNode);
-          print(
+          AppLogger.debug(
             '[DEBUG] PhotoNode.loadNodes: created PhotoNode for $fileName at ${exifData.location}',
           );
         } else {
-          print(
+          AppLogger.debug(
             '[DEBUG] PhotoNode.loadNodes: no GPS data found in $fileName, skipping',
           );
         }
       } catch (e) {
-        print(
+        AppLogger.debug(
           '[ERROR] PhotoNode.loadNodes: failed to process $fileName: $e',
         );
       }
     }
 
-    print(
+    AppLogger.debug(
       '[DEBUG] PhotoNode.loadNodes: found ${nodes.length} photos with GPS data, returning',
     );
     return nodes;
@@ -183,7 +185,7 @@ class PhotoNode extends LayerTreeNode {
         metadata: metadata,
       );
     } catch (e) {
-      print('[ERROR] PhotoNode._extractExifData: $e');
+      AppLogger.debug('[ERROR] PhotoNode._extractExifData: $e');
       return null;
     }
   }
@@ -217,7 +219,7 @@ class PhotoNode extends LayerTreeNode {
     try {
       // JPEGファイルかチェック（SOI: 0xFFD8で開始）
       if (bytes.length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) {
-        print('[DEBUG] PhotoNode._parseBasicExif: not a JPEG file');
+        AppLogger.debug('[DEBUG] PhotoNode._parseBasicExif: not a JPEG file');
         return null;
       }
 
@@ -256,10 +258,10 @@ class PhotoNode extends LayerTreeNode {
         }
       }
 
-      print('[DEBUG] PhotoNode._parseBasicExif: no EXIF data found');
+      AppLogger.debug('[DEBUG] PhotoNode._parseBasicExif: no EXIF data found');
       return null;
     } catch (e) {
-      print('[ERROR] PhotoNode._parseBasicExif: $e');
+      AppLogger.debug('[ERROR] PhotoNode._parseBasicExif: $e');
       return null;
     }
   }
@@ -277,7 +279,7 @@ class PhotoNode extends LayerTreeNode {
       final isLittleEndian = bytes[start] == 0x49 && bytes[start + 1] == 0x49;
       if (!isLittleEndian &&
           !(bytes[start] == 0x4D && bytes[start + 1] == 0x4D)) {
-        print('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF header');
+        AppLogger.debug('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF header');
         return null;
       }
 
@@ -287,7 +289,7 @@ class PhotoNode extends LayerTreeNode {
               ? bytes[start + 2] | (bytes[start + 3] << 8)
               : (bytes[start + 2] << 8) | bytes[start + 3];
       if (tiffId != 42) {
-        print('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF identifier');
+        AppLogger.debug('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF identifier');
         return null;
       }
 
@@ -306,7 +308,7 @@ class PhotoNode extends LayerTreeNode {
       // IFDを解析してGPS情報を探す
       return _parseIFD(bytes, start, start + ifdOffset, isLittleEndian);
     } catch (e) {
-      print('[ERROR] PhotoNode._parseTiffExif: $e');
+      AppLogger.debug('[ERROR] PhotoNode._parseTiffExif: $e');
       return null;
     }
   }
@@ -390,7 +392,7 @@ class PhotoNode extends LayerTreeNode {
 
       return null;
     } catch (e) {
-      print('[ERROR] PhotoNode._parseIFD: $e');
+      AppLogger.debug('[ERROR] PhotoNode._parseIFD: $e');
       return null;
     }
   }
@@ -503,7 +505,7 @@ class PhotoNode extends LayerTreeNode {
         final lat = _dmsToDecimal(latDms) * (latRef == 'S' ? -1 : 1);
         final lng = _dmsToDecimal(lngDms) * (lngRef == 'W' ? -1 : 1);
 
-        print(
+        AppLogger.debug(
           '[DEBUG] PhotoNode._parseGpsIFD: GPS coordinates found: $lat, $lng',
         );
         return {'lat': lat, 'lng': lng};
@@ -511,7 +513,7 @@ class PhotoNode extends LayerTreeNode {
 
       return null;
     } catch (e) {
-      print('[ERROR] PhotoNode._parseGpsIFD: $e');
+      AppLogger.debug('[ERROR] PhotoNode._parseGpsIFD: $e');
       return null;
     }
   }
@@ -561,7 +563,7 @@ class PhotoNode extends LayerTreeNode {
 
       return result;
     } catch (e) {
-      print('[ERROR] PhotoNode._parseRationalArray: $e');
+      AppLogger.debug('[ERROR] PhotoNode._parseRationalArray: $e');
       return null;
     }
   }
@@ -598,7 +600,7 @@ class PhotoNode extends LayerTreeNode {
       }
       
     } catch (e) {
-      print('[ERROR] PhotoNode.rename: $e');
+      AppLogger.debug('[ERROR] PhotoNode.rename: $e');
       rethrow;
     }
   }
@@ -611,19 +613,19 @@ class PhotoNode extends LayerTreeNode {
 
   @override
   Future<void> dispose() async {
-    print('[DEBUG] PhotoNode.dispose: disposing photo ${name}');
+    AppLogger.debug('[DEBUG] PhotoNode.dispose: disposing photo $name');
     
     // 画像ファイルを削除
     try {
       final file = File(filePath);
       if (file.existsSync()) {
         await file.delete();
-        print('[DEBUG] PhotoNode.dispose: deleted file ${filePath}');
+        AppLogger.debug('[DEBUG] PhotoNode.dispose: deleted file $filePath');
       } else {
-        print('[DEBUG] PhotoNode.dispose: file not found ${filePath}');
+        AppLogger.debug('[DEBUG] PhotoNode.dispose: file not found $filePath');
       }
     } catch (e) {
-      print('[ERROR] PhotoNode.dispose: failed to delete file ${filePath}: $e');
+      AppLogger.debug('[ERROR] PhotoNode.dispose: failed to delete file $filePath: $e');
       // エラーを再throwして、呼び出し元で処理できるようにする
       rethrow;
     }
@@ -650,3 +652,4 @@ class PhotoMetadata {
 
   PhotoMetadata({required this.fileSize, this.width, this.height, this.camera});
 }
+

@@ -1,5 +1,6 @@
 /// 背景地図プロバイダー定義
 /// OpenStreetMap、国土地理院地図などの背景地図を管理
+library;
 import 'package:flutter/material.dart';
 
 /// 背景地図の種類を定義するenum

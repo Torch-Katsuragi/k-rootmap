@@ -393,12 +393,14 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                 newLayerName,
               );
               if (targetLayer == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('レイヤーの作成に失敗しました'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('レイヤーの作成に失敗しました'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
                 return;
               }
             }

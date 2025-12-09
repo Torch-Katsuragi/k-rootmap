@@ -2,6 +2,7 @@
 // kmaps_metadataカラムの内容をパースして表形式データに変換
 
 import 'dart:convert';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/coordinate_converter.dart';
 import '../utils/address_converter.dart';
@@ -62,7 +63,7 @@ class MetadataParser {
         return baseData;
       }
 
-      print(
+      AppLogger.debug(
         '[MetadataParser] 基本データ: ヘッダー=${baseData.headers}, 行数=${baseData.rows.length}',
       );
 
@@ -78,7 +79,7 @@ class MetadataParser {
         defaultEpsg,
       );
 
-      print(
+      AppLogger.debug(
         '[MetadataParser] XY座標計算結果: X=${xyCoordinates['x']}, Y=${xyCoordinates['y']}',
       );
 
@@ -103,7 +104,7 @@ class MetadataParser {
         );
       }
     } catch (e) {
-      print('[MetadataParser] XY座標追加エラー: $e');
+      AppLogger.debug('[MetadataParser] XY座標追加エラー: $e');
       return parseMetadata(metadata);
     }
   }
@@ -114,7 +115,7 @@ class MetadataParser {
   ) async {
     final options = <String, String>{};
 
-    print(
+    AppLogger.debug(
       '[MetadataParser] 座標系選択肢生成開始: (${point.latitude}, ${point.longitude})',
     );
 
@@ -124,46 +125,46 @@ class MetadataParser {
     final utmName = 'UTM Zone ${zoneNumber}N';
     options[utmEpsg] = utmName;
 
-    print('[MetadataParser] UTM座標系選択肢追加: $utmName ($utmEpsg)');
+    AppLogger.debug('[MetadataParser] UTM座標系選択肢追加: $utmName ($utmEpsg)');
 
     // 住所を取得して日本かどうか判定
     try {
-      print('[MetadataParser] 住所取得開始...');
+      AppLogger.debug('[MetadataParser] 住所取得開始...');
       final address = await AddressConverter.getAddressFromLatLng(point);
-      print('[MetadataParser] 住所取得結果: ${address?.displayName ?? "null"}');
+      AppLogger.debug('[MetadataParser] 住所取得結果: ${address?.displayName ?? "null"}');
 
       if (address != null) {
         final isJapan = _isJapanAddress(address);
-        print('[MetadataParser] 日本住所判定: $isJapan');
+        AppLogger.debug('[MetadataParser] 日本住所判定: $isJapan');
 
         if (isJapan) {
-          print('[MetadataParser] JGD2011座標系取得開始...');
+          AppLogger.debug('[MetadataParser] JGD2011座標系取得開始...');
           // 日本平面直角座標系の選択肢を追加
           final jgd2011System =
               await CoordinateConverter.getBestCoordinateSystem(point);
-          print(
+          AppLogger.debug(
             '[MetadataParser] JGD2011座標系取得結果: ${jgd2011System?.name} (${jgd2011System?.epsgCode})',
           );
 
           if (jgd2011System != null && jgd2011System.epsgCode != utmEpsg) {
             options[jgd2011System.epsgCode] = jgd2011System.name;
-            print(
+            AppLogger.debug(
               '[MetadataParser] JGD2011座標系選択肢追加: ${jgd2011System.name} (${jgd2011System.epsgCode})',
             );
           } else {
-            print(
+            AppLogger.debug(
               '[MetadataParser] JGD2011座標系が追加されませんでした - システム: ${jgd2011System?.epsgCode}, UTM: $utmEpsg',
             );
           }
         }
       } else {
-        print('[MetadataParser] 住所がnullのため、JGD2011座標系をスキップ');
+        AppLogger.debug('[MetadataParser] 住所がnullのため、JGD2011座標系をスキップ');
       }
     } catch (e) {
-      print('[MetadataParser] 住所取得エラー: $e');
+      AppLogger.debug('[MetadataParser] 住所取得エラー: $e');
     }
 
-    print('[MetadataParser] 最終的な座標系選択肢: $options');
+    AppLogger.debug('[MetadataParser] 最終的な座標系選択肢: $options');
     return options;
   }
 
@@ -181,7 +182,7 @@ class MetadataParser {
     String epsgCode, {
     String? cachedState,
   }) async {
-    print('[MetadataParser] XY座標計算開始: EPSG=$epsgCode');
+    AppLogger.debug('[MetadataParser] XY座標計算開始: EPSG=$epsgCode');
 
     try {
       CoordinateSystem? coordinateSystem;
@@ -201,54 +202,54 @@ class MetadataParser {
           proj4String: proj4String,
         );
 
-        print(
+        AppLogger.debug(
           '[MetadataParser] UTM座標系使用: ${coordinateSystem.name} (${coordinateSystem.epsgCode})',
         );
       } else if (epsgCode.startsWith('667')) {
         // JGD2011座標系 - 指定されたEPSGコードから直接座標系を作成
-        print('[MetadataParser] JGD2011座標系処理開始: $epsgCode');
+        AppLogger.debug('[MetadataParser] JGD2011座標系処理開始: $epsgCode');
         coordinateSystem = await _getJGD2011CoordinateSystem(
           epsgCode,
           point,
           cachedState: cachedState,
         );
-        print(
+        AppLogger.debug(
           '[MetadataParser] JGD2011座標系取得結果: ${coordinateSystem?.name} (${coordinateSystem?.epsgCode})',
         );
 
         if (coordinateSystem == null) {
-          print('[MetadataParser] JGD2011座標系がnullです - EPSGコードから直接作成を試行');
+          AppLogger.debug('[MetadataParser] JGD2011座標系がnullです - EPSGコードから直接作成を試行');
           coordinateSystem = _createJGD2011CoordinateSystemFromEpsg(epsgCode);
-          print('[MetadataParser] EPSGコードから作成結果: ${coordinateSystem?.name}');
+          AppLogger.debug('[MetadataParser] EPSGコードから作成結果: ${coordinateSystem?.name}');
         }
       } else {
         // その他の座標系 - 自動判定
-        print('[MetadataParser] その他の座標系 - 自動判定開始');
+        AppLogger.debug('[MetadataParser] その他の座標系 - 自動判定開始');
         coordinateSystem = await CoordinateConverter.getBestCoordinateSystem(
           point,
           cachedState: cachedState,
         );
-        print(
+        AppLogger.debug(
           '[MetadataParser] 自動判定座標系使用: ${coordinateSystem?.name} (${coordinateSystem?.epsgCode})',
         );
       }
 
       if (coordinateSystem != null) {
-        print('[MetadataParser] 座標変換開始: ${coordinateSystem.epsgCode}');
+        AppLogger.debug('[MetadataParser] 座標変換開始: ${coordinateSystem.epsgCode}');
         final xy = CoordinateConverter.latLngToXY(
           point,
           coordinateSystem: coordinateSystem,
         );
 
-        print(
+        AppLogger.debug(
           '[MetadataParser] XY座標計算成功: X=${xy.x.toStringAsFixed(3)}, Y=${xy.y.toStringAsFixed(3)}',
         );
         return {'x': xy.x.toStringAsFixed(3), 'y': xy.y.toStringAsFixed(3)};
       } else {
-        print('[MetadataParser] 座標系がnullです');
+        AppLogger.debug('[MetadataParser] 座標系がnullです');
       }
     } catch (e) {
-      print('[MetadataParser] XY座標計算エラー: $e');
+      AppLogger.debug('[MetadataParser] XY座標計算エラー: $e');
     }
 
     return {'x': 'N/A', 'y': 'N/A'};
@@ -262,7 +263,7 @@ class MetadataParser {
   }) async {
     // キャッシュされたstateがある場合はそれを使用
     if (cachedState != null) {
-      print('[MetadataParser] キャッシュされたstate使用: $cachedState');
+      AppLogger.debug('[MetadataParser] キャッシュされたstate使用: $cachedState');
       final jgd2011Zone = CoordinateConverter.getJGD2011ZoneFromState(
         cachedState,
       );
@@ -386,19 +387,19 @@ class MetadataParser {
     LatLng point,
     String newEpsgCode,
   ) async {
-    print('[MetadataParser] XY座標再計算開始');
-    print('[MetadataParser] 元のEPSG: ${originalData.selectedCoordinateSystem}');
-    print('[MetadataParser] 新しいEPSG: $newEpsgCode');
-    print('[MetadataParser] 座標: (${point.latitude}, ${point.longitude})');
+    AppLogger.debug('[MetadataParser] XY座標再計算開始');
+    AppLogger.debug('[MetadataParser] 元のEPSG: ${originalData.selectedCoordinateSystem}');
+    AppLogger.debug('[MetadataParser] 新しいEPSG: $newEpsgCode');
+    AppLogger.debug('[MetadataParser] 座標: (${point.latitude}, ${point.longitude})');
 
     // 新しい座標系でXY座標を計算
     final newXY = await _calculateXYCoordinates(point, newEpsgCode);
-    print('[MetadataParser] 新しいXY座標: X=${newXY['x']}, Y=${newXY['y']}');
+    AppLogger.debug('[MetadataParser] 新しいXY座標: X=${newXY['x']}, Y=${newXY['y']}');
 
     // 新しい座標系名を取得
     final newCoordinateSystemName =
         originalData.coordinateSystemOptions?[newEpsgCode] ?? 'Unknown';
-    print('[MetadataParser] 新しい座標系名: $newCoordinateSystemName');
+    AppLogger.debug('[MetadataParser] 新しい座標系名: $newCoordinateSystemName');
 
     // 新しいXY座標をすべて計算
     final allNewXYCoordinates = await _calculateAllXYCoordinates(
@@ -417,7 +418,7 @@ class MetadataParser {
         originalData.rows,
         allNewXYCoordinates,
       );
-      print('[MetadataParser] キー・値形式でXY座標更新完了');
+      AppLogger.debug('[MetadataParser] キー・値形式でXY座標更新完了');
     } else {
       // 通常の表形式の場合
       updatedRows = await _updateXYInRowsAll(
@@ -427,7 +428,7 @@ class MetadataParser {
         point,
         newEpsgCode,
       );
-      print('[MetadataParser] 表形式でXY座標更新完了');
+      AppLogger.debug('[MetadataParser] 表形式でXY座標更新完了');
     }
 
     // テーブルデータを更新
@@ -441,44 +442,8 @@ class MetadataParser {
       coordinateSystemOptions: originalData.coordinateSystemOptions,
     );
 
-    print('[MetadataParser] XY座標再計算完了');
+    AppLogger.debug('[MetadataParser] XY座標再計算完了');
     return updatedData;
-  }
-
-  /// キー・値形式の行データのXY座標を更新
-  static List<List<String>> _updateXYInKeyValueRows(
-    List<List<String>> originalRows,
-    String newX,
-    String newY,
-  ) {
-    final newRows = <List<String>>[];
-
-    for (final row in originalRows) {
-      if (row.length >= 2) {
-        // 新しいXY座標形式に対応
-        if (row[0] == 'X座標（最初）') {
-          newRows.add([row[0], newX]);
-        } else if (row[0] == 'Y座標（最初）') {
-          newRows.add([row[0], newY]);
-        } else if (row[0] == 'X座標（最後）') {
-          newRows.add([row[0], newX]);
-        } else if (row[0] == 'Y座標（最後）') {
-          newRows.add([row[0], newY]);
-        } else if (row[0] == 'X座標（平均）') {
-          newRows.add([row[0], newX]);
-        } else if (row[0] == 'Y座標（平均）') {
-          newRows.add([row[0], newY]);
-        } else {
-          // その他の行はそのまま
-          newRows.add(List.from(row));
-        }
-      } else {
-        // 不正な行はそのまま
-        newRows.add(List.from(row));
-      }
-    }
-
-    return newRows;
   }
 
   /// キー・値形式の行データのXY座標をすべて更新
@@ -516,116 +481,6 @@ class MetadataParser {
     return newRows;
   }
 
-  /// 行データのXY座標を更新
-  static Future<List<List<String>>> _updateXYInRows(
-    List<List<String>> originalRows,
-    List<String> headers,
-    String newX,
-    String newY,
-    LatLng point,
-    String epsgCode,
-  ) async {
-    final newRows = <List<String>>[];
-
-    // 緯度・経度列のインデックスを探す
-    int? latIndex, lngIndex, xIndex, yIndex;
-    for (int i = 0; i < headers.length; i++) {
-      if (headers[i] == '緯度') {
-        latIndex = i;
-      } else if (headers[i] == '経度') {
-        lngIndex = i;
-      } else if (headers[i] == 'X座標') {
-        xIndex = i;
-      } else if (headers[i] == 'Y座標') {
-        yIndex = i;
-      }
-    }
-
-    // 最初の行からstateを取得してキャッシュ
-    String? cachedState;
-    if (latIndex != null && lngIndex != null && originalRows.isNotEmpty) {
-      try {
-        final firstRow = originalRows[0];
-        if (latIndex < firstRow.length && lngIndex < firstRow.length) {
-          final lat = double.parse(firstRow[latIndex]);
-          final lng = double.parse(firstRow[lngIndex]);
-          final firstPoint = LatLng(lat, lng);
-
-          print('[MetadataParser] 更新時の最初の座標でstate取得: ($lat, $lng)');
-          final address = await AddressConverter.getAddressFromLatLng(
-            firstPoint,
-          );
-          if (address != null) {
-            cachedState = CoordinateConverter.getStateFromAddress(address);
-            print('[MetadataParser] 更新時のキャッシュされたstate: $cachedState');
-          }
-        }
-      } catch (e) {
-        print('[MetadataParser] 更新時のstate取得エラー: $e');
-      }
-    }
-
-    for (int rowIndex = 0; rowIndex < originalRows.length; rowIndex++) {
-      final row = originalRows[rowIndex];
-      final newRow = <String>[];
-
-      // 各行の緯度経度を取得してXY座標を計算
-      String xCoord = newX; // デフォルト値
-      String yCoord = newY; // デフォルト値
-
-      if (latIndex != null &&
-          lngIndex != null &&
-          latIndex < row.length &&
-          lngIndex < row.length) {
-        try {
-          final latStr = row[latIndex];
-          final lngStr = row[lngIndex];
-          final lat = double.parse(latStr);
-          final lng = double.parse(lngStr);
-
-          // この行の座標でXY座標を計算（キャッシュされたstateを使用）
-          final rowPoint = LatLng(lat, lng);
-          final rowXY = await _calculateXYCoordinates(
-            rowPoint,
-            epsgCode,
-            cachedState: cachedState,
-          );
-          xCoord = rowXY['x'] ?? 'N/A';
-          yCoord = rowXY['y'] ?? 'N/A';
-
-          print(
-            '[MetadataParser] 行${rowIndex + 1}更新: 緯度=$lat, 経度=$lng -> X=$xCoord, Y=$yCoord',
-          );
-        } catch (e) {
-          print('[MetadataParser] 行${rowIndex + 1}更新エラー: $e');
-        }
-      }
-
-      // 新しい行を構築
-      for (int i = 0; i < headers.length; i++) {
-        if (headers[i] == 'X座標（最初）') {
-          newRow.add(xCoord);
-        } else if (headers[i] == 'Y座標（最初）') {
-          newRow.add(yCoord);
-        } else if (headers[i] == 'X座標（最後）') {
-          newRow.add(xCoord);
-        } else if (headers[i] == 'Y座標（最後）') {
-          newRow.add(yCoord);
-        } else if (headers[i] == 'X座標（平均）') {
-          newRow.add(xCoord);
-        } else if (headers[i] == 'Y座標（平均）') {
-          newRow.add(yCoord);
-        } else {
-          newRow.add(row[i]);
-        }
-      }
-
-      newRows.add(newRow);
-    }
-
-    return newRows;
-  }
-
   /// メタデータをパースして表形式データに変換
   static MetadataTableData? parseMetadata(Map<String, dynamic> metadata) {
     try {
@@ -643,7 +498,7 @@ class MetadataParser {
           return _parseDefault(contents, type);
       }
     } catch (e) {
-      print('[MetadataParser] パースエラー: $e');
+      AppLogger.debug('[MetadataParser] パースエラー: $e');
       return null;
     }
   }
@@ -663,7 +518,7 @@ class MetadataParser {
         return MetadataTableData(
           headers: ['内容'],
           rows: [
-            ['$contents'],
+            [contents],
           ],
           type: 'measurement_log',
           title: 'GPS測量ログ（文字列形式）',
@@ -672,7 +527,7 @@ class MetadataParser {
         return MetadataTableData(
           headers: ['内容'],
           rows: [
-            ['$contents'],
+            [contents],
           ],
           type: 'measurement_log',
           title: 'GPS測量ログ（文字列形式）',
@@ -980,13 +835,13 @@ class MetadataParser {
           }
         }
 
-        print('[MetadataParser] 元データ列検索: インデックス=$originalDataColumnIndex');
+        AppLogger.debug('[MetadataParser] 元データ列検索: インデックス=$originalDataColumnIndex');
 
         if (originalDataColumnIndex != null && baseData.rows.isNotEmpty) {
           final firstRow = baseData.rows[0];
           if (originalDataColumnIndex < firstRow.length) {
             final usedGpsDataString = firstRow[originalDataColumnIndex];
-            print(
+            AppLogger.debug(
               '[MetadataParser] 元データ文字列取得成功: 長さ=${usedGpsDataString.length}',
             );
             usedGpsData = _parseUsedGpsDataString(usedGpsDataString);
@@ -996,7 +851,7 @@ class MetadataParser {
 
       // usedGpsDataが取得できた場合、最初と最後のXY座標を計算
       if (usedGpsData != null && usedGpsData.isNotEmpty) {
-        print('[MetadataParser] usedGpsData取得成功: ${usedGpsData.length}件');
+        AppLogger.debug('[MetadataParser] usedGpsData取得成功: ${usedGpsData.length}件');
 
         final firstGps = usedGpsData.first as Map<String, dynamic>;
         final lastGps = usedGpsData.last as Map<String, dynamic>;
@@ -1022,7 +877,7 @@ class MetadataParser {
           'y_avg': avgXYCoordinates['y'] ?? 'N/A',
         };
       } else {
-        print('[MetadataParser] usedGpsDataが取得できないため平均値のみ使用');
+        AppLogger.debug('[MetadataParser] usedGpsDataが取得できないため平均値のみ使用');
         return {
           'x_first': avgXYCoordinates['x'] ?? 'N/A',
           'y_first': avgXYCoordinates['y'] ?? 'N/A',
@@ -1033,7 +888,7 @@ class MetadataParser {
         };
       }
     } catch (e) {
-      print('[MetadataParser] XY座標計算エラー: $e');
+      AppLogger.debug('[MetadataParser] XY座標計算エラー: $e');
       return {
         'x_first': 'N/A',
         'y_first': 'N/A',
@@ -1061,7 +916,7 @@ class MetadataParser {
         usedGpsData = _extractUsedGpsDataFromOriginalMetadata(baseData);
 
         if (usedGpsData != null && usedGpsData.isNotEmpty) {
-          print(
+          AppLogger.debug(
             '[MetadataParser] 元のメタデータからusedGpsDataを直接取得成功: ${usedGpsData.length}件',
           );
         }
@@ -1080,7 +935,7 @@ class MetadataParser {
         if (usedGpsDataString == null ||
             usedGpsDataString == 'null' ||
             usedGpsDataString.isEmpty) {
-          print('[MetadataParser] usedGpsDataが見つからないため平均値のみ使用');
+          AppLogger.debug('[MetadataParser] usedGpsDataが見つからないため平均値のみ使用');
           return {
             'x_first': avgXYCoordinates['x'] ?? 'N/A',
             'y_first': avgXYCoordinates['y'] ?? 'N/A',
@@ -1097,12 +952,12 @@ class MetadataParser {
           final cleaned = usedGpsDataString.replaceAll('null', 'null');
           usedGpsData = _parseUsedGpsDataString(cleaned);
         } catch (e) {
-          print('[MetadataParser] usedGpsDataパースエラー: $e');
+          AppLogger.debug('[MetadataParser] usedGpsDataパースエラー: $e');
           usedGpsData = null;
         }
 
         if (usedGpsData == null || usedGpsData.isEmpty) {
-          print('[MetadataParser] usedGpsDataが空のため平均値のみ使用');
+          AppLogger.debug('[MetadataParser] usedGpsDataが空のため平均値のみ使用');
           return {
             'x_first': avgXYCoordinates['x'] ?? 'N/A',
             'y_first': avgXYCoordinates['y'] ?? 'N/A',
@@ -1118,10 +973,10 @@ class MetadataParser {
       final firstGps = usedGpsData.first as Map<String, dynamic>;
       final lastGps = usedGpsData.last as Map<String, dynamic>;
 
-      print(
+      AppLogger.debug(
         '[MetadataParser] 最初のGPS: ${firstGps['latitude']}, ${firstGps['longitude']}',
       );
-      print(
+      AppLogger.debug(
         '[MetadataParser] 最後のGPS: ${lastGps['latitude']}, ${lastGps['longitude']}',
       );
 
@@ -1147,7 +1002,7 @@ class MetadataParser {
         'y_avg': avgXYCoordinates['y'] ?? 'N/A',
       };
     } catch (e) {
-      print('[MetadataParser] XY座標計算エラー: $e');
+      AppLogger.debug('[MetadataParser] XY座標計算エラー: $e');
       return {
         'x_first': 'N/A',
         'y_first': 'N/A',
@@ -1168,13 +1023,13 @@ class MetadataParser {
         return parsed;
       }
     } catch (e) {
-      print('[MetadataParser] JSON形式での解析失敗: $e');
+      AppLogger.debug('[MetadataParser] JSON形式での解析失敗: $e');
 
       // Dartマップ形式の文字列として解析を試行
       try {
         return _parseDartMapListString(str);
       } catch (e2) {
-        print('[MetadataParser] Dartマップ形式での解析失敗: $e2');
+        AppLogger.debug('[MetadataParser] Dartマップ形式での解析失敗: $e2');
       }
     }
     return null;
@@ -1227,23 +1082,23 @@ class MetadataParser {
         jsonStr = jsonStr.replaceAll(placeholder, timestamp);
       });
 
-      print(
+      AppLogger.debug(
         '[MetadataParser] 変換後のJSON文字列（最初の200文字）: ${jsonStr.substring(0, jsonStr.length > 200 ? 200 : jsonStr.length)}...',
       );
 
       final parsed = jsonDecode(jsonStr);
       if (parsed is List) {
-        print('[MetadataParser] Dartマップ形式の解析成功: ${parsed.length}件');
+        AppLogger.debug('[MetadataParser] Dartマップ形式の解析成功: ${parsed.length}件');
         return parsed;
       }
     } catch (e) {
-      print('[MetadataParser] Dartマップ形式解析エラー: $e');
+      AppLogger.debug('[MetadataParser] Dartマップ形式解析エラー: $e');
 
       // 最後の手段として正規表現で座標データを抽出
       try {
         return _extractCoordinatesWithRegex(str);
       } catch (e2) {
-        print('[MetadataParser] 正規表現による抽出も失敗: $e2');
+        AppLogger.debug('[MetadataParser] 正規表現による抽出も失敗: $e2');
       }
     }
 
@@ -1294,7 +1149,7 @@ class MetadataParser {
     }
 
     if (coordinates.isNotEmpty) {
-      print('[MetadataParser] 正規表現による座標抽出成功: ${coordinates.length}件');
+      AppLogger.debug('[MetadataParser] 正規表現による座標抽出成功: ${coordinates.length}件');
       return coordinates;
     }
 
@@ -1308,7 +1163,7 @@ class MetadataParser {
     Map<String, String> coordinateOptions,
     String defaultEpsg,
   ) async {
-    print('[MetadataParser] キー・値形式でXY座標追加開始');
+    AppLogger.debug('[MetadataParser] キー・値形式でXY座標追加開始');
 
     final newRows = <List<String>>[];
 
@@ -1371,7 +1226,7 @@ class MetadataParser {
       allXYCoordinates['y_avg'] ?? 'N/A',
     ]);
 
-    print('[MetadataParser] キー・値形式でXY座標追加完了: 行数=${newRows.length}');
+    AppLogger.debug('[MetadataParser] キー・値形式でXY座標追加完了: 行数=${newRows.length}');
 
     return MetadataTableData(
       headers: baseData.headers, // ヘッダーはそのまま
@@ -1390,7 +1245,7 @@ class MetadataParser {
     Map<String, String> coordinateOptions,
     String defaultEpsg,
   ) async {
-    print('[MetadataParser] 表形式でXY座標追加開始');
+    AppLogger.debug('[MetadataParser] 表形式でXY座標追加開始');
 
     // 緯度・経度列のインデックスを探す
     int? latIndex, lngIndex;
@@ -1422,7 +1277,7 @@ class MetadataParser {
       }
     }
 
-    print('[MetadataParser] 新しいヘッダー: $newHeaders');
+    AppLogger.debug('[MetadataParser] 新しいヘッダー: $newHeaders');
 
     // 最初・最後・平均のXY座標をすべて計算（元データから直接）
     final allXYCoordinates = await _calculateAllXYCoordinatesFromOriginalData(
@@ -1441,17 +1296,17 @@ class MetadataParser {
           final lng = double.parse(firstRow[lngIndex]);
           final firstPoint = LatLng(lat, lng);
 
-          print('[MetadataParser] 最初の座標でstate取得: ($lat, $lng)');
+          AppLogger.debug('[MetadataParser] 最初の座標でstate取得: ($lat, $lng)');
           final address = await AddressConverter.getAddressFromLatLng(
             firstPoint,
           );
           if (address != null) {
             cachedState = CoordinateConverter.getStateFromAddress(address);
-            print('[MetadataParser] キャッシュされたstate: $cachedState');
+            AppLogger.debug('[MetadataParser] キャッシュされたstate: $cachedState');
           }
         }
       } catch (e) {
-        print('[MetadataParser] state取得エラー: $e');
+        AppLogger.debug('[MetadataParser] state取得エラー: $e');
       }
     }
 
@@ -1485,7 +1340,7 @@ class MetadataParser {
           final rowUsedGpsData = _parseUsedGpsDataString(rowUsedGpsDataString);
 
           if (rowUsedGpsData != null && rowUsedGpsData.isNotEmpty) {
-            print(
+            AppLogger.debug(
               '[MetadataParser] 行${rowIndex + 1}: 個別GPS データ${rowUsedGpsData.length}件',
             );
 
@@ -1519,12 +1374,12 @@ class MetadataParser {
             xLastCoord = rowLastXY['x'] ?? 'N/A';
             yLastCoord = rowLastXY['y'] ?? 'N/A';
 
-            print(
+            AppLogger.debug(
               '[MetadataParser] 行${rowIndex + 1}: 最初XY=($xFirstCoord, $yFirstCoord), 最後XY=($xLastCoord, $yLastCoord)',
             );
           }
         } catch (e) {
-          print('[MetadataParser] 行${rowIndex + 1}: 個別GPS解析エラー: $e');
+          AppLogger.debug('[MetadataParser] 行${rowIndex + 1}: 個別GPS解析エラー: $e');
         }
       }
 
@@ -1548,11 +1403,11 @@ class MetadataParser {
           xAvgCoord = rowXY['x'] ?? 'N/A';
           yAvgCoord = rowXY['y'] ?? 'N/A';
 
-          print(
+          AppLogger.debug(
             '[MetadataParser] 行${rowIndex + 1}: 平均XY=($xAvgCoord, $yAvgCoord)',
           );
         } catch (e) {
-          print('[MetadataParser] 行${rowIndex + 1}: 平均座標計算エラー: $e');
+          AppLogger.debug('[MetadataParser] 行${rowIndex + 1}: 平均座標計算エラー: $e');
         }
       }
 
@@ -1576,7 +1431,7 @@ class MetadataParser {
       newRows.add(newRow);
     }
 
-    print('[MetadataParser] 表形式でXY座標追加完了: 行数=${newRows.length}');
+    AppLogger.debug('[MetadataParser] 表形式でXY座標追加完了: 行数=${newRows.length}');
 
     return MetadataTableData(
       headers: newHeaders,
@@ -1632,17 +1487,17 @@ class MetadataParser {
           final lng = double.parse(firstRow[lngIndex]);
           final firstPoint = LatLng(lat, lng);
 
-          print('[MetadataParser] 更新時の最初の座標でstate取得: ($lat, $lng)');
+          AppLogger.debug('[MetadataParser] 更新時の最初の座標でstate取得: ($lat, $lng)');
           final address = await AddressConverter.getAddressFromLatLng(
             firstPoint,
           );
           if (address != null) {
             cachedState = CoordinateConverter.getStateFromAddress(address);
-            print('[MetadataParser] 更新時のキャッシュされたstate: $cachedState');
+            AppLogger.debug('[MetadataParser] 更新時のキャッシュされたstate: $cachedState');
           }
         }
       } catch (e) {
-        print('[MetadataParser] 更新時のstate取得エラー: $e');
+        AppLogger.debug('[MetadataParser] 更新時のstate取得エラー: $e');
       }
     }
 
@@ -1675,11 +1530,11 @@ class MetadataParser {
           rowXYCoordinates['x_avg'] = rowXY['x'] ?? 'N/A';
           rowXYCoordinates['y_avg'] = rowXY['y'] ?? 'N/A';
 
-          print(
+          AppLogger.debug(
             '[MetadataParser] 行${rowIndex + 1}更新: 緯度=$lat, 経度=$lng -> 平均XY=${rowXYCoordinates['x_avg']}, ${rowXYCoordinates['y_avg']}',
           );
         } catch (e) {
-          print('[MetadataParser] 行${rowIndex + 1}更新エラー: $e');
+          AppLogger.debug('[MetadataParser] 行${rowIndex + 1}更新エラー: $e');
         }
       }
 
@@ -1712,10 +1567,10 @@ class MetadataParser {
   static List<dynamic>? _extractUsedGpsDataFromOriginalMetadata(
     MetadataTableData baseData,
   ) {
-    print(
+    AppLogger.debug(
       '[MetadataParser] 元データ抽出開始: type=${baseData.type}, 行数=${baseData.rows.length}',
     );
-    print('[MetadataParser] ヘッダー: ${baseData.headers}');
+    AppLogger.debug('[MetadataParser] ヘッダー: ${baseData.headers}');
 
     if (baseData.type == 'measurement_log') {
       // キー・値形式かどうか判定
@@ -1725,19 +1580,19 @@ class MetadataParser {
         // キー・値形式の場合
         for (int i = 0; i < baseData.rows.length; i++) {
           final row = baseData.rows[i];
-          print(
+          AppLogger.debug(
             '[MetadataParser] キー・値形式 行${i + 1}: 列数=${row.length}, キー="${row.isNotEmpty ? row[0] : "空"}"',
           );
 
           if (row.length >= 2 && row[0] == '元データ') {
             final usedGpsDataString = row[1];
-            print('[MetadataParser] 元データ発見! 文字列長=${usedGpsDataString.length}');
-            print(
+            AppLogger.debug('[MetadataParser] 元データ発見! 文字列長=${usedGpsDataString.length}');
+            AppLogger.debug(
               '[MetadataParser] 元データの最初の100文字: ${usedGpsDataString.length > 100 ? usedGpsDataString.substring(0, 100) : usedGpsDataString}...',
             );
 
             final result = _parseUsedGpsDataString(usedGpsDataString);
-            print(
+            AppLogger.debug(
               '[MetadataParser] パース結果: ${result != null ? "${result.length}件" : "null"}',
             );
             return result;
@@ -1753,37 +1608,38 @@ class MetadataParser {
           }
         }
 
-        print('[MetadataParser] 表形式: 元データ列インデックス=$dataColumnIndex');
+        AppLogger.debug('[MetadataParser] 表形式: 元データ列インデックス=$dataColumnIndex');
 
         if (dataColumnIndex != null && baseData.rows.isNotEmpty) {
           // 最初の行から元データを取得（複数測量点の場合）
           final firstRow = baseData.rows[0];
           if (dataColumnIndex < firstRow.length) {
             final usedGpsDataString = firstRow[dataColumnIndex];
-            print(
+            AppLogger.debug(
               '[MetadataParser] 表形式元データ発見! 文字列長=${usedGpsDataString.length}',
             );
-            print(
+            AppLogger.debug(
               '[MetadataParser] 元データの最初の100文字: ${usedGpsDataString.length > 100 ? usedGpsDataString.substring(0, 100) : usedGpsDataString}...',
             );
 
             final result = _parseUsedGpsDataString(usedGpsDataString);
-            print(
+            AppLogger.debug(
               '[MetadataParser] パース結果: ${result != null ? "${result.length}件" : "null"}',
             );
             return result;
           } else {
-            print(
+            AppLogger.debug(
               '[MetadataParser] 行の列数が不足: 期待=${dataColumnIndex + 1}, 実際=${firstRow.length}',
             );
           }
         }
       }
 
-      print('[MetadataParser] 元データ列が見つかりませんでした');
+      AppLogger.debug('[MetadataParser] 元データ列が見つかりませんでした');
     } else {
-      print('[MetadataParser] measurement_logではないためスキップ');
+      AppLogger.debug('[MetadataParser] measurement_logではないためスキップ');
     }
     return null;
   }
 }
+

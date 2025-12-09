@@ -2,6 +2,7 @@
 // GeoPackageファイルに対応するレイヤツリーノード
 
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
@@ -47,7 +48,7 @@ class GeoPackageNode extends LayerTreeNode {
     children.removeWhere((child) {
       final shouldRemove = !currentLayerNames.contains(child.name);
       if (shouldRemove) {
-        print(
+        AppLogger.debug(
           '[DEBUG] GeoPackageNode.updateChildren: removing layer ${child.name} (no longer exists)',
         );
         child.parent = null; // 親子関係を切断
@@ -60,14 +61,14 @@ class GeoPackageNode extends LayerTreeNode {
       addChildIfNotExists(node);
     }
 
-    print(
+    AppLogger.debug(
       '[DEBUG] GeoPackageNode.updateChildren: ${children.length} layers after update',
     );
   }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    print(
+    AppLogger.debug(
       '[DEBUG] GeoPackageNode.loadNodes: called with parent=${parent?.name}',
     );
     final nodes = <LayerTreeNode>[];
@@ -75,7 +76,7 @@ class GeoPackageNode extends LayerTreeNode {
 
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) {
-      print(
+      AppLogger.debug(
         '[DEBUG] GeoPackageNode.loadNodes: absPath is null for parent ${parent.name}',
       );
       return nodes;
@@ -83,13 +84,13 @@ class GeoPackageNode extends LayerTreeNode {
 
     final dir = Directory(absPath);
     if (!dir.existsSync()) {
-      print(
+      AppLogger.debug(
         '[DEBUG] GeoPackageNode.loadNodes: directory does not exist: $absPath',
       );
       return nodes;
     }
 
-    print('[DEBUG] GeoPackageNode.loadNodes: scanning directory: $absPath');
+    AppLogger.debug('[DEBUG] GeoPackageNode.loadNodes: scanning directory: $absPath');
     // ディレクトリ内の.gpkgファイルをスキャンして名前順にソート
     final gpkgFiles = dir
         .listSync()
@@ -100,17 +101,17 @@ class GeoPackageNode extends LayerTreeNode {
     
     for (var entity in gpkgFiles) {
       final fileName = p.basename(entity.path);
-      print('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
+      AppLogger.debug('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
       final parentPathSegments = parent.getAbsolutePathSegments();
       final pathList = [...parentPathSegments, fileName];
       final gpkgFile = GeoPackageFile(pathList);
 
       nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
-      print(
+      AppLogger.debug(
         '[DEBUG] GeoPackageNode.loadNodes: created GeoPackageNode for $fileName',
       );
     }
-    print(
+    AppLogger.debug(
       '[DEBUG] GeoPackageNode.loadNodes: found ${nodes.length} .gpkg files, returning',
     );
     return nodes;
@@ -153,7 +154,7 @@ class GeoPackageNode extends LayerTreeNode {
       
       return newFileName;
     } catch (e) {
-      print('[ERROR] GeoPackageNode.rename: $e');
+      AppLogger.debug('[ERROR] GeoPackageNode.rename: $e');
       rethrow;
     }
   }
@@ -161,23 +162,24 @@ class GeoPackageNode extends LayerTreeNode {
   /// GeoPackageファイルを含む削除処理（ファイル自体も削除）
   @override
   Future<void> dispose() async {
-    print('[DEBUG] GeoPackageNode.dispose: disposing ${name}');
+    AppLogger.debug('[DEBUG] GeoPackageNode.dispose: disposing $name');
 
     try {
       // ファイル自体を削除
       final success = await geoPackageFile.deleteFile();
       if (success) {
-        print('[DEBUG] GeoPackageNode.dispose: ファイル削除成功 - ${name}');
+        AppLogger.debug('[DEBUG] GeoPackageNode.dispose: ファイル削除成功 - $name');
       } else {
-        print('[DEBUG] GeoPackageNode.dispose: ファイル削除失敗 - ${name}');
+        AppLogger.debug('[DEBUG] GeoPackageNode.dispose: ファイル削除失敗 - $name');
       }
     } catch (e) {
-      print('[ERROR] GeoPackageNode.dispose: ファイル削除エラー - $e');
+      AppLogger.debug('[ERROR] GeoPackageNode.dispose: ファイル削除エラー - $e');
     }
 
     // 基底クラスの処理（親子関係切断）
     await super.dispose();
 
-    print('[DEBUG] GeoPackageNode.dispose: dispose完了 - ${name}');
+    AppLogger.debug('[DEBUG] GeoPackageNode.dispose: dispose完了 - $name');
   }
 }
+

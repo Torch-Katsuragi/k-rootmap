@@ -7,10 +7,11 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:nmea/nmea.dart'; // NMEA0183パーサ
 import 'package:geolocator/geolocator.dart';
 // geolocator, permission_handler等はpubspec.yamlに追加済み
-// import 'package:geolocator/geolocator.dart';
+// import 'package:k_maps/utils/app_logger.dart';
 // Sentence型もここでimportされる（nmeaパッケージの主要型）
 
 /// 衛星情報モデル
@@ -191,7 +192,7 @@ class GpsUtils {
       // 位置情報サービスが有効かチェック
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        print('[DEBUG] GPS: Location services are disabled.');
+        AppLogger.debug('[DEBUG] GPS: Location services are disabled.');
         return false;
       }
 
@@ -201,20 +202,20 @@ class GpsUtils {
       if (permission == LocationPermission.denied) {
         // 権限が拒否されている場合、リクエスト
         permission = await Geolocator.requestPermission();
-        print('[DEBUG] GPS: Permission requested, result: $permission');
+        AppLogger.debug('[DEBUG] GPS: Permission requested, result: $permission');
 
         if (permission == LocationPermission.denied) {
-          print('[DEBUG] GPS: Permissions are denied.');
+          AppLogger.debug('[DEBUG] GPS: Permissions are denied.');
           return false;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        print('[DEBUG] GPS: Permissions are permanently denied.');
+        AppLogger.debug('[DEBUG] GPS: Permissions are permanently denied.');
         return false;
       }
 
-      print('[DEBUG] GPS: Permission granted: $permission');
+      AppLogger.debug('[DEBUG] GPS: Permission granted: $permission');
       return true;
     } else if (Platform.isWindows) {
       return true;
@@ -227,7 +228,7 @@ class GpsUtils {
   Future<bool> isLocationServiceEnabled() async {
     if (Platform.isAndroid || Platform.isIOS) {
       bool enabled = await Geolocator.isLocationServiceEnabled();
-      print('[DEBUG] GPS: Location service enabled: $enabled');
+      AppLogger.debug('[DEBUG] GPS: Location service enabled: $enabled');
       return enabled;
     } else if (Platform.isWindows) {
       return true;
@@ -241,3 +242,4 @@ class GpsUtils {
 // 外部GPSデバイス対応のための拡張ポイントを追加
 // nmeaパッケージの詳細: https://pub.dev/packages/nmea
 // 公式サンプル: https://pub.dev/packages/nmea/example
+

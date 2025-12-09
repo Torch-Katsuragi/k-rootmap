@@ -1,6 +1,7 @@
 // lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
 import 'dart:async';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart'; // PointerScrollEvent用
 import 'map_tool.dart';
@@ -8,12 +9,8 @@ import 'pan_tool.dart';
 import '../utils/global_config.dart';
 import '../utils/global_drawing_state.dart';
 import '../services/gps_manager_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import 'package:latlong2/latlong.dart';
 
 /// GPS関連機能を扱うツール
@@ -123,7 +120,7 @@ class GpsTool extends MapTool {
   void _initializeGpsFeatures() {
     // GPS測量データの初期化（GlobalDrawingStateを使用）
     drawingState.clearAll();
-    debugPrint('[GpsTool] GPS測量機能を初期化しました');
+    AppLogger.debug('[GpsTool] GPS測量機能を初期化しました');
   }
 
   /// GPS機能のクリーンアップ
@@ -144,12 +141,12 @@ class GpsTool extends MapTool {
     _gpsManager.stopContinuousSurvey();
     _gpsManager.clearContinuousSurveyData();
 
-    debugPrint('[GpsTool] GPS測量機能をクリーンアップしました');
+    AppLogger.debug('[GpsTool] GPS測量機能をクリーンアップしました');
   }
 
   /// 長押しGPS測量開始（位置更新ベース）
   void startLongPressGpsSurvey() {
-    debugPrint('[GpsTool] 長押しGPS測量開始（位置更新ベース）');
+    AppLogger.debug('[GpsTool] 長押しGPS測量開始（位置更新ベース）');
 
     _isLongPressing = true;
     _longPressStartTime = DateTime.now();
@@ -166,7 +163,7 @@ class GpsTool extends MapTool {
 
   /// 長押しGPS測量停止と平均化処理（位置更新ベース）
   Future<bool> stopLongPressGpsSurvey() async {
-    debugPrint('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始（位置更新ベース）');
+    AppLogger.debug('[GpsTool] 長押しGPS測量停止 - GPS平均化処理開始（位置更新ベース）');
 
     _isLongPressing = false;
 
@@ -178,10 +175,10 @@ class GpsTool extends MapTool {
     _longPressGpsData.clear();
     _longPressGpsData.addAll(finalData);
 
-    debugPrint('[GpsTool] 位置更新ベース連続測量を停止しました');
+    AppLogger.debug('[GpsTool] 位置更新ベース連続測量を停止しました');
 
     if (_longPressGpsData.isEmpty) {
-      debugPrint('[GpsTool] 長押し中にGPSデータが取得できませんでした');
+      AppLogger.debug('[GpsTool] 長押し中にGPSデータが取得できませんでした');
       return false;
     }
 
@@ -199,7 +196,7 @@ class GpsTool extends MapTool {
         _longPressGpsData,
       );
 
-      debugPrint('[GpsTool] 長押し測量 optimizedGpsData: $optimizedGpsData');
+      AppLogger.debug('[GpsTool] 長押し測量 optimizedGpsData: $optimizedGpsData');
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
@@ -259,10 +256,10 @@ class GpsTool extends MapTool {
           _gpsCollectionTimer?.cancel();
           _gpsCollectionTimer = null;
 
-          debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
+          AppLogger.debug('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
           return true; // 成功
         } else {
-          debugPrint('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
+          AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
           return false; // 失敗
         }
       } else if (selected is LineLayerNode) {
@@ -280,7 +277,7 @@ class GpsTool extends MapTool {
 
       return true;
     } catch (e) {
-      debugPrint('[GpsTool] 長押しGPS測量エラー: $e');
+      AppLogger.debug('[GpsTool] 長押しGPS測量エラー: $e');
       return false;
     }
   }
@@ -289,17 +286,17 @@ class GpsTool extends MapTool {
   Future<bool> recordCurrentGpsPosition() async {
     // 長押し中の場合は何もしない
     if (_isLongPressing) {
-      debugPrint('[GpsTool] 長押し中のため単発GPS記録をスキップ');
+      AppLogger.debug('[GpsTool] 長押し中のため単発GPS記録をスキップ');
       return false;
     }
 
     try {
       // GPS測量専用開始（位置取得まで待機）
       final gpsInfo = await _gpsManager.startGpsSurveyWithWait();
-      debugPrint('[GpsTool] 単発測量 gpsInfo: $gpsInfo');
+      AppLogger.debug('[GpsTool] 単発測量 gpsInfo: $gpsInfo');
 
       if (gpsInfo == null || !gpsInfo['isActive']) {
-        debugPrint('[GpsTool] GPS位置情報が利用できません。位置情報の許可が必要です。');
+        AppLogger.debug('[GpsTool] GPS位置情報が利用できません。位置情報の許可が必要です。');
         return false;
       }
 
@@ -321,11 +318,11 @@ class GpsTool extends MapTool {
         'selectedDevice': gpsInfo['selectedDevice'],
         'collectedAt': DateTime.now().toIso8601String(),
       };
-      debugPrint('[GpsTool] 単発測量 singleGpsData: $singleGpsData');
+      AppLogger.debug('[GpsTool] 単発測量 singleGpsData: $singleGpsData');
 
       // 1つの点から平均を計算（実質的には同じ値）
       final averagedResult = _calculateAveragedGpsPosition([singleGpsData]);
-      debugPrint('[GpsTool] 単発測量 averagedResult: $averagedResult');
+      AppLogger.debug('[GpsTool] 単発測量 averagedResult: $averagedResult');
 
       // 長押し測量と同じ最適化された辞書構造を作成
       final optimizedGpsData = _createOptimizedGpsDescription(
@@ -334,7 +331,7 @@ class GpsTool extends MapTool {
         isSingleTap: true, // 通常測量フラグ
       );
 
-      debugPrint('[GpsTool] 単発測量 optimizedGpsData: $optimizedGpsData');
+      AppLogger.debug('[GpsTool] 単発測量 optimizedGpsData: $optimizedGpsData');
 
       // 現在選択中のレイヤーに応じてデータを追加
       final selected = GlobalConfig.instance.selectedLayerNode;
@@ -389,10 +386,10 @@ class GpsTool extends MapTool {
           _gpsCollectionTimer?.cancel();
           _gpsCollectionTimer = null;
 
-          debugPrint('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
+          AppLogger.debug('[GpsTool] GPS測量ポイントフィーチャを即座に作成しました（GPS停止済み・タイマー確認済み）');
           return true; // 成功
         } else {
-          debugPrint('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
+          AppLogger.debug('[ERROR] GPS測量ポイントフィーチャの作成に失敗しました');
           return false; // 失敗
         }
       } else if (selected is LineLayerNode) {
@@ -403,7 +400,7 @@ class GpsTool extends MapTool {
         drawingState.addPolygonPoint(position, optimizedGpsData);
       }
 
-      debugPrint(
+      AppLogger.debug(
         '[GpsTool] GPS位置を記録: Lat ${latitude.toStringAsFixed(6)}, '
         'Lon ${longitude.toStringAsFixed(6)}, '
         'Accuracy ${gpsInfo['accuracy']?.toStringAsFixed(1) ?? 'N/A'}m',
@@ -411,7 +408,7 @@ class GpsTool extends MapTool {
 
       return true;
     } catch (e) {
-      debugPrint('[GpsTool] GPS位置記録エラー: $e');
+      AppLogger.debug('[GpsTool] GPS位置記録エラー: $e');
       return false;
     }
   }
@@ -465,10 +462,10 @@ class GpsTool extends MapTool {
     bool isSingleTap = false,
   }) {
     // デバッグ出力
-    // debugPrint('[GpsTool] _createOptimizedGpsDescription 入力データ:');
-    // debugPrint('  averagedResult: $averagedResult');
-    // debugPrint('  rawGpsDataList.length: ${rawGpsDataList.length}');
-    // debugPrint('  rawGpsDataList: $rawGpsDataList');
+    // AppLogger.debug('[GpsTool] _createOptimizedGpsDescription 入力データ:');
+    // AppLogger.debug('  averagedResult: $averagedResult');
+    // AppLogger.debug('  rawGpsDataList.length: ${rawGpsDataList.length}');
+    // AppLogger.debug('  rawGpsDataList: $rawGpsDataList');
 
     final duration =
         _longPressStartTime != null && !isSingleTap
@@ -492,7 +489,7 @@ class GpsTool extends MapTool {
       'recordedAt': DateTime.now().toIso8601String(),
     };
 
-    // debugPrint('[GpsTool] _createOptimizedGpsDescription 結果: $result');
+    // AppLogger.debug('[GpsTool] _createOptimizedGpsDescription 結果: $result');
     return result;
   }
 
@@ -511,7 +508,7 @@ class GpsTool extends MapTool {
   Future<void> cancelSurveyWithGpsStop() async {
     _cleanupGpsFeatures();
     await _gpsManager.stopGpsSurvey();
-    debugPrint('[GpsTool] GPS測量をキャンセルしてGPS停止しました');
+    AppLogger.debug('[GpsTool] GPS測量をキャンセルしてGPS停止しました');
   }
 
   /// 連続測量位置更新コールバック
@@ -521,7 +518,7 @@ class GpsTool extends MapTool {
     _longPressGpsData.clear();
     _longPressGpsData.addAll(continuousData);
 
-    debugPrint('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
+    AppLogger.debug('[GpsTool] 連続測量位置更新 - 現在${_longPressGpsData.length}ポイント');
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）
@@ -550,3 +547,5 @@ class GpsTool extends MapTool {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }
+
+

@@ -1,8 +1,10 @@
 /// GeoPackageを使用したタイルキャッシュ管理
 /// OGC GeoPackage標準仕様に準拠したタイル格納
+library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 
@@ -174,7 +176,7 @@ class TileCacheGeoPackage {
       onOpen: _onOpen,
     );
     
-    print('[TILE-CACHE] GeoPackage initialized: $_databasePath');
+    AppLogger.debug('[TILE-CACHE] GeoPackage initialized: $_databasePath');
   }
 
   /// データベース作成時の処理
@@ -286,7 +288,7 @@ class TileCacheGeoPackage {
         }
       });
     } catch (e) {
-      print('[TILE-CACHE] ❌ Batch save failed: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Batch save failed: $e');
     } finally {
       _isFlushing = false;
     }
@@ -324,7 +326,7 @@ class TileCacheGeoPackage {
         if (data.length < 100) {
           // 破損データを自動削除
           await _database!.delete(_tilesTableName, where: 'id = ?', whereArgs: [id]);
-          print('[TILE-CACHE] 🗑️ Deleted corrupted tile (too small)');
+          AppLogger.debug('[TILE-CACHE] 🗑️ Deleted corrupted tile (too small)');
           return null;
         }
         
@@ -341,7 +343,7 @@ class TileCacheGeoPackage {
       
       return null;
     } catch (e) {
-      print('[TILE-CACHE] ❌ Get tile error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Get tile error: $e');
       return null;
     }
   }
@@ -366,7 +368,7 @@ class TileCacheGeoPackage {
       
       return stats;
     } catch (e) {
-      print('[TILE-CACHE] ❌ Statistics error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Statistics error: $e');
       return {};
     }
   }
@@ -381,7 +383,7 @@ class TileCacheGeoPackage {
       );
       return Sqflite.firstIntValue(result) ?? 0;
     } catch (e) {
-      print('[TILE-CACHE] ❌ Count error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Count error: $e');
       return 0;
     }
   }
@@ -397,7 +399,7 @@ class TileCacheGeoPackage {
       }
       return 0;
     } catch (e) {
-      print('[TILE-CACHE] ❌ Size error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Size error: $e');
       return 0;
     }
   }
@@ -416,7 +418,7 @@ class TileCacheGeoPackage {
       // VACUUM実行でディスク容量を回収
       await _database!.rawQuery('VACUUM');
     } catch (e) {
-      print('[TILE-CACHE] ❌ Clear error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Clear error: $e');
       rethrow;
     }
   }
@@ -483,7 +485,7 @@ class TileCacheGeoPackage {
         await _database!.rawQuery('VACUUM');
       }
     } catch (e) {
-      print('[TILE-CACHE] ❌ Validation error: $e');
+      AppLogger.debug('[TILE-CACHE] ❌ Validation error: $e');
     }
     
     return result;
@@ -504,4 +506,5 @@ class TileCacheGeoPackage {
   /// データベースパスを取得
   String? get databasePath => _databasePath;
 }
+
 

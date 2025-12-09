@@ -7,12 +7,12 @@ class CompassFanPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint =
         Paint()
-          ..color = Colors.lightBlue.withOpacity(0.3)
+          ..color = Colors.lightBlue.withValues(alpha: 0.3)
           ..style = PaintingStyle.fill;
 
     final strokePaint =
         Paint()
-          ..color = Colors.lightBlue.withOpacity(0.6)
+          ..color = Colors.lightBlue.withValues(alpha: 0.6)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.0;
 

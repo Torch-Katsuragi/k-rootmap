@@ -2,6 +2,7 @@
 // camerawesomeパッケージを使用して、安定したカメラ機能を提供
 import 'dart:async';
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // SystemChrome用
@@ -63,9 +64,9 @@ class _CameraScreenState extends State<CameraScreen> {
     return Scaffold(
       backgroundColor: Colors.black, // ステータスバー領域などの背景色
       // 戻るボタンでの終了時に撮影フラグを返す
-      body: PopScope(
+      body: PopScope<bool>(
         canPop: false,
-        onPopInvoked: (didPop) async {
+        onPopInvokedWithResult: (didPop, result) async {
           if (didPop) return;
           Navigator.pop(context, _hasCaptured);
         },
@@ -225,7 +226,7 @@ class _CameraScreenState extends State<CameraScreen> {
           desiredAccuracy: LocationAccuracy.best,
         ).timeout(const Duration(seconds: 3));
       } catch (e) {
-        print('[CameraScreen] GPS取得エラー: $e');
+        AppLogger.debug('[CameraScreen] GPS取得エラー: $e');
       }
 
       final now = DateTime.now();
@@ -279,7 +280,7 @@ class _CameraScreenState extends State<CameraScreen> {
         widget.targetFolder.addChild(photoNode);
       }
 
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('写真を保存しました: $fileName.jpg'),
@@ -292,8 +293,8 @@ class _CameraScreenState extends State<CameraScreen> {
       }
 
     } catch (e) {
-      print('[CameraScreen] 画像処理エラー: $e');
-      if (mounted) {
+      AppLogger.debug('[CameraScreen] 画像処理エラー: $e');
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('保存処理に失敗しました: $e'),
@@ -342,7 +343,8 @@ class _CameraScreenState extends State<CameraScreen> {
       await exif.close();
       
     } catch (e) {
-      print('[CameraScreen] EXIF書き込みエラー: $e');
+      AppLogger.debug('[CameraScreen] EXIF書き込みエラー: $e');
     }
   }
 }
+

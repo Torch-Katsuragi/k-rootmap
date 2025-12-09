@@ -5,7 +5,6 @@ import 'package:flutter/gestures.dart'; // PointerScrollEvent用
 // pointerEvents用
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'dart:math';
 import '../utils/global_config.dart'; // SelectToolアクセス用
 
@@ -23,7 +22,6 @@ class PanTool extends MapTool {
   // ピンチ・回転用状態
   Offset? _lastFocalPoint;
   double? _startZoom, _startRotation;
-  LatLng? _startCenter;
 
   // 中ボタンドラッグ用状態
   bool _isMiddleButtonDragging = false;
@@ -47,7 +45,6 @@ class PanTool extends MapTool {
     _lastFocalPoint = details.localFocalPoint;
     _startZoom = mapState.mapController.camera.zoom;
     _startRotation = mapState.mapController.camera.rotation;
-    _startCenter = mapState.mapController.camera.center;
   }
 
   /// スケール更新イベント
@@ -82,7 +79,6 @@ class PanTool extends MapTool {
     _lastFocalPoint = null;
     _startZoom = null;
     _startRotation = null;
-    _startCenter = null;
   }
 
   /// マウスホイールズーム処理（他のツールからも呼び出し可能）

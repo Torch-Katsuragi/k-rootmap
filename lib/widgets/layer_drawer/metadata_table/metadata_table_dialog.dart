@@ -2,8 +2,8 @@
 library;
 
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import '../../../utils/global_config.dart';
@@ -54,10 +54,12 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
         currentTableData = newTableData;
       });
     } catch (e) {
-      print('[MetadataTable] 座標系変更エラー: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('座標系の変更に失敗しました: $e')));
+      AppLogger.debug('[MetadataTable] 座標系変更エラー: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('座標系の変更に失敗しました: $e')));
+      }
     }
   }
 
@@ -67,9 +69,11 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
       // プロジェクトルートディレクトリを取得
       final projectRoot = GlobalConfig.instance.projectRootDir;
       if (projectRoot == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('プロジェクトルートディレクトリが見つかりません')),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('プロジェクトルートディレクトリが見つかりません')),
+          );
+        }
         return;
       }
 
@@ -90,7 +94,7 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
           '${safeGpkgName}_${safeLayerName}_${safeFeatureName}_metadata_table.tsv';
       final tsvPath = p.join(projectRoot, tsvFileName);
 
-      print('[MetadataTable] TSVエクスポート開始: $tsvPath');
+      AppLogger.debug('[MetadataTable] TSVエクスポート開始: $tsvPath');
 
       // TSVファイルを作成
       final tsvFile = File(tsvPath);
@@ -110,21 +114,25 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
 
       await sink.close();
 
-      print('[MetadataTable] TSVエクスポート完了: $tsvPath');
+      AppLogger.debug('[MetadataTable] TSVエクスポート完了: $tsvPath');
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('メタデータTSVファイルを出力しました:\n$tsvFileName'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('メタデータTSVファイルを出力しました:\n$tsvFileName'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e, stackTrace) {
-      print('[MetadataTable] TSVエクスポートエラー: $e');
-      print('[MetadataTable] スタックトレース: $stackTrace');
+      AppLogger.debug('[MetadataTable] TSVエクスポートエラー: $e');
+      AppLogger.debug('[MetadataTable] スタックトレース: $stackTrace');
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('メタデータTSVエクスポートに失敗しました: $e')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('メタデータTSVエクスポートに失敗しました: $e')));
+      }
     }
   }
 
@@ -222,3 +230,4 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
     );
   }
 }
+

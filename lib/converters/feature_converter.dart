@@ -1,18 +1,12 @@
 // K-MAPS: Feature Converter
 // フィーチャ変換操作に特化したコンバーター
+import 'package:k_maps/utils/app_logger.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'base_converter.dart';
 import '../services/import_export_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
-import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
-import '../models/geometry_type.dart';
 import '../utils/wkb_utils.dart';
 
 /// フィーチャインポート用コンバーター
@@ -330,7 +324,7 @@ class FeatureExportConverter
           if (coordinates.isEmpty) {
             needWkbParsing = true;
           } else if (coordinates.every(
-            (coord) => coord is List && (coord as List).isEmpty,
+            (coord) => coord is List && coord.isEmpty,
           )) {
             needWkbParsing = true;
           }
@@ -389,10 +383,10 @@ class FeatureExportConverter
           case 'Polygon':
             // ポリゴンの各頂点をポイントに変換（重複点除去付き）
             if (coordinates is List && coordinates.isNotEmpty) {
-              print('=== [FeatureExportConverter] Polygon点群変換開始 ===');
-              print('[FeatureExportConverter] フィーチャID: ${feature['id']}');
-              print('[FeatureExportConverter] リング数: ${coordinates.length}');
-              print('[FeatureExportConverter] 重複点除去: ON (閉じたリングの最後の点をスキップ)');
+              AppLogger.debug('=== [FeatureExportConverter] Polygon点群変換開始 ===');
+              AppLogger.debug('[FeatureExportConverter] フィーチャID: ${feature['id']}');
+              AppLogger.debug('[FeatureExportConverter] リング数: ${coordinates.length}');
+              AppLogger.debug('[FeatureExportConverter] 重複点除去: ON (閉じたリングの最後の点をスキップ)');
 
               for (
                 int ringIndex = 0;
@@ -405,7 +399,7 @@ class FeatureExportConverter
                   final originalRingSize = ring.length;
                   int addedPointsCount = 0;
 
-                  print(
+                  AppLogger.debug(
                     '[FeatureExportConverter] リング $ringIndex 処理開始: ${ring.length}点 ($ringType)',
                   );
 
@@ -418,29 +412,29 @@ class FeatureExportConverter
                         final lastCoord = coord;
                         const tolerance = 0.000001;
 
-                        print(
+                        AppLogger.debug(
                           '[FeatureExportConverter] 最後の点の重複チェック (リング $ringIndex):',
                         );
-                        print(
+                        AppLogger.debug(
                           '[FeatureExportConverter]   最初の点: (${firstCoord[1]}, ${firstCoord[0]})',
                         );
-                        print(
+                        AppLogger.debug(
                           '[FeatureExportConverter]   最後の点: (${lastCoord[1]}, ${lastCoord[0]})',
                         );
 
                         final latDiff = (firstCoord[1] - lastCoord[1]).abs();
                         final lngDiff = (firstCoord[0] - lastCoord[0]).abs();
-                        print(
+                        AppLogger.debug(
                           '[FeatureExportConverter]   座標差分: 緯度=${latDiff.toStringAsFixed(8)}, 経度=${lngDiff.toStringAsFixed(8)}',
                         );
 
                         if (latDiff < tolerance && lngDiff < tolerance) {
-                          print(
+                          AppLogger.debug(
                             '[FeatureExportConverter] ✓ 重複する最後の点をスキップ (リング $ringIndex)',
                           );
                           continue; // 最後の重複点をスキップ
                         } else {
-                          print(
+                          AppLogger.debug(
                             '[FeatureExportConverter] ✗ 最後の点は重複していない、追加します (リング $ringIndex)',
                           );
                         }
@@ -462,18 +456,18 @@ class FeatureExportConverter
                       addedPointsCount++;
 
                       if (addedPointsCount <= 3 || i == ring.length - 1) {
-                        print(
+                        AppLogger.debug(
                           '[FeatureExportConverter] 点追加[$addedPointsCount]: (${coord[1]}, ${coord[0]}) POINT_ID=${pointId - 1}',
                         );
                       }
                     }
                   }
-                  print(
-                    '[FeatureExportConverter] リング $ringIndex 完了: ${originalRingSize}点 -> ${addedPointsCount}点 (${originalRingSize - addedPointsCount}点除去)',
+                  AppLogger.debug(
+                    '[FeatureExportConverter] リング $ringIndex 完了: $originalRingSize点 -> $addedPointsCount点 (${originalRingSize - addedPointsCount}点除去)',
                   );
                 }
               }
-              print(
+              AppLogger.debug(
                 '[FeatureExportConverter] Polygon変換完了: フィーチャID=${feature['id']}',
               );
             }
@@ -888,11 +882,11 @@ class FeatureExportConverter
           // リングの順序をShapefile仕様に合わせて調整
           final ringCoords = ring.cast<List<num>>();
 
-          print(
+          AppLogger.debug(
             '[FeatureConverter] Polygon処理: フィーチャID=${feature['id']}, リング$ringIndex',
           );
-          print('[FeatureConverter] 元のリング座標数: ${ringCoords.length}');
-          print(
+          AppLogger.debug('[FeatureConverter] 元のリング座標数: ${ringCoords.length}');
+          AppLogger.debug(
             '[FeatureConverter] リングタイプ: ${ringIndex == 0 ? "外側" : "内側（穴）"}',
           );
 
@@ -901,8 +895,8 @@ class FeatureExportConverter
             ringIndex == 0,
           );
 
-          print('[FeatureConverter] 調整後のリング座標数: ${adjustedRing.length}');
-          print(
+          AppLogger.debug('[FeatureConverter] 調整後のリング座標数: ${adjustedRing.length}');
+          AppLogger.debug(
             '[FeatureConverter] 座標調整: ${ringCoords.length != adjustedRing.length ? "エラー" : "正常"}',
           );
 
@@ -920,7 +914,7 @@ class FeatureExportConverter
             }
           }
 
-          print('[FeatureConverter] リング$ringIndex 書き込み完了');
+          AppLogger.debug('[FeatureConverter] リング$ringIndex 書き込み完了');
         }
       }
     }
@@ -946,11 +940,8 @@ class FeatureExportConverter
     bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
 
-    // ファイル長計算
-    int totalFileLength = 50; // ヘッダー
-    for (final feature in validFeatures) {
-      totalFileLength += 4; // インデックスレコード1つあたり4ワード
-    }
+    // ファイル長計算（インデックスレコード1つあたり4ワード）
+    final totalFileLength = 50 + (validFeatures.length * 4);
     bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長
 
     bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
@@ -1644,17 +1635,17 @@ class FeatureExportConverter
     // 符号で向きを判定（正：反時計回り、負：時計回り）
     final isCounterClockwise = signedArea > 0;
 
-    print(
+    AppLogger.debug(
       '[FeatureConverter] リング向き分析: 面積=$signedArea, 反時計回り=$isCounterClockwise',
     );
 
     if (isExterior) {
       // ESRI仕様: 外側のリングは時計回り（負の面積）であるべき
-      print('[FeatureConverter] 外側リング調整: ${!isCounterClockwise ? "維持" : "反転"}');
+      AppLogger.debug('[FeatureConverter] 外側リング調整: ${!isCounterClockwise ? "維持" : "反転"}');
       return isCounterClockwise ? ring.reversed.toList() : ring;
     } else {
       // ESRI仕様: 内側の穴は反時計回り（正の面積）であるべき
-      print('[FeatureConverter] 内側リング調整: ${isCounterClockwise ? "維持" : "反転"}');
+      AppLogger.debug('[FeatureConverter] 内側リング調整: ${isCounterClockwise ? "維持" : "反転"}');
       return isCounterClockwise ? ring : ring.reversed.toList();
     }
   }
@@ -1673,7 +1664,7 @@ class FeatureExportConverter
           return geometry != null && geometry['type'] == 'Polygon';
         }).toList();
 
-    print('[FeatureConverter] PolygonSHX: 有効なフィーチャ数 = ${validFeatures.length}');
+    AppLogger.debug('[FeatureConverter] PolygonSHX: 有効なフィーチャ数 = ${validFeatures.length}');
 
     // バウンディングボックス計算（SHPファイルと同じ）
     double minX = double.infinity, minY = double.infinity;
@@ -1707,13 +1698,12 @@ class FeatureExportConverter
       minX = maxX = minY = maxY = 0.0;
     }
 
-    print(
+    AppLogger.debug(
       '[FeatureConverter] PolygonSHX: バウンディングボックス = ($minX, $minY) to ($maxX, $maxY)',
     );
 
     // SHXファイル長とレコード情報を事前計算
     final List<int> recordLengths = [];
-    int totalFileLengthWords = 50; // ヘッダー部分
 
     for (int i = 0; i < validFeatures.length; i++) {
       final feature = validFeatures[i];
@@ -1728,7 +1718,7 @@ class FeatureExportConverter
         }
       }
 
-      print(
+      AppLogger.debug(
         '[FeatureConverter] PolygonSHX: フィーチャ$i - リング数=${coordinates.length}, 総ポイント数=$totalPoints',
       );
 
@@ -1739,10 +1729,9 @@ class FeatureExportConverter
       final recordLengthWords = (contentSizeBytes + 1) ~/ 2; // バイトをワードに変換（切り上げ）
 
       recordLengths.add(recordLengthWords);
-      totalFileLengthWords += 4 + recordLengthWords; // レコードヘッダー(4ワード) + コンテンツ
 
-      print(
-        '[FeatureConverter] PolygonSHX: フィーチャ$i - レコード長=${recordLengthWords}ワード',
+      AppLogger.debug(
+        '[FeatureConverter] PolygonSHX: フィーチャ$i - レコード長=$recordLengthWordsワード',
       );
     }
 
@@ -1771,8 +1760,8 @@ class FeatureExportConverter
     for (int i = 0; i < validFeatures.length; i++) {
       final recordLength = recordLengths[i];
 
-      print(
-        '[FeatureConverter] PolygonSHX: フィーチャ$i - オフセット=${offset}ワード, 長さ=${recordLength}ワード',
+      AppLogger.debug(
+        '[FeatureConverter] PolygonSHX: フィーチャ$i - オフセット=$offsetワード, 長さ=$recordLengthワード',
       );
 
       // インデックスレコード（8バイト = 4ワード）
@@ -1783,7 +1772,7 @@ class FeatureExportConverter
       offset += 4 + recordLength; // レコードヘッダー(4ワード) + レコード長
     }
 
-    print(
+    AppLogger.debug(
       '[FeatureConverter] PolygonSHX: 書き込み完了 - SHXファイルサイズ=${bytes.length}バイト',
     );
 
@@ -2102,3 +2091,4 @@ class FeatureValidationConverter
     return true;
   }
 }
+

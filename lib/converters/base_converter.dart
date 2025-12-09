@@ -2,12 +2,7 @@
 // Import/Export操作のための基本コンバータークラス群
 import 'dart:async';
 import '../services/import_export_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 
 /// 変換操作の結果を表すクラス
 class ConversionResult {

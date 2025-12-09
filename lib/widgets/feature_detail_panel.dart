@@ -1,4 +1,5 @@
 // フィーチャ詳細パネルウィジェット
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:io';
@@ -89,7 +90,7 @@ class FeatureDetailPanel extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Icon(
@@ -291,8 +292,8 @@ class FeatureDetailPanel extends StatelessWidget {
           throw Exception('ジオメトリの更新に失敗しました');
         }
 
-        print('[LineSimplification] 簡略化適用完了: ${lineFeature.name}');
-        print('[LineSimplification] 点数: ${result.length}点');
+        AppLogger.debug('[LineSimplification] 簡略化適用完了: ${lineFeature.name}');
+        AppLogger.debug('[LineSimplification] 点数: ${result.length}点');
 
         // マップを更新
         if (context.mounted) {
@@ -310,7 +311,7 @@ class FeatureDetailPanel extends StatelessWidget {
           ).showSnackBar(const SnackBar(content: Text('ライン簡略化が適用されました')));
         }
       } catch (e) {
-        print('[ERROR] ライン簡略化適用失敗: $e');
+        AppLogger.debug('[ERROR] ライン簡略化適用失敗: $e');
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
@@ -410,7 +411,7 @@ class FeatureDetailPanel extends StatelessWidget {
         }
       }
     } catch (e) {
-      print('[ERROR] ポイント変換失敗: $e');
+      AppLogger.debug('[ERROR] ポイント変換失敗: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('ポイント変換に失敗しました: $e')),
@@ -463,4 +464,5 @@ class FeatureDetailPanel extends StatelessWidget {
     );
   }
 }
+
 

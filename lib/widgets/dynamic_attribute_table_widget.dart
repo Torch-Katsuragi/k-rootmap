@@ -1,6 +1,7 @@
 // K-MAPS: 動的属性テーブル表示・編集ウィジェット
 // LayerNodeから直接属性スキーマを取得して動的にテーブル構造を構築
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import 'package:latlong2/latlong.dart';
@@ -34,12 +35,12 @@ class DynamicAttributeTableWidget extends StatefulWidget {
   final Function()? onAddFeature;
 
   const DynamicAttributeTableWidget({
-    Key? key,
+    super.key,
     required this.layer,
     this.onFeatureSelected,
     this.onFeatureDeleted,
     this.onAddFeature,
-  }) : super(key: key);
+  });
 
   @override
   State<DynamicAttributeTableWidget> createState() =>
@@ -322,34 +323,34 @@ class _DynamicAttributeTableWidgetState
     });
 
     try {
-      print('[DynamicAttributeTable] データ初期化開始: ${widget.layer.layerName}');
+      AppLogger.debug('[DynamicAttributeTable] データ初期化開始: ${widget.layer.layerName}');
 
       // LayerNodeから属性カラム名を取得
       columnNames = await widget.layer.getAttributeColumnNames(getAll: true);
-      print('[DynamicAttributeTable] カラム名取得: ${columnNames.length}個');
+      AppLogger.debug('[DynamicAttributeTable] カラム名取得: ${columnNames.length}個');
 
       // LayerNodeからFeatureNodeリストを取得
       features = widget.layer.features;
-      print('[DynamicAttributeTable] フィーチャ取得: ${features.length}個');
+      AppLogger.debug('[DynamicAttributeTable] フィーチャ取得: ${features.length}個');
 
       // 重複チェック（LayerNode.featuresゲッターレベル）
       final featureRowIds = features.map((f) => f.rowId).toList();
       final uniqueRowIds = featureRowIds.toSet();
       if (featureRowIds.length != uniqueRowIds.length) {
-        print('[DynamicAttributeTable] !! LayerNode.featuresに重複を検出！');
-        print('[DynamicAttributeTable] 全rowId: $featureRowIds');
-        print('[DynamicAttributeTable] ユニークrowId: $uniqueRowIds');
+        AppLogger.debug('[DynamicAttributeTable] !! LayerNode.featuresに重複を検出！');
+        AppLogger.debug('[DynamicAttributeTable] 全rowId: $featureRowIds');
+        AppLogger.debug('[DynamicAttributeTable] ユニークrowId: $uniqueRowIds');
       }
 
       // カラムとデータを構築
       columns = _createColumns();
       rows = await _createRows();
 
-      print('[DynamicAttributeTable] テーブル構築完了');
+      AppLogger.debug('[DynamicAttributeTable] テーブル構築完了');
 
       // PlutoGridが既に構築されている場合は、データを更新
       if (stateManager != null && mounted) {
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] PlutoGridを更新: ${columns.length}カラム, ${rows.length}行',
         );
 
@@ -361,10 +362,10 @@ class _DynamicAttributeTableWidgetState
         // カラムが変わった場合はWidgetを再構築する必要がある）
         // そのため、setStateを呼び出してWidget全体を再構築
 
-        print('[DynamicAttributeTable] PlutoGrid更新完了');
+        AppLogger.debug('[DynamicAttributeTable] PlutoGrid更新完了');
       }
     } catch (e) {
-      print('[DynamicAttributeTable] データ初期化エラー: $e');
+      AppLogger.debug('[DynamicAttributeTable] データ初期化エラー: $e');
       columnNames = [];
       features = [];
       columns = [];
@@ -532,7 +533,7 @@ class _DynamicAttributeTableWidgetState
       final result = wgs84.transform(proj, p);
       return '[${result.x.toStringAsFixed(3)}, ${result.y.toStringAsFixed(3)}]';
     } catch (e) {
-      print('[DynamicAttributeTable] 座標変換エラー: $e');
+      AppLogger.debug('[DynamicAttributeTable] 座標変換エラー: $e');
       return '[${point.latitude}, ${point.longitude}]';
     }
   }
@@ -551,7 +552,7 @@ class _DynamicAttributeTableWidgetState
       return [];
     }
 
-    print('[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ');
+    AppLogger.debug('[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ');
 
     // 重複チェック: rowIdのセットを作成
     final seenRowIds = <int>{};
@@ -566,8 +567,8 @@ class _DynamicAttributeTableWidgetState
     }
 
     if (duplicateRowIds.isNotEmpty) {
-      print('[DynamicAttributeTable] ! 重複するrowIdを検出: $duplicateRowIds');
-      print('[DynamicAttributeTable] features配列に重複があります！');
+      AppLogger.debug('[DynamicAttributeTable] ! 重複するrowIdを検出: $duplicateRowIds');
+      AppLogger.debug('[DynamicAttributeTable] features配列に重複があります！');
     }
 
     final List<PlutoRow> tableRows = [];
@@ -582,7 +583,7 @@ class _DynamicAttributeTableWidgetState
           final value = await feature.getAttributeValue(columnName);
           cells[columnName] = PlutoCell(value: value ?? '');
         } catch (e) {
-          print('[DynamicAttributeTable] 属性値取得エラー ($columnName): $e');
+          AppLogger.debug('[DynamicAttributeTable] 属性値取得エラー ($columnName): $e');
           cells[columnName] = PlutoCell(value: '');
         }
       }
@@ -597,7 +598,7 @@ class _DynamicAttributeTableWidgetState
       tableRows.add(PlutoRow(cells: cells));
     }
 
-    print('[DynamicAttributeTable] 行データ作成完了: ${tableRows.length}行');
+    AppLogger.debug('[DynamicAttributeTable] 行データ作成完了: ${tableRows.length}行');
     return tableRows;
   }
 
@@ -658,7 +659,7 @@ class _DynamicAttributeTableWidgetState
     try {
       // 選択されたフィーチャーがない場合は処理を終了
       if (GlobalConfig.instance.selectedFeatures.isEmpty) {
-        print('[DynamicAttributeTable] 削除するフィーチャーが選択されていません');
+        AppLogger.debug('[DynamicAttributeTable] 削除するフィーチャーが選択されていません');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -675,8 +676,8 @@ class _DynamicAttributeTableWidgetState
       final selectedFeaturesToDelete = List.from(
         GlobalConfig.instance.selectedFeatures.whereType<FeatureNode>(),
       );
-      print('[DynamicAttributeTable] 削除処理開始: $featureCount個のフィーチャ');
-      print(
+      AppLogger.debug('[DynamicAttributeTable] 削除処理開始: $featureCount個のフィーチャ');
+      AppLogger.debug(
         '[DynamicAttributeTable] 削除対象フィーチャ: ${selectedFeaturesToDelete.map((f) => 'rowId=${f.rowId}, name=${f.name}').toList()}',
       );
 
@@ -684,7 +685,7 @@ class _DynamicAttributeTableWidgetState
       final rowIndicesToRemove = <int>[];
       for (final feature in selectedFeaturesToDelete) {
         final index = features.indexOf(feature);
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] フィーチャ rowId=${feature.rowId} のインデックス: $index',
         );
         if (index >= 0) {
@@ -692,12 +693,12 @@ class _DynamicAttributeTableWidgetState
         }
       }
 
-      print('[DynamicAttributeTable] 削除対象行インデックス（ソート前）: $rowIndicesToRemove');
+      AppLogger.debug('[DynamicAttributeTable] 削除対象行インデックス（ソート前）: $rowIndicesToRemove');
 
       // PlutoGridから該当する行を即座に削除（UI更新優先）
       if (stateManager != null && rowIndicesToRemove.isNotEmpty) {
         rowIndicesToRemove.sort((a, b) => b.compareTo(a)); // 後ろから削除
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] 削除対象行インデックス（ソート後、後ろから）: $rowIndicesToRemove',
         );
 
@@ -705,70 +706,70 @@ class _DynamicAttributeTableWidgetState
         for (final index in rowIndicesToRemove) {
           if (index < rows.length) {
             final row = rows[index];
-            print('[DynamicAttributeTable] 削除する行[$index]: ${row.cells}');
+            AppLogger.debug('[DynamicAttributeTable] 削除する行[$index]: ${row.cells}');
             rowsToRemove.add(row);
           } else {
-            print(
+            AppLogger.debug(
               '[DynamicAttributeTable] ⚠️ インデックス$indexが範囲外（rows.length=${rows.length}）',
             );
           }
         }
 
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] PlutoGrid行を即座に削除: ${rowsToRemove.length}行',
         );
         stateManager!.removeRows(rowsToRemove);
 
         // NOTE: rowsリストはPlutoGridが自動管理しているため、
         // ここで手動削除する必要はない。最後の_initializeTableData()で再同期される。
-        print('[DynamicAttributeTable] PlutoGridの行削除完了');
+        AppLogger.debug('[DynamicAttributeTable] PlutoGridの行削除完了');
       }
 
       // ローカルのfeaturesリストからも削除
-      print('[DynamicAttributeTable] featuresリストから削除開始（現在${features.length}個）');
+      AppLogger.debug('[DynamicAttributeTable] featuresリストから削除開始（現在${features.length}個）');
       for (final feature in selectedFeaturesToDelete) {
         features.remove(feature);
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] features.remove: rowId=${feature.rowId}',
         );
       }
-      print('[DynamicAttributeTable] featuresリスト削除完了（現在${features.length}個）');
+      AppLogger.debug('[DynamicAttributeTable] featuresリスト削除完了（現在${features.length}個）');
 
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(
         mapState: GlobalConfig.instance.mapState,
       );
 
-      print('[DynamicAttributeTable] DB削除完了、テーブルを再読み込み');
+      AppLogger.debug('[DynamicAttributeTable] DB削除完了、テーブルを再読み込み');
 
       // 削除完了後に再読み込み（データ整合性確保）
       await _initializeTableData();
 
       // PlutoGridに新しいデータを明示的にセット
       if (stateManager != null && mounted) {
-        print(
+        AppLogger.debug(
           '[DynamicAttributeTable] PlutoGridに新しいデータをセット: ${columns.length}カラム, ${rows.length}行',
         );
         stateManager!.removeAllRows();
         stateManager!.appendRows(rows);
         stateManager!.notifyListeners();
-        print('[DynamicAttributeTable] PlutoGrid更新完了');
+        AppLogger.debug('[DynamicAttributeTable] PlutoGrid更新完了');
       }
 
-      print('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');
+      AppLogger.debug('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');
 
       // 成功メッセージ
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${featureCount}個のフィーチャを削除しました'),
+            content: Text('$featureCount個のフィーチャを削除しました'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print('[DynamicAttributeTable] フィーチャ削除エラー: $e');
+      AppLogger.debug('[DynamicAttributeTable] フィーチャ削除エラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -788,7 +789,7 @@ class _DynamicAttributeTableWidgetState
     dynamic value,
   ) async {
     try {
-      print('[DynamicAttributeTable] 属性変更保存: field=$field, value=$value');
+      AppLogger.debug('[DynamicAttributeTable] 属性変更保存: field=$field, value=$value');
 
       // 基本フィールドの処理
       if (field == 'id' ||
@@ -796,14 +797,14 @@ class _DynamicAttributeTableWidgetState
           field == 'geom' ||
           field == 'geometry') {
         // システムフィールドは編集不可
-        print('[DynamicAttributeTable] システムフィールドのため保存をスキップ: $field');
+        AppLogger.debug('[DynamicAttributeTable] システムフィールドのため保存をスキップ: $field');
         return;
       }
 
       // 仮想カラム(_coordinate)の処理
       if (field == '_coordinate') {
         if (feature is! PointFeatureNode) {
-          print('[DynamicAttributeTable] _coordinateはPointレイヤーでのみ編集可能');
+          AppLogger.debug('[DynamicAttributeTable] _coordinateはPointレイヤーでのみ編集可能');
           return;
         }
 
@@ -811,8 +812,8 @@ class _DynamicAttributeTableWidgetState
         final coordinateResult = _parseCoordinate(value.toString());
 
         if (!coordinateResult['valid']) {
-          print('[DynamicAttributeTable] 無効な座標形式: $value');
-          print('[DynamicAttributeTable] エラー: ${coordinateResult['error']}');
+          AppLogger.debug('[DynamicAttributeTable] 無効な座標形式: $value');
+          AppLogger.debug('[DynamicAttributeTable] エラー: ${coordinateResult['error']}');
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -837,7 +838,7 @@ class _DynamicAttributeTableWidgetState
         final success = await feature.updateLocation(newPoint);
 
         if (success) {
-          print(
+          AppLogger.debug(
             '[DynamicAttributeTable] 座標更新成功: ${newPoint.latitude}, ${newPoint.longitude}',
           );
 
@@ -856,7 +857,7 @@ class _DynamicAttributeTableWidgetState
             );
           }
         } else {
-          print('[DynamicAttributeTable] 座標更新失敗');
+          AppLogger.debug('[DynamicAttributeTable] 座標更新失敗');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -877,7 +878,7 @@ class _DynamicAttributeTableWidgetState
       // 全ての属性を統一的にsetAttributeValueで処理
       await feature.setAttributeValue(field, value);
 
-      print('[DynamicAttributeTable] 属性変更保存成功: $field = $value');
+      AppLogger.debug('[DynamicAttributeTable] 属性変更保存成功: $field = $value');
 
       // 成功メッセージ（デバッグ時のみ表示）
       if (mounted) {
@@ -890,7 +891,7 @@ class _DynamicAttributeTableWidgetState
         );
       }
     } catch (e) {
-      print('[DynamicAttributeTable] 属性変更保存エラー: $e');
+      AppLogger.debug('[DynamicAttributeTable] 属性変更保存エラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -935,7 +936,7 @@ class _DynamicAttributeTableWidgetState
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: selectedType,
+                    initialValue: selectedType,
                     decoration: const InputDecoration(
                       labelText: 'データ型',
                       border: OutlineInputBorder(),
@@ -1025,7 +1026,7 @@ class _DynamicAttributeTableWidgetState
           );
         }
       } catch (e) {
-        print('[DynamicAttributeTable] カラム追加エラー: $e');
+        AppLogger.debug('[DynamicAttributeTable] カラム追加エラー: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1059,7 +1060,7 @@ class _DynamicAttributeTableWidgetState
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             border: Border(
               bottom: BorderSide(
                 color: Theme.of(context).dividerColor,
@@ -1258,7 +1259,7 @@ class _DynamicAttributeTableWidgetState
                         );
                       }
                     } catch (e) {
-                      print('[ERROR] 即座保存エラー: $e');
+                      AppLogger.debug('[ERROR] 即座保存エラー: $e');
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -1294,7 +1295,7 @@ class _DynamicAttributeTableWidgetState
                 if (GlobalConfig.instance.isAttributeTableEditing !=
                     isEditing) {
                   GlobalConfig.instance.isAttributeTableEditing = isEditing;
-                  print('[DynamicAttributeTable] 編集モード変更: $isEditing');
+                  AppLogger.debug('[DynamicAttributeTable] 編集モード変更: $isEditing');
                 }
               });
 
@@ -1304,17 +1305,17 @@ class _DynamicAttributeTableWidgetState
                 final currentRowIdx = stateManager?.currentRowIdx;
                 final currentColumnField = currentCell?.column.field;
 
-                print(
+                AppLogger.debug(
                   '[DynamicAttributeTable] ========== stateManager.listener 発火 ==========',
                 );
-                print(
+                AppLogger.debug(
                   '[DynamicAttributeTable] currentCell: ${currentCell != null ? "存在" : "null"}',
                 );
-                print('[DynamicAttributeTable] currentRowIdx: $currentRowIdx');
-                print(
+                AppLogger.debug('[DynamicAttributeTable] currentRowIdx: $currentRowIdx');
+                AppLogger.debug(
                   '[DynamicAttributeTable] currentColumnField: $currentColumnField',
                 );
-                print(
+                AppLogger.debug(
                   '[DynamicAttributeTable] features.length: ${features.length}',
                 );
 
@@ -1324,31 +1325,31 @@ class _DynamicAttributeTableWidgetState
                     currentRowIdx < features.length) {
                   final feature = features[currentRowIdx];
 
-                  print('[DynamicAttributeTable] 有効な行選択を検出');
-                  print('[DynamicAttributeTable] 選択フィーチャ情報:');
-                  print('  - rowId: ${feature.rowId}');
-                  print('  - name: ${feature.name}');
-                  print('  - layerName: ${feature.layerName}');
-                  print('  - フィーチャタイプ: ${feature.runtimeType}');
-                  print('  - 座標: ${feature.centroid}');
+                  AppLogger.debug('[DynamicAttributeTable] 有効な行選択を検出');
+                  AppLogger.debug('[DynamicAttributeTable] 選択フィーチャ情報:');
+                  AppLogger.debug('  - rowId: ${feature.rowId}');
+                  AppLogger.debug('  - name: ${feature.name}');
+                  AppLogger.debug('  - layerName: ${feature.layerName}');
+                  AppLogger.debug('  - フィーチャタイプ: ${feature.runtimeType}');
+                  AppLogger.debug('  - 座標: ${feature.centroid}');
 
                   // 既に選択されている場合はスキップ（無限ループ防止）
                   if (GlobalConfig.instance.selectedFeatures.length == 1 &&
                       GlobalConfig.instance.selectedFeatures.first == feature) {
-                    print('[DynamicAttributeTable] 既に選択済み → スキップ');
+                    AppLogger.debug('[DynamicAttributeTable] 既に選択済み → スキップ');
                     return;
                   }
 
-                  print('[DynamicAttributeTable] GlobalConfigに追加開始');
+                  AppLogger.debug('[DynamicAttributeTable] GlobalConfigに追加開始');
 
                   // GlobalConfigのselectedFeaturesリストをクリアして選択されたFeatureNodeを追加
                   GlobalConfig.instance.selectedFeatures.clear();
                   GlobalConfig.instance.selectedFeatures.add(feature);
 
-                  print(
+                  AppLogger.debug(
                     '[DynamicAttributeTable] GlobalConfig.selectedFeatures:',
                   );
-                  print(
+                  AppLogger.debug(
                     '  - 選択フィーチャ数: ${GlobalConfig.instance.selectedFeatures.length}',
                   );
                   for (
@@ -1359,21 +1360,21 @@ class _DynamicAttributeTableWidgetState
                     final selectedFeature =
                         GlobalConfig.instance.selectedFeatures[i];
                     if (selectedFeature is FeatureNode) {
-                      print(
+                      AppLogger.debug(
                         '  - [$i] ${selectedFeature.name} (ID: ${selectedFeature.rowId})',
                       );
                     } else {
-                      print('  - [$i] 型不明: ${selectedFeature.runtimeType}');
+                      AppLogger.debug('  - [$i] 型不明: ${selectedFeature.runtimeType}');
                     }
                   }
 
-                  print('[DynamicAttributeTable] onFeatureSelected コールバック呼び出し');
+                  AppLogger.debug('[DynamicAttributeTable] onFeatureSelected コールバック呼び出し');
                   widget.onFeatureSelected?.call(feature);
-                  print('[DynamicAttributeTable] フィーチャ選択処理完了');
+                  AppLogger.debug('[DynamicAttributeTable] フィーチャ選択処理完了');
                 } else {
-                  print('[DynamicAttributeTable] 無効な選択状態 → フィーチャ選択スキップ');
+                  AppLogger.debug('[DynamicAttributeTable] 無効な選択状態 → フィーチャ選択スキップ');
                 }
-                print(
+                AppLogger.debug(
                   '[DynamicAttributeTable] ========================================',
                 );
               });
@@ -1426,3 +1427,4 @@ class _DynamicAttributeTableWidgetState
     );
   }
 }
+

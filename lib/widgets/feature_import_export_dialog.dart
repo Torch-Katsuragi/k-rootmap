@@ -1,15 +1,9 @@
 // K-MAPS: Feature Import/Export Dialog Widget
 // 個別フィーチャのインポート・エクスポート機能を提供するダイアログ
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/import_export_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 
 /// 個別フィーチャのImport/Export機能を提供するダイアログ
 class FeatureImportExportDialog extends StatefulWidget {
@@ -60,7 +54,6 @@ class FeatureImportExportDialog extends StatefulWidget {
 
 class _FeatureImportExportDialogState extends State<FeatureImportExportDialog>
     with SingleTickerProviderStateMixin {
-  final ImportExportService _importExportService = ImportExportService();
   bool _isProcessing = false;
   String? _statusMessage;
   ImportExportResult? _lastResult;
@@ -313,7 +306,7 @@ class _FeatureImportExportDialogState extends State<FeatureImportExportDialog>
 
           // エクスポート形式
           DropdownButtonFormField<FileFormat>(
-            value: _exportFormat,
+            initialValue: _exportFormat,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               labelText: 'Export Format',

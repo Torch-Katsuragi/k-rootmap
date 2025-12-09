@@ -1,6 +1,6 @@
 // K-MAPS: Dialog Manager
 // ダイアログとコンバーターを統合管理するマネージャー
-import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,11 +8,7 @@ import '../converters/base_converter.dart';
 import '../converters/layer_converter.dart';
 import '../converters/feature_converter.dart';
 import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import '../services/import_export_service.dart';
 
 /// ダイアログ管理機能を提供するマネージャークラス
@@ -37,7 +33,7 @@ class DialogManager {
 
       return file?.path;
     } catch (e) {
-      print(
+      AppLogger.debug(
         '[DialogManager] file_selector failed, falling back to file_picker: $e',
       );
 
@@ -51,7 +47,7 @@ class DialogManager {
 
         return result?.files.first.path;
       } catch (fallbackError) {
-        print('[DialogManager] file_picker also failed: $fallbackError');
+        AppLogger.debug('[DialogManager] file_picker also failed: $fallbackError');
         return null;
       }
     }
@@ -74,7 +70,7 @@ class DialogManager {
 
       return result?.path;
     } catch (e) {
-      print(
+      AppLogger.debug(
         '[DialogManager] file_selector save failed, falling back to file_picker: $e',
       );
 
@@ -89,7 +85,7 @@ class DialogManager {
 
         return result;
       } catch (fallbackError) {
-        print('[DialogManager] file_picker save also failed: $fallbackError');
+        AppLogger.debug('[DialogManager] file_picker save also failed: $fallbackError');
         return null;
       }
     }
@@ -105,6 +101,7 @@ class DialogManager {
       builder: (context) => _LayerImportDialog(targetLayer: targetLayer),
     );
 
+    if (!context.mounted) return;
     if (result != null && result.success) {
       _showSuccessSnackBar(context, 'Layer imported successfully!');
     } else if (result != null && !result.success) {
@@ -122,6 +119,7 @@ class DialogManager {
       builder: (context) => _LayerExportDialog(sourceLayer: sourceLayer),
     );
 
+    if (!context.mounted) return;
     if (result != null && result.success) {
       _showSuccessSnackBar(context, 'Layer exported successfully!');
     } else if (result != null && !result.success) {
@@ -144,6 +142,7 @@ class DialogManager {
           ),
     );
 
+    if (!context.mounted) return;
     if (result != null && result.success) {
       final metadata = result.metadata;
       final count = metadata?['successfulImports'] ?? 0;
@@ -168,6 +167,7 @@ class DialogManager {
           ),
     );
 
+    if (!context.mounted) return;
     if (result != null && result.success) {
       final metadata = result.metadata;
       final count = metadata?['featureCount'] ?? 0;
@@ -424,7 +424,7 @@ class _LayerExportDialogState extends State<_LayerExportDialog> {
               Text(_progressMessage),
             ] else ...[
               DropdownButtonFormField<FileFormat>(
-                value: _selectedFormat,
+                initialValue: _selectedFormat,
                 decoration: const InputDecoration(
                   labelText: 'Export Format',
                   border: OutlineInputBorder(),
@@ -495,10 +495,10 @@ class _LayerExportDialogState extends State<_LayerExportDialog> {
         options: {}, // convertToPointCloudオプションを削除
       );
 
-      final result_conversion = await _converter.execute(params);
+      final resultConversion = await _converter.execute(params);
 
       if (mounted) {
-        Navigator.of(context).pop(result_conversion);
+        Navigator.of(context).pop(resultConversion);
       }
     } catch (e) {
       if (mounted) {
@@ -685,7 +685,7 @@ class _FeatureExportDialogState extends State<_FeatureExportDialog> {
               Text(_progressMessage),
             ] else ...[
               DropdownButtonFormField<FileFormat>(
-                value: _selectedFormat,
+                initialValue: _selectedFormat,
                 decoration: const InputDecoration(
                   labelText: 'Export Format',
                   border: OutlineInputBorder(),
@@ -784,10 +784,10 @@ class _FeatureExportDialogState extends State<_FeatureExportDialog> {
         selectedFeatureIds: widget.selectedFeatureIds,
       );
 
-      final result_conversion = await converter.execute(params);
+      final resultConversion = await converter.execute(params);
 
       if (mounted) {
-        Navigator.of(context).pop(result_conversion);
+        Navigator.of(context).pop(resultConversion);
       }
     } catch (e) {
       if (mounted) {
@@ -802,3 +802,4 @@ class _FeatureExportDialogState extends State<_FeatureExportDialog> {
     }
   }
 }
+

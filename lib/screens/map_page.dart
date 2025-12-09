@@ -1,8 +1,9 @@
 // K-MAPS: Map and edit screen
 // Main UI for map display and layer/feature editing
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart'; // PointerScrollEvent用
-import 'package:flutter/services.dart'; // マウスボタン定数用
+// マウスボタン定数用
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -22,7 +23,8 @@ import '../widgets/dynamic_attribute_table_widget.dart';
 import '../widgets/cached_tile_layer.dart'; // キャッシュ機能を有効化
 import '../widgets/compass_fan_painter.dart'; // コンパス扇形描画用
 import '../utils/global_config.dart';
-// import 'package:sqlite3/sqlite3.dart' as sql; // sqflite移行により削除
+// import 'package:k_maps/utils/app_logger.dart';
+// sqflite移行により削除
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
@@ -118,10 +120,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   @override
   void initState() {
     super.initState();
-    print('[DEBUG] initState: KMapsHomePage start');
+    AppLogger.debug('[DEBUG] initState: KMapsHomePage start');
     GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
     _currentNode = GlobalConfig.instance.folderTree; // Reference root node
-    print('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
+    AppLogger.debug('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
     GlobalConfig.instance.mapState = this;
 
     // GPS追跡アニメーション初期化
@@ -166,7 +168,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// プロジェクトツリーの初期化（非同期）
   Future<void> _initializeProjectTree() async {
-    print('[DEBUG] _initializeProjectTree: start');
+    AppLogger.debug('[DEBUG] _initializeProjectTree: start');
     final rootNode = GlobalConfig.instance.folderTree;
     if (rootNode != null) {
       await _updateNodeRecursively(rootNode);
@@ -177,7 +179,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         setState(() {});
       }
     }
-    print('[DEBUG] _initializeProjectTree: complete');
+    AppLogger.debug('[DEBUG] _initializeProjectTree: complete');
   }
 
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
@@ -196,27 +198,27 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// 背景地図サービス初期化
   Future<void> _initializeBaseMapService() async {
     try {
-      print('[DEBUG] BaseMapService: 初期化開始');
+      AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
       await GlobalConfig.instance.baseMapService.initialize();
 
       // 背景地図サービスの変更を監視
       GlobalConfig.instance.baseMapService.addListener(_onBaseMapServiceUpdate);
 
-      print('[DEBUG] BaseMapService: 初期化完了');
+      AppLogger.debug('[DEBUG] BaseMapService: 初期化完了');
     } catch (e) {
-      print('[ERROR] BaseMapService: 初期化エラー: $e');
+      AppLogger.debug('[ERROR] BaseMapService: 初期化エラー: $e');
     }
   }
 
   /// コンパス機能初期化
   Future<void> _initializeCompass() async {
     try {
-      print('[DEBUG] Compass: 初期化開始');
+      AppLogger.debug('[DEBUG] Compass: 初期化開始');
 
       // コンパスストリームが利用可能かチェック
       final compassStream = FlutterCompass.events;
       if (compassStream == null) {
-        print('[DEBUG] Compass: コンパスストリームが利用できません');
+        AppLogger.debug('[DEBUG] Compass: コンパスストリームが利用できません');
         return;
       }
 
@@ -229,9 +231,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         }
       });
 
-      print('[DEBUG] Compass: 初期化完了');
+      AppLogger.debug('[DEBUG] Compass: 初期化完了');
     } catch (e) {
-      print('[ERROR] Compass: 初期化エラー: $e');
+      AppLogger.debug('[ERROR] Compass: 初期化エラー: $e');
     }
   }
 
@@ -244,7 +246,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS管理サービス初期化
   Future<void> _initializeGpsManager() async {
-    print('[DEBUG] GPS: GPS管理サービス初期化開始');
+    AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化開始');
 
     try {
       // GPS管理サービスを初期化
@@ -281,7 +283,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           });
         },
         onError: (error) {
-          print('[DEBUG] GPS: Geolocator stream error: $error');
+          AppLogger.debug('[DEBUG] GPS: Geolocator stream error: $error');
         },
       );
 
@@ -293,22 +295,22 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         });
       });
 
-      print('[DEBUG] GPS: GPS管理サービス初期化完了');
+      AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化完了');
     } catch (e) {
-      print('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
+      AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
     }
   }
 
   /// 外部GNSS機器をバックグラウンドでスキャン
   Future<void> _scanGnssDevicesBackground() async {
     try {
-      print('[DEBUG] GPS: 外部GNSS機器バックグラウンドスキャン開始');
+      AppLogger.debug('[DEBUG] GPS: 外部GNSS機器バックグラウンドスキャン開始');
       await _gpsManager.scanExternalGnssDevices();
-      print(
+      AppLogger.debug(
         '[DEBUG] GPS: 外部GNSS機器スキャン完了: ${_gpsManager.availableGnssDevices.length}件',
       );
     } catch (e) {
-      print('[DEBUG] GPS: 外部GNSS機器スキャンエラー: $e');
+      AppLogger.debug('[DEBUG] GPS: 外部GNSS機器スキャンエラー: $e');
       // エラーでもマップ画面の表示は継続
     }
   }
@@ -429,14 +431,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         useExternalGnss && _gpsManager.isExternalGnssConnected;
 
     try {
-      debugPrint(
+      AppLogger.debug(
         '[MapPage] GPS追跡開始: ${_isMainIsolateTracking ? "外部GNSS" : "内蔵GPS"}',
       );
 
       // 外部GNSS使用時はGPS測量モードを開始
       if (_isMainIsolateTracking) {
         await _gpsManager.startGpsSurveyWithWait();
-        debugPrint(
+        AppLogger.debug(
           '[MapPage] GPS測量モード開始: 外部GNSS機器 (${_gpsManager.selectedGnssDevice?.name})',
         );
       }
@@ -456,7 +458,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         await _serviceManager.startService();
       } catch (e) {
         // Android 12以降でフォアグラウンドサービス開始が失敗する場合
-        debugPrint('[MapPage] GPS追跡サービス開始エラー: $e');
+        AppLogger.debug('[MapPage] GPS追跡サービス開始エラー: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -492,7 +494,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '$sourceType追跡を開始しました。ポイントを「${_trackingTargetPointLayer!.name}」に${_trackingSaveIntervalSeconds}秒間隔で保存します$deviceInfo',
+              '$sourceType追跡を開始しました。ポイントを「${_trackingTargetPointLayer!.name}」に$_trackingSaveIntervalSeconds秒間隔で保存します$deviceInfo',
             ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
@@ -500,7 +502,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         );
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS追跡開始エラー: $e');
+      AppLogger.debug('[MapPage] GPS追跡開始エラー: $e');
       _isMainIsolateTracking = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -518,7 +520,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   Future<void> _handleTrackPointForSaving(Map<String, dynamic> event) async {
     // 保存先レイヤーの存在チェック
     if (_trackingTargetPointLayer == null) {
-      debugPrint('[MapPage] GPS追跡: 保存先レイヤーがnullです');
+      AppLogger.debug('[MapPage] GPS追跡: 保存先レイヤーがnullです');
       return;
     }
 
@@ -526,7 +528,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     final parent = _trackingTargetPointLayer!.parent;
     if (parent == null ||
         !parent.children.contains(_trackingTargetPointLayer)) {
-      debugPrint('[MapPage] GPS追跡: 保存先レイヤーが削除されています');
+      AppLogger.debug('[MapPage] GPS追跡: 保存先レイヤーが削除されています');
       // 追跡を停止
       await _stopGpsTrackingService();
       if (mounted) {
@@ -656,7 +658,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         _trackedPointCount++;
         _lastTrackingSaveTime = DateTime.now();
         _lastSavedTrackingPosition = position;
-        debugPrint(
+        AppLogger.debug(
           '[MapPage] GPS追跡ポイント保存: $_trackedPointCount ポイント目 (source_type: ${attributes['source_type']})',
         );
 
@@ -666,10 +668,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         });
         refreshFeatures();
       } else {
-        debugPrint('[ERROR] GPS追跡ポイントの作成に失敗しました');
+        AppLogger.debug('[ERROR] GPS追跡ポイントの作成に失敗しました');
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS追跡ポイント保存エラー: $e');
+      AppLogger.debug('[MapPage] GPS追跡ポイント保存エラー: $e');
     }
   }
 
@@ -723,7 +725,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     try {
       final currentTool = GlobalConfig.instance.currentTool;
       if (currentTool is! GpsTool) {
-        debugPrint('[MapPage] GPS測量: 現在のツールがGpsToolではありません');
+        AppLogger.debug('[MapPage] GPS測量: 現在のツールがGpsToolではありません');
         return;
       }
 
@@ -774,7 +776,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               GlobalConfig.instance.drawingState.drawingPolygon.length;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('GPS位置を記録しました (${totalPoints}ポイント目)'),
+              content: Text('GPS位置を記録しました ($totalPointsポイント目)'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 1),
             ),
@@ -792,7 +794,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         }
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS測量エラー: $e');
+      AppLogger.debug('[MapPage] GPS測量エラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('GPS測量エラー: $e'), backgroundColor: Colors.red),
@@ -806,7 +808,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     try {
       final currentTool = GlobalConfig.instance.currentTool;
       if (currentTool is! GpsTool) {
-        debugPrint('[MapPage] GPS長押し測量: 現在のツールがGpsToolではありません');
+        AppLogger.debug('[MapPage] GPS長押し測量: 現在のツールがGpsToolではありません');
         return;
       }
 
@@ -815,20 +817,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         _longPressGpsCount = 0;
       });
 
-      debugPrint('[MapPage] GPS長押し測量開始');
+      AppLogger.debug('[MapPage] GPS長押し測量開始');
       currentTool.startLongPressGpsSurvey();
 
       // 長押し中の個数更新タイマーを開始（0.5秒間隔で更新）
       _longPressCountUpdateTimer = Timer.periodic(
         const Duration(milliseconds: 500),
         (timer) {
-          if (currentTool is GpsTool) {
-            final newCount = currentTool.longPressGpsCount;
-            if (_longPressGpsCount != newCount) {
-              setState(() {
-                _longPressGpsCount = newCount;
-              });
-            }
+          // currentToolは既にGpsTool型として確定している（行808でガード済み）
+          final newCount = currentTool.longPressGpsCount;
+          if (_longPressGpsCount != newCount) {
+            setState(() {
+              _longPressGpsCount = newCount;
+            });
           }
         },
       );
@@ -844,7 +845,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         );
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS長押し測量開始エラー: $e');
+      AppLogger.debug('[MapPage] GPS長押し測量開始エラー: $e');
       _longPressCountUpdateTimer?.cancel();
       _longPressCountUpdateTimer = null;
       setState(() {
@@ -867,11 +868,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     try {
       final currentTool = GlobalConfig.instance.currentTool;
       if (currentTool is! GpsTool) {
-        debugPrint('[MapPage] GPS長押し測量停止: 現在のツールがGpsToolではありません');
+        AppLogger.debug('[MapPage] GPS長押し測量停止: 現在のツールがGpsToolではありません');
         return;
       }
 
-      debugPrint('[MapPage] GPS長押し測量停止 - 平均化処理開始');
+      AppLogger.debug('[MapPage] GPS長押し測量停止 - 平均化処理開始');
       final success = await currentTool.stopLongPressGpsSurvey();
 
       if (!success) {
@@ -898,7 +899,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         );
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS長押し測量停止エラー: $e');
+      AppLogger.debug('[MapPage] GPS長押し測量停止エラー: $e');
       _longPressCountUpdateTimer?.cancel();
       _longPressCountUpdateTimer = null;
       setState(() {
@@ -918,7 +919,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS追跡フォアグラウンドサービス停止
   Future<void> _stopGpsTrackingService() async {
-    debugPrint(
+    AppLogger.debug(
       '[MapPage] GPS追跡停止: ${_isMainIsolateTracking ? "外部GNSS" : "内蔵GPS"}',
     );
 
@@ -1031,7 +1032,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           setState(() {});
         }
       } catch (e) {
-        debugPrint('[MapPage] GPS追跡ポイント変換エラー: $e');
+        AppLogger.debug('[MapPage] GPS追跡ポイント変換エラー: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('変換エラー: $e'), backgroundColor: Colors.red),
@@ -1142,7 +1143,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       );
 
       // GPS測量成功時はGPS停止（map_pageの_gpsManagerを使用）
-      if (success && currentTool is GpsTool) {
+      // currentToolは既にGpsTool型として確定している（行1062でガード済み）
+      if (success) {
         await _gpsManager.stopGpsSurvey();
       }
 
@@ -1169,7 +1171,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         }
       }
     } catch (e) {
-      debugPrint('[MapPage] GPS測量確定エラー: $e');
+      AppLogger.debug('[MapPage] GPS測量確定エラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1190,7 +1192,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
     // 描画データがあるかチェック
     if (!drawingState.isDrawing) {
-      print('[MAP] 確定処理: 描画データがありません');
+      AppLogger.debug('[MAP] 確定処理: 描画データがありません');
       return;
     }
 
@@ -1234,9 +1236,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     );
 
     if (success) {
-      print('[MAP] フィーチャ確定成功: $name');
+      AppLogger.debug('[MAP] フィーチャ確定成功: $name');
     } else {
-      print('[MAP] フィーチャ確定失敗: $name');
+      AppLogger.debug('[MAP] フィーチャ確定失敗: $name');
     }
   }
 
@@ -1247,7 +1249,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       final camera = _mapController.camera;
       return camera.offsetToCrs(offset);
     } catch (e) {
-      print('[ERROR] offsetToLatLng failed: $e');
+      AppLogger.debug('[ERROR] offsetToLatLng failed: $e');
       return _mapController.camera.center;
     }
   }
@@ -1259,7 +1261,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       final camera = _mapController.camera;
       return camera.latLngToScreenOffset(latlng);
     } catch (e) {
-      print('[ERROR] latLngToOffset failed: $e');
+      AppLogger.debug('[ERROR] latLngToOffset failed: $e');
       final size = MediaQuery.of(context).size;
       return Offset(size.width / 2, size.height / 2);
     }
@@ -1268,13 +1270,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// フィーチャデータを非同期で更新（キャッシュに保存）
   /// LayerNodeが管理するFeatureNodeを直接参照し、DBアクセスを最小限に抑制
   Future<void> _updateFeatures() async {
-    print('[DEBUG] _updateFeatures: start');
+    AppLogger.debug('[DEBUG] _updateFeatures: start');
     final folderTree = GlobalConfig.instance.folderTree;
-    print('[DEBUG] _updateFeatures: folderTree=$folderTree');
+    AppLogger.debug('[DEBUG] _updateFeatures: folderTree=$folderTree');
 
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
-    print(
+    AppLogger.debug(
       '[DEBUG] _updateFeatures: found ${visibleLayers.length} visible layers',
     );
 
@@ -1287,12 +1289,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     if (folderTree != null) {
       _collectPhotoNodesRecursive(folderTree, photoNodes);
     }
-    print(
+    AppLogger.debug(
       '[DEBUG] _updateFeatures: collected ${photoNodes.length} photo nodes',
     );
 
     for (final layer in visibleLayers) {
-      print(
+      AppLogger.debug(
         '[DEBUG] _updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
       );
 
@@ -1306,7 +1308,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       if (layer is PointLayerNode) {
         final layerPointFeatures =
             layerFeatures.whereType<PointFeatureNode>().toList();
-        print(
+        AppLogger.debug(
           '[DEBUG] _updateFeatures: found ${layerPointFeatures.length} point features in ${layer.name} (from children)',
         );
         pointFeatures.addAll(layerPointFeatures);
@@ -1316,7 +1318,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbPointFeatures =
               layer.features.whereType<PointFeatureNode>().toList();
-          print(
+          AppLogger.debug(
             '[DEBUG] _updateFeatures: loaded ${dbPointFeatures.length} point features from DB for ${layer.name}',
           );
           pointFeatures.addAll(dbPointFeatures);
@@ -1324,7 +1326,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       } else if (layer is LineLayerNode) {
         final layerLineFeatures =
             layerFeatures.whereType<LineFeatureNode>().toList();
-        print(
+        AppLogger.debug(
           '[DEBUG] _updateFeatures: found ${layerLineFeatures.length} line features in ${layer.name} (from children)',
         );
         lineFeatures.addAll(layerLineFeatures);
@@ -1334,7 +1336,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbLineFeatures =
               layer.features.whereType<LineFeatureNode>().toList();
-          print(
+          AppLogger.debug(
             '[DEBUG] _updateFeatures: loaded ${dbLineFeatures.length} line features from DB for ${layer.name}',
           );
           lineFeatures.addAll(dbLineFeatures);
@@ -1342,7 +1344,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       } else if (layer is PolygonLayerNode) {
         final layerPolygonFeatures =
             layerFeatures.whereType<PolygonFeatureNode>().toList();
-        print(
+        AppLogger.debug(
           '[DEBUG] _updateFeatures: found ${layerPolygonFeatures.length} polygon features in ${layer.name} (from children)',
         );
         polygonFeatures.addAll(layerPolygonFeatures);
@@ -1352,7 +1354,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           await layer.updateChildren(); // DBから読み込んでchildrenに追加
           final dbPolygonFeatures =
               layer.features.whereType<PolygonFeatureNode>().toList();
-          print(
+          AppLogger.debug(
             '[DEBUG] _updateFeatures: loaded ${dbPolygonFeatures.length} polygon features from DB for ${layer.name}',
           );
           polygonFeatures.addAll(dbPolygonFeatures);
@@ -1360,7 +1362,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       }
     }
 
-    print(
+    AppLogger.debug(
       '[DEBUG] _updateFeatures: total features - points:${pointFeatures.length}, lines:${lineFeatures.length}, polygons:${polygonFeatures.length}, photos:${photoNodes.length}',
     );
 
@@ -1371,9 +1373,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         _polygonFeatures = polygonFeatures;
         _photoNodes = photoNodes; // PhotoNodeキャッシュを更新
       });
-      print('[DEBUG] _updateFeatures: state updated successfully');
+      AppLogger.debug('[DEBUG] _updateFeatures: state updated successfully');
     } else {
-      print(
+      AppLogger.debug(
         '[DEBUG] _updateFeatures: widget not mounted, skipping state update',
       );
     }
@@ -1415,7 +1417,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         if (_currentHeading != null)
           Transform.rotate(
             angle: (_currentHeading! * pi / 180) - (pi / 2), // 北を上に調整
-            child: Container(
+            child: SizedBox(
               width: 60,
               height: 60,
               child: CustomPaint(painter: CompassFanPainter()),
@@ -1445,7 +1447,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// 追記モード開始処理
   /// [feature] - 追記対象のFeatureNode
   void _startAppendMode(FeatureNode feature) {
-    print('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
+    AppLogger.debug('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
 
     // 1. ツールをPenToolに切り替え
     setState(() {
@@ -1464,20 +1466,20 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       setState(() {
         GlobalConfig.instance.selectedLayerNode = targetLayer;
       });
-      print('[MAP] 選択レイヤーを設定: ${targetLayer.name}');
+      AppLogger.debug('[MAP] 選択レイヤーを設定: ${targetLayer.name}');
     }
 
     // 3. UI状態を更新してツール変更とレイヤー選択を反映
     setState(() {});
 
-    print('[MAP] 追記モード開始完了');
+    AppLogger.debug('[MAP] 追記モード開始完了');
   }
 
   /// マップUI更新処理
   /// フィーチャの追加・更新・削除後にマップ表示を更新
   /// 【重要】childrenはクリアせず、メモリ上のインスタンスから読み込む（DBアクセスなし）
   void _refreshMapUI() {
-    print('[MAP] マップUI更新開始（インスタンスベース）');
+    AppLogger.debug('[MAP] マップUI更新開始（インスタンスベース）');
 
     // 1. フィーチャデータのキャッシュをクリア
     _pointFeatures.clear();
@@ -1494,11 +1496,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           // 4. UI全体を更新
           if (mounted) {
             setState(() {});
-            print('[MAP] マップUI更新完了');
+            AppLogger.debug('[MAP] マップUI更新完了');
           }
         })
         .catchError((error) {
-          print('[ERROR] マップUI更新エラー: $error');
+          AppLogger.debug('[ERROR] マップUI更新エラー: $error');
         });
   }
 
@@ -1518,7 +1520,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         return;
       }
 
-      print('[MAP] 属性テーブルを開く: ${layer.name}');
+      AppLogger.debug('[MAP] 属性テーブルを開く: ${layer.name}');
 
       setState(() {
         _attributeTableLayer = layer;
@@ -1527,9 +1529,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         drawerOpen = false;
       });
 
-      print('[MAP] 属性テーブル表示開始');
+      AppLogger.debug('[MAP] 属性テーブル表示開始');
     } catch (e) {
-      print('[MAP] 属性テーブル表示エラー: $e');
+      AppLogger.debug('[MAP] 属性テーブル表示エラー: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('属性テーブルの表示に失敗しました: $e'),
@@ -1545,13 +1547,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       _showAttributeTable = false;
       _attributeTableLayer = null;
     });
-    print('[MAP] 属性テーブル表示終了');
+    AppLogger.debug('[MAP] 属性テーブル表示終了');
   }
 
   /// 属性テーブルでフィーチャが選択されたときの処理
   void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
-      print('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
+      AppLogger.debug('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
 
       // 地図上でフィーチャを選択状態にする
       GlobalConfig.instance.selectedFeatures = [feature];
@@ -1562,9 +1564,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       // 地図をフィーチャの位置にジャンプ
       _mapController.move(feature.centroid, _mapController.camera.zoom);
 
-      print('[MAP] フィーチャ選択とマップジャンプ完了');
+      AppLogger.debug('[MAP] フィーチャ選択とマップジャンプ完了');
     } catch (e) {
-      print('[MAP] フィーチャ選択処理エラー: $e');
+      AppLogger.debug('[MAP] フィーチャ選択処理エラー: $e');
     }
   }
 
@@ -1765,8 +1767,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 color:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? Colors.yellow.withOpacity(0.5)
-                                        : Colors.green.withOpacity(0.3),
+                                        ? Colors.yellow.withValues(alpha: 0.5)
+                                        : Colors.green.withValues(alpha: 0.3),
                                 borderStrokeWidth:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
@@ -1793,7 +1795,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     .drawingState
                                     .drawingPolygon,
                               ),
-                              color: Colors.purple.withOpacity(0.4),
+                              color: Colors.purple.withValues(alpha: 0.4),
                               borderStrokeWidth: 2.0,
                               borderColor: Colors.purple,
                             ),
@@ -1810,7 +1812,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                   return [
                                     Polygon(
                                       points: previewPoints,
-                                      color: Colors.orange.withOpacity(0.4),
+                                      color: Colors.orange.withValues(alpha: 0.4),
                                       borderStrokeWidth: 1.5,
                                       borderColor: Colors.orange,
                                     ),
@@ -1833,7 +1835,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     .map((offset) => offsetToLatLng(offset))
                                     .toList(),
                               ),
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderStrokeWidth: 1.0,
                               borderColor: Colors.black,
                             ),
@@ -2232,7 +2234,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
+                                color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -2268,7 +2270,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                        color: Colors.orange.withOpacity(0.3),
+                                        color: Colors.orange.withValues(alpha: 0.3),
                                         width: 1,
                                       ),
                                     ),
@@ -2298,7 +2300,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.orange.withOpacity(0.8),
+                                          color: Colors.orange.withValues(alpha: 0.8),
                                           blurRadius: 4,
                                           spreadRadius: 1,
                                         ),
@@ -2332,7 +2334,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.amber.withOpacity(0.6),
+                                          color: Colors.amber.withValues(alpha: 0.6),
                                           blurRadius: 3,
                                           spreadRadius: 1,
                                         ),
@@ -2418,7 +2420,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       layerNode.children.remove(feature);
 
                       // 成功メッセージ
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('フィーチャが削除されました: ID ${feature.rowId}'),
@@ -2430,14 +2432,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       // マップを更新
                       _refreshMapUI();
 
-                      print('[MAP] フィーチャ削除完了: ${feature.rowId}');
+                      AppLogger.debug('[MAP] フィーチャ削除完了: ${feature.rowId}');
                     } catch (e) {
-                      print('[MAP] フィーチャ削除エラー: $e');
+                      AppLogger.debug('[MAP] フィーチャ削除エラー: $e');
                     }
                   },
                   onAddFeature: () {
                     // 新規フィーチャ追加時の処理（将来実装）
-                    if (mounted) {
+                    if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')),
                       );
@@ -2521,7 +2523,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 children: [
                                   // 長押し進行状況を示すプログレスインジケーター
                                   if (_isLongPressing)
-                                    Container(
+                                    SizedBox(
                                       width: 56.0,
                                       height: 56.0,
                                       child: CircularProgressIndicator(
@@ -2531,7 +2533,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                               Colors.white,
                                             ),
                                         backgroundColor: Colors.white
-                                            .withOpacity(0.3),
+                                            .withValues(alpha: 0.3),
                                       ),
                                     ),
                                   // メインアイコン
@@ -2587,16 +2589,17 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             (() {
               final selected = GlobalConfig.instance.selectedLayerNode;
               final currentTool = GlobalConfig.instance.currentTool;
+              final gpsTool = currentTool is GpsTool ? currentTool : null;
 
               // GPS測量中のボタン表示
               final isGpsSurveyLine =
                   selected is LineLayerNode &&
-                  currentTool is GpsTool &&
-                  (currentTool as GpsTool).surveyLine.isNotEmpty;
+                  gpsTool != null &&
+                  gpsTool.surveyLine.isNotEmpty;
               final isGpsSurveyPolygon =
                   selected is PolygonLayerNode &&
-                  currentTool is GpsTool &&
-                  (currentTool as GpsTool).surveyPolygon.isNotEmpty;
+                  gpsTool != null &&
+                  gpsTool.surveyPolygon.isNotEmpty;
 
               // ペンツールでの描画中のボタン表示
               final isLineDrawing =
@@ -2610,6 +2613,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
               // GPS測量中は専用のボタンを表示
               if (isGpsSurveyLine || isGpsSurveyPolygon) {
+                // ここではgpsToolはnon-nullが保証される（条件でチェック済み）
+                final gps = gpsTool;
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2618,9 +2623,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       heroTag: 'gps_undo',
                       onPressed: () {
                         final drawingState = GlobalDrawingState.instance;
-                        final gpsTool = currentTool as GpsTool;
-                        // GPS測量の場合、線と面のどちらかを判定
-                        final isLine = gpsTool.surveyLine.isNotEmpty;
+                        final isLine = gps.surveyLine.isNotEmpty;
                         drawingState.undo(isLine: isLine);
                         setState(() {});
                       },
@@ -2633,8 +2636,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       heroTag: 'gps_cancel',
                       onPressed: () async {
                         try {
-                          await (currentTool as GpsTool)
-                              .cancelSurveyWithGpsStop();
+                          await gps.cancelSurveyWithGpsStop();
                           setState(() {});
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -2646,7 +2648,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                             );
                           }
                         } catch (e) {
-                          debugPrint('[MapPage] GPS測量キャンセルエラー: $e');
+                          AppLogger.debug('[MapPage] GPS測量キャンセルエラー: $e');
                         }
                       },
                       tooltip: 'GPS測量をキャンセル',
@@ -2736,7 +2738,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               Text('GPS: 取得中...'),
               SizedBox(width: 12),
               Text(
-                '(${_gpsWaitSeconds}秒経過)',
+                '($_gpsWaitSeconds秒経過)',
                 style: TextStyle(color: Colors.grey),
               ),
               SizedBox(width: 16),
@@ -2783,7 +2785,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             if (isExternalGnss) ...[
               if (satelliteCount != null) ...[
                 SizedBox(width: 16),
-                Text('衛星数: ${satelliteCount}基'),
+                Text('衛星数: $satelliteCount基'),
               ],
               if (hdop != null) ...[
                 SizedBox(width: 16),
@@ -2803,3 +2805,5 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     );
   }
 }
+
+

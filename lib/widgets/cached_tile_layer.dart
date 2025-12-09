@@ -1,8 +1,7 @@
-/**
- * キャッシュ機能付きタイルレイヤー
- * 
- * BaseMapServiceと連携してタイルをキャッシュし、オフライン表示を可能にします。
- */
+/// キャッシュ機能付きタイルレイヤー
+/// 
+/// BaseMapServiceと連携してタイルをキャッシュし、オフライン表示を可能にします。
+library;
 
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
@@ -107,7 +106,7 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
           return ImageInfo(image: frame.image);
         } catch (decodeError) {
           // 無効な画像データの場合は透明タイルを返し、ログは最小限にする
-          // print('[TILE-UI] ❌ Decode error: $decodeError');
+          // AppLogger.debug('[TILE-UI] ❌ Decode error: $decodeError');
           return await _createTransparentTile(decode);
         }
       } else {
@@ -116,7 +115,7 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
       }
     } catch (e) {
       // ロードエラー時も静かに透明タイルを返す
-      // print('[TILE-UI] ❌ Load error: $e');
+      // AppLogger.debug('[TILE-UI] ❌ Load error: $e');
       return await _createErrorTile(decode);
     }
   }
@@ -146,4 +145,5 @@ class CachedTileImageProvider extends ImageProvider<CachedTileImageProvider> {
   @override
   int get hashCode => Object.hash(coordinates, provider.id);
 }
+
 

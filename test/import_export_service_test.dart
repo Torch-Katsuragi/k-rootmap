@@ -4,7 +4,6 @@ import 'package:k_maps/services/import_export_service.dart';
 import 'package:k_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:k_maps/utils/coordinate_converter.dart';
 
@@ -153,12 +152,6 @@ void main() {
   });
 
   group('ImportExportService座標変換テスト', () {
-    late ImportExportService service;
-
-    setUp(() {
-      service = ImportExportService();
-    });
-
     test('CoordinateSystemオブジェクトの作成', () {
       final coordinateSystem = CoordinateSystem(
         name: 'JGD2000 / Japan Plane Rectangular CS VI',
@@ -218,7 +211,7 @@ void main() {
         expect(source, isNotNull);
         expect(target, isNotNull);
 
-        if (source != null && target != null) {
+        if (source != null) {
           // 和歌山県の緯度経度を平面直角座標に変換
           final wgs84Point = Point(x: 135.8, y: 34.2); // 和歌山県内の座標
           final result = source.transform(target, wgs84Point);

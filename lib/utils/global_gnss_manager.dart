@@ -10,6 +10,7 @@
 /// - 接続状態の集約管理
 library;
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import '../models/bluetooth_gnss_service.dart';
 
@@ -82,7 +83,7 @@ class GlobalGnssManager {
   /// アプリ終了時のクリーンアップ
   /// 通常のdisposeではなく、明示的な切断時のみ使用
   void dispose() {
-    debugPrint('[GlobalGnssManager] 明示的な切断・クリーンアップを実行');
+    AppLogger.debug('[GlobalGnssManager] 明示的な切断・クリーンアップを実行');
     _gnssService?.dispose();
     _gnssService = null;
   }
@@ -91,11 +92,11 @@ class GlobalGnssManager {
   void printDebugInfo() {
     final service = _gnssService;
     if (service == null) {
-      debugPrint('[GlobalGnssManager] GNSSサービス未初期化');
+      AppLogger.debug('[GlobalGnssManager] GNSSサービス未初期化');
       return;
     }
 
-    debugPrint('''
+    AppLogger.debug('''
 [GlobalGnssManager] デバッグ情報:
   - 接続状態: ${service.isConnected}
   - 接続中: ${service.isConnecting}
@@ -105,3 +106,5 @@ class GlobalGnssManager {
 ''');
   }
 }
+
+

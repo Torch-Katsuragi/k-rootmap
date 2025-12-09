@@ -6,6 +6,7 @@
 //
 // 依存: latlong2, turf
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart';
 import 'dart:math' as math;
@@ -248,7 +249,7 @@ class GeometryCalc {
       return booleanPointInPolygon(pointPos, feature);
     } catch (e) {
       // ポリゴンが壊れている場合でもエラーを出さずfalseを返す
-      print('[WARNING] pointInPolygonWithHoles: エラー発生（壊れたポリゴン？）: $e');
+      AppLogger.debug('[WARNING] pointInPolygonWithHoles: エラー発生（壊れたポリゴン？）: $e');
       return false;
     }
   }
@@ -321,7 +322,7 @@ class FeatureSearch {
         for (int i = 0; i < geometry.length - 1; i++) {
           final line = [geometry[i], geometry[i + 1]];
           final d = GeometryCalc.calcPointToLineDistance(pt, line);
-          // print(d);
+          // AppLogger.debug(d);
           if (d < minDist) minDist = d;
         }
         return minDist;
@@ -407,7 +408,7 @@ class PolygonMerge {
       mergedPolygon.add(polygon[0]);
     }
 
-    print('[PolygonMerge] 合成完了: 外環1個 + 穴${mergedPolygon.length - 1}個');
+    AppLogger.debug('[PolygonMerge] 合成完了: 外環1個 + 穴${mergedPolygon.length - 1}個');
     return mergedPolygon;
   }
 
@@ -461,7 +462,7 @@ class LineSimplification {
     // 現在は元の実装を使用（turf_dartのsimplifyは後で実装）
     final result = _douglasPeuckerRecursive(line, tolerance);
 
-    print(
+    AppLogger.debug(
       '[LineSimplification] 簡略化完了: ${line.length}点 → ${result.length}点 (許容誤差: ${tolerance}m)',
     );
 
@@ -580,7 +581,7 @@ class LineSimplification {
       tolerance *= 1.5; // 1.5倍ずつ増加
     }
 
-    print(
+    AppLogger.debug(
       '[LineSimplification] 適応的簡略化完了: '
       '${line.length}点 → ${result.length}点 (許容誤差: ${tolerance.toStringAsFixed(1)}m)',
     );
@@ -588,3 +589,4 @@ class LineSimplification {
     return result;
   }
 }
+

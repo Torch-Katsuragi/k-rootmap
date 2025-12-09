@@ -1,9 +1,10 @@
 /// 背景地図管理サービス
 /// 背景地図の選択、切り替え、オフラインキャッシュ機能を提供
+library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -83,7 +84,7 @@ Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
     // PNG形式でエンコード
     return Uint8List.fromList(img.encodePng(resizedImage));
   } catch (e) {
-    print('[TILE-ISO] ❌ Scaling error: $e');
+    AppLogger.debug('[TILE-ISO] ❌ Scaling error: $e');
     return null;
   }
 }
@@ -147,7 +148,7 @@ class BaseMapService extends ChangeNotifier {
       // ネットワーク状態の監視開始
       _initConnectivity();
     } catch (e) {
-      print('[BaseMapService] ❌ Init error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Init error: $e');
       _currentProvider = BaseMapProvider.defaultProvider;
     }
   }
@@ -160,7 +161,7 @@ class BaseMapService extends ChangeNotifier {
       
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
     } catch (e) {
-      print('[BaseMapService] ❌ Connectivity init error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Connectivity init error: $e');
     }
   }
 
@@ -169,7 +170,7 @@ class BaseMapService extends ChangeNotifier {
     final hasConnection = !result.contains(ConnectivityResult.none);
     if (_isNetworkAvailable != hasConnection) {
       _isNetworkAvailable = hasConnection;
-      print('[BaseMapService] Network status changed: ${_isNetworkAvailable ? "Online" : "Offline (No Interface)"}');
+      AppLogger.debug('[BaseMapService] Network status changed: ${_isNetworkAvailable ? "Online" : "Offline (No Interface)"}');
       notifyListeners();
     }
   }
@@ -185,7 +186,7 @@ class BaseMapService extends ChangeNotifier {
         cacheDir.createSync(recursive: true);
       }
     } catch (e) {
-      print('[BaseMapService] ❌ Cache dir error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Cache dir error: $e');
       rethrow;
     }
   }
@@ -196,7 +197,7 @@ class BaseMapService extends ChangeNotifier {
       _tileCacheDb = TileCacheGeoPackage();
       await _tileCacheDb!.initialize(_cacheDirectory!);
     } catch (e) {
-      print('[BaseMapService] ❌ TileDB init error: $e');
+      AppLogger.debug('[BaseMapService] ❌ TileDB init error: $e');
       rethrow;
     }
   }
@@ -215,7 +216,7 @@ class BaseMapService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('[BaseMapService] ❌ Settings load error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Settings load error: $e');
     }
   }
 
@@ -226,7 +227,7 @@ class BaseMapService extends ChangeNotifier {
       await prefs.setString('basemap_provider_id', _currentProvider.id);
       await prefs.setBool('basemap_offline_mode', _isOfflineMode);
     } catch (e) {
-      print('[BaseMapService] ❌ Settings save error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Settings save error: $e');
     }
   }
 
@@ -267,7 +268,7 @@ class BaseMapService extends ChangeNotifier {
         data: data,
       );
     } catch (e) {
-      print('[TILE] ❌ Cache save error: $e');
+      AppLogger.debug('[TILE] ❌ Cache save error: $e');
     }
   }
 
@@ -293,7 +294,7 @@ class BaseMapService extends ChangeNotifier {
       if (data != null) {
         // データサイズチェック
         if (data.length < 100) {
-          print('[TILE] ⚠️ Corrupted cache (too small)');
+          AppLogger.debug('[TILE] ⚠️ Corrupted cache (too small)');
           return null;
         }
         
@@ -310,7 +311,7 @@ class BaseMapService extends ChangeNotifier {
       
       return null;
     } catch (e) {
-      print('[TILE] ❌ Cache read error: $e');
+      AppLogger.debug('[TILE] ❌ Cache read error: $e');
       return null;
     }
   }
@@ -360,7 +361,7 @@ class BaseMapService extends ChangeNotifier {
       
       // ネットワークインターフェースがない場合は即座に終了（無駄なリクエスト防止）
       if (!_isNetworkAvailable) {
-        // print('[TILE] ⚠️ No network interface');
+        // AppLogger.debug('[TILE] ⚠️ No network interface');
         return null;
       }
 
@@ -398,7 +399,7 @@ class BaseMapService extends ChangeNotifier {
 
         // キャッシュに保存
         await _cacheTile(provider.id, z, x, y, data);
-        print('[TILE] 📥 Downloaded: ${provider.id}');
+        AppLogger.debug('[TILE] 📥 Downloaded: ${provider.id}');
 
         return data;
       } else {
@@ -431,7 +432,7 @@ class BaseMapService extends ChangeNotifier {
         return null;
       }
     } catch (e) {
-      print('[TILE] ❌ Network error');
+      AppLogger.debug('[TILE] ❌ Network error');
       
       // エラー時もキャッシュを確認（ネットワークエラーでもキャッシュがあれば利用）
       final errorFallbackData = await _getCachedTile(
@@ -541,7 +542,7 @@ class BaseMapService extends ChangeNotifier {
         'parentY': parentY,
       });
     } catch (e) {
-      print('[TILE] ❌ Scaling error (compute): $e');
+      AppLogger.debug('[TILE] ❌ Scaling error (compute): $e');
       return null;
     }
   }
@@ -554,7 +555,7 @@ class BaseMapService extends ChangeNotifier {
       final sizeBytes = await _tileCacheDb!.getCacheSize();
       return sizeBytes / (1024 * 1024);
     } catch (e) {
-      print('[BaseMapService] ❌ Size error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Size error: $e');
       return 0.0;
     }
   }
@@ -566,7 +567,7 @@ class BaseMapService extends ChangeNotifier {
     try {
       await _tileCacheDb!.clearCache(providerId: providerId);
     } catch (e) {
-      print('[BaseMapService] ❌ Clear error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Clear error: $e');
     }
   }
 
@@ -582,7 +583,7 @@ class BaseMapService extends ChangeNotifier {
     try {
       return await _tileCacheDb!.getStatistics();
     } catch (e) {
-      print('[BaseMapService] ❌ Stats error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Stats error: $e');
       return {};
     }
   }
@@ -604,7 +605,7 @@ class BaseMapService extends ChangeNotifier {
       
       return detailedStats;
     } catch (e) {
-      print('[BaseMapService] ❌ Detailed stats error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Detailed stats error: $e');
       return {};
     }
   }
@@ -623,7 +624,7 @@ class BaseMapService extends ChangeNotifier {
     try {
       return await _tileCacheDb!.validateAndRepair();
     } catch (e) {
-      print('[BaseMapService] ❌ Validation error: $e');
+      AppLogger.debug('[BaseMapService] ❌ Validation error: $e');
       return {
         'totalTiles': 0,
         'validTiles': 0,
@@ -764,8 +765,9 @@ class BaseMapService extends ChangeNotifier {
             (result) {
               // 完了コールバック
               processedTiles++;
-              if (result == 'downloaded') downloadedTiles++;
-              else if (result == 'skipped') skippedTiles++;
+              if (result == 'downloaded') {
+                downloadedTiles++;
+              } else if (result == 'skipped') skippedTiles++;
               else errorTiles++;
             }
           ).then((_) {
@@ -805,7 +807,7 @@ class BaseMapService extends ChangeNotifier {
       };
 
     } catch (e) {
-      print('[Downloader] Critical error: $e');
+      AppLogger.debug('[Downloader] Critical error: $e');
       yield {
         'status': 'error',
         'message': e.toString(),
@@ -850,7 +852,7 @@ class BaseMapService extends ChangeNotifier {
         onComplete('error');
       }
     } catch (e) {
-      print('[Downloader] ❌ Download failed (Offline/Network Error)');
+      AppLogger.debug('[Downloader] ❌ Download failed (Offline/Network Error)');
       onComplete('error');
     }
   }
@@ -871,3 +873,4 @@ class _TileRequest {
   
   _TileRequest(this.z, this.x, this.y);
 }
+

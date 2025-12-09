@@ -1,3 +1,4 @@
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -37,8 +38,8 @@ class Address {
     state ??= address?['region'] as String?;
     state ??= address?['administrative'] as String?;
 
-    print('[Address] 住所フィールド詳細: ${address?.keys.toList()}');
-    print(
+    AppLogger.debug('[Address] 住所フィールド詳細: ${address?.keys.toList()}');
+    AppLogger.debug(
       '[Address] state候補: state=${address?['state']}, province=${address?['province']}, region=${address?['region']}',
     );
 
@@ -84,16 +85,16 @@ class AddressConverter {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('Nominatim APIレスポンス: ${json.encode(data)}');
+        AppLogger.debug('Nominatim APIレスポンス: ${json.encode(data)}');
         final address = Address.fromJson(data);
-        print('住所取得成功: ${address.displayName}');
+        AppLogger.debug('住所取得成功: ${address.displayName}');
         return address;
       } else {
-        print('住所取得エラー: ${response.statusCode}');
+        AppLogger.debug('住所取得エラー: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      print('住所取得エラー: $e');
+      AppLogger.debug('住所取得エラー: $e');
       return null;
     }
   }
@@ -127,8 +128,9 @@ class AddressConverter {
       }
       return null;
     } catch (e) {
-      print('緯度経度取得エラー: $e');
+      AppLogger.debug('緯度経度取得エラー: $e');
       return null;
     }
   }
 }
+

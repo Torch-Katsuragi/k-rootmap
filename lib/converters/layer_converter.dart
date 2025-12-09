@@ -2,13 +2,7 @@
 // レイヤー変換操作に特化したコンバーター
 import 'dart:io';
 import 'base_converter.dart';
-import '../services/import_export_service.dart';
-import '../models/nodes/layer_tree_node.dart';
-import '../models/nodes/folder_node.dart';
-import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
 import '../models/geopackage_file.dart';
 import '../models/geometry_type.dart';
 
@@ -70,11 +64,6 @@ class LayerExportConverter
   Future<bool> validate(LayerConversionParams input) async {
     try {
       // レイヤー存在確認
-      if (input.sourceLayer == null) {
-        return false;
-      }
-
-      // 出力パス確認
       final outputDir = Directory(File(input.outputPath).parent.path);
       if (!await outputDir.exists()) {
         return false;
@@ -144,10 +133,10 @@ class LayerDuplicateConverter extends BaseConverter<LayerNode, LayerNode> {
       notifyProgress(0.8, 'Copying features...');
 
       // フィーチャをコピー
-      for (final feature in features) {
-        // フィーチャの複製処理（詳細は省略）
-        // await input.geoPackageFile.addFeature(newLayerName, feature);
-      }
+      // for (final feature in features) {
+      //   // フィーチャの複製処理（詳細は省略）
+      //   // await input.geoPackageFile.addFeature(newLayerName, feature);
+      // }
 
       // 新しいレイヤーノードを作成して返す
       final newLayer = _createLayerNode(

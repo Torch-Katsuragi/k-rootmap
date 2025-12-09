@@ -1,6 +1,7 @@
 /// K-MAPS: LayerDrawer用各種タイル描画ロジック
 library;
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 
@@ -271,13 +272,17 @@ mixin LayerDrawerTiles {
                         triggerMapRefresh();
 
                         setStateCallback(() {});
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('${node.name} を削除しました')),
-                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('${node.name} を削除しました')),
+                          );
+                        }
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('削除に失敗しました: $e')),
-                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('削除に失敗しました: $e')),
+                          );
+                        }
                       }
                     }
                   }
@@ -416,7 +421,7 @@ mixin LayerDrawerTiles {
                 shape: BoxShape.circle,
                 color:
                     isSelected
-                        ? Colors.blue.withOpacity(0.15)
+                        ? Colors.blue.withValues(alpha: 0.15)
                         : Colors.transparent,
               ),
               padding: const EdgeInsets.all(4),
@@ -555,7 +560,7 @@ mixin LayerDrawerTiles {
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
@@ -586,19 +591,19 @@ mixin LayerDrawerTiles {
       ),
       childWhenDragging: Container(
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.5),
+          color: Colors.grey.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Opacity(opacity: 0.5, child: layerTileContent),
       ),
       onDragStarted: () {
-        print('[LayerDrawer] レイヤドラッグ開始: ${node.name}');
+        AppLogger.debug('[LayerDrawer] レイヤドラッグ開始: ${node.name}');
         // ドラッグ状態をONにして視覚的フィードバックを開始
         isDragging = true;
         setStateCallback(() {});
       },
       onDragEnd: (details) {
-        print('[LayerDrawer] レイヤドラッグ終了: ${node.name}');
+        AppLogger.debug('[LayerDrawer] レイヤドラッグ終了: ${node.name}');
         // ドラッグ状態をOFFにする
         isDragging = false;
         dragTargetGeoPackageNode = null;
@@ -618,7 +623,7 @@ mixin LayerDrawerTiles {
         );
         if (result != null &&
             result['name'] != null) {
-          print(
+          AppLogger.debug(
             '[LayerDrawer] レイヤ作成開始: ${result['name']}, タイプ: ${result['geomType']}',
           );
 
@@ -627,51 +632,51 @@ mixin LayerDrawerTiles {
           final geomTypeString = result['geomType']!;
           final geomType = GeometryType.fromString(geomTypeString);
 
-          print('[LayerDrawer] ジオメトリタイプ解析: $geomTypeString -> $geomType');
+          AppLogger.debug('[LayerDrawer] ジオメトリタイプ解析: $geomTypeString -> $geomType');
 
           try {
             switch (geomType) {
               case GeometryType.point:
-                print('[LayerDrawer] PointLayerNode作成中...');
+                AppLogger.debug('[LayerDrawer] PointLayerNode作成中...');
                 newLayerNode = await PointLayerNode.createIn(
                   node,
                   result['name']!,
                 );
                 break;
               case GeometryType.linestring:
-                print('[LayerDrawer] LineLayerNode作成中...');
+                AppLogger.debug('[LayerDrawer] LineLayerNode作成中...');
                 newLayerNode = await LineLayerNode.createIn(
                   node,
                   result['name']!,
                 );
                 break;
               case GeometryType.polygon:
-                print('[LayerDrawer] PolygonLayerNode作成中...');
+                AppLogger.debug('[LayerDrawer] PolygonLayerNode作成中...');
                 newLayerNode = await PolygonLayerNode.createIn(
                   node,
                   result['name']!,
                 );
                 break;
               case null:
-                print('[LayerDrawer] 不明なジオメトリタイプです');
+                AppLogger.debug('[LayerDrawer] 不明なジオメトリタイプです');
                 break;
             }
 
             if (newLayerNode != null) {
-              print('[LayerDrawer] レイヤ作成成功、UI更新中...');
+              AppLogger.debug('[LayerDrawer] レイヤ作成成功、UI更新中...');
               // 追加成功時のみUI更新
               setStateCallback(() {});
               // 地図本体も即時再描画
               if (GlobalConfig.instance.mapState != null) {
                 GlobalConfig.instance.mapState.setState(() {});
               }
-              print('[LayerDrawer] レイヤ作成完了');
+              AppLogger.debug('[LayerDrawer] レイヤ作成完了');
             } else {
-              print('[LayerDrawer] レイヤ作成失敗: newLayerNodeがnull');
+              AppLogger.debug('[LayerDrawer] レイヤ作成失敗: newLayerNodeがnull');
             }
           } catch (e, stack) {
-            print('[LayerDrawer] レイヤ作成エラー: $e');
-            print('[LayerDrawer] スタックトレース: $stack');
+            AppLogger.debug('[LayerDrawer] レイヤ作成エラー: $e');
+            AppLogger.debug('[LayerDrawer] スタックトレース: $stack');
           }
         }
       },
@@ -815,22 +820,28 @@ mixin LayerDrawerTiles {
         }
 
         final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ポイントを$typeLabel に変換しました (${features.length}個の点)'),
-          ),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('ポイントを$typeLabel に変換しました (${features.length}個の点)'),
+            ),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('フィーチャの作成に失敗しました')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('フィーチャの作成に失敗しました')));
+        }
       }
     } catch (e, stack) {
-      print('[LayerDrawer] ポイント変換エラー: $e');
-      print('[LayerDrawer] スタックトレース: $stack');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('変換処理中にエラーが発生しました: $e')));
+      AppLogger.debug('[LayerDrawer] ポイント変換エラー: $e');
+      AppLogger.debug('[LayerDrawer] スタックトレース: $stack');
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('変換処理中にエラーが発生しました: $e')));
+      }
     }
   }
 
@@ -883,9 +894,11 @@ mixin LayerDrawerTiles {
       final mergedPolygon = PolygonMerge.mergePolygonFeatures(features);
 
       if (mergedPolygon.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('ポリゴンの合成に失敗しました')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('ポリゴンの合成に失敗しました')));
+        }
         return;
       }
 
@@ -900,9 +913,11 @@ mixin LayerDrawerTiles {
       );
 
       if (newLayerNode == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('新しいレイヤーの作成に失敗しました')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('新しいレイヤーの作成に失敗しました')));
+        }
         return;
       }
 
@@ -911,7 +926,7 @@ mixin LayerDrawerTiles {
         newLayerNode,
         mergedPolygon,
         'merged_polygon',
-        '${layerNode.name}の${mergeableCount}個のポリゴンを合成',
+        '${layerNode.name}の$mergeableCount個のポリゴンを合成',
         metadata: {
           'source_layer': layerNode.name,
           'merged_count': mergeableCount,
@@ -926,24 +941,30 @@ mixin LayerDrawerTiles {
           GlobalConfig.instance.mapState.setState(() {});
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。'),
-          ),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。'),
+            ),
+          );
+        }
 
-        print('[LayerDrawer] ポリゴン合成完了: $newLayerName');
+        AppLogger.debug('[LayerDrawer] ポリゴン合成完了: $newLayerName');
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('合成ポリゴンの保存に失敗しました')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('合成ポリゴンの保存に失敗しました')));
+        }
       }
     } catch (e, stack) {
-      print('[LayerDrawer] ポリゴン合成エラー: $e');
-      print('[LayerDrawer] スタックトレース: $stack');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
+      AppLogger.debug('[LayerDrawer] ポリゴン合成エラー: $e');
+      AppLogger.debug('[LayerDrawer] スタックトレース: $stack');
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
+      }
     }
   }
 
@@ -953,7 +974,7 @@ mixin LayerDrawerTiles {
     GeoPackageNode targetNode,
   ) async {
     try {
-      print(
+      AppLogger.debug(
         '[LayerDrawer] GeoPackageドロップ処理開始: $filePath -> ${targetNode.name}',
       );
 
@@ -966,21 +987,21 @@ mixin LayerDrawerTiles {
 
         // 作成されたレイヤーノードもFeatureNodeを更新
         if (result.createdLayer != null) {
-          print(
+          AppLogger.debug(
             '[LayerDrawer] 作成されたレイヤーのフィーチャ更新: ${result.createdLayer!.layerName}',
           );
           await result.createdLayer!.updateChildren();
 
           // デバッグ：フィーチャが正しく読み込まれたかを確認
           final features = result.createdLayer!.features;
-          print(
+          AppLogger.debug(
             '[LayerDrawer] レイヤー「${result.createdLayer!.layerName}」のフィーチャ数: ${features.length}',
           );
 
           // デバッグ：最初のフィーチャの詳細
           if (features.isNotEmpty) {
             final firstFeature = features.first;
-            print(
+            AppLogger.debug(
               '[LayerDrawer] 最初のフィーチャ: ${firstFeature.name}, 中心座標: ${firstFeature.centroid}',
             );
           }
@@ -1005,13 +1026,13 @@ mixin LayerDrawerTiles {
 
         _showImportSuccess(result);
 
-        print('[LayerDrawer] GeoPackageドロップ処理完了');
+        AppLogger.debug('[LayerDrawer] GeoPackageドロップ処理完了');
       } else {
         _showImportError(result.errorMessage ?? 'Import failed');
       }
     } catch (e, stack) {
-      print('[LayerDrawer] GeoPackageドロップエラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[LayerDrawer] GeoPackageドロップエラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
       _showImportError('Unexpected error during import: $e');
     }
   }
@@ -1020,7 +1041,7 @@ mixin LayerDrawerTiles {
   void _showImportSuccess(ImportExportResult result) {
     // ScaffoldMessengerを使用するにはBuildContextが必要
     // このメソッドは呼び出し側でcontextを渡すように変更する必要がある
-    print('[LayerDrawer] インポート成功: ${result.metadata}');
+    AppLogger.debug('[LayerDrawer] インポート成功: ${result.metadata}');
   }
 
   /// インポートエラーメッセージを表示
@@ -1036,7 +1057,7 @@ mixin LayerDrawerTiles {
     GeoPackageNode targetGeoPackage,
   ) async {
     try {
-      print(
+      AppLogger.debug(
         '[LayerDrawer] レイヤドロップ処理開始: ${sourceLayer.name} → ${targetGeoPackage.name}',
       );
 
@@ -1064,12 +1085,12 @@ mixin LayerDrawerTiles {
       );
 
       if (confirm != true) {
-        print('[LayerDrawer] レイヤ移植がキャンセルされました');
+        AppLogger.debug('[LayerDrawer] レイヤ移植がキャンセルされました');
         return;
       }
 
       // 移植処理を実行
-      print('[LayerDrawer] レイヤ移植実行中...');
+      AppLogger.debug('[LayerDrawer] レイヤ移植実行中...');
       final migratedLayer = await sourceLayer.migrateToGeoPackage(
         targetGeoPackage,
         moveLayer: true, // 移動モード
@@ -1077,7 +1098,7 @@ mixin LayerDrawerTiles {
 
       if (migratedLayer != null) {
         // 移植成功
-        print('[LayerDrawer] レイヤ移植成功: ${migratedLayer.name}');
+        AppLogger.debug('[LayerDrawer] レイヤ移植成功: ${migratedLayer.name}');
 
         // UI更新
         triggerMapRefresh();
@@ -1099,7 +1120,7 @@ mixin LayerDrawerTiles {
         }
       } else {
         // 移植失敗
-        print('[LayerDrawer] レイヤ移植失敗');
+        AppLogger.debug('[LayerDrawer] レイヤ移植失敗');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1110,8 +1131,8 @@ mixin LayerDrawerTiles {
         }
       }
     } catch (e, stack) {
-      print('[LayerDrawer] レイヤドロップ処理エラー: $e');
-      print('スタックトレース: $stack');
+      AppLogger.debug('[LayerDrawer] レイヤドロップ処理エラー: $e');
+      AppLogger.debug('スタックトレース: $stack');
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1217,7 +1238,7 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<GeometryType>(
-            value: _geomType,
+            initialValue: _geomType,
             decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
             items: [
               DropdownMenuItem(

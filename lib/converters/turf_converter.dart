@@ -2,6 +2,7 @@
 // turf_dartのFeature/FeatureCollectionとLatLng座標データ間の相互変換を行う
 
 import 'dart:convert';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -135,7 +136,7 @@ class TurfConverter {
 
       return turf.Feature(geometry: geometry, properties: properties);
     } catch (e) {
-      print('[ERROR] TurfConverter.createFeatureFromRow: $e');
+      AppLogger.debug('[ERROR] TurfConverter.createFeatureFromRow: $e');
       return null;
     }
   }
@@ -168,14 +169,14 @@ class TurfConverter {
             // メタデータなどのMapはJSON文字列として保存
             rowData[key] = jsonEncode(value);
           } else {
-            print('[WARNING] TurfConverter.featureToRowData: Unsupported property type: $key = $value (${value.runtimeType})');
+            AppLogger.debug('[WARNING] TurfConverter.featureToRowData: Unsupported property type: $key = $value (${value.runtimeType})');
           }
         }
       }
 
       return rowData;
     } catch (e) {
-      print('[ERROR] TurfConverter.featureToRowData: $e');
+      AppLogger.debug('[ERROR] TurfConverter.featureToRowData: $e');
       return null;
     }
   }
@@ -210,7 +211,7 @@ class TurfConverter {
       }
       return null;
     } catch (e) {
-      print('[ERROR] TurfConverter.calculateCentroid: $e');
+      AppLogger.debug('[ERROR] TurfConverter.calculateCentroid: $e');
       return null;
     }
   }
@@ -224,7 +225,7 @@ class TurfConverter {
       }
       return null;
     } catch (e) {
-      print('[ERROR] TurfConverter.calculateArea: $e');
+      AppLogger.debug('[ERROR] TurfConverter.calculateArea: $e');
       return null;
     }
   }
@@ -243,7 +244,7 @@ class TurfConverter {
       }
       return null;
     } catch (e) {
-      print('[ERROR] TurfConverter.calculateLength: $e');
+      AppLogger.debug('[ERROR] TurfConverter.calculateLength: $e');
       return null;
     }
   }
@@ -252,3 +253,4 @@ class TurfConverter {
   static List<double> get positionFromLatLng =>
       throw UnsupportedError('Use latlngToPosition(LatLng latlng) instead');
 }
+

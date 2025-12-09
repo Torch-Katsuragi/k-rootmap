@@ -1,5 +1,7 @@
 /// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
+library;
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/basemap_provider.dart';
@@ -45,7 +47,7 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
         });
       }
     } catch (e) {
-      print('[ERROR] BaseMapSettingsScreen: キャッシュ情報読み込みエラー: $e');
+      AppLogger.debug('[ERROR] BaseMapSettingsScreen: キャッシュ情報読み込みエラー: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -125,8 +127,8 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('クリア'),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('クリア'),
                 ),
               ],
             ),
@@ -236,20 +238,21 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
         // キャッシュ情報を再読み込み
         await _loadCacheInfo();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
+              ),
+              backgroundColor: Colors.blue,
             ),
-            backgroundColor: Colors.blue,
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       // エラー時はダイアログを閉じる
       if (mounted) {
         Navigator.pop(context);
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('キャッシュ検証に失敗しました: $e'),
@@ -416,7 +419,7 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
         final isSelected = provider.id == currentProvider.id;
         final cachedTileCount = _cacheStats[provider.id] ?? 0;
         final subtitleText = cachedTileCount > 0
-            ? '${provider.description}\nキャッシュ: ${cachedTileCount}タイル'
+            ? '${provider.description}\nキャッシュ: $cachedTileCountタイル'
             : provider.description;
 
         return SettingsSelectionTile(
@@ -819,3 +822,4 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
     );
   }
 }
+

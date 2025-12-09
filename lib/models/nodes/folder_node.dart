@@ -2,6 +2,7 @@
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
 import 'dart:io';
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
@@ -40,7 +41,7 @@ class FolderNode extends LayerTreeNode {
     children.removeWhere((child) {
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
-        print(
+        AppLogger.debug(
           '[DEBUG] FolderNode.updateChildren: removing ${child.name} (no longer exists)',
         );
         child.parent = null; // 親子関係を切断
@@ -59,7 +60,7 @@ class FolderNode extends LayerTreeNode {
       addChildIfNotExists(node);
     }
 
-    print(
+    AppLogger.debug(
       '[DEBUG] FolderNode.updateChildren: ${children.length} children after update',
     );
   }
@@ -117,3 +118,4 @@ class FolderNode extends LayerTreeNode {
     return node;
   }
 }
+

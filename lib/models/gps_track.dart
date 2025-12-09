@@ -1,6 +1,7 @@
 // lib/models/gps_track.dart
 // GPS追跡軌跡データ管理クラス
 import 'dart:math' as math;
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 
 /// GPS追跡の1つの位置情報ポイント
@@ -202,7 +203,7 @@ class GpsTrackManager {
   void startTracking() {
     _currentTrack = GpsTrack();
     _isTracking = true;
-    print('[GpsTrackManager] 軌跡追跡開始: ${_currentTrack!.startTime}');
+    AppLogger.debug('[GpsTrackManager] 軌跡追跡開始: ${_currentTrack!.startTime}');
   }
 
   /// 追跡停止
@@ -211,7 +212,7 @@ class GpsTrackManager {
 
     _isTracking = false;
     final track = _currentTrack!;
-    print('[GpsTrackManager] 軌跡追跡停止: ${track.pointCount}ポイント');
+    AppLogger.debug('[GpsTrackManager] 軌跡追跡停止: ${track.pointCount}ポイント');
     return track;
   }
 
@@ -228,3 +229,4 @@ class GpsTrackManager {
     _isTracking = false;
   }
 }
+

@@ -11,6 +11,7 @@
 /// - リアルタイム位置情報監視
 library;
 
+import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/gps_manager_service.dart';
@@ -104,7 +105,7 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
       }
 
       await _gpsManager.scanExternalGnssDevices();
-      debugPrint(
+      AppLogger.debug(
         '[GpsSettingsScreen] GNSS機器スキャン完了: ${_gpsManager.availableGnssDevices.length}件',
       );
     } catch (e) {
@@ -135,7 +136,7 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
             Permission.location, // 位置情報も必要な場合
           ].request();
 
-      debugPrint('[GpsSettingsScreen] Bluetooth権限要求結果: $statuses');
+      AppLogger.debug('[GpsSettingsScreen] Bluetooth権限要求結果: $statuses');
 
       // 必要な権限が全て許可されているかチェック
       bool hasBluetoothScan =
@@ -153,7 +154,7 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
 
       return true;
     } catch (e) {
-      debugPrint('[GpsSettingsScreen] Bluetooth権限確認エラー: $e');
+      AppLogger.debug('[GpsSettingsScreen] Bluetooth権限確認エラー: $e');
       return false;
     }
   }
@@ -196,6 +197,7 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
     final bluetoothConnectGranted = await Permission.bluetoothConnect.isGranted;
     final locationGranted = await Permission.location.isGranted;
 
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -664,3 +666,5 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
     );
   }
 }
+
+

@@ -1,0 +1,34 @@
+# flutter_launcher_icons設定ファイル
+# アプリアイコンを全プラットフォーム向けに生成
+
+flutter_launcher_icons:
+  # Android設定
+  android: true
+  # iOS設定
+  ios: true
+  # Web設定
+  web:
+    generate: true
+    image_path: "AssetStudio/thumbnail.png"
+    background_color: "#ffffff"
+    theme_color: "#b53e2c"
+  # Windows設定
+  windows:
+    generate: true
+    image_path: "AssetStudio/thumbnail.png"
+    icon_size: 256
+  # macOS設定
+  macos:
+    generate: true
+    image_path: "AssetStudio/thumbnail.png"
+  
+  # 元画像のパス
+  image_path: "AssetStudio/thumbnail.png"
+  
+  # iOS App Store向け：アルファチャンネルを削除
+  remove_alpha_ios: true
+  
+  # Android向けアダプティブアイコン設定
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "AssetStudio/thumbnail.png"
+

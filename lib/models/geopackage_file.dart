@@ -1239,6 +1239,60 @@ class GeoPackageFile {
     }
   }
 
+  /// テーブルのカラム名リストを取得
+  Future<List<String>> getTableColumns(String tableName) async {
+    try {
+      final db = await _getDatabase();
+      final result = await db.rawQuery('PRAGMA table_info("$tableName");');
+      return result.map((row) => row['name'] as String).toList();
+    } catch (e) {
+      AppLogger.debug('[GeoPackageFile] getTableColumns エラー: $e');
+      return [];
+    }
+  }
+
+  /// レイヤー間でフィーチャをコピー（同一カラム構造が前提）
+  /// [sourceTable] コピー元テーブル名
+  /// [targetTable] コピー先テーブル名
+  /// 戻り値: コピーされたフィーチャ数
+  Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) async {
+    try {
+      final db = await _getDatabase();
+
+      // ソーステーブルのカラムを取得（idとROWIDを除く）
+      final sourceColumns = await getTableColumns(sourceTable);
+      final columnsToInsert = sourceColumns
+          .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
+          .toList();
+
+      if (columnsToInsert.isEmpty) {
+        AppLogger.debug('[GeoPackageFile] コピー可能なカラムがありません');
+        return 0;
+      }
+
+      // カラムリストを作成
+      final columnList = columnsToInsert.map((c) => '"$c"').join(', ');
+
+      // INSERT INTO ... SELECT文でフィーチャをコピー
+      final sql = '''
+        INSERT INTO "$targetTable" ($columnList)
+        SELECT $columnList FROM "$sourceTable"
+      ''';
+
+      await db.execute(sql);
+
+      // コピーされた行数を取得（INSERT後の変更行数）
+      final countResult = await db.rawQuery('SELECT changes() as count');
+      final copiedCount = (countResult.first['count'] as int?) ?? 0;
+
+      AppLogger.debug('[GeoPackageFile] フィーチャコピー完了: $sourceTable -> $targetTable ($copiedCount件)');
+      return copiedCount;
+    } catch (e) {
+      AppLogger.debug('[GeoPackageFile] copyFeaturesBetweenLayers エラー: $e');
+      return 0;
+    }
+  }
+
   /// フィーチャを完全な属性テーブルとして追加
   /// [tableName] テーブル名
   /// [geometry] ジオメトリデータ（WKB形式）

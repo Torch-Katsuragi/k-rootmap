@@ -513,6 +513,8 @@ mixin LayerDrawerTiles {
             await _convertPointsToLine(context, node);
           } else if (value == 'merge' && node is PolygonLayerNode) {
             await _mergePolygonsInLayer(context, node);
+          } else if (value == 'absorb') {
+            await _absorbMatchingLayers(context, node);
           }
         },
         itemBuilder:
@@ -542,6 +544,17 @@ mixin LayerDrawerTiles {
               // PolygonLayerNodeの場合のみ合成メニューを表示
               if (node is PolygonLayerNode)
                 const PopupMenuItem(value: 'merge', child: Text('合成')),
+              // 同一GeoPackage内のカラム一致レイヤーを吸収
+              const PopupMenuItem(
+                value: 'absorb',
+                child: Row(
+                  children: [
+                    Icon(Icons.merge_type, size: 16),
+                    SizedBox(width: 8),
+                    Text('同構造レイヤを吸収'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
@@ -968,6 +981,145 @@ mixin LayerDrawerTiles {
         ).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
       }
     }
+  }
+
+  /// 同一GeoPackage内のカラム名が完全一致するレイヤーを吸収
+  Future<void> _absorbMatchingLayers(
+    BuildContext context,
+    LayerNode targetNode,
+  ) async {
+    try {
+      // 親のGeoPackageノードを取得
+      final parentGpkg = targetNode.parent;
+      if (parentGpkg is! GeoPackageNode) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GeoPackage内のレイヤーではありません')),
+        );
+        return;
+      }
+
+      // ターゲットレイヤのカラム構造を取得
+      final targetColumns = await parentGpkg.geoPackageFile.getTableColumns(targetNode.name);
+      if (targetColumns.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('レイヤーのカラム情報を取得できませんでした')),
+        );
+        return;
+      }
+
+      // 同一GeoPackage内の同じ型の他レイヤーを検索
+      final siblingLayers = parentGpkg.children
+          .whereType<LayerNode>()
+          .where((layer) => layer != targetNode && layer.runtimeType == targetNode.runtimeType)
+          .toList();
+
+      if (siblingLayers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('同じ型の他のレイヤーがありません')),
+        );
+        return;
+      }
+
+      // カラム名が完全一致するレイヤーを検索
+      final matchingLayers = <LayerNode>[];
+      for (final layer in siblingLayers) {
+        final layerColumns = await parentGpkg.geoPackageFile.getTableColumns(layer.name);
+        // カラム名のセットが完全一致するか確認（順序は問わない）
+        if (_columnsMatch(targetColumns, layerColumns)) {
+          matchingLayers.add(layer);
+        }
+      }
+
+      if (matchingLayers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('カラム構造が一致するレイヤーが見つかりません')),
+        );
+        return;
+      }
+
+      // 確認ダイアログを表示
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('レイヤー吸収'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('以下の ${matchingLayers.length} 件のレイヤーを「${targetNode.name}」に吸収しますか？\n'),
+              ...matchingLayers.map((l) => Text('  • ${l.name}')),
+              const SizedBox(height: 12),
+              const Text('※吸収されたレイヤーは削除されます', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('キャンセル'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('吸収'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      // 吸収処理を実行
+      int absorbedCount = 0;
+      for (final sourceLayer in matchingLayers) {
+        try {
+          // ソースレイヤーのフィーチャをターゲットレイヤーにコピー
+          final copied = await parentGpkg.geoPackageFile.copyFeaturesBetweenLayers(
+            sourceLayer.name,
+            targetNode.name,
+          );
+          
+          if (copied > 0) {
+            absorbedCount += copied;
+            
+            // ソースレイヤーを削除
+            sourceLayer.dispose();
+            
+            AppLogger.debug('[LayerDrawer] レイヤー吸収完了: ${sourceLayer.name} -> ${targetNode.name} ($copied features)');
+          }
+        } catch (e) {
+          AppLogger.debug('[LayerDrawer] レイヤー吸収エラー: ${sourceLayer.name} - $e');
+        }
+      }
+
+      // ターゲットレイヤーのフィーチャを更新
+      await targetNode.updateChildren();
+
+      // UI更新
+      triggerMapRefresh();
+      setStateCallback(() {});
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$absorbedCount 件のフィーチャを吸収しました')),
+        );
+      }
+    } catch (e, stack) {
+      AppLogger.debug('[LayerDrawer] レイヤー吸収エラー: $e');
+      AppLogger.debug('[LayerDrawer] スタックトレース: $stack');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('吸収処理中にエラーが発生しました: $e')),
+        );
+      }
+    }
+  }
+
+  /// カラム構造が一致するか確認（geomカラムを除く属性カラムのみ比較）
+  bool _columnsMatch(List<String> columns1, List<String> columns2) {
+    // システムカラム（id, geom, fid等）を除外して比較
+    final systemColumns = {'id', 'fid', 'geom', 'geometry', 'ROWID'};
+    final attrs1 = columns1.where((c) => !systemColumns.contains(c.toLowerCase())).toSet();
+    final attrs2 = columns2.where((c) => !systemColumns.contains(c.toLowerCase())).toSet();
+    return attrs1.length == attrs2.length && attrs1.containsAll(attrs2);
   }
 
   /// 特定のGeoPackageノードへのファイルドロップを処理

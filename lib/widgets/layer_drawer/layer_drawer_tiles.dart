@@ -383,8 +383,10 @@ mixin LayerDrawerTiles {
       },
       onDragDone: (details) async {
         if (details.files.isNotEmpty) {
-          final file = details.files.first;
-          await _handleSpecificGeoPackageDrop(file.path, node);
+          // 複数ファイルのドロップに対応
+          for (final file in details.files) {
+            await _handleSpecificGeoPackageDrop(file.path, node);
+          }
 
           // 処理完了後にフラグをリセット
           isDragging = false;

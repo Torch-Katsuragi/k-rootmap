@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/basemap_provider.dart';
 import '../services/basemap_service.dart';
 import '../utils/global_config.dart';
+import '../widgets/settings_widgets.dart';
 
 class BaseMapSettingsScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -333,90 +334,47 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('背景地図設定'),
-        automaticallyImplyLeading: !widget.isEmbedded,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'キャッシュ情報を更新',
-            onPressed: _loadCacheInfo,
-          ),
+    return SettingsScaffold(
+      title: '背景地図設定',
+      isEmbedded: widget.isEmbedded,
+      isLoading: _isLoading,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'キャッシュ情報を更新',
+          onPressed: _loadCacheInfo,
+        ),
+      ],
+      body: SettingsBody(
+        spacing: 24,
+        sections: [
+          _buildCurrentSettingsSection(),
+          _buildDownloadSection(),
+          _buildProviderSelectionSection(),
+          _buildOfflineSettingsSection(),
+          _buildCacheManagementSection(),
         ],
       ),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 現在の設定セクション
-                    _buildCurrentSettingsSection(),
-                    const SizedBox(height: 24),
-
-                    // ダウンロードセクション (追加)
-                    _buildDownloadSection(),
-                    const SizedBox(height: 24),
-
-                    // 背景地図選択セクション
-                    _buildProviderSelectionSection(),
-                    const SizedBox(height: 24),
-
-                    // オフライン設定セクション
-                    _buildOfflineSettingsSection(),
-                    const SizedBox(height: 24),
-
-                    // キャッシュ管理セクション
-                    _buildCacheManagementSection(),
-                  ],
-                ),
-              ),
     );
   }
 
   /// 一括ダウンロードセクション
   Widget _buildDownloadSection() {
-    return Card(
-      elevation: 4,
-      color: Colors.blue[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.download_for_offline, color: Colors.blue),
-                SizedBox(width: 8),
-                Text(
-                  '地図の一括ダウンロード',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '現在表示している場所を中心に、指定した範囲の地図データを一括で保存します。オフライン環境に行く前に実行してください。',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _showDownloadDialog,
-                icon: const Icon(Icons.download),
-                label: const Text('ダウンロード設定を開く'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-          ],
+    return SettingsHighlightSection(
+      title: '地図の一括ダウンロード',
+      icon: Icons.download_for_offline,
+      iconColor: Colors.blue,
+      backgroundColor: Colors.blue[50]!,
+      description:
+          '現在表示している場所を中心に、指定した範囲の地図データを一括で保存します。オフライン環境に行く前に実行してください。',
+      actionButton: ElevatedButton.icon(
+        onPressed: _showDownloadDialog,
+        icon: const Icon(Icons.download),
+        label: const Text('ダウンロード設定を開く'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
     );
@@ -426,35 +384,25 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
   Widget _buildCurrentSettingsSection() {
     final currentProvider = _baseMapService.currentProvider;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '現在の設定',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: Icon(currentProvider.icon, color: Colors.blue),
-              title: Text(currentProvider.name),
-              subtitle: Text(currentProvider.description),
-              trailing:
-                  _baseMapService.isOfflineMode
-                      ? const Chip(
-                        label: Text('オフライン'),
-                        backgroundColor: Colors.orange,
-                      )
-                      : const Chip(
-                        label: Text('オンライン'),
-                        backgroundColor: Colors.green,
-                      ),
-            ),
-          ],
+    return SettingsSection(
+      title: '現在の設定',
+      children: [
+        SettingsTile(
+          leadingIcon: currentProvider.icon,
+          leadingIconColor: Colors.blue,
+          title: currentProvider.name,
+          subtitle: currentProvider.description,
+          trailing: _baseMapService.isOfflineMode
+              ? const Chip(
+                  label: Text('オフライン'),
+                  backgroundColor: Colors.orange,
+                )
+              : const Chip(
+                  label: Text('オンライン'),
+                  backgroundColor: Colors.green,
+                ),
         ),
-      ),
+      ],
     );
   }
 
@@ -462,173 +410,117 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
   Widget _buildProviderSelectionSection() {
     final currentProvider = _baseMapService.currentProvider;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '背景地図の選択',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...BaseMapProvider.availableProviders.map((provider) {
-              final isSelected = provider.id == currentProvider.id;
-              final cachedTileCount = _cacheStats[provider.id] ?? 0;
+    return SettingsSection(
+      title: '背景地図の選択',
+      children: BaseMapProvider.availableProviders.map((provider) {
+        final isSelected = provider.id == currentProvider.id;
+        final cachedTileCount = _cacheStats[provider.id] ?? 0;
+        final subtitleText = cachedTileCount > 0
+            ? '${provider.description}\nキャッシュ: ${cachedTileCount}タイル'
+            : provider.description;
 
-              return ListTile(
-                leading: Icon(
-                  provider.icon,
-                  color: isSelected ? Colors.blue : Colors.grey,
-                ),
-                title: Text(
-                  provider.name,
-                  style: TextStyle(
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(provider.description),
-                    if (cachedTileCount > 0)
-                      Text(
-                        'キャッシュ: ${cachedTileCount}タイル',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green[600],
-                        ),
-                      ),
-                  ],
-                ),
-                trailing:
-                    isSelected
-                        ? const Icon(Icons.check_circle, color: Colors.blue)
-                        : null,
-                onTap: () => _changeProvider(provider),
-              );
-            }).toList(),
-          ],
-        ),
-      ),
+        return SettingsSelectionTile(
+          leadingIcon: provider.icon,
+          leadingIconColor: Colors.blue,
+          title: provider.name,
+          subtitle: subtitleText,
+          isSelected: isSelected,
+          onTap: () => _changeProvider(provider),
+        );
+      }).toList(),
     );
   }
 
   /// オフライン設定セクション
   Widget _buildOfflineSettingsSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'オフライン設定',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: const Text('オフラインモード'),
-              subtitle: const Text('ネットワークを使用せず、キャッシュされた地図のみを表示'),
-              value: _baseMapService.isOfflineMode,
-              onChanged: _toggleOfflineMode,
-              secondary: Icon(
-                _baseMapService.isOfflineMode ? Icons.wifi_off : Icons.wifi,
-                color:
-                    _baseMapService.isOfflineMode
-                        ? Colors.orange
-                        : Colors.green,
-              ),
-            ),
-          ],
+    return SettingsSection(
+      title: 'オフライン設定',
+      children: [
+        SettingsSwitchTile(
+          leadingIcon:
+              _baseMapService.isOfflineMode ? Icons.wifi_off : Icons.wifi,
+          activeIconColor: Colors.orange,
+          inactiveIconColor: Colors.green,
+          title: 'オフラインモード',
+          subtitle: 'ネットワークを使用せず、キャッシュされた地図のみを表示',
+          value: _baseMapService.isOfflineMode,
+          onChanged: _toggleOfflineMode,
         ),
-      ),
+      ],
     );
   }
 
   /// キャッシュ管理セクション
   Widget _buildCacheManagementSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'キャッシュ管理',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '合計: ${_cacheSizeMB.toStringAsFixed(1)} MB',
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // キャッシュ検証・修復ボタン
-            ListTile(
-              leading: const Icon(Icons.build, color: Colors.blue),
-              title: const Text('キャッシュを検証・修復'),
-              subtitle: const Text('破損したキャッシュを自動検出して削除'),
-              trailing: ElevatedButton(
-                onPressed: _cacheStats.isNotEmpty ? _validateAndRepairCache : null,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                child: const Text('検証', style: TextStyle(color: Colors.white)),
-              ),
-            ),
-            const Divider(),
-
-            // 全キャッシュクリアボタン
-            ListTile(
-              leading: const Icon(Icons.delete_sweep, color: Colors.red),
-              title: const Text('全キャッシュをクリア'),
-              subtitle: Text(
-                '${_cacheStats.values.fold(0, (sum, count) => sum + count)}タイル',
-              ),
-              trailing: ElevatedButton(
-                onPressed: _cacheStats.isNotEmpty ? () => _clearCache() : null,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('クリア', style: TextStyle(color: Colors.white)),
-              ),
-            ),
-            const Divider(),
-
-            // プロバイダー別キャッシュ情報
-            const Text(
-              'プロバイダー別キャッシュ',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            if (_cacheStats.isEmpty)
-              const Text(
-                'キャッシュされた地図データはありません',
-                style: TextStyle(color: Colors.grey),
-              )
-            else
-              ..._cacheStats.entries.map((entry) {
-                final provider = BaseMapProvider.getProviderById(entry.key);
-                if (provider == null) return const SizedBox.shrink();
-
-                return ListTile(
-                  leading: Icon(provider.icon, size: 20),
-                  title: Text(provider.name),
-                  subtitle: Text('${entry.value}タイル'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    tooltip: 'このプロバイダーのキャッシュをクリア',
-                    onPressed: () => _clearCache(providerId: entry.key),
-                  ),
-                );
-              }).toList(),
-          ],
-        ),
+    return SettingsSection(
+      title: 'キャッシュ管理',
+      trailing: Text(
+        '合計: ${_cacheSizeMB.toStringAsFixed(1)} MB',
+        style: const TextStyle(fontSize: 14, color: Colors.grey),
       ),
+      children: [
+        // キャッシュ検証・修復
+        SettingsActionTile(
+          leadingIcon: Icons.build,
+          leadingIconColor: Colors.blue,
+          title: 'キャッシュを検証・修復',
+          subtitle: '破損したキャッシュを自動検出して削除',
+          buttonLabel: '検証',
+          buttonColor: Colors.blue,
+          onPressed: _cacheStats.isNotEmpty ? _validateAndRepairCache : null,
+          enabled: _cacheStats.isNotEmpty,
+        ),
+        const Divider(),
+
+        // 全キャッシュクリア
+        SettingsActionTile(
+          leadingIcon: Icons.delete_sweep,
+          leadingIconColor: Colors.red,
+          title: '全キャッシュをクリア',
+          subtitle:
+              '${_cacheStats.values.fold(0, (sum, count) => sum + count)}タイル',
+          buttonLabel: 'クリア',
+          buttonColor: Colors.red,
+          onPressed: _cacheStats.isNotEmpty ? () => _clearCache() : null,
+          enabled: _cacheStats.isNotEmpty,
+        ),
+        const Divider(),
+
+        // プロバイダー別キャッシュ情報
+        const Padding(
+          padding: EdgeInsets.only(left: 16, top: 8),
+          child: Text(
+            'プロバイダー別キャッシュ',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_cacheStats.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'キャッシュされた地図データはありません',
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          ..._cacheStats.entries.map((entry) {
+            final provider = BaseMapProvider.getProviderById(entry.key);
+            if (provider == null) return const SizedBox.shrink();
+
+            return SettingsTile(
+              leadingIcon: provider.icon,
+              leadingIconColor: Colors.grey,
+              title: provider.name,
+              subtitle: '${entry.value}タイル',
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: 'このプロバイダーのキャッシュをクリア',
+                onPressed: () => _clearCache(providerId: entry.key),
+              ),
+            );
+          }),
+      ],
     );
   }
 }

@@ -14,8 +14,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/gps_manager_service.dart';
-import '../models/bluetooth_gnss_service.dart';
 import '../widgets/gps_info_widget.dart';
+import '../widgets/settings_widgets.dart';
 
 /// GPS設定画面
 class GpsSettingsScreen extends StatefulWidget {
@@ -480,70 +480,38 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('GPS設定'),
-        backgroundColor: Colors.green[700],
-        foregroundColor: Colors.white,
-        automaticallyImplyLeading: !widget.isEmbedded,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _isScanning ? null : _scanGnssDevices,
-            tooltip: 'GNSS機器再スキャン',
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: _showBluetoothPermissionInfo,
-            tooltip: 'Bluetooth権限情報',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // エラーメッセージ表示
-            if (_errorMessage != null)
-              Card(
-                color: Colors.red[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // 現在のGPSソース表示
-            _buildCurrentGpsSourceCard(),
-
-            const SizedBox(height: 16),
-
-            // GPS操作ボタン
-            _buildGpsControlButtons(),
-
-            const SizedBox(height: 16),
-
-            // GPS情報表示
-            if (_currentGpsInfo != null) _buildGpsInfoCard(_currentGpsInfo!),
-
-            const SizedBox(height: 16),
-
-            // 利用可能なGPSソース一覧
-            _buildAvailableSourcesCard(),
-          ],
+    return SettingsScaffold(
+      title: 'GPS設定',
+      isEmbedded: widget.isEmbedded,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _isScanning ? null : _scanGnssDevices,
+          tooltip: 'GNSS機器再スキャン',
         ),
+        IconButton(
+          icon: const Icon(Icons.info_outline),
+          onPressed: _showBluetoothPermissionInfo,
+          tooltip: 'Bluetooth権限情報',
+        ),
+      ],
+      body: SettingsBody(
+        sections: [
+          // エラーメッセージ表示
+          if (_errorMessage != null) SettingsErrorCard(message: _errorMessage!),
+
+          // 現在のGPSソース表示
+          _buildCurrentGpsSourceCard(),
+
+          // GPS操作ボタン
+          _buildGpsControlButtons(),
+
+          // GPS情報表示
+          if (_currentGpsInfo != null) _buildGpsInfoCard(_currentGpsInfo!),
+
+          // 利用可能なGPSソース一覧
+          _buildAvailableSourcesCard(),
+        ],
       ),
     );
   }
@@ -553,110 +521,97 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
     final currentSource = _gpsManager.currentSource;
     final selectedDevice = _gpsManager.selectedGnssDevice;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  currentSource == GpsSourceType.internal
-                      ? Icons.gps_fixed
-                      : Icons.bluetooth,
-                  color: Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  '現在のGPSソース',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    final deviceInfo = selectedDevice != null
+        ? 'デバイス: ${selectedDevice.name ?? '不明'}\nアドレス: ${selectedDevice.address}'
+        : null;
+
+    return SettingsSection(
+      title: '現在のGPSソース',
+      icon: currentSource == GpsSourceType.internal
+          ? Icons.gps_fixed
+          : Icons.bluetooth,
+      iconColor: Colors.blue,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                currentSource.displayName,
+                style: const TextStyle(fontSize: 16),
+              ),
+              if (deviceInfo != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  deviceInfo,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              currentSource.displayName,
-              style: const TextStyle(fontSize: 16),
-            ),
-            if (selectedDevice != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'デバイス: ${selectedDevice.name ?? '不明'}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              Text(
-                'アドレス: ${selectedDevice.address}',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   /// GPS操作ボタン群
   Widget _buildGpsControlButtons() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showGpsSourceDialog,
-                    icon: const Icon(Icons.swap_horiz),
-                    label: const Text('GPSソース切り替え'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
+    return SettingsSection(
+      title: 'GPS操作',
+      icon: Icons.settings_remote,
+      iconColor: Colors.blue,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _showGpsSourceDialog,
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('GPSソース切り替え'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _testGpsPosition,
-                    icon: const Icon(Icons.location_searching),
-                    label: const Text('GPS位置取得テスト'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _testGpsPosition,
+                  icon: const Icon(Icons.location_searching),
+                  label: const Text('GPS位置取得テスト'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   /// GPS情報表示カード
   Widget _buildGpsInfoCard(Map<String, dynamic> gpsInfo) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'GPS情報',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            GpsInfoWidget(gpsInfo: gpsInfo),
-          ],
+    return SettingsSection(
+      title: 'GPS情報',
+      icon: Icons.satellite_alt,
+      iconColor: Colors.green,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: GpsInfoWidget(gpsInfo: gpsInfo),
         ),
-      ),
+      ],
     );
   }
 
@@ -664,62 +619,48 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
   Widget _buildAvailableSourcesCard() {
     final sources = _gpsManager.getAvailableGpsSources();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  '利用可能なGPSソース',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                if (_isScanning)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
+    return SettingsSection(
+      title: '利用可能なGPSソース',
+      icon: Icons.list,
+      iconColor: Colors.blue,
+      trailing: _isScanning
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      children: [
+        if (sources.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'GPSソースが見つかりませんでした。\n外部GNSS機器の電源を入れて再スキャンしてください。',
+              style: TextStyle(color: Colors.grey),
             ),
-            const SizedBox(height: 12),
-            if (sources.isEmpty)
-              const Text(
-                'GPSソースが見つかりませんでした。\n外部GNSS機器の電源を入れて再スキャンしてください。',
-                style: TextStyle(color: Colors.grey),
-              )
-            else
-              ...sources.map(
-                (source) => ListTile(
-                  leading: Icon(
-                    source['type'] == GpsSourceType.internal
-                        ? Icons.gps_fixed
-                        : Icons.bluetooth,
-                    color: source['isSelected'] ? Colors.green : Colors.grey,
-                  ),
-                  title: Text(source['name']),
-                  subtitle: Text(source['description']),
-                  trailing:
-                      source['isSelected']
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : const Icon(
-                            Icons.radio_button_unchecked,
-                            color: Colors.grey,
-                          ),
-                  onTap: () => _switchGpsSource(source),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              '外部GNSS機器: ${_gpsManager.availableGnssDevices.length}件',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
+          )
+        else
+          ...sources.map(
+            (source) => SettingsSelectionTile(
+              leadingIcon: source['type'] == GpsSourceType.internal
+                  ? Icons.gps_fixed
+                  : Icons.bluetooth,
+              leadingIconColor: Colors.green,
+              title: source['name'],
+              subtitle: source['description'],
+              isSelected: source['isSelected'],
+              onTap: () => _switchGpsSource(source),
             ),
-          ],
+          ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            '外部GNSS機器: ${_gpsManager.availableGnssDevices.length}件',
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

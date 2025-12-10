@@ -96,9 +96,9 @@ class MapToolbar extends StatelessWidget {
                           ),
                         );
                         
-                        // 撮影成功時にフォルダを更新してPhotoNodeを読み込む
+                        // 撮影成功時にフォルダを更新してImageNodeを読み込む
                         if (result == true) {
-                          // FolderNodeの子ノードを更新（PhotoNodeを再読み込み）
+                          // FolderNodeの子ノードを更新（ImageNodeを再読み込み）
                           await currentFolder!.updateChildren();
                         }
                       }

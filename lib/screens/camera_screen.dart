@@ -11,7 +11,7 @@ import 'package:native_exif/native_exif.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 import '../models/nodes/folder_node.dart';
-import '../models/nodes/photo_node.dart';
+import '../models/nodes/image_node.dart';
 
 /// カメラ撮影画面
 class CameraScreen extends StatefulWidget {
@@ -260,13 +260,13 @@ class _CameraScreenState extends State<CameraScreen> {
         await _addExifData(targetFile, position, now);
       }
 
-      // PhotoNodeとして登録
+      // ImageNodeとして登録
       if (position != null) {
         final stats = await targetFile.stat();
-        final photoNode = PhotoNode(
+        final photoNode = ImageNode(
           targetPath,
           LatLng(position.latitude, position.longitude),
-          PhotoMetadata(
+          ImageMetadata(
             fileSize: stats.size,
             width: null,
             height: null,

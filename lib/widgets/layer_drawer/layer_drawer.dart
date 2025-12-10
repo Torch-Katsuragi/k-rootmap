@@ -12,7 +12,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
-import '../../models/nodes/photo_node.dart';
+import '../../models/nodes/image_node.dart';
 import '../../models/geopackage_file.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
@@ -186,7 +186,7 @@ class _LayerDrawerState extends State<LayerDrawer>
                       node,
                       () => widget.onDirChanged(node),
                     );
-                  } else if (node is PhotoNode) {
+                  } else if (node is ImageNode) {
                     return buildPhotoTile(
                       context,
                       node,
@@ -211,7 +211,7 @@ class _LayerDrawerState extends State<LayerDrawer>
   }
 
   /// 写真のリネーム処理
-  Future<void> _renamePhoto(BuildContext context, PhotoNode node) async {
+  Future<void> _renamePhoto(BuildContext context, ImageNode node) async {
     String input = p.basenameWithoutExtension(node.name);
     final result = await showDialog<String>(
       context: context,

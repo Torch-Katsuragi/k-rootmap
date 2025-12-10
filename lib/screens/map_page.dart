@@ -16,7 +16,7 @@ import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
+import '../models/nodes/image_node.dart';
 import '../widgets/layer_drawer/layer_drawer.dart';
 import '../widgets/resizable_side_panel.dart';
 import '../widgets/dynamic_attribute_table_widget.dart';
@@ -112,7 +112,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   List<PointFeatureNode> _pointFeatures = [];
   List<LineFeatureNode> _lineFeatures = [];
   List<PolygonFeatureNode> _polygonFeatures = [];
-  List<PhotoNode> _photoNodes = []; // PhotoNode用キャッシュ追加
+  List<ImageNode> _photoNodes = []; // ImageNode用キャッシュ追加
 
   // Public getter added
   MapController get mapController => _mapController;
@@ -1283,11 +1283,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     final pointFeatures = <PointFeatureNode>[];
     final lineFeatures = <LineFeatureNode>[];
     final polygonFeatures = <PolygonFeatureNode>[];
-    final photoNodes = <PhotoNode>[]; // PhotoNode収集用リスト追加
+    final photoNodes = <ImageNode>[]; // ImageNode収集用リスト追加
 
-    // PhotoNodeを収集（FolderNode配下を再帰的に検索）
+    // ImageNodeを収集（FolderNode配下を再帰的に検索）
     if (folderTree != null) {
-      _collectPhotoNodesRecursive(folderTree, photoNodes);
+      _collectImageNodesRecursive(folderTree, photoNodes);
     }
     AppLogger.debug(
       '[DEBUG] _updateFeatures: collected ${photoNodes.length} photo nodes',
@@ -1371,7 +1371,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         _pointFeatures = pointFeatures;
         _lineFeatures = lineFeatures;
         _polygonFeatures = polygonFeatures;
-        _photoNodes = photoNodes; // PhotoNodeキャッシュを更新
+        _photoNodes = photoNodes; // ImageNodeキャッシュを更新
       });
       AppLogger.debug('[DEBUG] _updateFeatures: state updated successfully');
     } else {
@@ -1381,19 +1381,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
-  /// PhotoNodeを再帰的に収集する補助メソッド
-  void _collectPhotoNodesRecursive(
+  /// ImageNodeを再帰的に収集する補助メソッド
+  void _collectImageNodesRecursive(
     LayerTreeNode node,
-    List<PhotoNode> photoNodes,
+    List<ImageNode> photoNodes,
   ) {
-    // 現在のノードがPhotoNodeなら追加
-    if (node is PhotoNode && node.visible && node.isVisibleRecursive()) {
+    // 現在のノードがImageNodeなら追加
+    if (node is ImageNode && node.visible && node.isVisibleRecursive()) {
       photoNodes.add(node);
     }
 
     // 子ノードを再帰的に処理
     for (final child in node.children) {
-      _collectPhotoNodesRecursive(child, photoNodes);
+      _collectImageNodesRecursive(child, photoNodes);
     }
   }
 
@@ -1576,7 +1576,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     final pointFeatures = _pointFeatures;
     final lineFeatures = _lineFeatures;
     final polygonFeatures = _polygonFeatures;
-    final photoNodes = _photoNodes; // PhotoNodeキャッシュを取得
+    final photoNodes = _photoNodes; // ImageNodeキャッシュを取得
 
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
@@ -2018,7 +2018,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 ),
                               )),
 
-                          // --- PhotoNode markers (写真アイコン) ---
+                          // --- ImageNode markers (写真アイコン) ---
                           for (final photo in photoNodes)
                             Marker(
                               point: photo.location,
@@ -2026,7 +2026,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                               height: 20,
                               child: GestureDetector(
                                 onTap: () {
-                                  // PhotoNode選択処理
+                                  // ImageNode選択処理
                                   setState(() {
                                     GlobalConfig.instance.selectedFeatures
                                         .clear();

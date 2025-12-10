@@ -11,7 +11,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
-import '../../models/nodes/photo_node.dart';
+import '../../models/nodes/image_node.dart';
 import '../../models/geometry_type.dart';
 import '../../utils/global_config.dart';
 import '../../utils/feature_calc_utils.dart';
@@ -71,14 +71,14 @@ mixin LayerDrawerTiles {
   /// 写真タイルを構築（位置情報付き画像ファイル）
   Widget buildPhotoTile(
     BuildContext context,
-    PhotoNode node, {
+    ImageNode node, {
     VoidCallback? onRename,
   }) {
     return ListTile(
       leading: _buildIconWithVisibility(node),
       title: Text(node.name),
       onTap: () {
-        // PhotoNode選択処理（地図上でハイライト表示）
+        // ImageNode選択処理（地図上でハイライト表示）
         GlobalConfig.instance.selectedFeatures.clear();
         GlobalConfig.instance.selectedFeatures.add(node);
 
@@ -120,7 +120,7 @@ mixin LayerDrawerTiles {
             );
             if (confirm == true) {
               try {
-                // 削除されるPhotoNodeが選択されている場合は選択状態をクリア
+                // 削除されるImageNodeが選択されている場合は選択状態をクリア
                 GlobalConfig.instance.selectedFeatures.remove(node);
 
                 await node.dispose();

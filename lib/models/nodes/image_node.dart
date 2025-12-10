@@ -1,4 +1,4 @@
-// K-MAPS: 写真ノードクラス
+// K-MAPS: 画像ノードクラス
 // 位置情報付き画像ファイルに対応するレイヤツリーノード
 
 import 'dart:io';
@@ -12,7 +12,7 @@ import 'folder_node.dart';
 
 /// 画像ファイルノード（位置情報付き画像ファイル管理）
 /// EXIFデータから緯度経度を取得し、位置情報がある画像のみを管理する
-class PhotoNode extends LayerTreeNode {
+class ImageNode extends LayerTreeNode {
   /// 画像ファイルの絶対パス
   final String filePath;
 
@@ -23,27 +23,22 @@ class PhotoNode extends LayerTreeNode {
   final DateTime? takenAt;
 
   /// 画像ファイルの詳細情報
-  final PhotoMetadata metadata;
+  final ImageMetadata metadata;
 
   /// コンストラクタ
-  PhotoNode(
+  ImageNode(
     this.filePath,
     this.location,
     this.metadata, {
     this.takenAt,
     bool visible = true,
     LayerTreeNode? parent,
-    // 以下はコンストラクタで受け取るが、PhotoNodeでは使用しない可能性があるため、
-    // 将来的な拡張性として残すか、削除する。
-    // 今回はCameraScreenからの呼び出しでisPhotoという名前付き引数が渡されているため、
-    // それに対応するために追加する。ただし、PhotoNode自体がPhotoであることを示すクラスなので、
-    // 本来的には不要。
     bool isPhoto = true,
   }) : super(
          p.basename(filePath),
          visible: visible,
          parent: parent,
-         nodeType: "photo",
+         nodeType: "image",
        );
 
   /// ノード種別ごとのベースアイコン（UI用）
@@ -78,33 +73,27 @@ class PhotoNode extends LayerTreeNode {
   /// 画像ファイルが存在するかチェック
   bool get fileExists => File(filePath).existsSync();
 
-  /// 画像ファイルのサムネイル取得（将来的に実装）
-  // Future<Uint8List?> getThumbnail() async {
-  //   // 画像リサイズライブラリを使用してサムネイル生成
-  //   return null;
-  // }
-
-  /// 指定したフォルダ内の画像ファイルをスキャンし、位置情報付きのPhotoNodeリストを返す
+  /// 指定したフォルダ内の画像ファイルをスキャンし、位置情報付きのImageNodeリストを返す
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    AppLogger.debug('[DEBUG] PhotoNode.loadNodes: called with parent=${parent?.name}');
+    AppLogger.debug('[DEBUG] ImageNode.loadNodes: called with parent=${parent?.name}');
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) {
       AppLogger.debug(
-        '[DEBUG] PhotoNode.loadNodes: absPath is null for parent ${parent.name}',
+        '[DEBUG] ImageNode.loadNodes: absPath is null for parent ${parent.name}',
       );
       return nodes;
     }
 
     final dir = Directory(absPath);
     if (!dir.existsSync()) {
-      AppLogger.debug('[DEBUG] PhotoNode.loadNodes: directory does not exist: $absPath');
+      AppLogger.debug('[DEBUG] ImageNode.loadNodes: directory does not exist: $absPath');
       return nodes;
     }
 
-    AppLogger.debug('[DEBUG] PhotoNode.loadNodes: scanning directory: $absPath');
+    AppLogger.debug('[DEBUG] ImageNode.loadNodes: scanning directory: $absPath');
     // ディレクトリ内の画像ファイルをスキャンして名前順にソート
     final supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
     
@@ -117,13 +106,13 @@ class PhotoNode extends LayerTreeNode {
 
     for (var entity in imageFiles) {
       final fileName = p.basename(entity.path);
-      AppLogger.debug('[DEBUG] PhotoNode.loadNodes: found image file: $fileName');
+      AppLogger.debug('[DEBUG] ImageNode.loadNodes: found image file: $fileName');
 
       try {
         // EXIFデータから位置情報を抽出
         final exifData = await _extractExifData(entity.path);
         if (exifData != null) {
-          final photoNode = PhotoNode(
+          final imageNode = ImageNode(
             entity.path,
             exifData.location,
             exifData.metadata,
@@ -131,24 +120,24 @@ class PhotoNode extends LayerTreeNode {
             visible: true,
             parent: parent,
           );
-          nodes.add(photoNode);
+          nodes.add(imageNode);
           AppLogger.debug(
-            '[DEBUG] PhotoNode.loadNodes: created PhotoNode for $fileName at ${exifData.location}',
+            '[DEBUG] ImageNode.loadNodes: created ImageNode for $fileName at ${exifData.location}',
           );
         } else {
           AppLogger.debug(
-            '[DEBUG] PhotoNode.loadNodes: no GPS data found in $fileName, skipping',
+            '[DEBUG] ImageNode.loadNodes: no GPS data found in $fileName, skipping',
           );
         }
       } catch (e) {
         AppLogger.debug(
-          '[ERROR] PhotoNode.loadNodes: failed to process $fileName: $e',
+          '[ERROR] ImageNode.loadNodes: failed to process $fileName: $e',
         );
       }
     }
 
     AppLogger.debug(
-      '[DEBUG] PhotoNode.loadNodes: found ${nodes.length} photos with GPS data, returning',
+      '[DEBUG] ImageNode.loadNodes: found ${nodes.length} images with GPS data, returning',
     );
     return nodes;
   }
@@ -157,7 +146,7 @@ class PhotoNode extends LayerTreeNode {
   /// 位置情報がない場合はnullを返す
   /// 
   /// パフォーマンス最適化: ファイル全体ではなくヘッダー部分のみを読み込む
-  static Future<ExifPhotoData?> _extractExifData(String filePath) async {
+  static Future<ExifImageData?> _extractExifData(String filePath) async {
     try {
       // ファイルサイズを取得
       final file = File(filePath);
@@ -169,14 +158,14 @@ class PhotoNode extends LayerTreeNode {
       final exifResult = _parseBasicExif(bytes);
       if (exifResult == null) return null;
 
-      final metadata = PhotoMetadata(
+      final metadata = ImageMetadata(
         fileSize: stats.size,
         width: exifResult['width'] as int?,
         height: exifResult['height'] as int?,
         camera: exifResult['camera'] as String?,
       );
 
-      return ExifPhotoData(
+      return ExifImageData(
         location: LatLng(
           exifResult['lat'] as double,
           exifResult['lng'] as double,
@@ -185,23 +174,15 @@ class PhotoNode extends LayerTreeNode {
         metadata: metadata,
       );
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._extractExifData: $e');
+      AppLogger.debug('[ERROR] ImageNode._extractExifData: $e');
       return null;
     }
   }
 
   /// ファイルの先頭部分のみを読み込む（EXIF解析用）
-  /// 
-  /// [filePath] 読み込むファイルのパス
-  /// [maxBytes] 読み込む最大バイト数（デフォルト256KB）
-  /// 
-  /// 大きな画像ファイルでも先頭部分だけを読み込むことで、
-  /// メモリ使用量を削減し、読み込み速度を大幅に向上させる
   static Future<Uint8List> _readFileHeader(String filePath, int maxBytes) async {
     final file = File(filePath);
     final fileSize = await file.length();
-    
-    // ファイルサイズが指定バイト数より小さい場合は全体を読み込む
     final bytesToRead = fileSize < maxBytes ? fileSize : maxBytes;
     
     final randomAccessFile = await file.open(mode: FileMode.read);
@@ -214,16 +195,13 @@ class PhotoNode extends LayerTreeNode {
   }
 
   /// 基本的なEXIF解析（JPEG対応）
-  /// GPS情報がある場合のみ座標データを返す
   static Map<String, dynamic>? _parseBasicExif(Uint8List bytes) {
     try {
-      // JPEGファイルかチェック（SOI: 0xFFD8で開始）
       if (bytes.length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) {
-        AppLogger.debug('[DEBUG] PhotoNode._parseBasicExif: not a JPEG file');
+        AppLogger.debug('[DEBUG] ImageNode._parseBasicExif: not a JPEG file');
         return null;
       }
 
-      // APP1セグメント（EXIF）を探す
       int offset = 2;
       while (offset < bytes.length - 1) {
         if (bytes[offset] != 0xFF) break;
@@ -232,11 +210,9 @@ class PhotoNode extends LayerTreeNode {
         offset += 2;
 
         if (marker == 0xE1) {
-          // APP1セグメント（EXIF）
           final segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
           offset += 2;
 
-          // "Exif\0\0" ヘッダをチェック
           if (offset + 6 < bytes.length &&
               bytes[offset] == 0x45 &&
               bytes[offset + 1] == 0x78 &&
@@ -244,24 +220,21 @@ class PhotoNode extends LayerTreeNode {
               bytes[offset + 3] == 0x66 &&
               bytes[offset + 4] == 0x00 &&
               bytes[offset + 5] == 0x00) {
-            // TIFFヘッダの開始位置
             final tiffStart = offset + 6;
             return _parseTiffExif(bytes, tiffStart, segmentLength - 6);
           }
         } else if (marker == 0xDA) {
-          // SOS（Start of Scan）
-          break; // 画像データ開始、EXIFはない
+          break;
         } else {
-          // 他のセグメントをスキップ
           final segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
           offset += segmentLength;
         }
       }
 
-      AppLogger.debug('[DEBUG] PhotoNode._parseBasicExif: no EXIF data found');
+      AppLogger.debug('[DEBUG] ImageNode._parseBasicExif: no EXIF data found');
       return null;
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._parseBasicExif: $e');
+      AppLogger.debug('[ERROR] ImageNode._parseBasicExif: $e');
       return null;
     }
   }
@@ -275,25 +248,22 @@ class PhotoNode extends LayerTreeNode {
     try {
       if (start + 8 > bytes.length) return null;
 
-      // エンディアンをチェック（"II" = little-endian, "MM" = big-endian）
       final isLittleEndian = bytes[start] == 0x49 && bytes[start + 1] == 0x49;
       if (!isLittleEndian &&
           !(bytes[start] == 0x4D && bytes[start + 1] == 0x4D)) {
-        AppLogger.debug('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF header');
+        AppLogger.debug('[DEBUG] ImageNode._parseTiffExif: invalid TIFF header');
         return null;
       }
 
-      // TIFF識別子（42）をチェック
       final tiffId =
           isLittleEndian
               ? bytes[start + 2] | (bytes[start + 3] << 8)
               : (bytes[start + 2] << 8) | bytes[start + 3];
       if (tiffId != 42) {
-        AppLogger.debug('[DEBUG] PhotoNode._parseTiffExif: invalid TIFF identifier');
+        AppLogger.debug('[DEBUG] ImageNode._parseTiffExif: invalid TIFF identifier');
         return null;
       }
 
-      // 最初のIFDのオフセット
       final ifdOffset =
           isLittleEndian
               ? bytes[start + 4] |
@@ -305,10 +275,9 @@ class PhotoNode extends LayerTreeNode {
                   (bytes[start + 6] << 8) |
                   bytes[start + 7];
 
-      // IFDを解析してGPS情報を探す
       return _parseIFD(bytes, start, start + ifdOffset, isLittleEndian);
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._parseTiffExif: $e');
+      AppLogger.debug('[ERROR] ImageNode._parseTiffExif: $e');
       return null;
     }
   }
@@ -323,7 +292,6 @@ class PhotoNode extends LayerTreeNode {
     try {
       if (ifdStart + 2 > bytes.length) return null;
 
-      // エントリ数を取得
       final entryCount =
           isLittleEndian
               ? bytes[ifdStart] | (bytes[ifdStart + 1] << 8)
@@ -332,17 +300,14 @@ class PhotoNode extends LayerTreeNode {
       int offset = ifdStart + 2;
       int? gpsIfdOffset;
 
-      // 各エントリを処理
       for (int i = 0; i < entryCount; i++) {
         if (offset + 12 > bytes.length) break;
 
-        // タグID
         final tag =
             isLittleEndian
                 ? bytes[offset] | (bytes[offset + 1] << 8)
                 : (bytes[offset] << 8) | bytes[offset + 1];
 
-        // 値のオフセット/値
         final valueOffset =
             isLittleEndian
                 ? bytes[offset + 8] |
@@ -354,7 +319,6 @@ class PhotoNode extends LayerTreeNode {
                     (bytes[offset + 10] << 8) |
                     bytes[offset + 11];
 
-        // GPS IFDポインタ（タグ 0x8825）
         if (tag == 0x8825) {
           gpsIfdOffset = tiffStart + valueOffset;
         }
@@ -362,12 +326,10 @@ class PhotoNode extends LayerTreeNode {
         offset += 12;
       }
 
-      // GPS IFDがあれば解析
       if (gpsIfdOffset != null && gpsIfdOffset < bytes.length) {
         return _parseGpsIFD(bytes, tiffStart, gpsIfdOffset, isLittleEndian);
       }
 
-      // 次のIFDがあれば処理（GPS情報が見つからない場合）
       if (offset + 4 <= bytes.length) {
         final nextIfdOffset =
             isLittleEndian
@@ -392,7 +354,7 @@ class PhotoNode extends LayerTreeNode {
 
       return null;
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._parseIFD: $e');
+      AppLogger.debug('[ERROR] ImageNode._parseIFD: $e');
       return null;
     }
   }
@@ -407,7 +369,6 @@ class PhotoNode extends LayerTreeNode {
     try {
       if (gpsIfdStart + 2 > bytes.length) return null;
 
-      // エントリ数を取得
       final entryCount =
           isLittleEndian
               ? bytes[gpsIfdStart] | (bytes[gpsIfdStart + 1] << 8)
@@ -417,23 +378,19 @@ class PhotoNode extends LayerTreeNode {
       String? latRef, lngRef;
       List<double>? latDms, lngDms;
 
-      // 各GPSエントリを処理
       for (int i = 0; i < entryCount; i++) {
         if (offset + 12 > bytes.length) break;
 
-        // タグID
         final tag =
             isLittleEndian
                 ? bytes[offset] | (bytes[offset + 1] << 8)
                 : (bytes[offset] << 8) | bytes[offset + 1];
 
-        // データ型
         final type =
             isLittleEndian
                 ? bytes[offset + 2] | (bytes[offset + 3] << 8)
                 : (bytes[offset + 2] << 8) | bytes[offset + 3];
 
-        // データ数
         final count =
             isLittleEndian
                 ? bytes[offset + 4] |
@@ -445,7 +402,6 @@ class PhotoNode extends LayerTreeNode {
                     (bytes[offset + 6] << 8) |
                     bytes[offset + 7];
 
-        // 値のオフセット/値
         final valueOffset =
             isLittleEndian
                 ? bytes[offset + 8] |
@@ -458,15 +414,13 @@ class PhotoNode extends LayerTreeNode {
                     bytes[offset + 11];
 
         switch (tag) {
-          case 1: // GPSLatitudeRef
+          case 1:
             if (type == 2 && count == 2) {
-              // ASCII string
               latRef = String.fromCharCode(bytes[offset + 8]);
             }
             break;
-          case 2: // GPSLatitude
+          case 2:
             if (type == 5 && count == 3) {
-              // RATIONAL
               latDms = _parseRationalArray(
                 bytes,
                 tiffStart + valueOffset,
@@ -475,15 +429,13 @@ class PhotoNode extends LayerTreeNode {
               );
             }
             break;
-          case 3: // GPSLongitudeRef
+          case 3:
             if (type == 2 && count == 2) {
-              // ASCII string
               lngRef = String.fromCharCode(bytes[offset + 8]);
             }
             break;
-          case 4: // GPSLongitude
+          case 4:
             if (type == 5 && count == 3) {
-              // RATIONAL
               lngDms = _parseRationalArray(
                 bytes,
                 tiffStart + valueOffset,
@@ -497,7 +449,6 @@ class PhotoNode extends LayerTreeNode {
         offset += 12;
       }
 
-      // 緯度経度が揃っていれば座標を計算
       if (latRef != null &&
           lngRef != null &&
           latDms != null &&
@@ -506,19 +457,19 @@ class PhotoNode extends LayerTreeNode {
         final lng = _dmsToDecimal(lngDms) * (lngRef == 'W' ? -1 : 1);
 
         AppLogger.debug(
-          '[DEBUG] PhotoNode._parseGpsIFD: GPS coordinates found: $lat, $lng',
+          '[DEBUG] ImageNode._parseGpsIFD: GPS coordinates found: $lat, $lng',
         );
         return {'lat': lat, 'lng': lng};
       }
 
       return null;
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._parseGpsIFD: $e');
+      AppLogger.debug('[ERROR] ImageNode._parseGpsIFD: $e');
       return null;
     }
   }
 
-  /// RATIONAL配列（分数の配列）を解析
+  /// RATIONAL配列を解析
   static List<double>? _parseRationalArray(
     Uint8List bytes,
     int start,
@@ -563,7 +514,7 @@ class PhotoNode extends LayerTreeNode {
 
       return result;
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode._parseRationalArray: $e');
+      AppLogger.debug('[ERROR] ImageNode._parseRationalArray: $e');
       return null;
     }
   }
@@ -584,7 +535,6 @@ class PhotoNode extends LayerTreeNode {
 
       final directory = p.dirname(filePath);
       final extension = p.extension(filePath);
-      // 拡張子が含まれていない場合は付与
       final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
       final newPath = p.join(directory, newFileName);
 
@@ -594,39 +544,35 @@ class PhotoNode extends LayerTreeNode {
 
       await file.rename(newPath);
       
-      // 親フォルダを更新して反映させる
       if (parent != null) {
         await parent!.updateChildren();
       }
       
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode.rename: $e');
+      AppLogger.debug('[ERROR] ImageNode.rename: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> updateChildren() async {
-    // PhotoNodeは子ノードを持たない
     children.clear();
   }
 
   @override
   Future<void> dispose() async {
-    AppLogger.debug('[DEBUG] PhotoNode.dispose: disposing photo $name');
+    AppLogger.debug('[DEBUG] ImageNode.dispose: disposing image $name');
     
-    // 画像ファイルを削除
     try {
       final file = File(filePath);
       if (file.existsSync()) {
         await file.delete();
-        AppLogger.debug('[DEBUG] PhotoNode.dispose: deleted file $filePath');
+        AppLogger.debug('[DEBUG] ImageNode.dispose: deleted file $filePath');
       } else {
-        AppLogger.debug('[DEBUG] PhotoNode.dispose: file not found $filePath');
+        AppLogger.debug('[DEBUG] ImageNode.dispose: file not found $filePath');
       }
     } catch (e) {
-      AppLogger.debug('[ERROR] PhotoNode.dispose: failed to delete file $filePath: $e');
-      // エラーを再throwして、呼び出し元で処理できるようにする
+      AppLogger.debug('[ERROR] ImageNode.dispose: failed to delete file $filePath: $e');
       rethrow;
     }
     
@@ -634,22 +580,22 @@ class PhotoNode extends LayerTreeNode {
   }
 }
 
-/// 写真のEXIFデータから抽出した情報
-class ExifPhotoData {
+/// 画像のEXIFデータから抽出した情報
+class ExifImageData {
   final LatLng location;
   final DateTime? takenAt;
-  final PhotoMetadata metadata;
+  final ImageMetadata metadata;
 
-  ExifPhotoData({required this.location, this.takenAt, required this.metadata});
+  ExifImageData({required this.location, this.takenAt, required this.metadata});
 }
 
-/// 写真ファイルのメタデータ
-class PhotoMetadata {
+/// 画像ファイルのメタデータ
+class ImageMetadata {
   final int fileSize;
   final int? width;
   final int? height;
   final String? camera;
 
-  PhotoMetadata({required this.fileSize, this.width, this.height, this.camera});
+  ImageMetadata({required this.fileSize, this.width, this.height, this.camera});
 }
 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:io';
 import '../models/nodes/feature_node.dart';
-import '../models/nodes/photo_node.dart';
+import '../models/nodes/image_node.dart';
 import '../models/nodes/layer_node.dart'; // PointLayerNode用
 import '../utils/global_config.dart';
 import '../widgets/line_simplification_dialog.dart';
@@ -21,9 +21,9 @@ class FeatureDetailPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (feature == null) return const SizedBox.shrink();
 
-    // PhotoNode用の詳細パネル
-    if (feature is PhotoNode) {
-      final photo = feature as PhotoNode;
+    // ImageNode用の詳細パネル
+    if (feature is ImageNode) {
+      final photo = feature as ImageNode;
 
       // プロジェクトルートからの相対パスを計算
       final projectRoot = GlobalConfig.instance.projectRootDir;

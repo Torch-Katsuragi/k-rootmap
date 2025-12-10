@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
-import 'photo_node.dart';
+import 'image_node.dart';
 
 /// フォルダノード
 class FolderNode extends LayerTreeNode {
@@ -19,13 +19,13 @@ class FolderNode extends LayerTreeNode {
   @override
   Color get baseIconColor => Colors.amber;
 
-  /// このフォルダ直下のFolderNode, GeoPackageNode, PhotoNodeのみ生成
+  /// このフォルダ直下のFolderNode, GeoPackageNode, ImageNodeのみ生成
   @override
   Future<void> updateChildren() async {
     // ファイルシステムから現在の構造を取得
     final folderNodes = await FolderNode.loadNodes(this);
     final gpkgNodes = await GeoPackageNode.loadNodes(this);
-    final photoNodes = await PhotoNode.loadNodes(this);
+    final photoNodes = await ImageNode.loadNodes(this);
 
     // 現在のファイルシステムに存在するノード名のセットを作成
     final currentFolderNames = folderNodes.map((n) => n.name).toSet();

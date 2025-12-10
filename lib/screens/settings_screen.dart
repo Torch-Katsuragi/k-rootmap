@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
+import 'layer_style_settings_screen.dart';
 
 /// 設定カテゴリー定義
 enum SettingsCategory {
   basemap,
   gps,
-  // 将来的なカテゴリーはここに追加
-  // general,
-  // account,
+  layerStyle,
 }
 
 extension SettingsCategoryExt on SettingsCategory {
@@ -18,6 +17,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return '地図・タイル';
       case SettingsCategory.gps:
         return 'GPS・測位';
+      case SettingsCategory.layerStyle:
+        return 'レイヤ描画';
     }
   }
 
@@ -27,6 +28,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return Icons.map;
       case SettingsCategory.gps:
         return Icons.gps_fixed;
+      case SettingsCategory.layerStyle:
+        return Icons.palette;
     }
   }
 
@@ -36,6 +39,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return '背景地図、オフライン地図、キャッシュ管理';
       case SettingsCategory.gps:
         return 'GPSソース選択、外部GNSS接続';
+      case SettingsCategory.layerStyle:
+        return '点・線・ポリゴンの描画スタイル';
     }
   }
 }
@@ -198,6 +203,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return BaseMapSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.gps:
         return GpsSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.layerStyle:
+        return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
     }
   }
 }
+

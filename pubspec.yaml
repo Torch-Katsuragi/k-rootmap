@@ -80,6 +80,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   connectivity_plus: ^7.0.0
   camerawesome: ^2.5.0
+  flex_color_picker: ^3.7.2
 
 dependency_overrides:
   rxdart: ^0.28.0

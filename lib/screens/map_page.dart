@@ -38,6 +38,7 @@ import '../widgets/left_bottom_fab.dart'; // 左下FAB
 import '../widgets/map_toolbar.dart'; // 地図ツールバー
 import '../widgets/map_appbar_actions.dart'; // AppBarアクション
 import '../services/foreground_service.dart'; // GPS追跡フォアグラウンドサービス
+import 'layer_style_settings_screen.dart'; // レイヤ描画設定
 import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
 import '../services/geometry_conversion_service.dart';
 import '../utils/global_drawing_state.dart'; // GlobalDrawingState
@@ -125,6 +126,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     _currentNode = GlobalConfig.instance.folderTree; // Reference root node
     AppLogger.debug('[DEBUG] initState: folderTree=${GlobalConfig.instance.folderTree}');
     GlobalConfig.instance.mapState = this;
+
+    // レイヤ描画設定を読み込み＆変更リスナー登録
+    LayerStyleConfig().load();
+    LayerStyleConfig().addListener(_onLayerStyleChanged);
 
     // GPS追跡アニメーション初期化
     _trackingAnimationController = AnimationController(
@@ -244,6 +249,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
   }
 
+  /// レイヤスタイル設定変更コールバック
+  void _onLayerStyleChanged() {
+    if (mounted) {
+      setState(() {}); // スタイル変更時にマップを再描画
+    }
+  }
+
   /// GPS管理サービス初期化
   Future<void> _initializeGpsManager() async {
     AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化開始');
@@ -339,6 +351,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     GlobalConfig.instance.baseMapService.removeListener(
       _onBaseMapServiceUpdate,
     );
+    LayerStyleConfig().removeListener(_onLayerStyleChanged); // レイヤスタイル変更リスナー解除
     // GPS取得を停止（測量モードでない場合のみ）
     if (_gpsManager.isGpsActive && !_gpsManager.isSurveyMode) {
       _gpsManager.stopGps();
@@ -1666,13 +1679,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 color:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? Colors.yellow
-                                        : Colors.blue,
+                                        ? LayerStyleConfig().selectedColor
+                                        : LayerStyleConfig().lineColor,
                                 strokeWidth:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? 2.5
-                                        : 1.5,
+                                        ? LayerStyleConfig().lineWidth * LayerStyleConfig().selectedMultiplier
+                                        : LayerStyleConfig().lineWidth,
                               ),
                           // --- GPS survey line preview ---
                           if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1767,18 +1780,18 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 color:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? Colors.yellow.withValues(alpha: 0.5)
-                                        : Colors.green.withValues(alpha: 0.3),
+                                        ? LayerStyleConfig().selectedColor.withOpacity(0.5)
+                                        : LayerStyleConfig().polygonFillColor.withOpacity(LayerStyleConfig().polygonFillOpacity),
                                 borderStrokeWidth:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? 3.0
-                                        : 1.5,
+                                        ? LayerStyleConfig().polygonBorderWidth * LayerStyleConfig().selectedMultiplier
+                                        : LayerStyleConfig().polygonBorderWidth,
                                 borderColor:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? Colors.yellow
-                                        : Colors.green,
+                                        ? LayerStyleConfig().selectedColor
+                                        : LayerStyleConfig().polygonBorderColor.withOpacity(LayerStyleConfig().polygonBorderOpacity),
                               ),
                           // --- GPS survey polygon preview ---
                           if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1975,47 +1988,42 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                           for (final f in pointFeatures)
                             if (f.geometry != null)
                               ...((f.geometry as List<LatLng>).map(
-                                (pt) => Marker(
-                                  point: pt,
-                                  width: 8,
-                                  height: 8,
-                                  child: Tooltip(
-                                    message: f.name,
-                                    child: Container(
-                                      width:
-                                          GlobalConfig.instance.selectedFeatures
-                                                  .contains(f)
-                                              ? 4
-                                              : 3,
-                                      height:
-                                          GlobalConfig.instance.selectedFeatures
-                                                  .contains(f)
-                                              ? 4
-                                              : 3,
-                                      decoration: BoxDecoration(
-                                        color:
-                                            GlobalConfig
-                                                    .instance
-                                                    .selectedFeatures
-                                                    .contains(f)
-                                                ? Colors.yellow
-                                                : Colors.red,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 0.5,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black26,
-                                            blurRadius: 0.5,
-                                            offset: Offset(0, 0.25),
+                                (pt) {
+                                  final styleConfig = LayerStyleConfig();
+                                  final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+                                  final size = isSelected
+                                      ? styleConfig.pointSize * styleConfig.selectedMultiplier
+                                      : styleConfig.pointSize;
+                                  return Marker(
+                                    point: pt,
+                                    width: size + 4, // マージン考慮
+                                    height: size + 4,
+                                    child: Tooltip(
+                                      message: f.name,
+                                      child: Container(
+                                        width: size,
+                                        height: size,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? styleConfig.selectedColor
+                                              : styleConfig.pointColor,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: size > 8 ? 1.5 : 0.5,
                                           ),
-                                        ],
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black26,
+                                              blurRadius: 1,
+                                              offset: Offset(0, 0.5),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
+                                  );
+                                },
                               )),
 
                           // --- ImageNode markers (写真アイコン) ---

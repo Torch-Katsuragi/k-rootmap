@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
+import '../widgets/settings_widgets.dart';
 
 /// 設定カテゴリー定義
 enum SettingsCategory {
   basemap,
   gps,
   layerStyle,
+  feedback,
 }
 
 extension SettingsCategoryExt on SettingsCategory {
@@ -19,6 +22,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPS・測位';
       case SettingsCategory.layerStyle:
         return 'レイヤ描画';
+      case SettingsCategory.feedback:
+        return 'フィードバック';
     }
   }
 
@@ -30,6 +35,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return Icons.gps_fixed;
       case SettingsCategory.layerStyle:
         return Icons.palette;
+      case SettingsCategory.feedback:
+        return Icons.feedback;
     }
   }
 
@@ -41,6 +48,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPSソース選択、外部GNSS接続';
       case SettingsCategory.layerStyle:
         return '点・線・ポリゴンの描画スタイル';
+      case SettingsCategory.feedback:
+        return '要望・バグ報告をお送りください';
     }
   }
 }
@@ -205,7 +214,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return GpsSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.layerStyle:
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.feedback:
+        return FeedbackScreen(key: key, isEmbedded: isEmbedded);
     }
   }
 }
 
+/// フィードバック画面
+class FeedbackScreen extends StatelessWidget {
+  final bool isEmbedded;
+  
+  /// Google Forms フィードバックURL
+  static const _feedbackUrl = 'https://forms.gle/zQEHoHt1d9nXzW5x7';
+
+  const FeedbackScreen({
+    super.key,
+    this.isEmbedded = false,
+  });
+
+  Future<void> _openFeedbackForm(BuildContext context) async {
+    final uri = Uri.parse(_feedbackUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('ブラウザを開けませんでした'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('エラーが発生しました: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScaffold(
+      title: 'フィードバック',
+      isEmbedded: isEmbedded,
+      body: SettingsBody(
+        sections: [
+          SettingsHighlightSection(
+            title: 'ご意見・ご要望をお聞かせください',
+            icon: Icons.mail_outline,
+            iconColor: Colors.blue,
+            backgroundColor: Colors.blue.shade50,
+            description:
+                'K-MAPSをより良いアプリにするために、'
+                'あなたのフィードバックをお待ちしています。\n\n'
+                '機能の要望やバグ報告など、お気軽にお送りください。'
+                '開発の参考にさせていただきます。',
+            actionButton: ElevatedButton.icon(
+              onPressed: () => _openFeedbackForm(context),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('フィードバックフォームを開く'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          SettingsSection(
+            title: 'フィードバックの種類',
+            icon: Icons.category,
+            iconColor: Colors.orange,
+            children: [
+              const ListTile(
+                leading: Icon(Icons.lightbulb_outline, color: Colors.amber),
+                title: Text('機能の要望'),
+                subtitle: Text('こんな機能があったら便利！というアイデア'),
+              ),
+              const Divider(),
+              const ListTile(
+                leading: Icon(Icons.bug_report, color: Colors.red),
+                title: Text('バグ報告'),
+                subtitle: Text('動作がおかしい、エラーが出るなどの問題'),
+              ),
+              const Divider(),
+              const ListTile(
+                leading: Icon(Icons.thumb_up_outlined, color: Colors.green),
+                title: Text('その他'),
+                subtitle: Text('感想、質問、改善提案など何でも'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

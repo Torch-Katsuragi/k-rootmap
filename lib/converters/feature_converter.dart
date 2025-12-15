@@ -1,6 +1,7 @@
 // K-MAPS: Feature Converter
 // フィーチャ変換操作に特化したコンバーター
 import 'package:k_maps/utils/app_logger.dart';
+import 'package:charset/charset.dart' as charset;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -593,8 +594,8 @@ class FeatureExportConverter
     // .shxファイル（インデックス）
     await _writeNativePolygonShxFile(features, '$basePath.shx');
 
-    // .dbfファイル（属性データ）
-    await _writeNativePolygonDbfFile(features, '$basePath.dbf');
+    // .dbfファイル（属性データ）- 元の属性を保持
+    await _writeNativeDbfFile(features, '$basePath.dbf');
 
     // .prjファイル（座標系定義）
     await _writePrjFile('$basePath.prj');
@@ -984,14 +985,18 @@ class FeatureExportConverter
     final fields = <Map<String, dynamic>>[];
     final allMetadata = <String, dynamic>{};
 
-    // 全フィーチャから属性フィールドを収集
+    // エクスポートから除外する予約済みカラム名（GeoPackage内部管理用のみ）
+    const excludedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry'};
+
+    // 全フィーチャから属性フィールドを収集（予約済みカラムを除外）
     for (final feature in features) {
       final metadata = feature['metadata'] as Map<String, dynamic>? ?? {};
-      allMetadata.addAll(metadata);
+      for (final entry in metadata.entries) {
+        if (!excludedColumns.contains(entry.key.toLowerCase())) {
+          allMetadata[entry.key] = entry.value;
+        }
+      }
     }
-
-    // 基本フィールド
-    fields.add({'name': 'FID', 'type': 'N', 'length': 10, 'decimal': 0});
 
     // メタデータフィールド
     for (final entry in allMetadata.entries) {
@@ -1013,12 +1018,12 @@ class FeatureExportConverter
         fieldLength = 1;
       }
 
-      // フィールド名を8文字以内に制限
+      // フィールド名を10文字以内に制限（DBF仕様）
       String fieldName =
-          entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key;
+          entry.key.length > 10 ? entry.key.substring(0, 10) : entry.key;
 
       // 重複チェック
-      if (!fields.any((f) => f['name'] == fieldName)) {
+      if (!fields.any((f) => f['name'] == fieldName.toUpperCase())) {
         fields.add({
           'name': fieldName.toUpperCase(),
           'type': fieldType,
@@ -1048,9 +1053,9 @@ class FeatureExportConverter
 
     // フィールド記述子
     for (final field in fields) {
-      final nameBytes = (field['name'] as String).codeUnits;
+      // フィールド名をShift-JISでエンコード
+      final nameBytes = _encodeToShiftJis(field['name'] as String, 11);
       bytes.addAll(nameBytes);
-      bytes.addAll(List.filled(11 - nameBytes.length, 0)); // フィールド名（11バイト）
       bytes.add((field['type'] as String).codeUnitAt(0)); // フィールドタイプ
       bytes.addAll(List.filled(4, 0)); // フィールドアドレス
       bytes.add(field['length'] as int); // フィールド長
@@ -1070,21 +1075,16 @@ class FeatureExportConverter
       for (final field in fields) {
         final fieldName = field['name'] as String;
         final fieldLength = field['length'] as int;
-        String value;
-
-        if (fieldName == 'FID') {
-          value = (feature['id'] ?? i + 1).toString();
-        } else {
-          // メタデータから対応する値を取得（大文字小文字を無視）
-          final metaValue =
-              metadata.entries
-                  .firstWhere(
-                    (entry) => entry.key.toUpperCase() == fieldName,
-                    orElse: () => MapEntry('', ''),
-                  )
-                  .value;
-          value = metaValue?.toString() ?? '';
-        }
+        
+        // メタデータから対応する値を取得（大文字小文字を無視）
+        final metaValue =
+            metadata.entries
+                .firstWhere(
+                  (entry) => entry.key.toUpperCase() == fieldName,
+                  orElse: () => MapEntry('', ''),
+                )
+                .value;
+        String value = metaValue?.toString() ?? '';
 
         if (field['type'] == 'N') {
           // 数値フィールド：右寄せ、スペース埋め
@@ -1094,7 +1094,8 @@ class FeatureExportConverter
           value = value.padRight(fieldLength);
         }
 
-        final valueBytes = value.substring(0, fieldLength).codeUnits;
+        // 値をShift-JISでエンコード（スペースでパディング）
+        final valueBytes = _encodeToShiftJis(value, fieldLength, padWithSpace: true);
         bytes.addAll(valueBytes);
       }
     }
@@ -1102,6 +1103,42 @@ class FeatureExportConverter
     bytes.add(0x1A); // ファイル終了マーカー
 
     await file.writeAsBytes(bytes);
+    
+    // .cpgファイルを作成（エンコーディング指定）
+    final cpgPath = path.replaceAll('.dbf', '.cpg');
+    await File(cpgPath).writeAsString('CP932');
+  }
+  
+  /// 文字列をShift-JIS（CP932）でエンコードし、指定バイト長に調整
+  /// [padWithSpace] trueの場合はスペース(0x20)でパディング、falseの場合はNULL(0x00)
+  List<int> _encodeToShiftJis(String text, int byteLength, {bool padWithSpace = false}) {
+    try {
+      // Shift-JISでエンコード
+      final encoded = charset.shiftJis.encode(text);
+      final padByte = padWithSpace ? 0x20 : 0x00;
+      
+      // 指定バイト長に調整（切り詰めまたはパディング）
+      if (encoded.length >= byteLength) {
+        return encoded.sublist(0, byteLength);
+      } else {
+        // 不足分をパディング
+        final result = List<int>.from(encoded);
+        result.addAll(List.filled(byteLength - encoded.length, padByte));
+        return result;
+      }
+    } catch (e) {
+      AppLogger.debug('[FeatureConverter] Shift-JISエンコード失敗: $e, フォールバック使用');
+      final padByte = padWithSpace ? 0x20 : 0x00;
+      // フォールバック: ASCII範囲のみ使用
+      final asciiBytes = text.codeUnits
+          .where((c) => c < 128)
+          .take(byteLength)
+          .toList();
+      if (asciiBytes.length < byteLength) {
+        asciiBytes.addAll(List.filled(byteLength - asciiBytes.length, padByte));
+      }
+      return asciiBytes;
+    }
   }
 
   /// ポイントクラウド用Shapefileコンポーネントファイルを書き込み
@@ -1243,9 +1280,9 @@ class FeatureExportConverter
 
     // フィールド記述子
     for (final field in fields) {
-      final nameBytes = (field['name'] as String).codeUnits;
+      // フィールド名をShift-JISでエンコード
+      final nameBytes = _encodeToShiftJis(field['name'] as String, 11);
       bytes.addAll(nameBytes);
-      bytes.addAll(List.filled(11 - nameBytes.length, 0)); // フィールド名（11バイト）
       bytes.add((field['type'] as String).codeUnitAt(0)); // フィールドタイプ
       bytes.addAll(List.filled(4, 0)); // フィールドアドレス
       bytes.add(field['length'] as int); // フィールド長
@@ -1273,7 +1310,8 @@ class FeatureExportConverter
           value = value.padRight(fieldLength);
         }
 
-        final valueBytes = value.substring(0, fieldLength).codeUnits;
+        // 値をShift-JISでエンコード（スペースでパディング）
+        final valueBytes = _encodeToShiftJis(value, fieldLength, padWithSpace: true);
         bytes.addAll(valueBytes);
       }
     }
@@ -1281,6 +1319,10 @@ class FeatureExportConverter
     bytes.add(0x1A); // ファイル終了マーカー
 
     await file.writeAsBytes(bytes);
+    
+    // .cpgファイルを作成（エンコーディング指定）
+    final cpgPath = path.replaceAll('.dbf', '.cpg');
+    await File(cpgPath).writeAsString('CP932');
   }
 
   /// .prjファイルを書き込み（WGS84座標系）
@@ -1328,142 +1370,8 @@ class FeatureExportConverter
     return geometry['type']?.toString() ?? 'Unknown';
   }
 
-  /// Polygon用.dbfファイルを書き込み（属性データ）
-  Future<void> _writeNativePolygonDbfFile(
-    List<Map<String, dynamic>> features,
-    String path,
-  ) async {
-    final file = File(path);
-
-    // Polygon用属性フィールド定義
-    final fields = [
-      {'name': 'FID', 'type': 'N', 'length': 10, 'decimal': 0},
-      {'name': 'ID', 'type': 'N', 'length': 10, 'decimal': 0},
-      {'name': 'NAME', 'type': 'C', 'length': 100, 'decimal': 0},
-      {'name': 'DESC', 'type': 'C', 'length': 255, 'decimal': 0},
-      {'name': 'AREA', 'type': 'N', 'length': 15, 'decimal': 6},
-      {'name': 'PERIMETER', 'type': 'N', 'length': 15, 'decimal': 6},
-      {'name': 'PARTS', 'type': 'N', 'length': 5, 'decimal': 0},
-      {'name': 'POINTS', 'type': 'N', 'length': 8, 'decimal': 0},
-    ];
-
-    final recordLength =
-        1 + fields.fold<int>(0, (sum, field) => sum + (field['length'] as int));
-    final headerLength = 32 + (fields.length * 32) + 1;
-
-    final bytes = <int>[];
-
-    // DBFヘッダー（32バイト）
-    bytes.add(0x03); // バージョン（dBASE III）
-
-    // 日付（年-月-日）
-    final now = DateTime.now();
-    bytes.add(now.year - 1900); // 年（1900年からの経過年数）
-    bytes.add(now.month); // 月
-    bytes.add(now.day); // 日
-
-    bytes.addAll(_writeInt32LittleEndian(features.length)); // レコード数
-    bytes.addAll(_writeInt16LittleEndian(headerLength)); // ヘッダー長
-    bytes.addAll(_writeInt16LittleEndian(recordLength)); // レコード長
-    bytes.addAll(List.filled(20, 0)); // 予約領域
-
-    // フィールド記述子（各フィールド32バイト）
-    for (final field in fields) {
-      final fieldName = field['name'] as String;
-      final nameBytes = fieldName.codeUnits;
-
-      // フィールド名（11バイト、null埋め）
-      bytes.addAll(nameBytes.take(11));
-      bytes.addAll(List.filled(11 - nameBytes.length, 0));
-
-      bytes.add((field['type'] as String).codeUnitAt(0)); // フィールドタイプ
-      bytes.addAll(List.filled(4, 0)); // フィールドアドレス（未使用）
-      bytes.add(field['length'] as int); // フィールド長
-      bytes.add(field['decimal'] as int); // 小数点以下桁数
-      bytes.addAll(List.filled(14, 0)); // 予約領域
-    }
-
-    bytes.add(0x0D); // フィールド記述子終了マーカー
-
-    // データレコード
-    for (int i = 0; i < features.length; i++) {
-      final feature = features[i];
-      final metadata = feature['metadata'] as Map<String, dynamic>? ?? {};
-      final geometry = feature['geometry'] as Map<String, dynamic>? ?? {};
-      final coordinates = geometry['coordinates'] as List? ?? [];
-
-      bytes.add(0x20); // レコード削除フラグ（スペース = 非削除）
-
-      // 各フィールドのデータを書き込み
-      for (final field in fields) {
-        final fieldName = field['name'] as String;
-        final fieldType = field['type'] as String;
-        final fieldLength = field['length'] as int;
-
-        String value = '';
-
-        switch (fieldName) {
-          case 'FID':
-            value = (i + 1).toString(); // 1から始まるFeature ID
-            break;
-          case 'ID':
-            value = (feature['id'] ?? (i + 1)).toString();
-            break;
-          case 'NAME':
-            value = metadata['name']?.toString() ?? '';
-            break;
-          case 'DESC':
-            value = metadata['description']?.toString() ?? '';
-            break;
-          case 'AREA':
-            // 簡易的な面積計算（実際の測地面積ではない）
-            value = _calculatePolygonArea(coordinates).toStringAsFixed(6);
-            break;
-          case 'PERIMETER':
-            // 簡易的な周囲長計算
-            value = _calculatePolygonPerimeter(coordinates).toStringAsFixed(6);
-            break;
-          case 'PARTS':
-            value = coordinates.length.toString();
-            break;
-          case 'POINTS':
-            int totalPoints = 0;
-            for (final ring in coordinates) {
-              if (ring is List) totalPoints += ring.length;
-            }
-            value = totalPoints.toString();
-            break;
-          default:
-            value = '';
-        }
-
-        // フィールドタイプに応じたフォーマット
-        if (fieldType == 'N') {
-          // 数値フィールド：右寄せ、スペース埋め
-          value = value.padLeft(fieldLength, ' ');
-        } else {
-          // 文字フィールド：左寄せ、スペース埋め
-          if (value.length > fieldLength) {
-            value = value.substring(0, fieldLength);
-          }
-          value = value.padRight(fieldLength, ' ');
-        }
-
-        // 文字列をバイト配列に変換
-        final valueBytes = value.codeUnits.take(fieldLength).toList();
-        while (valueBytes.length < fieldLength) {
-          valueBytes.add(0x20); // スペース文字で埋める
-        }
-        bytes.addAll(valueBytes);
-      }
-    }
-
-    bytes.add(0x1A); // ファイル終了マーカー
-
-    await file.writeAsBytes(bytes);
-  }
-
   /// 簡易ポリゴン面積計算（度数単位、測地面積ではない）
+  // ignore: unused_element
   double _calculatePolygonArea(List coordinates) {
     if (coordinates.isEmpty) return 0.0;
 
@@ -1493,6 +1401,7 @@ class FeatureExportConverter
   }
 
   /// 簡易ポリゴン周囲長計算（度数単位、測地距離ではない）
+  // ignore: unused_element
   double _calculatePolygonPerimeter(List coordinates) {
     if (coordinates.isEmpty) return 0.0;
 

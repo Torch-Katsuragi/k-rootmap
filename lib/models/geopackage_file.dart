@@ -1572,6 +1572,9 @@ class GeoPackageFile {
     String tableName,
     List<Map<String, dynamic>> polygonData,
   ) async {
+    // 予約済みカラム名（INSERT時に除外する）
+    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'rings'};
+    
     try {
       final db = await _getDatabase();
       final batch = db.batch();
@@ -1585,13 +1588,17 @@ class GeoPackageFile {
         // WKBジオメトリを作成
         final wkb = createWkbPolygon(rings);
         
-        // insertData を構築（ringsを除く全ての属性を含める）
+        // insertData を構築（予約済みカラムを除く全ての属性を含める）
         final insertData = <String, dynamic>{'geom': wkb};
         
-        // dataから全ての属性をコピー（ringsは除外）
+        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
         data.forEach((key, value) {
-          if (key != 'rings') {
-            insertData[key] = value;
+          if (!reservedColumns.contains(key.toLowerCase())) {
+            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
+            final sanitizedKey = _sanitizeColumnName(key);
+            if (sanitizedKey.isNotEmpty) {
+              insertData[sanitizedKey] = value;
+            }
           }
         });
         
@@ -1632,6 +1639,9 @@ class GeoPackageFile {
     String tableName,
     List<Map<String, dynamic>> pointData,
   ) async {
+    // 予約済みカラム名（INSERT時に除外する）
+    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'point'};
+    
     try {
       final db = await _getDatabase();
       final batch = db.batch();
@@ -1645,13 +1655,17 @@ class GeoPackageFile {
         // WKBジオメトリを作成
         final wkb = createWkbPoint(point.longitude, point.latitude);
         
-        // insertData を構築（pointを除く全ての属性を含める）
+        // insertData を構築（予約済みカラムを除く全ての属性を含める）
         final insertData = <String, dynamic>{'geom': wkb};
         
-        // dataから全ての属性をコピー（pointは除外）
+        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
         data.forEach((key, value) {
-          if (key != 'point') {
-            insertData[key] = value;
+          if (!reservedColumns.contains(key.toLowerCase())) {
+            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
+            final sanitizedKey = _sanitizeColumnName(key);
+            if (sanitizedKey.isNotEmpty) {
+              insertData[sanitizedKey] = value;
+            }
           }
         });
         
@@ -1692,6 +1706,9 @@ class GeoPackageFile {
     String tableName,
     List<Map<String, dynamic>> lineData,
   ) async {
+    // 予約済みカラム名（INSERT時に除外する）
+    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'line'};
+    
     try {
       final db = await _getDatabase();
       final batch = db.batch();
@@ -1705,13 +1722,17 @@ class GeoPackageFile {
         // WKBジオメトリを作成
         final wkb = createWkbLineString(line);
         
-        // insertData を構築（lineを除く全ての属性を含める）
+        // insertData を構築（予約済みカラムを除く全ての属性を含める）
         final insertData = <String, dynamic>{'geom': wkb};
         
-        // dataから全ての属性をコピー（lineは除外）
+        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
         data.forEach((key, value) {
-          if (key != 'line') {
-            insertData[key] = value;
+          if (!reservedColumns.contains(key.toLowerCase())) {
+            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
+            final sanitizedKey = _sanitizeColumnName(key);
+            if (sanitizedKey.isNotEmpty) {
+              insertData[sanitizedKey] = value;
+            }
           }
         });
         

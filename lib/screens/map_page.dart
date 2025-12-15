@@ -1780,8 +1780,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 color:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
-                                        ? LayerStyleConfig().selectedColor.withOpacity(0.5)
-                                        : LayerStyleConfig().polygonFillColor.withOpacity(LayerStyleConfig().polygonFillOpacity),
+                                        ? LayerStyleConfig().selectedColor.withValues(alpha: 0.5)
+                                        : LayerStyleConfig().polygonFillColor.withValues(
+                                          alpha: LayerStyleConfig().polygonFillOpacity,
+                                        ),
                                 borderStrokeWidth:
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
@@ -1791,7 +1793,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                     GlobalConfig.instance.selectedFeatures
                                             .contains(f)
                                         ? LayerStyleConfig().selectedColor
-                                        : LayerStyleConfig().polygonBorderColor.withOpacity(LayerStyleConfig().polygonBorderOpacity),
+                                        : LayerStyleConfig().polygonBorderColor.withValues(
+                                          alpha: LayerStyleConfig().polygonBorderOpacity,
+                                        ),
                               ),
                           // --- GPS survey polygon preview ---
                           if (GlobalConfig.instance.currentTool is GpsTool &&
@@ -1983,6 +1987,118 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                 ),
                               ),
                           ],
+
+                          // --- Line/Polygon vertex points (optional) ---
+                          ...((() {
+                            final style = LayerStyleConfig();
+                            final markers = <Marker>[];
+
+                            if (style.lineVertexPointsEnabled) {
+                              for (final f in lineFeatures) {
+                                if (f.geometry == null) continue;
+                                final pts = f.geometry as List<LatLng>;
+                                if (pts.isEmpty) continue;
+
+                                final isSelected =
+                                    GlobalConfig.instance.selectedFeatures.contains(f);
+                                final color =
+                                    isSelected ? style.selectedColor : style.lineColor;
+                                final strokeWidth = isSelected
+                                    ? style.lineWidth * style.selectedMultiplier
+                                    : style.lineWidth;
+                                final size = (strokeWidth * style.lineVertexPointSizeFactor)
+                                    .clamp(4.0, 48.0);
+
+                                for (final pt in pts) {
+                                  markers.add(
+                                    Marker(
+                                      point: pt,
+                                      width: size + 4,
+                                      height: size + 4,
+                                      child: Container(
+                                        width: size,
+                                        height: size,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: size > 10 ? 1.5 : 1.0,
+                                          ),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Colors.black26,
+                                              blurRadius: 1,
+                                              offset: Offset(0, 0.5),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+
+                            if (style.polygonVertexPointsEnabled) {
+                              for (final f in polygonFeatures) {
+                                if (f.geometry == null) continue;
+                                final rings = f.geometry as List<List<LatLng>>;
+                                if (rings.isEmpty) continue;
+
+                                final isSelected =
+                                    GlobalConfig.instance.selectedFeatures.contains(f);
+                                final color = isSelected
+                                    ? style.selectedColor
+                                    : style.polygonBorderColor.withValues(
+                                        alpha: style.polygonBorderOpacity,
+                                      );
+                                final strokeWidth = isSelected
+                                    ? style.polygonBorderWidth * style.selectedMultiplier
+                                    : style.polygonBorderWidth;
+                                final size = (strokeWidth * style.polygonVertexPointSizeFactor)
+                                    .clamp(4.0, 48.0);
+
+                                for (final ring in rings) {
+                                  if (ring.isEmpty) continue;
+                                  final pts = List<LatLng>.from(ring);
+                                  if (pts.length >= 2 && pts.first == pts.last) {
+                                    pts.removeLast(); // 閉路の重複点は除外
+                                  }
+                                  for (final pt in pts) {
+                                    markers.add(
+                                      Marker(
+                                        point: pt,
+                                        width: size + 4,
+                                        height: size + 4,
+                                        child: Container(
+                                          width: size,
+                                          height: size,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: size > 10 ? 1.5 : 1.0,
+                                            ),
+                                            boxShadow: const [
+                                              BoxShadow(
+                                                color: Colors.black26,
+                                                blurRadius: 1,
+                                                offset: Offset(0, 0.5),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            }
+
+                            return markers;
+                          })()),
 
                           // --- Existing point feature markers ---
                           for (final f in pointFeatures)

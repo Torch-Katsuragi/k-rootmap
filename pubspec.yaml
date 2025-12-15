@@ -43,6 +43,7 @@ dependencies:
   desktop_drop: ^0.4.4  # デスクトップでのファイルドラッグ&ドロップ用
   cross_file: ^0.3.4+2  # クロスプラットフォームファイル操作用
   charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
+  charset: ^2.0.1  # 純粋Dart実装の文字コード変換（Shift-JIS, EUC-JP対応）
   
   # オフライン機能・キャッシュ用パッケージ
   path_provider: ^2.1.4              # アプリディレクトリ取得用

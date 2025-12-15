@@ -10,7 +10,10 @@ import 'package:flutter/material.dart';
 ///
 /// 設定項目をグループ化するためのカードコンポーネント。
 /// [title] と [children] を指定してセクションを構成します。
-class SettingsSection extends StatelessWidget {
+///
+/// スクロール負担を下げるため、[collapsible] を true にすると
+/// セクションを折りたたみ（タップで展開）できるようになります。
+class SettingsSection extends StatefulWidget {
   final String title;
   final List<Widget> children;
   final IconData? icon;
@@ -18,6 +21,8 @@ class SettingsSection extends StatelessWidget {
   final Color? backgroundColor;
   final double elevation;
   final Widget? trailing;
+  final bool collapsible;
+  final bool initiallyExpanded;
 
   const SettingsSection({
     super.key,
@@ -28,40 +33,76 @@ class SettingsSection extends StatelessWidget {
     this.backgroundColor,
     this.elevation = 1.0,
     this.trailing,
+    this.collapsible = false,
+    this.initiallyExpanded = true,
   });
+
+  @override
+  State<SettingsSection> createState() => _SettingsSectionState();
+}
+
+class _SettingsSectionState extends State<SettingsSection>
+    with SingleTickerProviderStateMixin {
+  late bool _expanded = widget.initiallyExpanded;
+
+  void _toggleExpanded() {
+    if (!widget.collapsible) return;
+    setState(() => _expanded = !_expanded);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: elevation,
-      color: backgroundColor,
+      elevation: widget.elevation,
+      color: widget.backgroundColor,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // セクションヘッダー
-            Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, color: iconColor ?? Colors.blue, size: 20),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: widget.collapsible ? _toggleExpanded : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    if (widget.icon != null) ...[
+                      Icon(
+                        widget.icon,
+                        color: widget.iconColor ?? Colors.blue,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (widget.trailing != null) ...[
+                      widget.trailing!,
+                      const SizedBox(width: 8),
+                    ],
+                    if (widget.collapsible)
+                      AnimatedRotation(
+                        duration: const Duration(milliseconds: 150),
+                        turns: _expanded ? 0.5 : 0.0,
+                        child: const Icon(Icons.expand_more),
+                      ),
+                  ],
                 ),
-                if (trailing != null) trailing!,
-              ],
+              ),
             ),
-            const SizedBox(height: 12),
-            // セクションコンテンツ
-            ...children,
+            if (!widget.collapsible || _expanded) ...[
+              const SizedBox(height: 12),
+              ...widget.children,
+            ],
           ],
         ),
       ),

@@ -15,6 +15,7 @@ import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/geometry_type.dart';
 import '../utils/coordinate_converter.dart';
+import '../utils/wkb_utils.dart';
 import '../converters/feature_converter.dart';
 import '../converters/base_converter.dart';
 
@@ -1284,22 +1285,47 @@ class ImportExportService {
       final feature = features[index];
       final featureId = feature['id'] ?? 'unknown';
       final featureName = feature['name']?.toString() ?? '';
-      final featureDescription = feature['description']?.toString() ?? '';
 
       AppLogger.debug(
         '[ImportExportService] フィーチャ変換中[$index]: ID=$featureId, Name=$featureName',
       );
 
       Map<String, dynamic>? geometry;
-      Map<String, dynamic> metadata = {
-        'name': featureName,
-        'description': featureDescription,
-      };
+      
+      // 予約済みキー（metadataに含めないキー）
+      const reservedKeys = {'fid', 'geom', 'id', 'rowid', 'geometry', 'points', 'lines', 'polygons', 'rings', 'point', 'line'};
+      
+      // 全ての属性をmetadataにコピー（予約済みキーを除く）
+      final Map<String, dynamic> metadata = {};
+      feature.forEach((key, value) {
+        if (!reservedKeys.contains(key.toLowerCase()) && value != null) {
+          metadata[key] = value;
+        }
+      });
 
       // 既存の解析済み座標データを直接使用（points/lines/polygons）
       switch (geometryType) {
         case GeometryType.point:
-          final points = feature['points'] as List<LatLng>?;
+          List<LatLng>? points = feature['points'] as List<LatLng>?;
+          
+          // pointsがない場合、geom（WKB）から解析を試みる
+          if ((points == null || points.isEmpty) && feature['geom'] != null) {
+            final geom = feature['geom'];
+            Uint8List? wkbData;
+            if (geom is Uint8List) {
+              wkbData = geom;
+            } else if (geom is List<int>) {
+              wkbData = Uint8List.fromList(geom);
+            }
+            if (wkbData != null) {
+              final point = parseWkbPoint(wkbData);
+              if (point != null) {
+                points = [point];
+                AppLogger.debug('[ImportExportService] WKBからPoint座標を解析');
+              }
+            }
+          }
+          
           if (points != null && points.isNotEmpty) {
             final point = points.first;
             geometry = {
@@ -1315,7 +1341,26 @@ class ImportExportService {
           break;
 
         case GeometryType.linestring:
-          final lines = feature['lines'] as List<List<LatLng>>?;
+          List<List<LatLng>>? lines = feature['lines'] as List<List<LatLng>>?;
+          
+          // linesがない場合、geom（WKB）から解析を試みる
+          if ((lines == null || lines.isEmpty) && feature['geom'] != null) {
+            final geom = feature['geom'];
+            Uint8List? wkbData;
+            if (geom is Uint8List) {
+              wkbData = geom;
+            } else if (geom is List<int>) {
+              wkbData = Uint8List.fromList(geom);
+            }
+            if (wkbData != null) {
+              final linePoints = parseWkbLineString(wkbData);
+              if (linePoints.isNotEmpty) {
+                lines = [linePoints];
+                AppLogger.debug('[ImportExportService] WKBからLineString座標を解析: ${linePoints.length}点');
+              }
+            }
+          }
+          
           if (lines != null && lines.isNotEmpty) {
             // 最初の線分を使用（複数の線分がある場合は最初のもの）
             final linePoints = lines.first;
@@ -1334,7 +1379,25 @@ class ImportExportService {
           break;
 
         case GeometryType.polygon:
-          final polygons = feature['polygons'] as List<List<LatLng>>?;
+          List<List<LatLng>>? polygons = feature['polygons'] as List<List<LatLng>>?;
+          
+          // polygonsがない場合、geom（WKB）から解析を試みる
+          if ((polygons == null || polygons.isEmpty) && feature['geom'] != null) {
+            final geom = feature['geom'];
+            Uint8List? wkbData;
+            if (geom is Uint8List) {
+              wkbData = geom;
+            } else if (geom is List<int>) {
+              wkbData = Uint8List.fromList(geom);
+            }
+            if (wkbData != null) {
+              polygons = parseWkbPolygon(wkbData);
+              if (polygons.isNotEmpty) {
+                AppLogger.debug('[ImportExportService] WKBからPolygon座標を解析: ${polygons.length}リング');
+              }
+            }
+          }
+          
           if (polygons != null && polygons.isNotEmpty) {
             // 全てのリングを処理（外側リング + 穴）
             final List<List<List<double>>> allRings = [];
@@ -3569,7 +3632,13 @@ class ImportExportService {
         );
 
         // 文字コード変換を適用（非同期）
-        final fieldName = await _decodeBytes(fieldNameBytes, encoding);
+        final decodedName = await _decodeBytes(fieldNameBytes, encoding);
+        // フィールド名をトリムしてNULLバイト・制御文字を除去
+        final fieldName = decodedName
+            .replaceAll('\x00', '') // NULLバイト除去
+            .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '') // 制御文字除去
+            .trim();
+        AppLogger.debug('[DBF] フィールド名: "$fieldName"');
 
         // フィールドタイプ（1バイト）
         final fieldType = String.fromCharCode(bytes[offset + 11]);

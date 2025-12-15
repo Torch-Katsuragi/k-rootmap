@@ -19,6 +19,8 @@ class LayerStyleDefaults {
   // 線（ライン）
   static const double lineWidth = 3.0;
   static const int lineColor = 0xFF4CAF50; // Green
+  static const bool lineVertexPointsEnabled = false;
+  static const double lineVertexPointSizeFactor = 2.0; // 頂点点サイズ = lineWidth × f
 
   // ポリゴン
   static const double polygonBorderWidth = 2.0;
@@ -26,6 +28,8 @@ class LayerStyleDefaults {
   static const int polygonFillColor = 0xFFFF9800; // Orange
   static const double polygonFillOpacity = 0.3;
   static const double polygonBorderOpacity = 1.0;
+  static const bool polygonVertexPointsEnabled = false;
+  static const double polygonVertexPointSizeFactor = 2.0; // 頂点点サイズ = borderWidth × f
 
   // 選択時のハイライト
   static const int selectedColor = 0xFFE91E63; // Pink
@@ -45,6 +49,8 @@ class LayerStyleConfig extends ChangeNotifier {
   // 線の設定
   double lineWidth = LayerStyleDefaults.lineWidth;
   Color lineColor = Color(LayerStyleDefaults.lineColor);
+  bool lineVertexPointsEnabled = LayerStyleDefaults.lineVertexPointsEnabled;
+  double lineVertexPointSizeFactor = LayerStyleDefaults.lineVertexPointSizeFactor;
 
   // ポリゴンの設定
   double polygonBorderWidth = LayerStyleDefaults.polygonBorderWidth;
@@ -52,6 +58,8 @@ class LayerStyleConfig extends ChangeNotifier {
   Color polygonFillColor = Color(LayerStyleDefaults.polygonFillColor);
   double polygonFillOpacity = LayerStyleDefaults.polygonFillOpacity;
   double polygonBorderOpacity = LayerStyleDefaults.polygonBorderOpacity;
+  bool polygonVertexPointsEnabled = LayerStyleDefaults.polygonVertexPointsEnabled;
+  double polygonVertexPointSizeFactor = LayerStyleDefaults.polygonVertexPointSizeFactor;
 
   // 選択時
   Color selectedColor = Color(LayerStyleDefaults.selectedColor);
@@ -66,12 +74,24 @@ class LayerStyleConfig extends ChangeNotifier {
 
     lineWidth = prefs.getDouble('layer_style_line_width') ?? LayerStyleDefaults.lineWidth;
     lineColor = Color(prefs.getInt('layer_style_line_color') ?? LayerStyleDefaults.lineColor);
+    lineVertexPointsEnabled =
+        prefs.getBool('layer_style_line_vertex_points_enabled') ??
+            LayerStyleDefaults.lineVertexPointsEnabled;
+    lineVertexPointSizeFactor =
+        prefs.getDouble('layer_style_line_vertex_point_size_factor') ??
+            LayerStyleDefaults.lineVertexPointSizeFactor;
 
     polygonBorderWidth = prefs.getDouble('layer_style_polygon_border_width') ?? LayerStyleDefaults.polygonBorderWidth;
     polygonBorderColor = Color(prefs.getInt('layer_style_polygon_border_color') ?? LayerStyleDefaults.polygonBorderColor);
     polygonFillColor = Color(prefs.getInt('layer_style_polygon_fill_color') ?? LayerStyleDefaults.polygonFillColor);
     polygonFillOpacity = prefs.getDouble('layer_style_polygon_fill_opacity') ?? LayerStyleDefaults.polygonFillOpacity;
     polygonBorderOpacity = prefs.getDouble('layer_style_polygon_border_opacity') ?? LayerStyleDefaults.polygonBorderOpacity;
+    polygonVertexPointsEnabled =
+        prefs.getBool('layer_style_polygon_vertex_points_enabled') ??
+            LayerStyleDefaults.polygonVertexPointsEnabled;
+    polygonVertexPointSizeFactor =
+        prefs.getDouble('layer_style_polygon_vertex_point_size_factor') ??
+            LayerStyleDefaults.polygonVertexPointSizeFactor;
 
     selectedColor = Color(prefs.getInt('layer_style_selected_color') ?? LayerStyleDefaults.selectedColor);
     selectedMultiplier = prefs.getDouble('layer_style_selected_multiplier') ?? LayerStyleDefaults.selectedMultiplier;
@@ -82,18 +102,40 @@ class LayerStyleConfig extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     
     await prefs.setDouble('layer_style_point_size', pointSize);
-    await prefs.setInt('layer_style_point_color', pointColor.value);
+    await prefs.setInt('layer_style_point_color', pointColor.toARGB32());
 
     await prefs.setDouble('layer_style_line_width', lineWidth);
-    await prefs.setInt('layer_style_line_color', lineColor.value);
+    await prefs.setInt('layer_style_line_color', lineColor.toARGB32());
+    await prefs.setBool(
+      'layer_style_line_vertex_points_enabled',
+      lineVertexPointsEnabled,
+    );
+    await prefs.setDouble(
+      'layer_style_line_vertex_point_size_factor',
+      lineVertexPointSizeFactor,
+    );
 
     await prefs.setDouble('layer_style_polygon_border_width', polygonBorderWidth);
-    await prefs.setInt('layer_style_polygon_border_color', polygonBorderColor.value);
-    await prefs.setInt('layer_style_polygon_fill_color', polygonFillColor.value);
+    await prefs.setInt(
+      'layer_style_polygon_border_color',
+      polygonBorderColor.toARGB32(),
+    );
+    await prefs.setInt(
+      'layer_style_polygon_fill_color',
+      polygonFillColor.toARGB32(),
+    );
     await prefs.setDouble('layer_style_polygon_fill_opacity', polygonFillOpacity);
     await prefs.setDouble('layer_style_polygon_border_opacity', polygonBorderOpacity);
+    await prefs.setBool(
+      'layer_style_polygon_vertex_points_enabled',
+      polygonVertexPointsEnabled,
+    );
+    await prefs.setDouble(
+      'layer_style_polygon_vertex_point_size_factor',
+      polygonVertexPointSizeFactor,
+    );
 
-    await prefs.setInt('layer_style_selected_color', selectedColor.value);
+    await prefs.setInt('layer_style_selected_color', selectedColor.toARGB32());
     await prefs.setDouble('layer_style_selected_multiplier', selectedMultiplier);
 
     // リスナーに変更を通知（マップ再描画用）
@@ -107,12 +149,16 @@ class LayerStyleConfig extends ChangeNotifier {
 
     lineWidth = LayerStyleDefaults.lineWidth;
     lineColor = Color(LayerStyleDefaults.lineColor);
+    lineVertexPointsEnabled = LayerStyleDefaults.lineVertexPointsEnabled;
+    lineVertexPointSizeFactor = LayerStyleDefaults.lineVertexPointSizeFactor;
 
     polygonBorderWidth = LayerStyleDefaults.polygonBorderWidth;
     polygonBorderColor = Color(LayerStyleDefaults.polygonBorderColor);
     polygonFillColor = Color(LayerStyleDefaults.polygonFillColor);
     polygonFillOpacity = LayerStyleDefaults.polygonFillOpacity;
     polygonBorderOpacity = LayerStyleDefaults.polygonBorderOpacity;
+    polygonVertexPointsEnabled = LayerStyleDefaults.polygonVertexPointsEnabled;
+    polygonVertexPointSizeFactor = LayerStyleDefaults.polygonVertexPointSizeFactor;
 
     selectedColor = Color(LayerStyleDefaults.selectedColor);
     selectedMultiplier = LayerStyleDefaults.selectedMultiplier;
@@ -220,6 +266,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       title: 'Preview',
       icon: Icons.preview,
       iconColor: Colors.purple,
+      collapsible: true,
+      initiallyExpanded: true,
       children: [
         SizedBox(
           height: 100,
@@ -238,6 +286,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       title: 'Point Style',
       icon: Icons.place,
       iconColor: _config.pointColor,
+      collapsible: true,
+      initiallyExpanded: false,
       children: [
         // サイズ
         _buildSliderTile(
@@ -272,6 +322,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       title: 'Line Style',
       icon: Icons.show_chart,
       iconColor: _config.lineColor,
+      collapsible: true,
+      initiallyExpanded: false,
       children: [
         // 太さ
         _buildSliderTile(
@@ -296,6 +348,33 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
             _saveSettings();
           },
         ),
+        const Divider(),
+        // 頂点点描画ON/OFF
+        SettingsSwitchTile(
+          leadingIcon: Icons.scatter_plot_outlined,
+          title: 'Draw Vertex Points',
+          subtitle: 'Overlay points at each vertex (color follows line)',
+          value: _config.lineVertexPointsEnabled,
+          onChanged: (v) {
+            setState(() => _config.lineVertexPointsEnabled = v);
+            _saveSettings();
+          },
+        ),
+        // 頂点点サイズ倍率（有効時のみ）
+        if (_config.lineVertexPointsEnabled) ...[
+          _buildSliderTile(
+            title: 'Vertex Point Size Factor',
+            value: _config.lineVertexPointSizeFactor,
+            min: 0.5,
+            max: 6.0,
+            divisions: 55,
+            label: '${_config.lineVertexPointSizeFactor.toStringAsFixed(1)}x',
+            onChanged: (v) {
+              setState(() => _config.lineVertexPointSizeFactor = v);
+              _saveSettings();
+            },
+          ),
+        ],
       ],
     );
   }
@@ -306,6 +385,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       title: 'Polygon Style',
       icon: Icons.hexagon_outlined,
       iconColor: _config.polygonBorderColor,
+      collapsible: true,
+      initiallyExpanded: false,
       children: [
         // 境界線の太さ
         _buildSliderTile(
@@ -354,6 +435,33 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
             _saveSettings();
           },
         ),
+        const Divider(),
+        // 頂点点描画ON/OFF
+        SettingsSwitchTile(
+          leadingIcon: Icons.scatter_plot_outlined,
+          title: 'Draw Vertex Points',
+          subtitle: 'Overlay points at each vertex (color follows border)',
+          value: _config.polygonVertexPointsEnabled,
+          onChanged: (v) {
+            setState(() => _config.polygonVertexPointsEnabled = v);
+            _saveSettings();
+          },
+        ),
+        // 頂点点サイズ倍率（有効時のみ）
+        if (_config.polygonVertexPointsEnabled) ...[
+          _buildSliderTile(
+            title: 'Vertex Point Size Factor',
+            value: _config.polygonVertexPointSizeFactor,
+            min: 0.5,
+            max: 6.0,
+            divisions: 55,
+            label: '${_config.polygonVertexPointSizeFactor.toStringAsFixed(1)}x',
+            onChanged: (v) {
+              setState(() => _config.polygonVertexPointSizeFactor = v);
+              _saveSettings();
+            },
+          ),
+        ],
       ],
     );
   }
@@ -364,6 +472,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       title: 'Selection Highlight',
       icon: Icons.highlight_alt,
       iconColor: _config.selectedColor,
+      collapsible: true,
+      initiallyExpanded: false,
       children: [
         // 選択色
         _buildColorTile(
@@ -513,11 +623,11 @@ class _StylePreviewPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final polygonFillPaint = Paint()
-      ..color = config.polygonFillColor.withOpacity(config.polygonFillOpacity)
+      ..color = config.polygonFillColor.withValues(alpha: config.polygonFillOpacity)
       ..style = PaintingStyle.fill;
 
     final polygonBorderPaint = Paint()
-      ..color = config.polygonBorderColor.withOpacity(config.polygonBorderOpacity)
+      ..color = config.polygonBorderColor.withValues(alpha: config.polygonBorderOpacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = config.polygonBorderWidth;
 
@@ -549,12 +659,41 @@ class _StylePreviewPainter extends CustomPainter {
       );
     canvas.drawPath(linePath, linePaint);
 
+    // ライン頂点点（簡易プレビュー）
+    if (config.lineVertexPointsEnabled) {
+      final r = (config.lineWidth * config.lineVertexPointSizeFactor / 2)
+          .clamp(2.0, 12.0);
+      final vertexPaint = Paint()..color = config.lineColor;
+      canvas.drawCircle(Offset(size.width * 0.35, size.height * 0.7), r, vertexPaint);
+      canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.2), r, vertexPaint);
+      canvas.drawCircle(Offset(size.width * 0.65, size.height * 0.5), r, vertexPaint);
+    }
+
     // ポイント
     canvas.drawCircle(
       Offset(size.width * 0.15, size.height * 0.5),
       config.pointSize / 2,
       pointPaint,
     );
+
+    // ポリゴン頂点点（簡易プレビュー）
+    if (config.polygonVertexPointsEnabled) {
+      final r =
+          (config.polygonBorderWidth * config.polygonVertexPointSizeFactor / 2)
+              .clamp(2.0, 12.0);
+      final vertexPaint = Paint()
+        ..color = config.polygonBorderColor.withValues(alpha: config.polygonBorderOpacity);
+      // 六角形の各頂点に点を描画（既にpolygonPathを作っているので再計算）
+      final cx = size.width * 0.75;
+      final cy = size.height * 0.5;
+      final rr = 35.0;
+      for (int i = 0; i < 6; i++) {
+        final angle = (i * 60 - 90) * 3.14159 / 180;
+        final x = cx + rr * _cos(angle);
+        final y = cy + rr * _sin(angle);
+        canvas.drawCircle(Offset(x, y), r, vertexPaint);
+      }
+    }
   }
 
   double _cos(double radians) => radians.cos();

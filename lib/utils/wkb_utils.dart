@@ -215,6 +215,36 @@ bool _isValidCoordinate(double lat, double lon) {
          !lat.isInfinite && !lon.isInfinite;
 }
 
+/// WKB(Point)デコードユーティリティ - GeoPackage対応
+LatLng? parseWkbPoint(Uint8List wkb) {
+  try {
+    final pureWkb = _skipGpbHeader(wkb);
+    if (pureWkb.length < 21) {
+      AppLogger.debug('[WKB] Point: データサイズ不足');
+      return null;
+    }
+    
+    // WKB Point構造: [1byte endian][4bytes type][8bytes X][8bytes Y]
+    if (pureWkb[0] != 1 || pureWkb[1] != 1) {
+      AppLogger.debug('[WKB] Point: 不正なWKBヘッダー');
+      return null;
+    }
+    
+    final lon = ByteData.sublistView(pureWkb, 5, 13).getFloat64(0, Endian.little);
+    final lat = ByteData.sublistView(pureWkb, 13, 21).getFloat64(0, Endian.little);
+    
+    if (!_isValidCoordinate(lat, lon)) {
+      AppLogger.debug('[WKB] Point: 無効な座標値: lat=$lat, lon=$lon');
+      return null;
+    }
+    
+    return LatLng(lat, lon);
+  } catch (e) {
+    AppLogger.debug('[WKB] Point解析エラー: $e');
+    return null;
+  }
+}
+
 /// WKB(LineString)デコードユーティリティ - GeoPackage対応
 List<LatLng> parseWkbLineString(Uint8List wkb) {
   try {

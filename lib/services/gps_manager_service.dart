@@ -1051,14 +1051,36 @@ class GpsManagerService extends ChangeNotifier {
   void dispose() {
     AppLogger.debug('$_logTag: GPS管理サービスを停止中...');
 
+    // タイマーをキャンセル
     _recordingTimer?.cancel();
-    _stopCurrentSource();
+    _recordingTimer = null;
+
+    // GPS位置情報ストリームを停止（同期的に実行）
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+
+    // 外部GNSSサービスのクリーンアップ
+    if (_externalGnssService != null) {
+      _externalGnssService!.removeListener(_onExternalGnssUpdate);
+      _externalGnssService!.dispose();
+      _externalGnssService = null;
+    }
+
+    // 状態フラグをリセット
+    _isGpsActive = false;
+    _isSurveyMode = false;
+    _isRecording = false;
+    _foregroundServiceTracking = false;
 
     // 連続測量もクリーンアップ
     _isContinuousSurvey = false;
     _onContinuousSurveyUpdate = null;
     _continuousSurveyData.clear();
 
+    // 履歴データをクリア
+    _gpsHistory.clear();
+
+    AppLogger.debug('$_logTag: GPS管理サービス停止完了');
     super.dispose();
   }
 }

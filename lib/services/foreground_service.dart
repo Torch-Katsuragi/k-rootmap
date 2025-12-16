@@ -20,6 +20,9 @@ class ForegroundServiceManager {
   /// サービス実行フラグ
   bool _isServiceRunning = false;
 
+  /// メインIsolate側のトラックポイント受信リスナー
+  StreamSubscription<Map<String, dynamic>?>? _trackPointSubscription;
+
   /// 現在のGNSS設定を取得（統合GPS管理サービスから取得）
   static Map<String, String?> getGnssDevice() {
     final gpsManager = GpsManagerService();
@@ -89,8 +92,13 @@ class ForegroundServiceManager {
       // GPS軌跡追跡開始
       GpsTrackManager().startTracking();
 
-      // バックグラウンドサービスからのメッセージ受信設定
-      FlutterBackgroundService().on('addTrackPoint').listen((event) {
+      // 既存のリスナーがあればキャンセル（二重登録防止）
+      await _trackPointSubscription?.cancel();
+
+      // バックグラウンドサービスからのメッセージ受信設定（リスナーを保存）
+      _trackPointSubscription = FlutterBackgroundService()
+          .on('addTrackPoint')
+          .listen((event) {
         if (event != null) {
           try {
             final pointData = Map<String, dynamic>.from(event);
@@ -116,11 +124,8 @@ class ForegroundServiceManager {
       AppLogger.debug('[ForegroundService] GPS追跡サービス開始');
     } catch (e) {
       AppLogger.debug('[ForegroundService] サービス開始エラー: $e');
-      // Android 12以降でフォアグラウンドサービス開始が失敗する場合、
-      // ユーザーに通知を表示（デバッグ情報）
       AppLogger.debug('[ForegroundService] エラー詳細: ${e.toString()}');
-      // サービスが開始できなくてもアプリはクラッシュさせない
-      rethrow; // エラーを呼び出し元に伝播して、ユーザーにメッセージを表示
+      rethrow;
     }
   }
 
@@ -134,12 +139,27 @@ class ForegroundServiceManager {
       // 統合GPS管理サービスに追跡停止を通知
       GpsManagerService().notifyForegroundTrackingStopped();
 
+      // メインIsolate側のリスナーをキャンセル
+      await _trackPointSubscription?.cancel();
+      _trackPointSubscription = null;
+
       FlutterBackgroundService().invoke("stopService");
       _isServiceRunning = false;
       AppLogger.debug('[ForegroundService] GPS追跡サービス停止');
     } catch (e) {
       AppLogger.debug('[ForegroundService] サービス停止エラー: $e');
     }
+  }
+
+  /// アプリ終了時のクリーンアップ（強制停止）
+  Future<void> dispose() async {
+    await _trackPointSubscription?.cancel();
+    _trackPointSubscription = null;
+    if (_isServiceRunning) {
+      FlutterBackgroundService().invoke("stopService");
+      _isServiceRunning = false;
+    }
+    AppLogger.debug('[ForegroundService] クリーンアップ完了');
   }
 
   /// 軌跡追跡を停止して軌跡データを取得
@@ -170,6 +190,7 @@ void onStart(ServiceInstance service) async {
     // 内蔵GPS専用の位置情報ストリーム
     StreamSubscription<Position>? positionSubscription;
     Position? lastPosition;
+    Timer? periodicTimer; // タイマー参照を保持
 
     // 内蔵GPS位置情報ストリームを開始
     positionSubscription = Geolocator.getPositionStream(
@@ -181,43 +202,36 @@ void onStart(ServiceInstance service) async {
       lastPosition = position;
     });
 
-    // サービス停止要求の監視を設定
+    // サービス停止要求の監視を設定（タイマーもキャンセル）
     service.on('stopService').listen((event) {
+      periodicTimer?.cancel(); // タイマーをキャンセル
       positionSubscription?.cancel();
       service.stopSelf();
     });
 
     // 1秒間隔のタイマー設定（内蔵GPSのみ使用）
-    Timer.periodic(const Duration(seconds: 1), (timer) async {
+    periodicTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
         Position? currentPosition = lastPosition;
 
         if (currentPosition != null) {
-          final lat = currentPosition.latitude;
-          final lon = currentPosition.longitude;
-          final alt = currentPosition.altitude;
-          final acc = currentPosition.accuracy;
-          final spd = currentPosition.speed;
-          final brg = currentPosition.heading;
-
           // 軌跡に位置情報を追加（メインIsolateに送信）
           final pointData = {
-            'latitude': lat,
-            'longitude': lon,
-            'altitude': alt,
-            'accuracy': acc,
-            'speed': spd,
-            'bearing': brg,
+            'latitude': currentPosition.latitude,
+            'longitude': currentPosition.longitude,
+            'altitude': currentPosition.altitude,
+            'accuracy': currentPosition.accuracy,
+            'speed': currentPosition.speed,
+            'bearing': currentPosition.heading,
             'timestamp': DateTime.now().toIso8601String(),
-            'sourceType': 'GPS', // 内蔵GPSは常に'GPS'
+            'sourceType': 'GPS',
           };
           service.invoke('addTrackPoint', pointData);
         }
 
-        // サービス停止チェック
+        // Android通知更新
         if (service is AndroidServiceInstance) {
           if (await service.isForegroundService()) {
-            // 通知内容を更新（Android 12以降のエラー対策でtry-catchで囲む）
             try {
               String notificationContent =
                   "位置追跡中: ${DateTime.now().toString().substring(11, 19)}";
@@ -225,15 +239,12 @@ void onStart(ServiceInstance service) async {
                 notificationContent +=
                     "\nGPS: ${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
               }
-
               service.setForegroundNotificationInfo(
                 title: "K-MAPS GPS追跡実行中",
                 content: notificationContent,
               );
-            } catch (notificationError) {
-              // Android 12以降で通知更新が失敗する場合があるが、
-              // GPS追跡自体は継続するためエラーを無視
-              AppLogger.debug('[ForegroundService] 通知更新エラー（継続）: $notificationError');
+            } catch (_) {
+              // 通知更新エラーは無視（GPS追跡継続）
             }
           }
         }

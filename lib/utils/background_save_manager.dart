@@ -220,5 +220,25 @@ class BackgroundSaveManager {
       (gpkg, changes) => MapEntry(gpkg, changes.length),
     );
   }
+
+  /// アプリ終了時のクリーンアップ
+  Future<void> dispose() async {
+    // タイマーをキャンセル
+    _saveTimer?.cancel();
+    _saveTimer = null;
+
+    // 保留中の変更を保存
+    if (_pendingChanges.isNotEmpty) {
+      try {
+        await _saveChangesToDB();
+      } catch (e) {
+        AppLogger.debug('[ERROR] BackgroundSaveManager.dispose: $e');
+      }
+    }
+
+    // キューをクリア
+    _pendingChanges.clear();
+    AppLogger.debug('[DEBUG] BackgroundSaveManager: Disposed');
+  }
 }
 

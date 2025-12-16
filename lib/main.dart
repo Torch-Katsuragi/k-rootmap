@@ -8,7 +8,8 @@ import 'screens/home_screen.dart';
 import 'screens/map_page.dart';
 import 'services/foreground_service.dart';
 import 'services/gps_manager_service.dart';
-import 'services/basemap_service.dart'; // 追加
+import 'services/basemap_service.dart';
+import 'utils/background_save_manager.dart';
 
 void main() async {
   // sqflite使用前に必須の初期化処理
@@ -16,7 +17,6 @@ void main() async {
 
   // デスクトップ環境での sqflite_common_ffi 初期化
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    // sqflite_common_ffi を初期化
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
@@ -42,7 +42,6 @@ void main() async {
   });
 
   // フォアグラウンドサービスの初期化（遅延実行に変更）
-  // アプリ起動後に初期化してメインIsolate競合を回避
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     try {
       await ForegroundServiceManager.initializeService();
@@ -55,8 +54,59 @@ void main() async {
   runApp(const KMapsApp());
 }
 
-class KMapsApp extends StatelessWidget {
+/// アプリのルートウィジェット（ライフサイクル監視付き）
+class KMapsApp extends StatefulWidget {
   const KMapsApp({super.key});
+
+  @override
+  State<KMapsApp> createState() => _KMapsAppState();
+}
+
+class _KMapsAppState extends State<KMapsApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// アプリライフサイクル変更時の処理
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.detached) {
+      // アプリ終了時のクリーンアップ
+      _cleanupOnAppExit();
+    } else if (state == AppLifecycleState.paused) {
+      // バックグラウンドに移行時：保留中の変更を保存
+      BackgroundSaveManager.instance.flushAllChanges();
+    }
+  }
+
+  /// アプリ終了時のクリーンアップ処理
+  Future<void> _cleanupOnAppExit() async {
+    AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ開始');
+    try {
+      // フォアグラウンドサービスを停止
+      await ForegroundServiceManager().dispose();
+
+      // 保留中の変更を保存しタイマーをクリーンアップ
+      await BackgroundSaveManager.instance.dispose();
+
+      // GPS管理サービスのクリーンアップ
+      GpsManagerService().dispose();
+
+      AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ完了');
+    } catch (e) {
+      AppLogger.debug('[K-MAPS] クリーンアップエラー: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

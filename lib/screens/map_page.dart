@@ -1306,10 +1306,19 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       '[DEBUG] _updateFeatures: collected ${photoNodes.length} photo nodes',
     );
 
-    for (final layer in visibleLayers) {
+    for (final node in visibleLayers) {
+      // LayerNode以外はスキップ
+      if (node is! LayerNode) continue;
+      final layer = node;
+
       AppLogger.debug(
         '[DEBUG] _updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
       );
+
+      // KMetaスタイルを事前読み込み（描画時に同期アクセスするため）
+      if (!layer.isKmetaStyleLoaded) {
+        await layer.getKmetaStyle();
+      }
 
       // LayerNodeのchildrenから直接FeatureNodeを取得（dispose済みを除外）
       final layerFeatures =
@@ -1674,19 +1683,23 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         polylines: [
                           for (final f in lineFeatures)
                             if (f.geometry != null)
-                              Polyline(
-                                points: f.geometry as List<LatLng>,
-                                color:
-                                    GlobalConfig.instance.selectedFeatures
-                                            .contains(f)
-                                        ? LayerStyleConfig().selectedColor
-                                        : LayerStyleConfig().lineColor,
-                                strokeWidth:
-                                    GlobalConfig.instance.selectedFeatures
-                                            .contains(f)
-                                        ? LayerStyleConfig().lineWidth * LayerStyleConfig().selectedMultiplier
-                                        : LayerStyleConfig().lineWidth,
-                              ),
+                              (() {
+                                final styleConfig = LayerStyleConfig();
+                                // 親レイヤーのKMetaスタイルを取得
+                                final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
+                                final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+                                final lineColor = styleConfig.getLineColor(kmetaStyle);
+                                final lineWidth = styleConfig.getLineWidth(kmetaStyle);
+                                return Polyline(
+                                  points: f.geometry as List<LatLng>,
+                                  color: isSelected
+                                      ? styleConfig.selectedColor
+                                      : lineColor,
+                                  strokeWidth: isSelected
+                                      ? lineWidth * styleConfig.selectedMultiplier
+                                      : lineWidth,
+                                );
+                              })(),
                           // --- GPS survey line preview ---
                           if (GlobalConfig.instance.currentTool is GpsTool &&
                               GlobalConfig
@@ -1770,33 +1783,32 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                         polygons: [
                           for (final f in polygonFeatures)
                             if (f.geometry != null)
-                              Polygon(
-                                points:
-                                    (f.geometry as List<List<LatLng>>).first,
-                                holePointsList:
-                                    (f.geometry as List<List<LatLng>>)
-                                        .skip(1)
-                                        .toList(),
-                                color:
-                                    GlobalConfig.instance.selectedFeatures
-                                            .contains(f)
-                                        ? LayerStyleConfig().selectedColor.withValues(alpha: 0.5)
-                                        : LayerStyleConfig().polygonFillColor.withValues(
-                                          alpha: LayerStyleConfig().polygonFillOpacity,
-                                        ),
-                                borderStrokeWidth:
-                                    GlobalConfig.instance.selectedFeatures
-                                            .contains(f)
-                                        ? LayerStyleConfig().polygonBorderWidth * LayerStyleConfig().selectedMultiplier
-                                        : LayerStyleConfig().polygonBorderWidth,
-                                borderColor:
-                                    GlobalConfig.instance.selectedFeatures
-                                            .contains(f)
-                                        ? LayerStyleConfig().selectedColor
-                                        : LayerStyleConfig().polygonBorderColor.withValues(
-                                          alpha: LayerStyleConfig().polygonBorderOpacity,
-                                        ),
-                              ),
+                              (() {
+                                final styleConfig = LayerStyleConfig();
+                                // 親レイヤーのKMetaスタイルを取得
+                                final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
+                                final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+                                final fillColor = styleConfig.getPolygonFillColor(kmetaStyle);
+                                final fillOpacity = styleConfig.getPolygonFillOpacity(kmetaStyle);
+                                final borderColor = styleConfig.getPolygonBorderColor(kmetaStyle);
+                                final borderOpacity = styleConfig.getPolygonBorderOpacity(kmetaStyle);
+                                final borderWidth = styleConfig.getPolygonBorderWidth(kmetaStyle);
+                                return Polygon(
+                                  points: (f.geometry as List<List<LatLng>>).first,
+                                  holePointsList: (f.geometry as List<List<LatLng>>)
+                                      .skip(1)
+                                      .toList(),
+                                  color: isSelected
+                                      ? styleConfig.selectedColor.withValues(alpha: 0.5)
+                                      : fillColor.withValues(alpha: fillOpacity),
+                                  borderStrokeWidth: isSelected
+                                      ? borderWidth * styleConfig.selectedMultiplier
+                                      : borderWidth,
+                                  borderColor: isSelected
+                                      ? styleConfig.selectedColor
+                                      : borderColor.withValues(alpha: borderOpacity),
+                                );
+                              })(),
                           // --- GPS survey polygon preview ---
                           if (GlobalConfig.instance.currentTool is GpsTool &&
                               GlobalConfig
@@ -2106,10 +2118,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                               ...((f.geometry as List<LatLng>).map(
                                 (pt) {
                                   final styleConfig = LayerStyleConfig();
+                                  // 親レイヤーのKMetaスタイルを取得
+                                  final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
                                   final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+                                  final pointSize = styleConfig.getPointSize(kmetaStyle);
+                                  final pointColor = styleConfig.getPointColor(kmetaStyle);
                                   final size = isSelected
-                                      ? styleConfig.pointSize * styleConfig.selectedMultiplier
-                                      : styleConfig.pointSize;
+                                      ? pointSize * styleConfig.selectedMultiplier
+                                      : pointSize;
                                   return Marker(
                                     point: pt,
                                     width: size + 4, // マージン考慮
@@ -2122,7 +2138,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                                         decoration: BoxDecoration(
                                           color: isSelected
                                               ? styleConfig.selectedColor
-                                              : styleConfig.pointColor,
+                                              : pointColor,
                                           shape: BoxShape.circle,
                                           border: Border.all(
                                             color: Colors.white,

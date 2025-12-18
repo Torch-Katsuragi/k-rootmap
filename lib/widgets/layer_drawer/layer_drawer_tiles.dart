@@ -4,7 +4,6 @@ library;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -19,7 +18,7 @@ import '../../services/import_export_service.dart';
 import '../../services/geometry_conversion_service.dart';
 import '../../widgets/dialog_manager.dart';
 import '../../widgets/geometry_conversion_dialogs.dart';
-
+import '../../screens/layer_style_settings_screen.dart';
 import 'layer_drawer_extensions.dart';
 
 /// 各種タイル描画機能を提供するミックスイン
@@ -461,7 +460,13 @@ mixin LayerDrawerTiles {
       },
       trailing: PopupMenuButton<String>(
         onSelected: (value) async {
-          if (value == 'delete') {
+          if (value == 'rename') {
+            // レイヤー名変更ダイアログ
+            await _showRenameLayerDialog(context, node);
+          } else if (value == 'style') {
+            // スタイル設定画面を開く
+            await _openLayerStyleSettings(context, node);
+          } else if (value == 'delete') {
             final confirm = await showDialog<bool>(
               context: context,
               builder:
@@ -519,6 +524,29 @@ mixin LayerDrawerTiles {
         },
         itemBuilder:
             (context) => [
+              // リネーム
+              const PopupMenuItem(
+                value: 'rename',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 16),
+                    SizedBox(width: 8),
+                    Text('Rename'),
+                  ],
+                ),
+              ),
+              // スタイル設定
+              const PopupMenuItem(
+                value: 'style',
+                child: Row(
+                  children: [
+                    Icon(Icons.palette, size: 16),
+                    SizedBox(width: 8),
+                    Text('Style'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'export',
                 child: Row(
@@ -555,6 +583,7 @@ mixin LayerDrawerTiles {
                   ],
                 ),
               ),
+              const PopupMenuDivider(),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
       ),
@@ -738,6 +767,105 @@ mixin LayerDrawerTiles {
   }
 
   /// 写真の詳細情報を表示するダイアログ
+
+  /// レイヤー名変更ダイアログ
+  Future<void> _showRenameLayerDialog(
+    BuildContext context,
+    LayerNode node,
+  ) async {
+    final controller = TextEditingController(text: node.layerName);
+    final formKey = GlobalKey<FormState>();
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Layer'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Layer Name',
+              hintText: 'Enter new layer name',
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Name cannot be empty';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(context, controller.text.trim());
+              }
+            },
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName != node.layerName) {
+      try {
+        // レイヤー名を変更（DBテーブル名変更）
+        await node.geoPackageFile.renameLayer(node.layerName, newName);
+        // 親のGeoPackageNodeを更新
+        await node.geoPackageNode.updateChildren();
+        // マップを更新
+        triggerMapRefresh();
+        setStateCallback(() {});
+        AppLogger.debug('[LayerDrawer] Layer renamed: ${node.layerName} -> $newName');
+      } catch (e) {
+        AppLogger.debug('[LayerDrawer] Rename failed: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Rename failed: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  /// スタイル設定画面を開く
+  Future<void> _openLayerStyleSettings(
+    BuildContext context,
+    LayerNode node,
+  ) async {
+    // 親フォルダのパスを取得
+    final folderNode = node.folderNode;
+    final folderPath = folderNode?.getAbsoluteFilePath();
+
+    if (folderPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not determine folder path')),
+      );
+      return;
+    }
+
+    // スタイル設定画面を開く
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LayerStyleSettingsScreen(
+          targetLayer: node,
+          folderPath: folderPath,
+        ),
+      ),
+    );
+
+    // 画面から戻ったらマップを更新
+    triggerMapRefresh();
+    setStateCallback(() {});
+  }
 
   /// ポイントレイヤーをライン/ポリゴンに変換
   Future<void> _convertPointsToLine(

@@ -1,0 +1,244 @@
+// K-MAPS: フォルダメタデータサービス
+// 継承チェーン解決・保存処理を担当
+
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import '../models/kmeta.dart';
+import '../models/nodes/layer_tree_node.dart';
+import '../utils/app_logger.dart';
+import '../utils/global_config.dart';
+
+/// フォルダメタデータサービス
+/// 継承チェーンを解決し、マージ済みメタデータを提供
+class KMetaService {
+  // シングルトン
+  static final KMetaService instance = KMetaService._internal();
+  factory KMetaService() => instance;
+  KMetaService._internal();
+
+  /// メタデータキャッシュ（フォルダパス → 生メタデータ）
+  final Map<String, KMeta> _rawCache = {};
+
+  /// マージ済みメタデータキャッシュ（フォルダパス → マージ済みメタデータ）
+  final Map<String, KMeta> _mergedCache = {};
+
+  /// キャッシュをクリア
+  void clearCache() {
+    _rawCache.clear();
+    _mergedCache.clear();
+    AppLogger.debug('[KMetaService] Cache cleared');
+  }
+
+  /// 特定フォルダのキャッシュをクリア（変更時に使用）
+  void invalidateCache(String folderPath) {
+    _rawCache.remove(folderPath);
+    // マージ済みキャッシュは子フォルダも影響を受けるのでクリア
+    _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
+    AppLogger.debug('[KMetaService] Cache invalidated for: $folderPath');
+  }
+
+  /// フォルダの生メタデータを取得（キャッシュ対応）
+  Future<KMeta?> getRawMeta(String folderPath) async {
+    // キャッシュ確認
+    if (_rawCache.containsKey(folderPath)) {
+      return _rawCache[folderPath];
+    }
+
+    // ファイルから読み込み
+    final meta = await KMeta.loadFromFile(folderPath);
+    if (meta != null) {
+      _rawCache[folderPath] = meta;
+    }
+    return meta;
+  }
+
+  /// フォルダのマージ済みメタデータを取得（継承チェーン解決済み）
+  Future<KMeta> getMergedMeta(String folderPath) async {
+    // キャッシュ確認
+    if (_mergedCache.containsKey(folderPath)) {
+      return _mergedCache[folderPath]!;
+    }
+
+    // 継承チェーンを解決
+    final mergedMeta = await _resolveInheritanceChain(folderPath);
+    _mergedCache[folderPath] = mergedMeta;
+    return mergedMeta;
+  }
+
+  /// LayerTreeNodeからマージ済みメタデータを取得
+  Future<KMeta> getMergedMetaForNode(LayerTreeNode node) async {
+    final folderPath = node.getAbsoluteFilePath();
+    if (folderPath == null) {
+      return KMeta.empty;
+    }
+    return getMergedMeta(folderPath);
+  }
+
+  /// 継承チェーンを解決してマージ
+  Future<KMeta> _resolveInheritanceChain(String folderPath) async {
+    final projectRoot = GlobalConfig.instance.projectRootDir;
+    if (projectRoot == null) {
+      return await getRawMeta(folderPath) ?? KMeta.empty;
+    }
+
+    // 正規化されたパス
+    final normalizedPath = p.normalize(folderPath);
+    final normalizedRoot = p.normalize(projectRoot);
+
+    // ルートからこのフォルダまでのパスを構築
+    final ancestorPaths = <String>[];
+    String currentPath = normalizedPath;
+
+    while (currentPath.length >= normalizedRoot.length) {
+      ancestorPaths.insert(0, currentPath);
+      final parentPath = p.dirname(currentPath);
+      if (parentPath == currentPath) break; // ルートに到達
+      currentPath = parentPath;
+    }
+
+    // ルートから順にマージ
+    KMeta? mergedMeta;
+    for (final ancestorPath in ancestorPaths) {
+      final rawMeta = await getRawMeta(ancestorPath);
+      if (rawMeta != null) {
+        mergedMeta = rawMeta.mergeWith(mergedMeta);
+      } else if (mergedMeta != null) {
+        // このフォルダにはメタデータがないが、親からの継承は維持
+        mergedMeta = mergedMeta;
+      }
+    }
+
+    return mergedMeta ?? KMeta.empty;
+  }
+
+  /// メタデータを保存
+  Future<bool> saveMeta(String folderPath, KMeta meta) async {
+    final success = await meta.saveToFile(folderPath);
+    if (success) {
+      _rawCache[folderPath] = meta;
+      // マージ済みキャッシュを無効化（子フォルダにも影響）
+      _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
+    }
+    return success;
+  }
+
+  /// レイヤーの可視状態を更新
+  Future<bool> setLayerVisibility(
+    String folderPath,
+    String layerName,
+    bool visible,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedVisibility = KMetaVisibility(
+      layers: {...rawMeta.visibility.layers, layerName: visible},
+      geopackages: rawMeta.visibility.geopackages,
+    );
+    final updatedMeta = rawMeta.copyWith(visibility: updatedVisibility);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// GeoPackageの可視状態を更新
+  Future<bool> setGeoPackageVisibility(
+    String folderPath,
+    String gpkgName,
+    bool visible,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedVisibility = KMetaVisibility(
+      layers: rawMeta.visibility.layers,
+      geopackages: {...rawMeta.visibility.geopackages, gpkgName: visible},
+    );
+    final updatedMeta = rawMeta.copyWith(visibility: updatedVisibility);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// レイヤースタイルを更新
+  /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
+  Future<bool> setLayerStyle(
+    String folderPath,
+    String layerKey,
+    KMetaLayerStyle style,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedStyles = KMetaStyles(
+      defaultStyle: rawMeta.styles.defaultStyle,
+      layers: {...rawMeta.styles.layers, layerKey: style},
+    );
+    final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// デフォルトスタイルを更新
+  Future<bool> setDefaultStyle(
+    String folderPath,
+    KMetaLayerStyle style,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedStyles = KMetaStyles(
+      defaultStyle: style,
+      layers: rawMeta.styles.layers,
+    );
+    final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// レイアウトの並び順を更新
+  Future<bool> setSortOrder(
+    String folderPath,
+    List<String> sortOrder,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedLayout = KMetaLayout(
+      sortOrder: sortOrder,
+      expanded: rawMeta.layout.expanded,
+    );
+    final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// 展開状態を更新
+  Future<bool> setExpanded(String folderPath, bool expanded) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedLayout = KMetaLayout(
+      sortOrder: rawMeta.layout.sortOrder,
+      expanded: expanded,
+    );
+    final updatedMeta = rawMeta.copyWith(layout: updatedLayout);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// Google Drive同期情報を更新
+  Future<bool> setDriveSync(
+    String folderPath, {
+    String? driveId,
+    DateTime? lastSynced,
+  }) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedSync = KMetaSync(
+      driveId: driveId ?? rawMeta.sync.driveId,
+      lastSynced: lastSynced ?? rawMeta.sync.lastSynced,
+    );
+    final updatedMeta = rawMeta.copyWith(sync: updatedSync);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// フォルダが.kmeta.jsonを持っているか確認
+  Future<bool> hasMetaFile(String folderPath) async {
+    final file = File('$folderPath/$kMetaFileName');
+    return file.exists();
+  }
+
+  /// 新しい.kmeta.jsonを初期化（存在しない場合のみ）
+  Future<KMeta?> initializeMetaIfNeeded(String folderPath) async {
+    if (await hasMetaFile(folderPath)) {
+      return getRawMeta(folderPath);
+    }
+    const newMeta = KMeta();
+    if (await saveMeta(folderPath, newMeta)) {
+      return newMeta;
+    }
+    return null;
+  }
+}
+
+

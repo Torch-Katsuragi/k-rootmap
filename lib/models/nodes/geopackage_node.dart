@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage_file.dart';
+import '../kmeta.dart';
 import 'folder_node.dart';
 import '../../utils/global_config.dart';
 
@@ -61,9 +62,36 @@ class GeoPackageNode extends LayerTreeNode {
       addChildIfNotExists(node);
     }
 
+    // KMetaの可視性設定をレイヤーに適用
+    await _applyMetaVisibility();
+
     AppLogger.debug(
       '[DEBUG] GeoPackageNode.updateChildren: ${children.length} layers after update',
     );
+  }
+
+  /// 親フォルダのKMetaを取得
+  Future<KMeta?> _getParentMeta() async {
+    final folderParent = parent;
+    if (folderParent is FolderNode) {
+      return folderParent.getMeta();
+    }
+    return null;
+  }
+
+  /// KMetaの可視性設定をレイヤーに適用
+  Future<void> _applyMetaVisibility() async {
+    final meta = await _getParentMeta();
+    if (meta == null) return;
+
+    for (final child in children) {
+      if (child is LayerNode) {
+        final layerVisible = meta.visibility.layers[child.layerName];
+        if (layerVisible != null) {
+          child.visible = layerVisible;
+        }
+      }
+    }
   }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）

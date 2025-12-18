@@ -8,9 +8,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
+import 'folder_node.dart';
 import 'feature_node.dart';
 import '../geopackage_file.dart';
 import '../geometry_type.dart';
+import '../kmeta.dart';
 import '../../converters/turf_converter.dart';
 
 /// 重複レイヤ名のナンバリング処理ユーティリティ
@@ -71,6 +73,65 @@ abstract class LayerNode extends LayerTreeNode {
     }
     throw StateError('LayerNode must have a GeoPackageNode parent');
   }
+
+  /// 親のFolderNodeを取得
+  FolderNode? get folderNode {
+    LayerTreeNode? current = parent;
+    while (current != null) {
+      if (current is FolderNode) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  /// レイヤーの一意キー（gpkgName/layerName形式）
+  /// 同一フォルダ内の異なるGeoPackageの同名レイヤーを区別するため
+  String get layerKey {
+    if (_isDisposed) {
+      throw StateError('Cannot access layerKey on disposed LayerNode: $layerName');
+    }
+    final gpkg = geoPackageNode;
+    return '${gpkg.name}/$layerName';
+  }
+
+  /// KMetaスタイルキャッシュ
+  KMetaLayerStyle? _cachedKmetaStyle;
+  bool _kmetaStyleLoaded = false;
+
+  /// このレイヤーのKMetaスタイルを取得（キャッシュ対応）
+  /// layerKey（gpkgName/layerName形式）を使用して一意に識別
+  Future<KMetaLayerStyle?> getKmetaStyle() async {
+    if (_kmetaStyleLoaded) return _cachedKmetaStyle;
+    _kmetaStyleLoaded = true;
+
+    final folder = folderNode;
+    if (folder == null) return null;
+
+    try {
+      final meta = await folder.getMeta();
+      final key = layerKey;
+      _cachedKmetaStyle = meta.getLayerStyle(key);
+      return _cachedKmetaStyle;
+    } catch (e) {
+      AppLogger.debug('[LayerNode] Error getting KMeta style: $e');
+      return null;
+    }
+  }
+
+  /// KMetaスタイルキャッシュをクリア
+  void invalidateKmetaStyleCache() {
+    _cachedKmetaStyle = null;
+    _kmetaStyleLoaded = false;
+  }
+
+  /// キャッシュ済みのKMetaスタイルを同期的に取得（描画用）
+  /// キャッシュされていない場合はnullを返す
+  KMetaLayerStyle? get cachedKmetaStyle => _cachedKmetaStyle;
+
+  /// KMetaスタイルがキャッシュ済みかどうか
+  bool get isKmetaStyleLoaded => _kmetaStyleLoaded;
 
   /// turf_dartのFeatureCollectionオブジェクトを取得
   /// _featureMapから動的に生成（常に最新の状態を反映）

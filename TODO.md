@@ -48,6 +48,12 @@
 
 ## 機能改善
 
+- [x] フォルダメタデータシステム（.kmeta.json）の実装
+  - [x] KMetaモデルクラス（JSON読み書き・継承マージロジック）
+  - [x] KMetaService（継承チェーン解決・保存処理）
+  - [x] FolderNode/GeoPackageNodeへのKMeta統合
+  - [x] LayerStyleConfigとKMetaの連携
+
 - [ ] フィードバックフォームにバージョン情報を事前入力
   - Google FormsのURLパラメータを使用して、アプリバージョンを埋め込む
   - フォームを開いたときにバージョン情報が入力済みの状態で表示される

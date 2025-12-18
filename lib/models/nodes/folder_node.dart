@@ -8,11 +8,61 @@ import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
+import '../kmeta.dart';
+import '../../services/kmeta_service.dart';
 
 /// フォルダノード
 class FolderNode extends LayerTreeNode {
+  /// マージ済みメタデータのキャッシュ
+  KMeta? _cachedMeta;
+
+  /// 展開状態（KMetaから取得、未設定時はtrue）
+  bool _expanded = true;
+
   FolderNode(super.name, {super.visible, super.parent, super.children})
     : super(nodeType: "folder");
+
+  /// 展開状態を取得
+  @override
+  bool get expanded => _expanded;
+
+  /// 展開状態を設定（KMetaにも保存）
+  set expanded(bool value) {
+    _expanded = value;
+    _saveExpandedState(value);
+  }
+
+  /// 展開状態をKMetaに保存
+  Future<void> _saveExpandedState(bool value) async {
+    final folderPath = getAbsoluteFilePath();
+    if (folderPath == null) return;
+    await KMetaService.instance.setExpanded(folderPath, value);
+  }
+
+  /// マージ済みメタデータを取得（キャッシュ対応）
+  Future<KMeta> getMeta() async {
+    if (_cachedMeta != null) return _cachedMeta!;
+    final folderPath = getAbsoluteFilePath();
+    if (folderPath == null) return KMeta.empty;
+    _cachedMeta = await KMetaService.instance.getMergedMeta(folderPath);
+    return _cachedMeta!;
+  }
+
+  /// 生メタデータを取得（このフォルダのみ、継承なし）
+  Future<KMeta?> getRawMeta() async {
+    final folderPath = getAbsoluteFilePath();
+    if (folderPath == null) return null;
+    return KMetaService.instance.getRawMeta(folderPath);
+  }
+
+  /// メタデータキャッシュをクリア
+  void invalidateMetaCache() {
+    _cachedMeta = null;
+    final folderPath = getAbsoluteFilePath();
+    if (folderPath != null) {
+      KMetaService.instance.invalidateCache(folderPath);
+    }
+  }
 
   @override
   IconData get baseIcon => Icons.folder;
@@ -22,6 +72,9 @@ class FolderNode extends LayerTreeNode {
   /// このフォルダ直下のFolderNode, GeoPackageNode, ImageNodeのみ生成
   @override
   Future<void> updateChildren() async {
+    // メタデータを読み込み（展開状態を復元）
+    await _loadMetaState();
+
     // ファイルシステムから現在の構造を取得
     final folderNodes = await FolderNode.loadNodes(this);
     final gpkgNodes = await GeoPackageNode.loadNodes(this);
@@ -60,9 +113,35 @@ class FolderNode extends LayerTreeNode {
       addChildIfNotExists(node);
     }
 
+    // KMetaの可視性設定を子ノードに適用
+    await _applyMetaVisibility();
+
     AppLogger.debug(
       '[DEBUG] FolderNode.updateChildren: ${children.length} children after update',
     );
+  }
+
+  /// メタデータから状態を読み込み
+  Future<void> _loadMetaState() async {
+    invalidateMetaCache(); // キャッシュをクリアして最新を読み込み
+    final meta = await getMeta();
+    // 展開状態を復元
+    _expanded = meta.layout.expanded ?? true;
+  }
+
+  /// メタデータの可視性設定を子ノードに適用
+  Future<void> _applyMetaVisibility() async {
+    final meta = await getMeta();
+    for (final child in children) {
+      if (child is GeoPackageNode) {
+        // GeoPackageの可視性を適用
+        final gpkgVisible = meta.visibility.geopackages[child.name];
+        if (gpkgVisible != null) {
+          child.visible = gpkgVisible;
+        }
+      }
+      // LayerNodeの可視性はGeoPackageNode側で処理
+    }
   }
 
   /// このフォルダ直下のFolderNodeリストのみ返す（名前昇順でソート）

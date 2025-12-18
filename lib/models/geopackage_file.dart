@@ -1019,6 +1019,39 @@ class GeoPackageFile {
     }
   }
 
+  /// レイヤ名変更（テーブル名変更＋メタデータ更新）
+  Future<void> renameLayer(String oldName, String newName) async {
+    if (oldName == newName) return;
+
+    try {
+      final db = await _getDatabase();
+
+      // テーブル名変更
+      await db.execute('ALTER TABLE "$oldName" RENAME TO "$newName";');
+
+      // gpkg_contentsのテーブル名更新
+      await db.update(
+        'gpkg_contents',
+        {'table_name': newName, 'identifier': newName},
+        where: 'table_name = ?',
+        whereArgs: [oldName],
+      );
+
+      // gpkg_geometry_columnsのテーブル名更新
+      await db.update(
+        'gpkg_geometry_columns',
+        {'table_name': newName},
+        where: 'table_name = ?',
+        whereArgs: [oldName],
+      );
+
+      AppLogger.debug('renameLayer: $oldName -> $newName');
+    } catch (e) {
+      AppLogger.debug('renameLayer: エラー発生 - $e');
+      rethrow;
+    }
+  }
+
   /// 線フィーチャを追加（属性付き）
   Future<int?> addLine(
     String tableName,

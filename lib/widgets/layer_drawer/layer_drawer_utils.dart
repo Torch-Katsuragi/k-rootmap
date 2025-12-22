@@ -12,11 +12,11 @@ mixin LayerDrawerUtils {
   /// マップページのフィーチャ更新をトリガー
   void triggerMapRefresh() {
     try {
-      // GlobalConfigを通じてマップページの更新をトリガー
+      // GlobalConfigを通じてマップページの更新をトリガー（型安全）
       final mapState = GlobalConfig.instance.mapState;
       if (mapState != null && mapState.mounted) {
         // レイヤ削除時は強制的にマップを更新（フィーチャキャッシュクリア）
-        (mapState as dynamic).forceMapRefresh();
+        mapState.forceMapRefresh();
         AppLogger.debug('[LayerDrawer] マップ強制更新をトリガーしました');
       } else {
         AppLogger.debug('[LayerDrawer] マップページが見つからないか、マウントされていません');

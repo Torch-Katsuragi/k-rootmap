@@ -554,7 +554,18 @@ abstract class LayerNode extends LayerTreeNode {
         attributeSchema,
       );
 
-      AppLogger.debug('[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個のカラム');
+      // 移植先のカラムを確認し、不足カラムがあれば警告
+      final targetColumns = await targetGeoPackage.geoPackageFile.getTableColumns(targetLayerName);
+      final targetColumnSet = targetColumns.map((c) => c.toLowerCase()).toSet();
+      final missingColumns = attributeSchema.keys
+          .where((c) => !targetColumnSet.contains(c.toLowerCase()))
+          .toList();
+
+      if (missingColumns.isNotEmpty) {
+        AppLogger.debug('[LayerNode] 追加されなかったカラム: $missingColumns');
+      }
+
+      AppLogger.debug('[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個中${targetColumns.length - 2}個のカラム追加');
     } catch (e) {
       AppLogger.debug('[LayerNode] 属性スキーマ移植エラー: $e');
       // エラーが発生しても継続（基本的な属性は移植可能）

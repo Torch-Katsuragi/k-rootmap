@@ -69,6 +69,14 @@ class KeyboardHandler {
       return false;
     }
 
+    // IME関連の無効なキーイベントを無視（Windows日本語入力との互換性）
+    // 無効な物理キーIDはIMEからの合成イベントで発生することがある
+    final physicalKeyId = event.physicalKey.usbHidUsage;
+    if (physicalKeyId > 0x100000000) {
+      // 無効なキーIDは静かに無視
+      return false;
+    }
+
     AppLogger.debug('[KeyboardHandler] キー押下: ${event.logicalKey}');
 
     // Deleteキーまたはバックスペースキー
@@ -163,4 +171,3 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
     );
   }
 }
-

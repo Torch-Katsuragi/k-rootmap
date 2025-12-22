@@ -10,6 +10,7 @@ import '../utils/feature_calc_utils.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'dart:math' as math;
+import '../interfaces/map_state_interface.dart';
 
 /// オブジェクト選択ツール
 class SelectTool extends MapTool {
@@ -24,11 +25,10 @@ class SelectTool extends MapTool {
   List<Offset> get lassoPoints => _lassoPoints;
 
   /// ズーム率から選択判定用range(m)を計算
-  double _calcSelectRange(dynamic mapState) {
-    // mapStateは_KMapsHomePageState想定
+  double _calcSelectRange(IMapState mapState) {
     try {
       final mapController = mapState.mapController;
-      final zoom = mapController.zoom;
+      final zoom = mapController.camera.zoom;
       // 例: ズーム16で20m, 1ズーム下がるごとに2倍
       // 公式: range = base * pow(2, 16 - zoom)
       const double base = 20.0; // ズーム16で20m
@@ -42,7 +42,7 @@ class SelectTool extends MapTool {
   /// 指定座標・範囲でfeatureを選択する（PenTool等からも利用可・最適化）
   static Future<void> selectFeatureAtLatLng({
     required LatLng tapLatLng,
-    required dynamic mapState,
+    required IMapState mapState,
     double? range,
   }) async {
     AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: selecting at $tapLatLng');
@@ -127,15 +127,13 @@ class SelectTool extends MapTool {
 
   /// タップイベント
   @override
-  void onTap(TapUpDetails details, dynamic mapState) async {
-    if (mapState == null) return;
+  void onTap(TapUpDetails details, IMapState mapState) async {
     LatLng? tapLatLng;
     try {
       tapLatLng = mapState.offsetToLatLng(details.localPosition);
     } catch (e) {
       return;
     }
-    if (tapLatLng == null) return;
     // staticメソッドで共通化
     await selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState);
   }
@@ -143,8 +141,7 @@ class SelectTool extends MapTool {
   /// スケール開始イベント
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
-  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
-    if (mapState == null) return;
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     _pointerCount = details.pointerCount;
@@ -161,8 +158,7 @@ class SelectTool extends MapTool {
   /// スケール更新イベント
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
-  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
-    if (mapState == null) return;
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
@@ -178,8 +174,7 @@ class SelectTool extends MapTool {
   /// スケール終了イベント
   /// 1本指: 投げ縄選択, 2本指: パン
   @override
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) async {
-    if (mapState == null) return;
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) async {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
@@ -264,7 +259,7 @@ class SelectTool extends MapTool {
   /// マウスホイールスクロールイベント（ズーム機能）
   /// PanToolの統一処理を呼び出し
   @override
-  void onPointerSignal(PointerEvent event, dynamic mapState) {
+  void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
       // PanToolの統一されたマウスホイールズーム処理を使用
       GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
@@ -273,18 +268,17 @@ class SelectTool extends MapTool {
 
   /// 中ボタンドラッグイベント - PanToolに委譲
   @override
-  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
   }
 
   @override
-  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
   }
 
   @override
-  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }
-

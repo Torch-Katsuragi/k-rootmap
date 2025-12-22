@@ -12,6 +12,7 @@ import '../services/gps_manager_service.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'package:latlong2/latlong.dart';
+import '../interfaces/map_state_interface.dart';
 
 /// GPS関連機能を扱うツール
 ///
@@ -72,25 +73,25 @@ class GpsTool extends MapTool {
 
   /// タップイベント - パンツールに丸投げ
   @override
-  void onTap(TapUpDetails details, dynamic mapState) {
+  void onTap(TapUpDetails details, IMapState mapState) {
     _panTool.onTap(details, mapState);
   }
 
   /// スケール開始イベント - パンツールに丸投げ
   @override
-  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     _panTool.onScaleStart(details, mapState);
   }
 
   /// スケール更新イベント - パンツールに丸投げ
   @override
-  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     _panTool.onScaleUpdate(details, mapState);
   }
 
   /// スケール終了イベント - パンツールに丸投げ
   @override
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     _panTool.onScaleEnd(details, mapState);
   }
 
@@ -244,10 +245,8 @@ class GpsTool extends MapTool {
           }
           
           // UI更新（pen_toolと同様）
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-            GlobalConfig.instance.mapState.setState(() {});
-          }
+          GlobalConfig.instance.mapState?.refreshFeatures();
+          GlobalConfig.instance.mapState?.setState(() {});
 
           // Point測量完了後はGPS測量を停止（リソース効率化）
           await _gpsManager.stopGpsSurvey();
@@ -374,10 +373,8 @@ class GpsTool extends MapTool {
           }
           
           // UI更新（pen_toolと同様）
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-            GlobalConfig.instance.mapState.setState(() {});
-          }
+          GlobalConfig.instance.mapState?.refreshFeatures();
+          GlobalConfig.instance.mapState?.setState(() {});
 
           // Point測量完了後はGPS測量を停止（リソース効率化）
           await _gpsManager.stopGpsSurvey();
@@ -524,7 +521,7 @@ class GpsTool extends MapTool {
   /// マウスホイールスクロールイベント（ズーム機能）
   /// PanToolの統一処理を呼び出し
   @override
-  void onPointerSignal(PointerEvent event, dynamic mapState) {
+  void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
       // PanToolの統一されたマウスホイールズーム処理を使用
       GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
@@ -533,17 +530,17 @@ class GpsTool extends MapTool {
 
   /// 中ボタンドラッグイベント - PanToolに委譲
   @override
-  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
   }
 
   @override
-  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
   }
 
   @override
-  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }

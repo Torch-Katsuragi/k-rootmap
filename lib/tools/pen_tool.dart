@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import 'pan_tool.dart'; // てのひらツールを利用
 import 'select_tool.dart';
 import 'dart:async'; // デバウンス機能用
+import '../interfaces/map_state_interface.dart';
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
@@ -45,7 +46,7 @@ class PenTool extends MapTool {
 
   /// タップイベント
   @override
-  void onTap(TapUpDetails details, dynamic mapState) {
+  void onTap(TapUpDetails details, IMapState mapState) {
     AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント開始');
 
     // フロートボタン押下時は消しゴム動作
@@ -80,9 +81,8 @@ class PenTool extends MapTool {
     if (!selected.isVisibleRecursive()) {
       AppLogger.debug('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
       // 警告ポップアップ
-      final context = mapState.context;
       ScaffoldMessenger.of(
-        context,
+        mapState.context,
       ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
       return;
     }
@@ -131,7 +131,7 @@ class PenTool extends MapTool {
   /// スケール開始イベント
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
-  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
 
@@ -153,9 +153,8 @@ class PenTool extends MapTool {
     // 1本指の場合のみレイヤー選択チェック
     if (selected == null || !selected.isVisibleRecursive()) {
       if (selected != null && !selected.isVisibleRecursive()) {
-        final context = mapState.context;
         ScaffoldMessenger.of(
-          context,
+          mapState.context,
         ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
       }
       return;
@@ -204,7 +203,7 @@ class PenTool extends MapTool {
   /// スケール更新イベント
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
-  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
 
@@ -260,7 +259,7 @@ class PenTool extends MapTool {
   /// スケール終了イベント
   /// 1本指: ペン描画, 2本指: パンツール処理
   @override
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
     if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
 
@@ -327,7 +326,7 @@ class PenTool extends MapTool {
   }
 
   /// 選択されたフィーチャーを削除（GlobalConfig統一処理を使用）
-  void _disposeSelectedFeatures(dynamic mapState) async {
+  void _disposeSelectedFeatures(IMapState mapState) async {
     AppLogger.debug('[DEBUG] PenTool._disposeSelectedFeatures: using GlobalConfig unified deletion');
     
     // GlobalConfigの統一削除処理を使用
@@ -337,7 +336,7 @@ class PenTool extends MapTool {
   /// マウスホイールスクロールイベント（ズーム機能）
   /// PanToolの統一処理を呼び出し
   @override
-  void onPointerSignal(PointerEvent event, dynamic mapState) {
+  void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
       // PanToolの統一されたマウスホイールズーム処理を使用
       GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
@@ -346,18 +345,17 @@ class PenTool extends MapTool {
 
   /// 中ボタンドラッグイベント - PanToolに委譲
   @override
-  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
   }
 
   @override
-  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
   }
 
   @override
-  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
     GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
   }
 }
-

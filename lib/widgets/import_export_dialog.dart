@@ -583,11 +583,10 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
   /// マップページのフィーチャ更新をトリガー
   void _triggerMapRefresh() {
     try {
-      // GlobalConfigを通じてマップページの更新をトリガー
+      // GlobalConfigを通じてマップページの更新をトリガー（型安全）
       final mapState = GlobalConfig.instance.mapState;
       if (mapState != null && mapState.mounted) {
-        // マップページのrefreshFeaturesメソッドを呼び出し
-        (mapState as dynamic).refreshFeatures();
+        mapState.refreshFeatures();
         AppLogger.debug('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
       } else {
         AppLogger.debug('[ImportExportDialog] マップページが見つからないか、マウントされていません');

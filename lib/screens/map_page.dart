@@ -43,6 +43,7 @@ import '../services/gps_manager_service.dart'; // 統合GPS管理サービス
 import '../services/geometry_conversion_service.dart';
 import '../utils/global_drawing_state.dart'; // GlobalDrawingState
 import '../utils/keyboard_handler.dart'; // キーボードショートカット
+import '../interfaces/map_state_interface.dart'; // 型安全なマップ状態インターフェース
 
 /// Map and edit screen (main structure)
 class KMapsHomePage extends StatefulWidget {
@@ -55,7 +56,8 @@ class KMapsHomePage extends StatefulWidget {
 enum ToolType { pen, eraser, gps }
 
 class _KMapsHomePageState extends State<KMapsHomePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin
+    implements IMapState {
   final LatLng _center = const LatLng(35.681236, 139.767125); // Tokyo Station
   LatLng? _currentLocation;
   Stream<Position>? _positionStream;
@@ -115,7 +117,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   List<PolygonFeatureNode> _polygonFeatures = [];
   List<ImageNode> _photoNodes = []; // ImageNode用キャッシュ追加
 
-  // Public getter added
+  // Public getter added (implements IMapState.mapController)
+  @override
   MapController get mapController => _mapController;
 
   @override
@@ -1056,6 +1059,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   // --- Utility to automatically close polygon rings ---
+  @override
   List<LatLng> closeRing(List<LatLng> pts) {
     if (pts.length < 3) return [];
     final first = pts.first;
@@ -1256,6 +1260,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   // --- Screen coordinates to map coordinates conversion ---
+  @override
   LatLng offsetToLatLng(Offset offset) {
     // Flutter Map v8での正しい座標変換API
     try {
@@ -1268,6 +1273,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   // --- Map coordinates to screen pixel conversion ---
+  @override
   Offset latLngToOffset(LatLng latlng) {
     // Flutter Map v8での正しい座標変換API
     try {
@@ -1420,12 +1426,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   }
 
   /// フィーチャデータの公開更新メソッド（外部から呼び出し可能）
+  @override
   void refreshFeatures() {
     _updateFeatures();
   }
 
   /// マップの強制更新処理（外部から呼び出し可能）
   /// フィーチャの追加・更新・削除後にマップ表示を更新
+  @override
   void forceMapRefresh() {
     _refreshMapUI();
   }

@@ -18,6 +18,33 @@
   - [x] withOpacity → withValues()
   - [x] onPopInvoked → onPopInvokedWithResult
 
+## アーキテクチャ改善（2025/12/18実施）
+
+### 完了
+
+- [x] 型安全性の改善
+  - [x] IMapStateインターフェースの作成（lib/interfaces/map_state_interface.dart）
+  - [x] GlobalConfigのdynamic型を具体型に変更（mapState: IMapState, selectedFeatures: List<LayerTreeNode>）
+  - [x] MapToolおよび各ツールクラスの型安全化（PanTool, PenTool, SelectTool, GpsTool）
+- [x] 重複コードの削減
+  - [x] geopackage_file.dartのバッチ処理メソッド共通化（_addGeometryBatch<T>）
+  - [x] ダイアログヘルパークラスの作成（lib/widgets/dialogs/dialog_helpers.dart）
+- [x] 定数の集約
+  - [x] アプリケーション定数ファイルの作成（lib/core/constants.dart）
+- [x] ファイル構造の整備
+  - [x] map_page用mixinディレクトリ作成（lib/screens/map_page/）
+  - [x] import_export用ディレクトリ作成（lib/services/import_export/）
+
+### 将来の作業
+
+- [ ] map_page.dartへのmixin統合
+- [ ] import_export_service.dartのフォーマット別分割
+- [ ] geopackage_file.dartの機能別分割
+- [ ] ServiceLocatorパターンの導入
+- [ ] 非同期競合状態防止の改善（Completer使用）
+- [ ] フィーチャキャッシュの差分更新対応
+- [ ] LayerNodeサブクラスの個別ファイル分離
+
 ## コード品質改善
 
 ### 優先度：高（安全性・正確性）

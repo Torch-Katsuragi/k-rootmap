@@ -409,9 +409,7 @@ mixin LayerDrawerTiles {
         onTap: () {
           node.visible = !node.visible;
           // フィーチャ表示を更新
-          if (GlobalConfig.instance.mapState != null) {
-            GlobalConfig.instance.mapState.refreshFeatures();
-          }
+          GlobalConfig.instance.mapState?.refreshFeatures();
           setStateCallback(() {});
         },
         child: Stack(
@@ -711,9 +709,7 @@ mixin LayerDrawerTiles {
               // 追加成功時のみUI更新
               setStateCallback(() {});
               // 地図本体も即時再描画
-              if (GlobalConfig.instance.mapState != null) {
-                GlobalConfig.instance.mapState.setState(() {});
-              }
+              GlobalConfig.instance.mapState?.setState(() {});
               AppLogger.debug('[LayerDrawer] レイヤ作成完了');
             } else {
               AppLogger.debug('[LayerDrawer] レイヤ作成失敗: newLayerNodeがnull');
@@ -744,9 +740,7 @@ mixin LayerDrawerTiles {
       onTap: () {
         node.visible = !node.visible;
         // フィーチャ表示を更新
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-        }
+        GlobalConfig.instance.mapState?.refreshFeatures();
         setStateCallback(() {});
       },
       child: Stack(
@@ -957,10 +951,7 @@ mixin LayerDrawerTiles {
         
         // マップの強制更新
         triggerMapRefresh();
-        
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.refreshFeatures();
-        }
+        GlobalConfig.instance.mapState?.refreshFeatures();
 
         final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
         if (context.mounted) {
@@ -1080,9 +1071,7 @@ mixin LayerDrawerTiles {
       if (mergedFeature != null) {
         // UI更新
         setStateCallback(() {});
-        if (GlobalConfig.instance.mapState != null) {
-          GlobalConfig.instance.mapState.setState(() {});
-        }
+        GlobalConfig.instance.mapState?.setState(() {});
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

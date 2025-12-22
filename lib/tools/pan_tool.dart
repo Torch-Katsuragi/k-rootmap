@@ -7,6 +7,7 @@ import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
 import '../utils/global_config.dart'; // SelectToolアクセス用
+import '../interfaces/map_state_interface.dart';
 
 /// 地図パン（移動）専用ツール
 class PanTool extends MapTool {
@@ -31,14 +32,14 @@ class PanTool extends MapTool {
 
   /// タップイベント - SelectToolのonTapを呼び出す
   @override
-  void onTap(TapUpDetails details, dynamic mapState) {
+  void onTap(TapUpDetails details, IMapState mapState) {
     // パンツールでのシングルタップは選択動作として動作
     GlobalConfig.instance.selectTool.onTap(details, mapState);
   }
 
   /// スケール開始イベント
   @override
-  void onScaleStart(ScaleStartDetails details, dynamic mapState) {
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
 
@@ -49,7 +50,7 @@ class PanTool extends MapTool {
 
   /// スケール更新イベント
   @override
-  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
 
@@ -72,7 +73,7 @@ class PanTool extends MapTool {
 
   /// スケール終了イベント
   @override
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
 
@@ -82,7 +83,7 @@ class PanTool extends MapTool {
   }
 
   /// マウスホイールズーム処理（他のツールからも呼び出し可能）
-  void handleMouseWheelZoom(PointerScrollEvent event, dynamic mapState) {
+  void handleMouseWheelZoom(PointerScrollEvent event, IMapState mapState) {
     // スクロール量を基にズーム量を計算
     const double zoomSpeed = 0.01; // ズーム感度調整（より細かいズーム操作）
     final double zoomDelta = -event.scrollDelta.dy * zoomSpeed;
@@ -104,7 +105,7 @@ class PanTool extends MapTool {
 
   /// マウスホイールスクロールイベント（ズーム機能）
   @override
-  void onPointerSignal(PointerEvent event, dynamic mapState) {
+  void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
       handleMouseWheelZoom(event, mapState);
     }
@@ -112,14 +113,14 @@ class PanTool extends MapTool {
 
   /// 中ボタンドラッグ開始（パン処理用の初期化）
   @override
-  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
     _isMiddleButtonDragging = true;
     _lastFocalPoint = event.localPosition;
   }
 
   /// 中ボタンドラッグ移動（パン処理のみ）
   @override
-  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
     if (!_isMiddleButtonDragging || _lastFocalPoint == null) return;
 
     // 前回位置からの移動量を計算
@@ -144,7 +145,7 @@ class PanTool extends MapTool {
 
   /// 中ボタンドラッグ終了
   @override
-  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
     _isMiddleButtonDragging = false;
     _lastFocalPoint = null;
   }

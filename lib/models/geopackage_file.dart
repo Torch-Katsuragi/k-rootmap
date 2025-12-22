@@ -182,6 +182,16 @@ class GeoPackageFile {
         point.latitude,
       );
 
+      // R-Tree空間インデックスを更新（QGIS互換性のため）
+      await _updateRTreeIndex(
+        tableName,
+        rowId,
+        point.longitude,
+        point.latitude,
+        point.longitude,
+        point.latitude,
+      );
+
       return rowId;
     } catch (e) {
       AppLogger.debug('[ERROR] GeoPackageFile: addPointWithAttributes failed: $e');
@@ -220,6 +230,9 @@ class GeoPackageFile {
         }
 
         await _updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
+
+        // R-Tree空間インデックスを更新（QGIS互換性のため）
+        await _updateRTreeIndex(tableName, rowId, minX, minY, maxX, maxY);
       }
 
       return rowId;
@@ -262,6 +275,9 @@ class GeoPackageFile {
         }
 
         await _updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
+
+        // R-Tree空間インデックスを更新（QGIS互換性のため）
+        await _updateRTreeIndex(tableName, rowId, minX, minY, maxX, maxY);
       }
 
       return rowId;
@@ -312,6 +328,10 @@ class GeoPackageFile {
       
       // GeoPackageファイルの基本構造をチェック
       await _validateGeoPackageStructure();
+
+      // SpatiaLite固有のトリガーを削除（QGIS作成ファイルの互換性対応）
+      // sqfliteではST_IsEmpty等の関数がサポートされていないため
+      await _removeSpatiaLiteTriggers();
       
       _isInitialized = true;
       // 正常時のログは不要（異常時のみ出力）
@@ -671,6 +691,9 @@ class GeoPackageFile {
           : '"$pkColumn" = ?';
       
       await db.delete(tableName, where: whereClause, whereArgs: [id]);
+
+      // R-Tree空間インデックスからも削除（QGIS互換性のため）
+      await _removeFromRTreeIndex(tableName, id);
     } catch (e) {
       AppLogger.debug('removeFeature: エラー発生 - $e');
     }
@@ -927,6 +950,136 @@ class GeoPackageFile {
 
     } catch (e) {
       AppLogger.debug('[ERROR] GeoPackageFile._createSpatialIndex: $e');
+    }
+  }
+
+  // ============================================================
+  // SpatiaLiteトリガー対応（QGIS互換性）
+  // ============================================================
+
+  /// SpatiaLite固有のトリガーを検出して削除
+  /// QGISで作成されたGeoPackageにはST_IsEmpty等のSpatiaLite関数を使用する
+  /// トリガーが含まれており、sqfliteではこれらの関数がサポートされていないため
+  /// INSERT/UPDATE時にエラーが発生する。このメソッドで問題のトリガーを削除する。
+  Future<void> _removeSpatiaLiteTriggers() async {
+    // 注意: このメソッドは_initializeDatabase内から呼ばれるため、
+    // _getDatabase()を使わず直接_databaseを使用する（循環呼び出し防止）
+    if (_database == null) return;
+    
+    try {
+      final db = _database!;
+
+      // sqlite_masterからトリガー一覧を取得
+      final triggers = await db.rawQuery(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'",
+      );
+
+      int removedCount = 0;
+      for (final trigger in triggers) {
+        final triggerName = trigger['name'] as String?;
+        final sql = trigger['sql'] as String?;
+
+        // SpatiaLite関数を使用しているトリガーを検出して削除
+        if (triggerName != null &&
+            sql != null &&
+            _containsSpatiaLiteFunctions(sql)) {
+          await db.execute('DROP TRIGGER IF EXISTS "$triggerName"');
+          removedCount++;
+          AppLogger.debug(
+            '[GeoPackageFile] SpatiaLiteトリガー削除: $triggerName',
+          );
+        }
+      }
+
+      if (removedCount > 0) {
+        AppLogger.debug(
+          '[GeoPackageFile] 合計 $removedCount 個のSpatiaLiteトリガーを削除',
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('[ERROR] GeoPackageFile._removeSpatiaLiteTriggers: $e');
+    }
+  }
+
+  /// SQLにSpatiaLite固有の関数が含まれているかチェック
+  bool _containsSpatiaLiteFunctions(String sql) {
+    // SpatiaLite/GeoPackage固有の関数リスト
+    const spatialiteFunctions = [
+      'ST_IsEmpty',
+      'ST_MinX',
+      'ST_MaxX',
+      'ST_MinY',
+      'ST_MaxY',
+      'ST_GeometryType',
+      'ST_SRID',
+      'IsValidGPB',
+      'gpkgMakePoint',
+      'gpkgMakePointZ',
+      'gpkgMakePointM',
+      'gpkgMakePointZM',
+    ];
+
+    final upperSql = sql.toUpperCase();
+    return spatialiteFunctions.any((f) => upperSql.contains(f.toUpperCase()));
+  }
+
+  /// R-Tree空間インデックスを更新（フィーチャ追加/更新時に呼び出す）
+  /// SpatiaLiteトリガーを削除した場合、空間インデックスの自動更新が行われないため
+  /// 手動で更新する必要がある。これによりQGISでの空間検索が正常に機能する。
+  Future<void> _updateRTreeIndex(
+    String tableName,
+    int rowId,
+    double minX,
+    double minY,
+    double maxX,
+    double maxY,
+  ) async {
+    try {
+      final db = await _getDatabase();
+      final rtreeTable = 'rtree_${tableName}_geom';
+
+      // R-Treeテーブルが存在するか確認
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [rtreeTable],
+      );
+
+      if (tables.isNotEmpty) {
+        // R-Treeインデックスを更新（INSERT OR REPLACEで既存エントリも更新）
+        await db.execute(
+          '''
+          INSERT OR REPLACE INTO "$rtreeTable" (id, minx, maxx, miny, maxy)
+          VALUES (?, ?, ?, ?, ?)
+          ''',
+          [rowId, minX, maxX, minY, maxY],
+        );
+      }
+    } catch (e) {
+      // R-Tree更新エラーは致命的ではないのでログのみ
+      AppLogger.debug('[WARNING] GeoPackageFile._updateRTreeIndex: $e');
+    }
+  }
+
+  /// R-Tree空間インデックスからエントリを削除（フィーチャ削除時に呼び出す）
+  Future<void> _removeFromRTreeIndex(String tableName, int rowId) async {
+    try {
+      final db = await _getDatabase();
+      final rtreeTable = 'rtree_${tableName}_geom';
+
+      // R-Treeテーブルが存在するか確認
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [rtreeTable],
+      );
+
+      if (tables.isNotEmpty) {
+        await db.execute(
+          'DELETE FROM "$rtreeTable" WHERE id = ?',
+          [rowId],
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('[WARNING] GeoPackageFile._removeFromRTreeIndex: $e');
     }
   }
 
@@ -1598,205 +1751,118 @@ class GeoPackageFile {
     }
   }
 
-  /// バッチ処理でポリゴンを高速追加
+  /// ジェネリックなバッチ追加処理（内部共通化メソッド）
   /// [tableName] テーブル名
-  /// [polygonData] ポリゴンデータのリスト
+  /// [dataList] データのリスト
+  /// [geometryKey] ジオメトリデータのキー名（'point', 'line', 'rings'）
+  /// [createWkb] WKBジオメトリ作成関数
+  Future<List<int>> _addGeometryBatch<T>(
+    String tableName,
+    List<Map<String, dynamic>> dataList,
+    String geometryKey,
+    Uint8List Function(T) createWkb,
+  ) async {
+    // 予約済みカラム名（INSERT時に除外する）
+    final reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', geometryKey};
+    
+    try {
+      final db = await _getDatabase();
+      final batch = db.batch();
+      final insertedIds = <int>[];
+
+      // テーブルの実際のカラムを取得（存在するカラムのみ挿入するため）
+      final tableColumns = await getTableColumns(tableName);
+      final tableColumnSet = tableColumns.map((c) => c.toLowerCase()).toSet();
+
+      // バッチでINSERT文を準備
+      for (final data in dataList) {
+        final geometry = data[geometryKey] as T;
+        
+        // WKBジオメトリを作成
+        final wkb = createWkb(geometry);
+        
+        // insertData を構築（予約済みカラムを除く全ての属性を含める）
+        final insertData = <String, dynamic>{'geom': wkb};
+        
+        // dataから属性をコピー（予約済みカラムは除外、テーブルに存在するカラムのみ）
+        data.forEach((key, value) {
+          if (!reservedColumns.contains(key.toLowerCase())) {
+            final sanitizedKey = _sanitizeColumnName(key);
+            // テーブルに存在するカラムのみ追加
+            if (sanitizedKey.isNotEmpty && 
+                tableColumnSet.contains(sanitizedKey.toLowerCase())) {
+              insertData[sanitizedKey] = value;
+            }
+          }
+        });
+        
+        // カラム名とプレースホルダーを動的に生成
+        final columns = insertData.keys.toList();
+        final placeholders = List.filled(columns.length, '?').join(', ');
+        final columnNames = columns.map((c) => '"$c"').join(', ');
+        final values = columns.map((c) => insertData[c]).toList();
+        
+        // 動的INSERT文を実行
+        batch.rawInsert(
+          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
+          values,
+        );
+      }
+
+      // バッチ実行
+      final results = await batch.commit(noResult: false);
+
+      // 結果をrowIdリストに変換
+      for (final result in results) {
+        if (result is int) {
+          insertedIds.add(result);
+        }
+      }
+
+      return insertedIds;
+    } catch (e) {
+      AppLogger.debug('[ERROR] GeoPackageFile._addGeometryBatch<$T>: $e');
+      return [];
+    }
+  }
+
+  /// バッチ処理でポリゴンを高速追加
   Future<List<int>> addPolygonsBatch(
     String tableName,
     List<Map<String, dynamic>> polygonData,
   ) async {
-    // 予約済みカラム名（INSERT時に除外する）
-    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'rings'};
-    
-    try {
-      final db = await _getDatabase();
-      final batch = db.batch();
-      final insertedIds = <int>[];
-
-      // バッチでINSERT文を準備
-      for (int i = 0; i < polygonData.length; i++) {
-        final data = polygonData[i];
-        final rings = data['rings'] as List<List<LatLng>>;
-        
-        // WKBジオメトリを作成
-        final wkb = createWkbPolygon(rings);
-        
-        // insertData を構築（予約済みカラムを除く全ての属性を含める）
-        final insertData = <String, dynamic>{'geom': wkb};
-        
-        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
-        data.forEach((key, value) {
-          if (!reservedColumns.contains(key.toLowerCase())) {
-            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
-            final sanitizedKey = _sanitizeColumnName(key);
-            if (sanitizedKey.isNotEmpty) {
-              insertData[sanitizedKey] = value;
-            }
-          }
-        });
-        
-        // カラム名とプレースホルダーを動的に生成
-        final columns = insertData.keys.toList();
-        final placeholders = List.filled(columns.length, '?').join(', ');
-        final columnNames = columns.map((c) => '"$c"').join(', ');
-        final values = columns.map((c) => insertData[c]).toList();
-        
-        // 動的INSERT文を実行
-        batch.rawInsert(
-          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
-          values,
-        );
-      }
-
-      // バッチ実行
-      final results = await batch.commit(noResult: false);
-
-      // 結果をrowIdリストに変換
-      for (final result in results) {
-        if (result is int) {
-          insertedIds.add(result);
-        }
-      }
-
-      return insertedIds;
-    } catch (e) {
-      AppLogger.debug('[ERROR] GeoPackageFile.addPolygonsBatch: $e');
-      return [];
-    }
+    return _addGeometryBatch<List<List<LatLng>>>(
+      tableName,
+      polygonData,
+      'rings',
+      (rings) => createWkbPolygon(rings),
+    );
   }
 
   /// バッチ処理でポイントを高速追加
-  /// [tableName] テーブル名
-  /// [pointData] ポイントデータのリスト
   Future<List<int>> addPointsBatch(
     String tableName,
     List<Map<String, dynamic>> pointData,
   ) async {
-    // 予約済みカラム名（INSERT時に除外する）
-    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'point'};
-    
-    try {
-      final db = await _getDatabase();
-      final batch = db.batch();
-      final insertedIds = <int>[];
-
-      // バッチでINSERT文を準備
-      for (int i = 0; i < pointData.length; i++) {
-        final data = pointData[i];
-        final point = data['point'] as LatLng;
-        
-        // WKBジオメトリを作成
-        final wkb = createWkbPoint(point.longitude, point.latitude);
-        
-        // insertData を構築（予約済みカラムを除く全ての属性を含める）
-        final insertData = <String, dynamic>{'geom': wkb};
-        
-        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
-        data.forEach((key, value) {
-          if (!reservedColumns.contains(key.toLowerCase())) {
-            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
-            final sanitizedKey = _sanitizeColumnName(key);
-            if (sanitizedKey.isNotEmpty) {
-              insertData[sanitizedKey] = value;
-            }
-          }
-        });
-        
-        // カラム名とプレースホルダーを動的に生成
-        final columns = insertData.keys.toList();
-        final placeholders = List.filled(columns.length, '?').join(', ');
-        final columnNames = columns.map((c) => '"$c"').join(', ');
-        final values = columns.map((c) => insertData[c]).toList();
-        
-        // 動的INSERT文を実行
-        batch.rawInsert(
-          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
-          values,
-        );
-      }
-
-      // バッチ実行
-      final results = await batch.commit(noResult: false);
-
-      // 結果をrowIdリストに変換
-      for (final result in results) {
-        if (result is int) {
-          insertedIds.add(result);
-        }
-      }
-
-      return insertedIds;
-    } catch (e) {
-      AppLogger.debug('[ERROR] GeoPackageFile.addPointsBatch: $e');
-      return [];
-    }
+    return _addGeometryBatch<LatLng>(
+      tableName,
+      pointData,
+      'point',
+      (point) => createWkbPoint(point.longitude, point.latitude),
+    );
   }
 
   /// バッチ処理でラインを高速追加
-  /// [tableName] テーブル名
-  /// [lineData] ラインデータのリスト
   Future<List<int>> addLinesBatch(
     String tableName,
     List<Map<String, dynamic>> lineData,
   ) async {
-    // 予約済みカラム名（INSERT時に除外する）
-    const reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', 'line'};
-    
-    try {
-      final db = await _getDatabase();
-      final batch = db.batch();
-      final insertedIds = <int>[];
-
-      // バッチでINSERT文を準備
-      for (int i = 0; i < lineData.length; i++) {
-        final data = lineData[i];
-        final line = data['line'] as List<LatLng>;
-        
-        // WKBジオメトリを作成
-        final wkb = createWkbLineString(line);
-        
-        // insertData を構築（予約済みカラムを除く全ての属性を含める）
-        final insertData = <String, dynamic>{'geom': wkb};
-        
-        // dataから全ての属性をコピー（予約済みカラムは除外、カラム名をサニタイズ）
-        data.forEach((key, value) {
-          if (!reservedColumns.contains(key.toLowerCase())) {
-            // カラム名をサニタイズ（addAttributeColumnと同じ処理）
-            final sanitizedKey = _sanitizeColumnName(key);
-            if (sanitizedKey.isNotEmpty) {
-              insertData[sanitizedKey] = value;
-            }
-          }
-        });
-        
-        // カラム名とプレースホルダーを動的に生成
-        final columns = insertData.keys.toList();
-        final placeholders = List.filled(columns.length, '?').join(', ');
-        final columnNames = columns.map((c) => '"$c"').join(', ');
-        final values = columns.map((c) => insertData[c]).toList();
-        
-        // 動的INSERT文を実行
-        batch.rawInsert(
-          'INSERT INTO "$tableName" ($columnNames) VALUES ($placeholders)',
-          values,
-        );
-      }
-
-      // バッチ実行
-      final results = await batch.commit(noResult: false);
-
-      // 結果をrowIdリストに変換
-      for (final result in results) {
-        if (result is int) {
-          insertedIds.add(result);
-        }
-      }
-
-      return insertedIds;
-    } catch (e) {
-      AppLogger.debug('[ERROR] GeoPackageFile.addLinesBatch: $e');
-      return [];
-    }
+    return _addGeometryBatch<List<LatLng>>(
+      tableName,
+      lineData,
+      'line',
+      (line) => createWkbLineString(line),
+    );
   }
 
   /// 指定レイヤーの全フィーチャの属性データを一括取得（属性テーブル表示用最適化）

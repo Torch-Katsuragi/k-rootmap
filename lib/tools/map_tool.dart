@@ -3,6 +3,7 @@
 // 各ツール（てのひら・ペン・選択等）はこのクラスを継承
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart';
+import '../interfaces/map_state_interface.dart';
 
 /// 地図操作ツールの抽象基底クラス
 abstract class MapTool {
@@ -22,28 +23,28 @@ abstract class MapTool {
   void onDeactivate() {}
 
   /// タップイベント
-  void onTap(TapUpDetails details, dynamic mapState) {}
+  void onTap(TapUpDetails details, IMapState mapState) {}
 
   /// スケール開始イベント
-  void onScaleStart(ScaleStartDetails details, dynamic mapState) {}
+  void onScaleStart(ScaleStartDetails details, IMapState mapState) {}
 
   /// スケール更新イベント
-  void onScaleUpdate(ScaleUpdateDetails details, dynamic mapState) {}
+  void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {}
 
   /// スケール終了イベント
-  void onScaleEnd(ScaleEndDetails details, dynamic mapState) {}
+  void onScaleEnd(ScaleEndDetails details, IMapState mapState) {}
 
   /// マウスホイールスクロールイベント
-  void onPointerSignal(PointerEvent event, dynamic mapState) {}
+  void onPointerSignal(PointerEvent event, IMapState mapState) {}
 
   /// 中ボタンドラッグ開始イベント
-  void onMiddleButtonDown(PointerDownEvent event, dynamic mapState) {}
+  void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {}
 
   /// 中ボタンドラッグ移動イベント
-  void onMiddleButtonMove(PointerMoveEvent event, dynamic mapState) {}
+  void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {}
 
   /// 中ボタンドラッグ終了イベント
-  void onMiddleButtonUp(PointerUpEvent event, dynamic mapState) {}
+  void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {}
 
   /// バッファに座標を追加
   void addPointerToBuffer(Offset offset) {

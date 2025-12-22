@@ -5,12 +5,14 @@ import 'package:k_maps/utils/app_logger.dart';
 
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../models/nodes/feature_node.dart';
 import '../tools/map_tool.dart';
 import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
 import '../services/basemap_service.dart';
+import '../interfaces/map_state_interface.dart';
 import 'global_drawing_state.dart';
 
 class GlobalConfig {
@@ -37,12 +39,13 @@ class GlobalConfig {
   /// 現在選択中の地図操作ツール
   MapTool currentTool;
 
-  /// 選択中フィーチャのリスト（今後利用予定）
-  /// 例: 地物IDやFeatureインスタンス等を格納
-  List<dynamic> selectedFeatures = [];
+  /// 選択中フィーチャのリスト（FeatureNode, ImageNode等）
+  /// LayerTreeNodeの共通基底型を使用（型安全）
+  List<LayerTreeNode> selectedFeatures = [];
 
   /// 地図画面のStateインスタンス（グローバル参照用）
-  dynamic mapState;
+  /// IMapStateインターフェースで型安全にアクセス
+  IMapState? mapState;
 
   /// 左下フロートボタンの押下状態（true: 押下中, false: 通常）
   bool isFabActive = false;
@@ -53,8 +56,8 @@ class GlobalConfig {
 
   /// 選択されたフィーチャを削除（統一処理）
   /// pen_tool、AttributeTableなど全ての削除処理で使用
-  Future<void> disposeSelectedFeatures({dynamic mapState}) async {
-    final selectedFeaturesToDispose = List.from(selectedFeatures);
+  Future<void> disposeSelectedFeatures({IMapState? mapState}) async {
+    final selectedFeaturesToDispose = List<LayerTreeNode>.from(selectedFeatures);
     AppLogger.debug('[GlobalConfig] 削除処理開始: ${selectedFeaturesToDispose.length}個のフィーチャ');
 
     if (selectedFeaturesToDispose.isEmpty) {
@@ -67,23 +70,24 @@ class GlobalConfig {
     AppLogger.debug('[GlobalConfig] 選択状態をクリアしました');
 
     // 即座にUI更新（選択表示を確実にクリア）
-    if (mapState != null) {
-      mapState.setState(() {});
-      mapState.refreshFeatures();
+    final state = mapState ?? this.mapState;
+    if (state != null) {
+      state.setState(() {});
+      state.refreshFeatures();
       AppLogger.debug('[GlobalConfig] UI更新をトリガーしました');
     }
 
     // 各フィーチャーを非同期で削除（並行処理）
     final disposeFutures =
-        selectedFeaturesToDispose.map((feature) async {
+        selectedFeaturesToDispose.map((node) async {
           try {
-            AppLogger.debug(
-              '[GlobalConfig] フィーチャ削除中: ${feature.name} (ID: ${feature.rowId})',
-            );
-            await feature.dispose();
-            AppLogger.debug('[GlobalConfig] フィーチャ削除完了: ${feature.name}');
+            // FeatureNodeの場合のみrowIdを表示
+            final String idInfo = node is FeatureNode ? ' (ID: ${node.rowId})' : '';
+            AppLogger.debug('[GlobalConfig] フィーチャ削除中: ${node.name}$idInfo');
+            await node.dispose();
+            AppLogger.debug('[GlobalConfig] フィーチャ削除完了: ${node.name}');
           } catch (e) {
-            AppLogger.debug('[ERROR] GlobalConfig: フィーチャ削除失敗 ${feature.name}: $e');
+            AppLogger.debug('[ERROR] GlobalConfig: フィーチャ削除失敗 ${node.name}: $e');
           }
         }).toList();
 
@@ -94,8 +98,8 @@ class GlobalConfig {
             '[GlobalConfig] 全${selectedFeaturesToDispose.length}個のフィーチャ削除完了',
           );
           // 削除完了後に最終的なUI更新
-          if (mapState != null) {
-            mapState.refreshFeatures();
+          if (state != null) {
+            state.refreshFeatures();
           }
         })
         .catchError((e) {

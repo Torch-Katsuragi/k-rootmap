@@ -1,6 +1,7 @@
 // K-MAPS: エントリーポイント
 // 本ファイルはアプリ起動・ルーティングのみを担当
 import 'package:k_maps/utils/app_logger.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
@@ -14,6 +15,10 @@ import 'utils/background_save_manager.dart';
 void main() async {
   // sqflite使用前に必須の初期化処理
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Windows IME関連のキーボードエラーを無視するワークアラウンド
+  // Flutter既知の問題: IME使用時に不正なKeyDownEventが発生することがある
+  _setupErrorHandlers();
 
   // デスクトップ環境での sqflite_common_ffi 初期化
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -52,6 +57,34 @@ void main() async {
   });
 
   runApp(const KMapsApp());
+}
+
+/// エラーハンドラーの設定
+/// Windows IME関連のキーボードエラーなど、既知の非致命的エラーを無視
+void _setupErrorHandlers() {
+  // 元のエラーハンドラーを保存
+  final originalOnError = FlutterError.onError;
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // IME関連のキーボードエラーを無視
+    // "A KeyDownEvent is dispatched, but the state shows that the physical key is already pressed"
+    final errorString = details.exception.toString();
+    if (errorString.contains('KeyDownEvent') &&
+        errorString.contains('physical key is already pressed')) {
+      // このエラーは静かに無視（デバッグログのみ）
+      if (kDebugMode) {
+        AppLogger.debug('[K-MAPS] IME関連キーボードイベントを無視');
+      }
+      return;
+    }
+
+    // その他のエラーは通常通り処理
+    if (originalOnError != null) {
+      originalOnError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
 }
 
 /// アプリのルートウィジェット（ライフサイクル監視付き）

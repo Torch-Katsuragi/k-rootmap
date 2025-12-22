@@ -9,6 +9,35 @@ import 'global_config.dart';
 /// キーボードイベントハンドラー
 /// グローバルなキーボードショートカットを管理
 class KeyboardHandler {
+  /// テキスト入力フィールドにフォーカスがあるかチェック
+  /// ダイアログ内のTextField、属性テーブル編集など
+  static bool _isTextInputFocused(BuildContext context) {
+    // GlobalConfigのフラグをチェック（属性テーブル編集用）
+    if (GlobalConfig.instance.isAttributeTableEditing) {
+      return true;
+    }
+
+    // 現在のフォーカスノードをチェック
+    final focusNode = FocusManager.instance.primaryFocus;
+    if (focusNode == null) {
+      return false;
+    }
+
+    // フォーカスノードのコンテキストからEditableTextを探す
+    // TextField, TextFormField, EditableText等にフォーカスがある場合はtrue
+    final focusContext = focusNode.context;
+    if (focusContext != null) {
+      // EditableTextStateを探す（TextField内部で使用される）
+      final editableText =
+          focusContext.findAncestorStateOfType<EditableTextState>();
+      if (editableText != null) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   /// Deleteキー押下時の処理
   /// 選択されたフィーチャを削除
   static Future<void> handleDeleteKey(
@@ -69,23 +98,29 @@ class KeyboardHandler {
       return false;
     }
 
-    // IME関連の無効なキーイベントを無視（Windows日本語入力との互換性）
-    // 無効な物理キーIDはIMEからの合成イベントで発生することがある
-    final physicalKeyId = event.physicalKey.usbHidUsage;
-    if (physicalKeyId > 0x100000000) {
-      // 無効なキーIDは静かに無視
+    // IME関連の無効なキーイベントを安全にフィルタリング
+    // Windows日本語入力との互換性のため、以下のケースを無視:
+    // 1. 無効な物理キーID（IMEからの合成イベント）
+    // 2. 極端に大きいUSB HID使用コード
+    try {
+      final physicalKeyId = event.physicalKey.usbHidUsage;
+      if (physicalKeyId > 0x100000000 || physicalKeyId == 0) {
+        // 無効なキーIDは静かに無視
+        return false;
+      }
+    } catch (e) {
+      // 物理キー情報の取得に失敗した場合も無視
       return false;
     }
 
     AppLogger.debug('[KeyboardHandler] キー押下: ${event.logicalKey}');
 
     // Deleteキーまたはバックスペースキー
-    // 属性テーブル編集中は無効化（GlobalConfigのフラグをチェック）
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
-      // 属性テーブル編集中は削除しない
-      if (GlobalConfig.instance.isAttributeTableEditing) {
-        AppLogger.debug('[KeyboardHandler] 属性テーブル編集中のため削除をスキップ');
+      // テキスト入力中は削除しない（ダイアログ、属性テーブル等）
+      if (_isTextInputFocused(context)) {
+        AppLogger.debug('[KeyboardHandler] テキスト入力中のため削除をスキップ');
         return false; // イベントを伝播させる
       }
 

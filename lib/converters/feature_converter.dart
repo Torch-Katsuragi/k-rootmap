@@ -385,9 +385,15 @@ class FeatureExportConverter
             // ポリゴンの各頂点をポイントに変換（重複点除去付き）
             if (coordinates is List && coordinates.isNotEmpty) {
               AppLogger.debug('=== [FeatureExportConverter] Polygon点群変換開始 ===');
-              AppLogger.debug('[FeatureExportConverter] フィーチャID: ${feature['id']}');
-              AppLogger.debug('[FeatureExportConverter] リング数: ${coordinates.length}');
-              AppLogger.debug('[FeatureExportConverter] 重複点除去: ON (閉じたリングの最後の点をスキップ)');
+              AppLogger.debug(
+                '[FeatureExportConverter] フィーチャID: ${feature['id']}',
+              );
+              AppLogger.debug(
+                '[FeatureExportConverter] リング数: ${coordinates.length}',
+              );
+              AppLogger.debug(
+                '[FeatureExportConverter] 重複点除去: ON (閉じたリングの最後の点をスキップ)',
+              );
 
               for (
                 int ringIndex = 0;
@@ -566,7 +572,7 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
     String outputPath,
   ) async {
-    final basePath = outputPath.substring(0, outputPath.lastIndexOf('.'));
+    final basePath = _getBasePathWithoutExtension(outputPath);
 
     // .shpファイル（ジオメトリデータ）
     await _writeNativePointShpFile(features, '$basePath.shp');
@@ -586,7 +592,7 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
     String outputPath,
   ) async {
-    final basePath = outputPath.substring(0, outputPath.lastIndexOf('.'));
+    final basePath = _getBasePathWithoutExtension(outputPath);
 
     // .shpファイル（ジオメトリデータ）
     await _writeNativePolygonShpFile(features, '$basePath.shp');
@@ -606,7 +612,7 @@ class FeatureExportConverter
     List<Map<String, dynamic>> features,
     String outputPath,
   ) async {
-    final basePath = outputPath.substring(0, outputPath.lastIndexOf('.'));
+    final basePath = _getBasePathWithoutExtension(outputPath);
 
     // .shpファイル（ジオメトリデータ）
     await _writeNativeLineShpFile(features, '$basePath.shp');
@@ -896,7 +902,9 @@ class FeatureExportConverter
             ringIndex == 0,
           );
 
-          AppLogger.debug('[FeatureConverter] 調整後のリング座標数: ${adjustedRing.length}');
+          AppLogger.debug(
+            '[FeatureConverter] 調整後のリング座標数: ${adjustedRing.length}',
+          );
           AppLogger.debug(
             '[FeatureConverter] 座標調整: ${ringCoords.length != adjustedRing.length ? "エラー" : "正常"}',
           );
@@ -937,6 +945,33 @@ class FeatureExportConverter
           return geometry != null && geometry['type'] == 'LineString';
         }).toList();
 
+    // バウンディングボックス計算
+    double minX = double.infinity, minY = double.infinity;
+    double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+
+    for (final feature in validFeatures) {
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final coordinates = geometry['coordinates'] as List;
+
+      for (final coord in coordinates) {
+        if (coord is List && coord.length >= 2) {
+          final x = (coord[0] as num).toDouble();
+          final y = (coord[1] as num).toDouble();
+          if (x.isFinite && y.isFinite) {
+            minX = minX.isFinite ? (minX < x ? minX : x) : x;
+            maxX = maxX.isFinite ? (maxX > x ? maxX : x) : x;
+            minY = minY.isFinite ? (minY < y ? minY : y) : y;
+            maxY = maxY.isFinite ? (maxY > y ? maxY : y) : y;
+          }
+        }
+      }
+    }
+
+    // バウンディングボックスの妥当性チェック
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      minX = maxX = minY = maxY = 0.0;
+    }
+
     // SHXヘッダー
     bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
@@ -947,7 +982,16 @@ class FeatureExportConverter
 
     bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
     bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ
-    bytes.addAll(List.filled(64, 0)); // バウンディングボックス（簡略）
+
+    // バウンディングボックス（64バイト）
+    bytes.addAll(_writeFloat64(minX));
+    bytes.addAll(_writeFloat64(minY));
+    bytes.addAll(_writeFloat64(maxX));
+    bytes.addAll(_writeFloat64(maxY));
+    bytes.addAll(_writeFloat64(0.0)); // Zmin
+    bytes.addAll(_writeFloat64(0.0)); // Zmax
+    bytes.addAll(_writeFloat64(0.0)); // Mmin
+    bytes.addAll(_writeFloat64(0.0)); // Mmax
 
     // インデックスレコード
     int offset = 50; // ヘッダー後の開始位置
@@ -955,7 +999,9 @@ class FeatureExportConverter
       final geometry = feature['geometry'] as Map<String, dynamic>;
       final coordinates = geometry['coordinates'] as List;
 
-      final recordLength = (44 + 4 + (16 * coordinates.length)) ~/ 2;
+      // レコードコンテンツ長（ワード単位）
+      final recordLength =
+          (4 + 32 + 4 + 4 + 4 + (16 * coordinates.length)) ~/ 2;
 
       bytes.addAll(_writeInt32BigEndian(offset)); // オフセット
       bytes.addAll(_writeInt32BigEndian(recordLength)); // レコード長
@@ -1075,7 +1121,7 @@ class FeatureExportConverter
       for (final field in fields) {
         final fieldName = field['name'] as String;
         final fieldLength = field['length'] as int;
-        
+
         // メタデータから対応する値を取得（大文字小文字を無視）
         final metaValue =
             metadata.entries
@@ -1095,7 +1141,11 @@ class FeatureExportConverter
         }
 
         // 値をShift-JISでエンコード（スペースでパディング）
-        final valueBytes = _encodeToShiftJis(value, fieldLength, padWithSpace: true);
+        final valueBytes = _encodeToShiftJis(
+          value,
+          fieldLength,
+          padWithSpace: true,
+        );
         bytes.addAll(valueBytes);
       }
     }
@@ -1103,20 +1153,24 @@ class FeatureExportConverter
     bytes.add(0x1A); // ファイル終了マーカー
 
     await file.writeAsBytes(bytes);
-    
+
     // .cpgファイルを作成（エンコーディング指定）
     final cpgPath = path.replaceAll('.dbf', '.cpg');
     await File(cpgPath).writeAsString('CP932');
   }
-  
+
   /// 文字列をShift-JIS（CP932）でエンコードし、指定バイト長に調整
   /// [padWithSpace] trueの場合はスペース(0x20)でパディング、falseの場合はNULL(0x00)
-  List<int> _encodeToShiftJis(String text, int byteLength, {bool padWithSpace = false}) {
+  List<int> _encodeToShiftJis(
+    String text,
+    int byteLength, {
+    bool padWithSpace = false,
+  }) {
     try {
       // Shift-JISでエンコード
       final encoded = charset.shiftJis.encode(text);
       final padByte = padWithSpace ? 0x20 : 0x00;
-      
+
       // 指定バイト長に調整（切り詰めまたはパディング）
       if (encoded.length >= byteLength) {
         return encoded.sublist(0, byteLength);
@@ -1130,10 +1184,8 @@ class FeatureExportConverter
       AppLogger.debug('[FeatureConverter] Shift-JISエンコード失敗: $e, フォールバック使用');
       final padByte = padWithSpace ? 0x20 : 0x00;
       // フォールバック: ASCII範囲のみ使用
-      final asciiBytes = text.codeUnits
-          .where((c) => c < 128)
-          .take(byteLength)
-          .toList();
+      final asciiBytes =
+          text.codeUnits.where((c) => c < 128).take(byteLength).toList();
       if (asciiBytes.length < byteLength) {
         asciiBytes.addAll(List.filled(byteLength - asciiBytes.length, padByte));
       }
@@ -1146,7 +1198,7 @@ class FeatureExportConverter
     List<Map<String, dynamic>> points,
     String outputPath,
   ) async {
-    final basePath = outputPath.substring(0, outputPath.lastIndexOf('.'));
+    final basePath = _getBasePathWithoutExtension(outputPath);
 
     // .shpファイル（ジオメトリデータ）
     await _writeShpFile(points, '$basePath.shp');
@@ -1311,7 +1363,11 @@ class FeatureExportConverter
         }
 
         // 値をShift-JISでエンコード（スペースでパディング）
-        final valueBytes = _encodeToShiftJis(value, fieldLength, padWithSpace: true);
+        final valueBytes = _encodeToShiftJis(
+          value,
+          fieldLength,
+          padWithSpace: true,
+        );
         bytes.addAll(valueBytes);
       }
     }
@@ -1319,7 +1375,7 @@ class FeatureExportConverter
     bytes.add(0x1A); // ファイル終了マーカー
 
     await file.writeAsBytes(bytes);
-    
+
     // .cpgファイルを作成（エンコーディング指定）
     final cpgPath = path.replaceAll('.dbf', '.cpg');
     await File(cpgPath).writeAsString('CP932');
@@ -1333,6 +1389,23 @@ class FeatureExportConverter
         'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
         'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
     await file.writeAsString(wgs84Wkt);
+  }
+
+  /// 出力パスから拡張子を除去したベースパスを取得
+  /// 拡張子がない場合はそのまま返す
+  String _getBasePathWithoutExtension(String outputPath) {
+    final lastDotIndex = outputPath.lastIndexOf('.');
+    final lastSeparatorIndex = math.max(
+      outputPath.lastIndexOf('/'),
+      outputPath.lastIndexOf('\\'),
+    );
+
+    // 拡張子がない、またはドットがディレクトリ区切りより前にある場合
+    if (lastDotIndex == -1 || lastDotIndex < lastSeparatorIndex) {
+      return outputPath;
+    }
+
+    return outputPath.substring(0, lastDotIndex);
   }
 
   /// バイト変換ヘルパーメソッド
@@ -1550,11 +1623,15 @@ class FeatureExportConverter
 
     if (isExterior) {
       // ESRI仕様: 外側のリングは時計回り（負の面積）であるべき
-      AppLogger.debug('[FeatureConverter] 外側リング調整: ${!isCounterClockwise ? "維持" : "反転"}');
+      AppLogger.debug(
+        '[FeatureConverter] 外側リング調整: ${!isCounterClockwise ? "維持" : "反転"}',
+      );
       return isCounterClockwise ? ring.reversed.toList() : ring;
     } else {
       // ESRI仕様: 内側の穴は反時計回り（正の面積）であるべき
-      AppLogger.debug('[FeatureConverter] 内側リング調整: ${isCounterClockwise ? "維持" : "反転"}');
+      AppLogger.debug(
+        '[FeatureConverter] 内側リング調整: ${isCounterClockwise ? "維持" : "反転"}',
+      );
       return isCounterClockwise ? ring : ring.reversed.toList();
     }
   }
@@ -1573,7 +1650,9 @@ class FeatureExportConverter
           return geometry != null && geometry['type'] == 'Polygon';
         }).toList();
 
-    AppLogger.debug('[FeatureConverter] PolygonSHX: 有効なフィーチャ数 = ${validFeatures.length}');
+    AppLogger.debug(
+      '[FeatureConverter] PolygonSHX: 有効なフィーチャ数 = ${validFeatures.length}',
+    );
 
     // バウンディングボックス計算（SHPファイルと同じ）
     double minX = double.infinity, minY = double.infinity;
@@ -1797,9 +1876,16 @@ class FeatureExportConverter
         }
       }
 
-      // レコードサイズ = ヘッダー(4) + シェープタイプ(4) + バウンディングボックス(32) + パーツ数(4) + ポイント数(4) + パーツ配列(4*1) + ポイント配列(16*ポイント数)
-      final recordSize = 4 + 4 + 32 + 4 + 4 + 4 + (16 * coordinates.length);
-      totalFileLength += (recordSize + 8) ~/ 2; // レコードヘッダー(8バイト)を含む、ワード単位
+      // レコードコンテンツ = シェープタイプ(4) + バウンディングボックス(32) + パーツ数(4) + ポイント数(4) + パーツ配列(4*1) + ポイント配列(16*ポイント数)
+      final recordContentSize = 4 + 32 + 4 + 4 + 4 + (16 * coordinates.length);
+      // レコード全体 = レコードヘッダー(8バイト) + コンテンツ
+      totalFileLength +=
+          4 + (recordContentSize ~/ 2); // ヘッダー4ワード + コンテンツ（ワード単位）
+    }
+
+    // バウンディングボックスの妥当性チェック
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      minX = maxX = minY = maxY = 0.0;
     }
 
     // SHPヘッダー（100バイト）
@@ -1825,7 +1911,9 @@ class FeatureExportConverter
       final geometry = feature['geometry'] as Map<String, dynamic>;
       final coordinates = geometry['coordinates'] as List;
 
-      final contentLength = (44 + 4 + (16 * coordinates.length)) ~/ 2; // ワード単位
+      // レコードコンテンツ長（ワード単位）= (シェープタイプ4 + BBox32 + パーツ数4 + ポイント数4 + パーツ配列4 + ポイント配列16*n) / 2
+      final contentLength =
+          (4 + 32 + 4 + 4 + 4 + (16 * coordinates.length)) ~/ 2;
 
       bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
       bytes.addAll(_writeInt32BigEndian(contentLength)); // コンテンツ長
@@ -1840,12 +1928,20 @@ class FeatureExportConverter
         if (coord is List && coord.length >= 2) {
           final x = (coord[0] as num).toDouble();
           final y = (coord[1] as num).toDouble();
-          lineMinX = lineMinX < x ? lineMinX : x;
-          lineMaxX = lineMaxX > x ? lineMaxX : x;
-          lineMinY = lineMinY < y ? lineMinY : y;
-          lineMaxY = lineMaxY > y ? lineMaxY : y;
+          if (x.isFinite && y.isFinite) {
+            lineMinX = lineMinX.isFinite ? (lineMinX < x ? lineMinX : x) : x;
+            lineMaxX = lineMaxX.isFinite ? (lineMaxX > x ? lineMaxX : x) : x;
+            lineMinY = lineMinY.isFinite ? (lineMinY < y ? lineMinY : y) : y;
+            lineMaxY = lineMaxY.isFinite ? (lineMaxY > y ? lineMaxY : y) : y;
+          }
         }
       }
+
+      // バウンディングボックスの妥当性チェック
+      if (!lineMinX.isFinite) lineMinX = 0.0;
+      if (!lineMaxX.isFinite) lineMaxX = 0.0;
+      if (!lineMinY.isFinite) lineMinY = 0.0;
+      if (!lineMaxY.isFinite) lineMaxY = 0.0;
 
       bytes.addAll(_writeFloat64(lineMinX));
       bytes.addAll(_writeFloat64(lineMinY));
@@ -2000,4 +2096,3 @@ class FeatureValidationConverter
     return true;
   }
 }
-

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';
-import 'screens/map_page.dart';
+import 'screens/map_page/map_page.dart';
 import 'services/foreground_service.dart';
 import 'services/gps_manager_service.dart';
 import 'services/basemap_service.dart';

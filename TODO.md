@@ -37,7 +37,14 @@
 
 ### 将来の作業
 
-- [ ] map_page.dartへのmixin統合
+- [x] map_page.dartへのmixin統合（2025/12/23完了）
+  - MapPageStateBase（状態変数の定義）
+  - MapInitializationMixin（初期化処理）
+  - MapGpsTrackingMixin（GPS追跡サービス）
+  - MapGpsSurveyMixin（GPS測量）
+  - MapFeatureCacheMixin（フィーチャキャッシュ）
+  - MapDrawingMixin（描画確定処理）
+  - GpsInfoBar, GpsTrackingOverlay, GpsSurveyButtons（ウィジェット）
 - [ ] import_export_service.dartのフォーマット別分割
 - [ ] geopackage_file.dartの機能別分割
 - [ ] ServiceLocatorパターンの導入

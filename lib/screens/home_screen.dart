@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/global_config.dart';
 import '../models/nodes/folder_node.dart';
-import 'map_page.dart';
+import 'map_page/map_page.dart';
 
 /// ホーム画面（最小構成）
 class HomeScreen extends StatefulWidget {

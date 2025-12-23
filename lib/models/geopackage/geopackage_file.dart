@@ -1,0 +1,430 @@
+// K-MAPS: GeoPackageファイル管理クラス（ファサード）
+// 既存APIを維持しつつ、内部で各サービスクラスに委譲
+import 'dart:typed_data';
+import 'package:latlong2/latlong.dart';
+import '../../utils/background_save_manager.dart';
+import '../geometry_type.dart';
+import 'geopackage_connection.dart';
+import 'geopackage_schema.dart';
+import 'spatial_index_manager.dart';
+import 'feature_repository.dart';
+import 'layer_repository.dart';
+
+/// GeoPackageファイルを管理するファサードクラス
+/// 
+/// 責務: 既存APIの維持、内部サービスへの委譲
+/// 
+/// PRIMARY KEY戦略:
+/// - 新規作成: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
+/// - 読み込み: 動的検出（fid, id, rowid等）して内部的に'id'として正規化
+/// - FeatureNode互換性: row['id']で常にPRIMARY KEYにアクセス可能
+class GeoPackageFile {
+  /// ルートからのパスリスト
+  final List<String> pathList;
+
+  // ============================================================
+  // 内部サービス（遅延初期化）
+  // ============================================================
+
+  late final GeoPackageConnection _connection;
+  late final GeoPackageSchema _schema;
+  late final SpatialIndexManager _spatial;
+  late final FeatureRepository _features;
+  late final LayerRepository _layers;
+
+  bool _servicesInitialized = false;
+
+  /// サポートする属性カラム名リスト（属性テーブルで表示するカラム）
+  List<String> get supportedAttributes => _schema.supportedAttributes;
+
+  /// コンストラクタ
+  GeoPackageFile(this.pathList) {
+    _initializeServices();
+  }
+
+  /// 内部サービスの初期化
+  void _initializeServices() {
+    if (_servicesInitialized) return;
+
+    _connection = GeoPackageConnection(pathList);
+    _schema = GeoPackageSchema(_connection);
+    _spatial = SpatialIndexManager(_connection);
+    _features = FeatureRepository(_connection, _schema, _spatial);
+    _layers = LayerRepository(_connection, _schema, _spatial);
+
+    _servicesInitialized = true;
+  }
+
+  // ============================================================
+  // DB接続管理（GeoPackageConnectionに委譲）
+  // ============================================================
+
+  /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
+  Future<bool> createEmptyDatabase() async {
+    final result = await _connection.createEmptyDatabase();
+    if (result) {
+      // SpatiaLiteトリガーを削除
+      await _spatial.removeSpatiaLiteTriggers();
+    }
+    return result;
+  }
+
+  /// データベースのクローズ処理
+  Future<void> dispose() async {
+    // 保留中の変更を全て保存
+    await flushChanges();
+
+    // BackgroundSaveManagerから変更キューをクリア
+    BackgroundSaveManager.instance.clearPendingChanges(this);
+
+    // データベースを閉じる
+    await _connection.dispose();
+  }
+
+  /// ファイル自体を削除（物理削除）
+  Future<bool> deleteFile() async {
+    // 保留中の変更を全て保存
+    await flushChanges();
+
+    // BackgroundSaveManagerから変更キューをクリア
+    BackgroundSaveManager.instance.clearPendingChanges(this);
+
+    return await _connection.deleteFile();
+  }
+
+  // ============================================================
+  // バックグラウンド保存（BackgroundSaveManagerに委譲）
+  // ============================================================
+
+  /// 属性値の遅延更新をキューに追加
+  void queueAttributeUpdate(
+    String tableName,
+    int rowId,
+    String attributeName,
+    dynamic value,
+  ) {
+    BackgroundSaveManager.instance.queueAttributeUpdate(
+      this,
+      tableName,
+      rowId,
+      attributeName,
+      value,
+    );
+  }
+
+  /// 複数の属性値を一括で遅延更新キューに追加
+  void queueAttributeUpdates(
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) {
+    BackgroundSaveManager.instance.queueAttributeUpdates(
+      this,
+      tableName,
+      rowId,
+      attributes,
+    );
+  }
+
+  /// 即座に全ての変更をDBに保存
+  Future<void> flushChanges() async {
+    await BackgroundSaveManager.instance.flushChanges(this);
+  }
+
+  // ============================================================
+  // スキーマ操作（GeoPackageSchemaに委譲）
+  // ============================================================
+
+  /// PRIMARY KEYカラム名を動的に取得
+  Future<String> getPrimaryKeyColumn(String tableName) =>
+      _schema.getPrimaryKeyColumn(tableName);
+
+  /// 指定テーブルのカラム名一覧を返す
+  Future<List<String>> getColumnNames(String tableName, {bool getAll = false}) =>
+      _schema.getColumnNames(tableName, getAll: getAll);
+
+  /// テーブルのカラム名リストを取得
+  Future<List<String>> getTableColumns(String tableName) =>
+      _schema.getTableColumns(tableName);
+
+  /// 属性カラムを動的に追加
+  Future<void> addAttributeColumn(
+    String tableName,
+    String columnName,
+    String columnType,
+  ) =>
+      _schema.addAttributeColumn(tableName, columnName, columnType);
+
+  /// 複数の属性カラムを一括追加
+  Future<void> addAttributeColumns(
+    String tableName,
+    Map<String, String> attributeSchema,
+  ) =>
+      _schema.addAttributeColumns(tableName, attributeSchema);
+
+  /// レイヤの全属性カラム情報を取得
+  Future<List<Map<String, dynamic>>> getAttributeColumnInfo(
+    String tableName, {
+    bool includeBuiltIn = false,
+  }) =>
+      _schema.getAttributeColumnInfo(tableName, includeBuiltIn: includeBuiltIn);
+
+  // ============================================================
+  // レイヤ管理（LayerRepositoryに委譲）
+  // ============================================================
+
+  /// DBからレイヤ名一覧を取得
+  Future<List<String>> getLayerNames() => _layers.getLayerNames();
+
+  /// 指定レイヤのジオメトリタイプを取得
+  Future<GeometryType?> getGeometryType(String tableName) =>
+      _layers.getGeometryType(tableName);
+
+  /// レイヤ追加
+  Future<void> addLayer(String name, GeometryType geomType) =>
+      _layers.addLayer(name, geomType);
+
+  /// レイヤ削除
+  Future<void> removeLayer(String name) => _layers.removeLayer(name);
+
+  /// レイヤ名変更
+  Future<void> renameLayer(String oldName, String newName) =>
+      _layers.renameLayer(oldName, newName);
+
+  // ============================================================
+  // Point Feature操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 辞書ベースの点フィーチャ追加
+  Future<int?> addPointWithAttributes(
+    String tableName,
+    LatLng point,
+    Map<String, dynamic> attributes,
+  ) =>
+      _features.addPointWithAttributes(tableName, point, attributes);
+
+  /// 点フィーチャを追加
+  Future<int?> addPoint(
+    String tableName,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.addPoint(
+        tableName,
+        pt,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  /// 点フィーチャを更新
+  Future<bool> updatePoint(
+    String tableName,
+    int id,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.updatePoint(
+        tableName,
+        id,
+        pt,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  // ============================================================
+  // Line Feature操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 辞書ベースの線フィーチャ追加
+  Future<int?> addLineWithAttributes(
+    String tableName,
+    List<LatLng> line,
+    Map<String, dynamic> attributes,
+  ) =>
+      _features.addLineWithAttributes(tableName, line, attributes);
+
+  /// 線フィーチャを追加
+  Future<int?> addLine(
+    String tableName,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.addLine(
+        tableName,
+        line,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  /// 線フィーチャを更新
+  Future<bool> updateLine(
+    String tableName,
+    int id,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.updateLine(
+        tableName,
+        id,
+        line,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  // ============================================================
+  // Polygon Feature操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 辞書ベースの面フィーチャ追加
+  Future<int?> addPolygonWithAttributes(
+    String tableName,
+    List<List<LatLng>> polygon,
+    Map<String, dynamic> attributes,
+  ) =>
+      _features.addPolygonWithAttributes(tableName, polygon, attributes);
+
+  /// ポリゴンフィーチャを追加
+  Future<int?> addPolygon(
+    String tableName,
+    List<List<LatLng>> rings, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.addPolygon(
+        tableName,
+        rings,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  /// ポリゴンフィーチャを更新
+  Future<bool> updatePolygon(
+    String tableName,
+    int id,
+    List<List<LatLng>> rings, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) =>
+      _features.updatePolygon(
+        tableName,
+        id,
+        rings,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+  // ============================================================
+  // 共通Feature操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 指定IDのフィーチャを削除
+  Future<void> removeFeature(String tableName, int id) =>
+      _features.removeFeature(tableName, id);
+
+  /// 単一フィーチャを取得
+  Future<Map<String, dynamic>?> getFeature(String tableName, int rowId) async {
+    final geomType = await _layers.getGeometryType(tableName);
+    return _features.getFeature(tableName, rowId, geomType);
+  }
+
+  /// 指定レイヤの全フィーチャを取得
+  Future<List<Map<String, dynamic>>> getFeatures(String tableName) =>
+      _features.getFeatures(tableName);
+
+  /// 指定レイヤーの全フィーチャの属性データを一括取得
+  Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
+    String tableName, {
+    List<String>? columns,
+  }) =>
+      _features.getAllFeatureAttributes(tableName, columns: columns);
+
+  // ============================================================
+  // 属性操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// 指定テーブル・rowId・カラム名から値を取得
+  Future<dynamic> getFeatureAttribute(
+    String tableName,
+    int rowId,
+    String attributeName,
+  ) =>
+      _features.getFeatureAttribute(tableName, rowId, attributeName);
+
+  /// 指定テーブル・rowIdの全属性値を取得
+  Future<Map<String, dynamic>?> getFeatureAttributes(
+    String tableName,
+    int rowId,
+  ) =>
+      _features.getFeatureAttributes(tableName, rowId);
+
+  /// 指定テーブル・rowId・カラム名の属性値を更新
+  Future<bool> updateFeatureAttribute(
+    String tableName,
+    int rowId,
+    String attributeName,
+    dynamic newValue,
+  ) =>
+      _features.updateFeatureAttribute(tableName, rowId, attributeName, newValue);
+
+  /// 複数の属性値を一括更新
+  Future<bool> updateFeatureAttributes(
+    String tableName,
+    int rowId,
+    Map<String, dynamic> attributes,
+  ) =>
+      _features.updateFeatureAttributes(tableName, rowId, attributes);
+
+  // ============================================================
+  // バッチ操作（FeatureRepositoryに委譲）
+  // ============================================================
+
+  /// バッチ処理でポイントを高速追加
+  Future<List<int>> addPointsBatch(
+    String tableName,
+    List<Map<String, dynamic>> pointData,
+  ) =>
+      _features.addPointsBatch(tableName, pointData);
+
+  /// バッチ処理でラインを高速追加
+  Future<List<int>> addLinesBatch(
+    String tableName,
+    List<Map<String, dynamic>> lineData,
+  ) =>
+      _features.addLinesBatch(tableName, lineData);
+
+  /// バッチ処理でポリゴンを高速追加
+  Future<List<int>> addPolygonsBatch(
+    String tableName,
+    List<Map<String, dynamic>> polygonData,
+  ) =>
+      _features.addPolygonsBatch(tableName, polygonData);
+
+  /// レイヤー間でフィーチャをコピー
+  Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) =>
+      _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
+
+  /// フィーチャを完全な属性テーブルとして追加
+  Future<int?> addFeatureWithAttributes(
+    String tableName,
+    Uint8List geometry,
+    Map<String, dynamic> attributes,
+  ) =>
+      _features.addFeatureWithAttributes(tableName, geometry, attributes);
+}
+

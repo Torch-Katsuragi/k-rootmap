@@ -13,7 +13,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
 import '../../models/nodes/image_node.dart';
-import '../../models/geopackage_file.dart';
+import '../../models/geopackage/geopackage_file.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
 import 'layer_drawer_utils.dart';

@@ -2,7 +2,7 @@
 library;
 
 import 'package:path/path.dart' as p;
-import '../../models/geopackage_file.dart';
+import '../../models/geopackage/geopackage_file.dart';
 import '../../utils/global_config.dart';
 
 /// GeoPackageFileの絶対パス取得用拡張メソッド

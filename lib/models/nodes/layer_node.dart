@@ -10,7 +10,7 @@ import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'folder_node.dart';
 import 'feature_node.dart';
-import '../geopackage_file.dart';
+import '../geopackage/geopackage_file.dart';
 import '../geometry_type.dart';
 import '../kmeta.dart';
 import '../../converters/turf_converter.dart';

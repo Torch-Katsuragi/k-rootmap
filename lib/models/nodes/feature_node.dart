@@ -10,7 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
-import '../geopackage_file.dart';
+import '../geopackage/geopackage_file.dart';
 import '../../utils/global_config.dart';
 import '../../converters/turf_converter.dart';
 

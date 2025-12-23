@@ -2,7 +2,7 @@
 // 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
 import 'package:k_maps/utils/app_logger.dart';
 import 'dart:async';
-import '../models/geopackage_file.dart';
+import '../models/geopackage/geopackage_file.dart';
 
 /// バックグラウンド保存を一元管理するシングルトンクラス
 class BackgroundSaveManager {

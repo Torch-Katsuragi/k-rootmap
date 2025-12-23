@@ -3,7 +3,7 @@
 import 'dart:io';
 import 'base_converter.dart';
 import '../models/nodes/layer_node.dart';
-import '../models/geopackage_file.dart';
+import '../models/geopackage/geopackage_file.dart';
 import '../models/geometry_type.dart';
 
 /// レイヤーインポート用コンバーター

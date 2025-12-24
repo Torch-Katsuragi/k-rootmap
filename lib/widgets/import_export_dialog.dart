@@ -13,6 +13,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../models/nodes/geopackage_node.dart';
 import '../utils/global_config.dart';
 
 /// Import/Export機能を提供するダイアログ
@@ -534,8 +535,16 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
       _updateProgress(0.6, 'Creating layer...');
 
       // インポート実行
+      // currentLayerからGeoPackageNodeを取得
+      GeoPackageNode? targetGeoPackage;
+      if (widget.currentLayer is GeoPackageNode) {
+        targetGeoPackage = widget.currentLayer as GeoPackageNode;
+      } else if (widget.currentLayer is LayerNode) {
+        targetGeoPackage = (widget.currentLayer as LayerNode).geoPackageNode;
+      }
+      
       final importResult = await _importExportService
-          .importFileFromCurrentLayer(_selectedFilePath!, widget.currentLayer);
+          .importFileFromCurrentLayer(_selectedFilePath!, targetGeoPackage);
 
       _updateProgress(0.8, 'Finalizing import...');
       await Future.delayed(const Duration(milliseconds: 300));
@@ -647,7 +656,7 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
       final exportResult = await _importExportService.exportLayer(
         widget.currentLayer! as LayerNode,
         result,
-        FileFormat.shapefile,
+        format: FileFormat.shapefile,
       );
 
       _updateProgress(0.8, 'Finalizing export...');

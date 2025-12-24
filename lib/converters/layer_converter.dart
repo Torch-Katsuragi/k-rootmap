@@ -35,22 +35,12 @@ class LayerImportConverter
     try {
       notifyProgress(0.4, 'Reading layer file...');
 
-      // ファイル読み込み・解析
-      final importResult = await service.importFileFromCurrentLayer(
-        input.filePath,
-        null, // ターゲットはパラメータから取得
+      // 注意: importFileにはtargetGeoPackageNodeが必要
+      // このコンバーターを使用する場合は、別途GeoPackageNodeを取得する必要があります
+      // TODO: LayerImportConverterにGeoPackageNodeを渡すパラメータを追加する
+      return ConversionResult.error(
+        'LayerImportConverter requires GeoPackageNode parameter. Use ImportExportService.importFile() directly.',
       );
-
-      if (importResult.success) {
-        return ConversionResult.success(
-          data: importResult.createdLayer,
-          metadata: importResult.metadata,
-        );
-      } else {
-        return ConversionResult.error(
-          importResult.errorMessage ?? 'Import failed',
-        );
-      }
     } catch (e) {
       return ConversionResult.error('Layer import failed: $e');
     }
@@ -89,7 +79,7 @@ class LayerExportConverter
       final exportResult = await service.exportLayer(
         input.sourceLayer,
         input.outputPath,
-        input.targetFormat,
+        format: input.targetFormat,
       );
 
       if (exportResult.success) {

@@ -212,6 +212,7 @@ class _LayerDrawerState extends State<LayerDrawer>
 
   /// 写真のリネーム処理
   Future<void> _renamePhoto(BuildContext context, ImageNode node) async {
+    AppLogger.debug('[DEBUG] _renamePhoto: 開始 - ${node.name}');
     String input = p.basenameWithoutExtension(node.name);
     final result = await showDialog<String>(
       context: context,
@@ -243,10 +244,14 @@ class _LayerDrawerState extends State<LayerDrawer>
       },
     );
 
+    AppLogger.debug('[DEBUG] _renamePhoto: ダイアログ結果 = $result');
+
     if (result != null && result.isNotEmpty && result != p.basenameWithoutExtension(node.name)) {
       try {
         final newName = result;
+        AppLogger.debug('[DEBUG] _renamePhoto: rename呼び出し - $newName');
         await node.rename(newName);
+        AppLogger.debug('[DEBUG] _renamePhoto: rename完了');
         
         // 親フォルダの再スキャンを確実に行うために
         // node.rename() 内で parent.updateChildren() が呼ばれているが
@@ -263,6 +268,7 @@ class _LayerDrawerState extends State<LayerDrawer>
           );
         }
       } catch (e) {
+        AppLogger.debug('[ERROR] _renamePhoto: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('リネームに失敗しました: $e')),

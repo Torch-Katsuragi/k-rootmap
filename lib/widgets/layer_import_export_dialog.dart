@@ -571,7 +571,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       final exportResult = await _importExportService.exportLayer(
         widget.exportLayer!,
         result,
-        _exportFormat,
+        format: _exportFormat,
       );
 
       _updateProgress(1.0, 'Export completed!');

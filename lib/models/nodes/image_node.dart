@@ -527,6 +527,7 @@ class ImageNode extends LayerTreeNode {
 
   /// リネーム処理
   Future<void> rename(String newName) async {
+    AppLogger.debug('[DEBUG] ImageNode.rename: 開始 - $name → $newName');
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
@@ -538,14 +539,19 @@ class ImageNode extends LayerTreeNode {
       final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
       final newPath = p.join(directory, newFileName);
 
+      AppLogger.debug('[DEBUG] ImageNode.rename: $filePath → $newPath');
+
       if (File(newPath).existsSync()) {
         throw Exception('同名のファイルが既に存在します: $newFileName');
       }
 
       await file.rename(newPath);
+      AppLogger.debug('[DEBUG] ImageNode.rename: ファイルリネーム完了');
       
       if (parent != null) {
+        AppLogger.debug('[DEBUG] ImageNode.rename: 親ノードのupdateChildren呼び出し');
         await parent!.updateChildren();
+        AppLogger.debug('[DEBUG] ImageNode.rename: 親ノードのupdateChildren完了');
       }
       
     } catch (e) {

@@ -1,14 +1,14 @@
 // K-MAPS: Feature Converter
 // フィーチャ変換操作に特化したコンバーター
 import 'package:k_maps/utils/app_logger.dart';
-import 'package:charset/charset.dart' as charset;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'base_converter.dart';
-import '../services/import_export_service.dart';
+import '../services/import_export/import_export_service.dart';
 import '../utils/wkb_utils.dart';
+import '../utils/binary_utils.dart';
 
 /// フィーチャインポート用コンバーター
 class FeatureImportConverter
@@ -192,7 +192,6 @@ class FeatureExportConverter
         }).toList();
 
     final geojson = {'type': 'FeatureCollection', 'features': geojsonFeatures};
-
     return jsonEncode(geojson);
   }
 
@@ -674,23 +673,23 @@ class FeatureExportConverter
     final fileLengthInWords = 50 + (validFeatures.length * 14);
 
     // SHPヘッダー（100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用（5 * 4バイト）
     bytes.addAll(
-      _writeInt32BigEndian(fileLengthInWords),
+      BinaryUtils.writeInt32BigEndian(fileLengthInWords),
     ); // ファイル長（16bit words単位）
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ（Point）
 
     // バウンディングボックス（64バイト）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // ポイントレコード
     for (int i = 0; i < validFeatures.length; i++) {
@@ -699,13 +698,19 @@ class FeatureExportConverter
       final coordinates = geometry['coordinates'] as List;
 
       // レコードヘッダー（8バイト）
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
-      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（10ワード = 20バイト）
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
+      bytes.addAll(
+        BinaryUtils.writeInt32BigEndian(10),
+      ); // コンテンツ長（10ワード = 20バイト）
 
       // レコードコンテンツ（20バイト）
-      bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
-      bytes.addAll(_writeFloat64((coordinates[0] as num).toDouble())); // X座標
-      bytes.addAll(_writeFloat64((coordinates[1] as num).toDouble())); // Y座標
+      bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ（Point）
+      bytes.addAll(
+        BinaryUtils.writeFloat64((coordinates[0] as num).toDouble()),
+      ); // X座標
+      bytes.addAll(
+        BinaryUtils.writeFloat64((coordinates[1] as num).toDouble()),
+      ); // Y座標
     }
 
     await file.writeAsBytes(bytes);
@@ -778,21 +783,23 @@ class FeatureExportConverter
     }
 
     // SHPヘッダー（100バイト = 50 words）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用フィールド（5つの32bit値）
-    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長（16bit words単位）
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
+    bytes.addAll(
+      BinaryUtils.writeInt32BigEndian(totalFileLength),
+    ); // ファイル長（16bit words単位）
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
 
     // バウンディングボックス（64バイト）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // ポリゴンレコード
     for (int i = 0; i < validFeatures.length; i++) {
@@ -815,13 +822,15 @@ class FeatureExportConverter
           (contentSizeInBytes + 1) ~/ 2; // 16bit words単位（切り上げ）
 
       // レコードヘッダー（8バイト）
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(i + 1)); // レコード番号（1から開始）
       bytes.addAll(
-        _writeInt32BigEndian(contentLength),
+        BinaryUtils.writeInt32BigEndian(contentLength),
       ); // コンテンツ長（16bit words単位）
 
       // レコードコンテンツ
-      bytes.addAll(_writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
+      bytes.addAll(
+        BinaryUtils.writeInt32LittleEndian(5),
+      ); // シェープタイプ（Polygon = 5）
 
       // ポリゴンのバウンディングボックス計算
       double polygonMinX = double.infinity, polygonMinY = double.infinity;
@@ -865,19 +874,21 @@ class FeatureExportConverter
       if (!polygonMaxY.isFinite) polygonMaxY = 0.0;
 
       // ポリゴンのバウンディングボックス（32バイト）
-      bytes.addAll(_writeFloat64(polygonMinX));
-      bytes.addAll(_writeFloat64(polygonMinY));
-      bytes.addAll(_writeFloat64(polygonMaxX));
-      bytes.addAll(_writeFloat64(polygonMaxY));
+      bytes.addAll(BinaryUtils.writeFloat64(polygonMinX));
+      bytes.addAll(BinaryUtils.writeFloat64(polygonMinY));
+      bytes.addAll(BinaryUtils.writeFloat64(polygonMaxX));
+      bytes.addAll(BinaryUtils.writeFloat64(polygonMaxY));
 
       // パーツ数とポイント数
-      bytes.addAll(_writeInt32LittleEndian(coordinates.length)); // パーツ数（リング数）
-      bytes.addAll(_writeInt32LittleEndian(totalPoints)); // 総ポイント数
+      bytes.addAll(
+        BinaryUtils.writeInt32LittleEndian(coordinates.length),
+      ); // パーツ数（リング数）
+      bytes.addAll(BinaryUtils.writeInt32LittleEndian(totalPoints)); // 総ポイント数
 
       // パーツ配列（各リングの開始ポイントインデックス）
       int pointIndex = 0;
       for (int ringIndex = 0; ringIndex < coordinates.length; ringIndex++) {
-        bytes.addAll(_writeInt32LittleEndian(pointIndex));
+        bytes.addAll(BinaryUtils.writeInt32LittleEndian(pointIndex));
         final ring = coordinates[ringIndex] as List;
         pointIndex += ring.length;
       }
@@ -918,8 +929,8 @@ class FeatureExportConverter
               final validX = x.isFinite ? x : 0.0;
               final validY = y.isFinite ? y : 0.0;
 
-              bytes.addAll(_writeFloat64(validX));
-              bytes.addAll(_writeFloat64(validY));
+              bytes.addAll(BinaryUtils.writeFloat64(validX));
+              bytes.addAll(BinaryUtils.writeFloat64(validY));
             }
           }
 
@@ -973,25 +984,25 @@ class FeatureExportConverter
     }
 
     // SHXヘッダー
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
 
     // ファイル長計算（インデックスレコード1つあたり4ワード）
     final totalFileLength = 50 + (validFeatures.length * 4);
-    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(totalFileLength)); // ファイル長
 
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(3)); // シェープタイプ
 
     // バウンディングボックス（64バイト）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // インデックスレコード
     int offset = 50; // ヘッダー後の開始位置
@@ -1003,8 +1014,8 @@ class FeatureExportConverter
       final recordLength =
           (4 + 32 + 4 + 4 + 4 + (16 * coordinates.length)) ~/ 2;
 
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット
-      bytes.addAll(_writeInt32BigEndian(recordLength)); // レコード長
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(offset)); // オフセット
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(recordLength)); // レコード長
       offset += recordLength + 4; // レコードヘッダー(4ワード)を加算
     }
 
@@ -1092,15 +1103,18 @@ class FeatureExportConverter
     bytes.add(24); // 年（2024-1900）
     bytes.add(12); // 月
     bytes.add(19); // 日
-    bytes.addAll(_writeInt32LittleEndian(features.length)); // レコード数
-    bytes.addAll(_writeInt16LittleEndian(headerLength)); // ヘッダー長
-    bytes.addAll(_writeInt16LittleEndian(recordLength)); // レコード長
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(features.length)); // レコード数
+    bytes.addAll(BinaryUtils.writeInt16LittleEndian(headerLength)); // ヘッダー長
+    bytes.addAll(BinaryUtils.writeInt16LittleEndian(recordLength)); // レコード長
     bytes.addAll(List.filled(20, 0)); // 予約領域
 
     // フィールド記述子
     for (final field in fields) {
       // フィールド名をShift-JISでエンコード
-      final nameBytes = _encodeToShiftJis(field['name'] as String, 11);
+      final nameBytes = BinaryUtils.encodeToShiftJis(
+        field['name'] as String,
+        11,
+      );
       bytes.addAll(nameBytes);
       bytes.add((field['type'] as String).codeUnitAt(0)); // フィールドタイプ
       bytes.addAll(List.filled(4, 0)); // フィールドアドレス
@@ -1141,7 +1155,7 @@ class FeatureExportConverter
         }
 
         // 値をShift-JISでエンコード（スペースでパディング）
-        final valueBytes = _encodeToShiftJis(
+        final valueBytes = BinaryUtils.encodeToShiftJis(
           value,
           fieldLength,
           padWithSpace: true,
@@ -1157,40 +1171,6 @@ class FeatureExportConverter
     // .cpgファイルを作成（エンコーディング指定）
     final cpgPath = path.replaceAll('.dbf', '.cpg');
     await File(cpgPath).writeAsString('CP932');
-  }
-
-  /// 文字列をShift-JIS（CP932）でエンコードし、指定バイト長に調整
-  /// [padWithSpace] trueの場合はスペース(0x20)でパディング、falseの場合はNULL(0x00)
-  List<int> _encodeToShiftJis(
-    String text,
-    int byteLength, {
-    bool padWithSpace = false,
-  }) {
-    try {
-      // Shift-JISでエンコード
-      final encoded = charset.shiftJis.encode(text);
-      final padByte = padWithSpace ? 0x20 : 0x00;
-
-      // 指定バイト長に調整（切り詰めまたはパディング）
-      if (encoded.length >= byteLength) {
-        return encoded.sublist(0, byteLength);
-      } else {
-        // 不足分をパディング
-        final result = List<int>.from(encoded);
-        result.addAll(List.filled(byteLength - encoded.length, padByte));
-        return result;
-      }
-    } catch (e) {
-      AppLogger.debug('[FeatureConverter] Shift-JISエンコード失敗: $e, フォールバック使用');
-      final padByte = padWithSpace ? 0x20 : 0x00;
-      // フォールバック: ASCII範囲のみ使用
-      final asciiBytes =
-          text.codeUnits.where((c) => c < 128).take(byteLength).toList();
-      if (asciiBytes.length < byteLength) {
-        asciiBytes.addAll(List.filled(byteLength - asciiBytes.length, padByte));
-      }
-      return asciiBytes;
-    }
   }
 
   /// ポイントクラウド用Shapefileコンポーネントファイルを書き込み
@@ -1222,11 +1202,13 @@ class FeatureExportConverter
     final bytes = <int>[];
 
     // SHPヘッダー（100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(50 + points.length * 14)); // ファイル長
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
+    bytes.addAll(
+      BinaryUtils.writeInt32BigEndian(50 + points.length * 14),
+    ); // ファイル長
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ（Point）
 
     // バウンディングボックス（8倍精度×4）
     double minX = double.infinity, minY = double.infinity;
@@ -1241,26 +1223,28 @@ class FeatureExportConverter
       maxY = maxY > y ? maxY : y;
     }
 
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // ポイントレコード
     for (int i = 0; i < points.length; i++) {
       final point = points[i];
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
-      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（Point=10ワード）
-      bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(i + 1)); // レコード番号
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(10)); // コンテンツ長（Point=10ワード）
+      bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ（Point）
       bytes.addAll(
-        _writeFloat64((point['LONGITUDE'] as num? ?? 0.0).toDouble()),
+        BinaryUtils.writeFloat64(
+          (point['LONGITUDE'] as num? ?? 0.0).toDouble(),
+        ),
       );
       bytes.addAll(
-        _writeFloat64((point['LATITUDE'] as num? ?? 0.0).toDouble()),
+        BinaryUtils.writeFloat64((point['LATITUDE'] as num? ?? 0.0).toDouble()),
       );
     }
 
@@ -1276,18 +1260,20 @@ class FeatureExportConverter
     final bytes = <int>[];
 
     // SHXヘッダー（.shpと同じ最初の100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(50 + points.length * 4)); // ファイル長
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ
+    bytes.addAll(
+      BinaryUtils.writeInt32BigEndian(50 + points.length * 4),
+    ); // ファイル長
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ
     bytes.addAll(List.filled(64, 0)); // バウンディングボックス（簡略）
 
     // インデックスレコード
     int offset = 50; // ヘッダー後の開始位置
     for (int i = 0; i < points.length; i++) {
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット
-      bytes.addAll(_writeInt32BigEndian(14)); // レコード長
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(offset)); // オフセット
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(14)); // レコード長
       offset += 14;
     }
 
@@ -1325,15 +1311,18 @@ class FeatureExportConverter
     bytes.add(24); // 年（2024-1900）
     bytes.add(12); // 月
     bytes.add(19); // 日
-    bytes.addAll(_writeInt32LittleEndian(points.length)); // レコード数
-    bytes.addAll(_writeInt16LittleEndian(headerLength)); // ヘッダー長
-    bytes.addAll(_writeInt16LittleEndian(recordLength)); // レコード長
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(points.length)); // レコード数
+    bytes.addAll(BinaryUtils.writeInt16LittleEndian(headerLength)); // ヘッダー長
+    bytes.addAll(BinaryUtils.writeInt16LittleEndian(recordLength)); // レコード長
     bytes.addAll(List.filled(20, 0)); // 予約領域
 
     // フィールド記述子
     for (final field in fields) {
       // フィールド名をShift-JISでエンコード
-      final nameBytes = _encodeToShiftJis(field['name'] as String, 11);
+      final nameBytes = BinaryUtils.encodeToShiftJis(
+        field['name'] as String,
+        11,
+      );
       bytes.addAll(nameBytes);
       bytes.add((field['type'] as String).codeUnitAt(0)); // フィールドタイプ
       bytes.addAll(List.filled(4, 0)); // フィールドアドレス
@@ -1363,7 +1352,7 @@ class FeatureExportConverter
         }
 
         // 値をShift-JISでエンコード（スペースでパディング）
-        final valueBytes = _encodeToShiftJis(
+        final valueBytes = BinaryUtils.encodeToShiftJis(
           value,
           fieldLength,
           padWithSpace: true,
@@ -1406,35 +1395,6 @@ class FeatureExportConverter
     }
 
     return outputPath.substring(0, lastDotIndex);
-  }
-
-  /// バイト変換ヘルパーメソッド
-  List<int> _writeInt32BigEndian(int value) {
-    return [
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ];
-  }
-
-  List<int> _writeInt32LittleEndian(int value) {
-    return [
-      value & 0xFF,
-      (value >> 8) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 24) & 0xFF,
-    ];
-  }
-
-  List<int> _writeInt16LittleEndian(int value) {
-    return [value & 0xFF, (value >> 8) & 0xFF];
-  }
-
-  List<int> _writeFloat64(double value) {
-    final buffer = ByteData(8);
-    buffer.setFloat64(0, value, Endian.little);
-    return buffer.buffer.asUint8List();
   }
 
   /// ジオメトリタイプを取得
@@ -1724,23 +1684,23 @@ class FeatureExportConverter
     }
 
     // SHXヘッダー（SHPファイルと同じ構造の100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用フィールド（5 * 4バイト）
     bytes.addAll(
-      _writeInt32BigEndian(50 + validFeatures.length * 4),
+      BinaryUtils.writeInt32BigEndian(50 + validFeatures.length * 4),
     ); // SHXファイル長（ヘッダー + インデックスレコード数）
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(5)); // シェープタイプ（Polygon = 5）
 
     // バウンディングボックス（SHPファイルと同じ64バイト）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // インデックスレコード作成（各8バイト）
     int offset = 50; // ヘッダー後の開始位置（16bit words単位）
@@ -1753,8 +1713,12 @@ class FeatureExportConverter
       );
 
       // インデックスレコード（8バイト = 4ワード）
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット（16bit words単位）
-      bytes.addAll(_writeInt32BigEndian(recordLength)); // レコード長（16bit words単位）
+      bytes.addAll(
+        BinaryUtils.writeInt32BigEndian(offset),
+      ); // オフセット（16bit words単位）
+      bytes.addAll(
+        BinaryUtils.writeInt32BigEndian(recordLength),
+      ); // レコード長（16bit words単位）
 
       // 次のレコードのオフセットを計算
       offset += 4 + recordLength; // レコードヘッダー(4ワード) + レコード長
@@ -1812,29 +1776,33 @@ class FeatureExportConverter
     final fileLengthInWords = 50 + (validFeatures.length * 4);
 
     // SHXヘッダー（SHPファイルと同じ構造の100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用（5 * 4バイト）
     bytes.addAll(
-      _writeInt32BigEndian(fileLengthInWords),
+      BinaryUtils.writeInt32BigEndian(fileLengthInWords),
     ); // ファイル長（16bit words単位）
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(1)); // シェープタイプ（Point）
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1)); // シェープタイプ（Point）
 
     // バウンディングボックス（SHPファイルと同じ64バイト）
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // インデックスレコード（各8バイト）
     int offset = 50; // ヘッダー後の開始位置（16bit words単位）
     for (int i = 0; i < validFeatures.length; i++) {
-      bytes.addAll(_writeInt32BigEndian(offset)); // オフセット（16bit words単位）
-      bytes.addAll(_writeInt32BigEndian(10)); // コンテンツ長（10ワード = 20バイト）
+      bytes.addAll(
+        BinaryUtils.writeInt32BigEndian(offset),
+      ); // オフセット（16bit words単位）
+      bytes.addAll(
+        BinaryUtils.writeInt32BigEndian(10),
+      ); // コンテンツ長（10ワード = 20バイト）
       offset += 14; // 次のレコードへ（レコードヘッダー4ワード + コンテンツ10ワード）
     }
 
@@ -1889,21 +1857,21 @@ class FeatureExportConverter
     }
 
     // SHPヘッダー（100バイト）
-    bytes.addAll(_writeInt32BigEndian(9994)); // ファイルコード
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(9994)); // ファイルコード
     bytes.addAll(List.filled(20, 0)); // 未使用
-    bytes.addAll(_writeInt32BigEndian(totalFileLength)); // ファイル長
-    bytes.addAll(_writeInt32LittleEndian(1000)); // バージョン
-    bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
+    bytes.addAll(BinaryUtils.writeInt32BigEndian(totalFileLength)); // ファイル長
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(1000)); // バージョン
+    bytes.addAll(BinaryUtils.writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
 
     // バウンディングボックス
-    bytes.addAll(_writeFloat64(minX));
-    bytes.addAll(_writeFloat64(minY));
-    bytes.addAll(_writeFloat64(maxX));
-    bytes.addAll(_writeFloat64(maxY));
-    bytes.addAll(_writeFloat64(0.0)); // Zmin
-    bytes.addAll(_writeFloat64(0.0)); // Zmax
-    bytes.addAll(_writeFloat64(0.0)); // Mmin
-    bytes.addAll(_writeFloat64(0.0)); // Mmax
+    bytes.addAll(BinaryUtils.writeFloat64(minX));
+    bytes.addAll(BinaryUtils.writeFloat64(minY));
+    bytes.addAll(BinaryUtils.writeFloat64(maxX));
+    bytes.addAll(BinaryUtils.writeFloat64(maxY));
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Zmax
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmin
+    bytes.addAll(BinaryUtils.writeFloat64(0.0)); // Mmax
 
     // ラインストリングレコード
     for (int i = 0; i < validFeatures.length; i++) {
@@ -1915,9 +1883,9 @@ class FeatureExportConverter
       final contentLength =
           (4 + 32 + 4 + 4 + 4 + (16 * coordinates.length)) ~/ 2;
 
-      bytes.addAll(_writeInt32BigEndian(i + 1)); // レコード番号
-      bytes.addAll(_writeInt32BigEndian(contentLength)); // コンテンツ長
-      bytes.addAll(_writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(i + 1)); // レコード番号
+      bytes.addAll(BinaryUtils.writeInt32BigEndian(contentLength)); // コンテンツ長
+      bytes.addAll(BinaryUtils.writeInt32LittleEndian(3)); // シェープタイプ（PolyLine）
 
       // ラインのバウンディングボックス
       double lineMinX = double.infinity, lineMinY = double.infinity;
@@ -1943,23 +1911,27 @@ class FeatureExportConverter
       if (!lineMinY.isFinite) lineMinY = 0.0;
       if (!lineMaxY.isFinite) lineMaxY = 0.0;
 
-      bytes.addAll(_writeFloat64(lineMinX));
-      bytes.addAll(_writeFloat64(lineMinY));
-      bytes.addAll(_writeFloat64(lineMaxX));
-      bytes.addAll(_writeFloat64(lineMaxY));
+      bytes.addAll(BinaryUtils.writeFloat64(lineMinX));
+      bytes.addAll(BinaryUtils.writeFloat64(lineMinY));
+      bytes.addAll(BinaryUtils.writeFloat64(lineMaxX));
+      bytes.addAll(BinaryUtils.writeFloat64(lineMaxY));
 
       // パーツ数とポイント数
-      bytes.addAll(_writeInt32LittleEndian(1)); // パーツ数（LineStringは1つのパート）
-      bytes.addAll(_writeInt32LittleEndian(coordinates.length)); // ポイント数
+      bytes.addAll(
+        BinaryUtils.writeInt32LittleEndian(1),
+      ); // パーツ数（LineStringは1つのパート）
+      bytes.addAll(
+        BinaryUtils.writeInt32LittleEndian(coordinates.length),
+      ); // ポイント数
 
       // パーツ配列（開始ポイントインデックス）
-      bytes.addAll(_writeInt32LittleEndian(0)); // 開始インデックス0
+      bytes.addAll(BinaryUtils.writeInt32LittleEndian(0)); // 開始インデックス0
 
       // ポイント配列
       for (final coord in coordinates) {
         if (coord is List && coord.length >= 2) {
-          bytes.addAll(_writeFloat64((coord[0] as num).toDouble()));
-          bytes.addAll(_writeFloat64((coord[1] as num).toDouble()));
+          bytes.addAll(BinaryUtils.writeFloat64((coord[0] as num).toDouble()));
+          bytes.addAll(BinaryUtils.writeFloat64((coord[1] as num).toDouble()));
         }
       }
     }

@@ -46,7 +46,7 @@
   - MapDrawingMixin（描画確定処理）
   - GpsInfoBar, GpsTrackingOverlay, GpsSurveyButtons（ウィジェット）
 - [ ] import_export_service.dartのフォーマット別分割
-- [ ] geopackage_file.dartの機能別分割
+- [x] geopackage_file.dartの機能別分割
 - [ ] ServiceLocatorパターンの導入
 - [ ] 非同期競合状態防止の改善（Completer使用）
 - [ ] フィーチャキャッシュの差分更新対応

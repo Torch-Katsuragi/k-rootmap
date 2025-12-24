@@ -152,11 +152,13 @@ mixin LayerDrawerTiles {
             }
           }
         },
-        itemBuilder:
-            (context) => [
-              const PopupMenuItem(value: 'rename', child: Text('名前の変更')),
-              const PopupMenuItem(value: 'delete', child: Text('削除')),
-            ],
+        itemBuilder: (context) {
+          AppLogger.debug('[DEBUG] buildPhotoTile: itemBuilder called');
+          return [
+            const PopupMenuItem(value: 'rename', child: Text('名前の変更')),
+            const PopupMenuItem(value: 'delete', child: Text('削除')),
+          ];
+        },
       ),
     );
   }

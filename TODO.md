@@ -2,6 +2,10 @@
 
 ## 完了済み
 
+- [x] ドキュメント構造の整理（2025/12/30）
+  - [x] FEATURES.mdとDOCUMENT.mdをdocs/配下に分割
+  - [x] docs/features/（機能設計8ファイル）、docs/technical/（技術資料5ファイル）
+  - [x] docs/index.md（目次・ナビゲーション）作成
 - [x] READMEの整理（更新履歴の削除と機能概要の統合）
 - [x] 背景地図の機能改善
   - [x] 一括ダウンロード機能（範囲・ズーム指定）の実装
@@ -45,11 +49,11 @@
   - MapFeatureCacheMixin（フィーチャキャッシュ）
   - MapDrawingMixin（描画確定処理）
   - GpsInfoBar, GpsTrackingOverlay, GpsSurveyButtons（ウィジェット）
-- [ ] import_export_service.dartのフォーマット別分割
+- [x] import_export_service.dartのフォーマット別分割
 - [x] geopackage_file.dartの機能別分割
 - [ ] ServiceLocatorパターンの導入
 - [ ] 非同期競合状態防止の改善（Completer使用）
-- [ ] フィーチャキャッシュの差分更新対応
+- [x] フィーチャキャッシュの差分更新対応
 - [ ] LayerNodeサブクラスの個別ファイル分離
 
 ## コード品質改善

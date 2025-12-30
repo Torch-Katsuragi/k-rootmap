@@ -1,0 +1,68 @@
+---
+title: Import/Export Service アーキテクチャ
+tags: [technical, architecture, import, export]
+---
+
+# Import/Export Service アーキテクチャ（リファクタリング完了）
+
+2024年12月のリファクタリングにより、`import_export_service.dart`（約3,800行）を以下のモジュラー構造に分割しました。
+
+## ディレクトリ構造
+
+```
+lib/services/
+├── import_export/                    # 新規ディレクトリ
+│   ├── import_export_service.dart    # ファサード（軽量なエントリポイント）
+│   ├── import_export_models.dart     # FileFormat, ImportExportResult等
+│   ├── coordinate_system_manager.dart # SmartCoordinateSystemManager
+│   ├── importers/
+│   │   ├── base_importer.dart        # 抽象インポーター
+│   │   ├── shapefile_importer.dart   # Shapefileインポート
+│   │   └── geojson_importer.dart     # GeoJSONインポート
+│   ├── exporters/
+│   │   ├── base_exporter.dart        # 抽象エクスポーター
+│   │   ├── shapefile_exporter.dart   # Shapefileエクスポート
+│   │   ├── geojson_exporter.dart     # GeoJSONエクスポート
+│   │   ├── csv_exporter.dart         # CSVエクスポート
+│   │   └── kml_exporter.dart         # KMLエクスポート
+│   └── parsers/
+│       ├── shapefile_binary_parser.dart  # SHP/SHXバイナリ解析
+│       ├── dbf_reader.dart           # DBF読み込み
+│       └── prj_reader.dart           # PRJ読み込み（座標系解析）
+├── import_export_service.dart        # 後方互換性のためのre-export
+lib/utils/
+└── binary_utils.dart                 # バイト変換ヘルパー（共通化）
+```
+
+## 設計原則
+
+1. **ファサードパターン**: `ImportExportService`は軽量なエントリポイントとして、各インポーター/エクスポーターを呼び出すのみ
+2. **DRY原則**: バイナリ変換ヘルパーを`binary_utils.dart`に統合し、重複コードを排除
+3. **疎結合**: 各モジュールは独立して動作可能で、依存関係を最小化
+4. **後方互換性**: 元の`import_export_service.dart`はre-exportファイルとして残し、既存コードへの影響を最小化
+
+## 各モジュールの想定行数
+
+| ファイル | 行数 | 内容 |
+|---------|------|------|
+| import_export_models.dart | ~100 | enum, 結果クラス |
+| coordinate_system_manager.dart | ~300 | 座標系解析・変換 |
+| base_importer.dart | ~30 | 抽象クラス |
+| shapefile_importer.dart | ~250 | SHPインポート |
+| geojson_importer.dart | ~200 | GeoJSONインポート |
+| base_exporter.dart | ~20 | 抽象クラス |
+| shapefile_exporter.dart | ~400 | SHPエクスポート |
+| geojson_exporter.dart | ~130 | GeoJSONエクスポート |
+| csv_exporter.dart | ~100 | CSVエクスポート |
+| kml_exporter.dart | ~120 | KMLエクスポート |
+| shapefile_binary_parser.dart | ~350 | バイナリ解析 |
+| dbf_reader.dart | ~180 | DBF読み込み |
+| prj_reader.dart | ~50 | PRJ読み込み |
+| binary_utils.dart | ~140 | バイト変換 |
+| import_export_service.dart (facade) | ~180 | ファサード |
+
+## 関連ドキュメント
+
+- [[../features/geometry-types]] - レイヤジオメトリタイプ仕様
+- [[tech-stack]] - 技術スタック
+

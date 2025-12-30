@@ -1,0 +1,44 @@
+---
+title: K-MAPS ドキュメント
+tags: [index, navigation]
+---
+
+# K-MAPS ドキュメント
+
+このディレクトリには、K-MAPSの機能設計と技術資料が格納されています。
+
+---
+
+## 機能設計ドキュメント
+
+| ドキュメント | 概要 |
+|-------------|------|
+| [[features/concept]] | コンセプト・ターゲットユーザー・コアバリュー |
+| [[features/drawing-editing]] | 描画・編集機能（基本図形、属性編集、ツール） |
+| [[features/layer-management]] | レイヤー管理機能（階層構造、GeoPackage連動） |
+| [[features/gps-map]] | GPS・地図機能（トラッキング、測量、GNSS対応） |
+| [[features/project-management]] | プロジェクト・GeoPackage管理（フォルダ構造、メタデータ） |
+| [[features/google-drive]] | Google Drive連携（同期、共有） |
+| [[features/ui-ux]] | UI/UXの方向性（ツールバー、レイヤーパネル、ジェスチャー） |
+| [[features/geometry-types]] | レイヤジオメトリタイプ仕様（OGC Simple Features準拠） |
+
+---
+
+## 技術資料
+
+| ドキュメント | 概要 |
+|-------------|------|
+| [[technical/tech-stack]] | 技術スタック・フリーハンド描画実装 |
+| [[technical/development-phases]] | 開発ステップ（MVP〜フェーズ4） |
+| [[technical/import-export]] | Import/Exportアーキテクチャ（モジュール構造） |
+| [[technical/foreground-service]] | フォアグラウンドサービス・Bluetooth通信制約 |
+| [[technical/gps-architecture]] | GPS追跡・測量アーキテクチャ |
+
+---
+
+## 関連ファイル（ルート）
+
+- `README.md` - プロジェクト概要・機能一覧
+- `TODO.md` - タスク管理
+- `CLAUDE.md` - AI開発ガイドライン
+

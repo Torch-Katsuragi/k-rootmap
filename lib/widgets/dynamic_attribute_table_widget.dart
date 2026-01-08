@@ -330,8 +330,11 @@ class _DynamicAttributeTableWidgetState
         '[DynamicAttributeTable] データ初期化開始: ${widget.layer.layerName}',
       );
 
-      // LayerNodeから属性カラム名を取得
-      columnNames = await widget.layer.getAttributeColumnNames(getAll: true);
+      // LayerNodeから属性カラム名を取得（PRIMARY KEYは表示不要のためスキップ）
+      columnNames = await widget.layer.getAttributeColumnNames(
+        getAll: true,
+        skipPrimaryKey: true,
+      );
       AppLogger.debug('[DynamicAttributeTable] カラム名取得: ${columnNames.length}個');
 
       // LayerNodeからFeatureNodeリストを取得
@@ -386,20 +389,65 @@ class _DynamicAttributeTableWidgetState
 
   /// カラム定義を作成
   List<PlutoColumn> _createColumns() {
-    if (columnNames.isEmpty) {
-      return [
-        PlutoColumn(
-          title: 'No Data',
-          field: 'no_data',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-        ),
-      ];
-    }
-
     final List<PlutoColumn> tableColumns = [];
     final isPointLayer = _isPointLayer();
-    bool coordinateColumnsAdded = false; // 座標カラムが既に追加されたかどうか
+
+    // 行番号カラムを最初に追加（全レイヤー共通）
+    tableColumns.add(
+      PlutoColumn(
+        title: '#',
+        field: '_row_num',
+        type: PlutoColumnType.number(),
+        enableEditingMode: false,
+        width: 50,
+        frozen: PlutoColumnFrozen.start,
+      ),
+    );
+
+    // Pointレイヤーの場合、座標カラムを追加
+    if (isPointLayer) {
+      if (_showWgs84) {
+        tableColumns.add(
+          PlutoColumn(
+            title: '_lat',
+            field: '_lat',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 100,
+          ),
+        );
+        tableColumns.add(
+          PlutoColumn(
+            title: '_lon',
+            field: '_lon',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 100,
+          ),
+        );
+      }
+
+      if (_additionalEpsg != null) {
+        tableColumns.add(
+          PlutoColumn(
+            title: '_x',
+            field: '_x',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 110,
+          ),
+        );
+        tableColumns.add(
+          PlutoColumn(
+            title: '_y',
+            field: '_y',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 110,
+          ),
+        );
+      }
+    }
 
     // LayerNodeから取得したカラム名を基にカラムを作成
     for (final columnName in columnNames) {
@@ -416,70 +464,6 @@ class _DynamicAttributeTableWidgetState
           width: columnWidth,
         ),
       );
-
-      // fid/id列の直後にPointレイヤーの場合のみ座標列を追加（1回のみ）
-      final lowerName = columnName.toLowerCase();
-      if (isPointLayer &&
-          !coordinateColumnsAdded &&
-          (lowerName == 'fid' || lowerName == 'id')) {
-        coordinateColumnsAdded = true;
-
-        // WGS84座標が有効な場合
-        if (_showWgs84) {
-          tableColumns.add(
-            PlutoColumn(
-              title: '_lat',
-              field: '_lat',
-              type: PlutoColumnType.text(),
-              enableEditingMode: false,
-              width: 100,
-            ),
-          );
-          tableColumns.add(
-            PlutoColumn(
-              title: '_lon',
-              field: '_lon',
-              type: PlutoColumnType.text(),
-              enableEditingMode: false,
-              width: 100,
-            ),
-          );
-        }
-
-        // 追加座標系が設定されている場合
-        if (_additionalEpsg != null) {
-          tableColumns.add(
-            PlutoColumn(
-              title: '_x',
-              field: '_x',
-              type: PlutoColumnType.text(),
-              enableEditingMode: false,
-              width: 110,
-            ),
-          );
-          tableColumns.add(
-            PlutoColumn(
-              title: '_y',
-              field: '_y',
-              type: PlutoColumnType.text(),
-              enableEditingMode: false,
-              width: 110,
-            ),
-          );
-        }
-      }
-    }
-
-    // カラムが空の場合はNo Dataカラムを追加
-    if (tableColumns.isEmpty) {
-      return [
-        PlutoColumn(
-          title: 'No Data',
-          field: 'no_data',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-        ),
-      ];
     }
 
     return tableColumns;
@@ -619,17 +603,12 @@ class _DynamicAttributeTableWidgetState
 
   /// 行データを作成
   Future<List<PlutoRow>> _createRows() async {
-    // カラム名が空の場合は、'no_data'カラムに対応する行を返す
-    if (columnNames.isEmpty) {
-      return [
-        PlutoRow(cells: {'no_data': PlutoCell(value: 'No features available')}),
-      ];
-    }
-
-    // フィーチャが空の場合は、空のリストを返す（カラム定義は存在する）
+    // フィーチャが空の場合は、空のリストを返す
     if (features.isEmpty) {
       return [];
     }
+    
+    final isPointLayer = _isPointLayer();
 
     AppLogger.debug(
       '[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ',
@@ -655,10 +634,13 @@ class _DynamicAttributeTableWidgetState
     }
 
     final List<PlutoRow> tableRows = [];
-    final isPointLayer = _isPointLayer();
 
-    for (final feature in features) {
+    for (int i = 0; i < features.length; i++) {
+      final feature = features[i];
       final Map<String, PlutoCell> cells = {};
+
+      // 行番号（1から始まる）
+      cells['_row_num'] = PlutoCell(value: i + 1);
 
       // 各カラムの値をFeatureNodeから取得
       for (final columnName in columnNames) {
@@ -671,17 +653,15 @@ class _DynamicAttributeTableWidgetState
         }
       }
 
-      // Pointレイヤーの場合、仮想的な座標列を追加
+      // Pointレイヤーの場合、座標列を追加
       if (isPointLayer && feature is PointFeatureNode) {
         final point = feature.point;
 
-        // WGS84座標
         if (_showWgs84) {
           cells['_lat'] = PlutoCell(value: point.latitude.toStringAsFixed(6));
           cells['_lon'] = PlutoCell(value: point.longitude.toStringAsFixed(6));
         }
 
-        // 追加座標系
         if (_additionalEpsg != null) {
           final xy = _formatCoordinateXY(point, _additionalEpsg!);
           cells['_x'] = PlutoCell(value: xy['x'] ?? '');
@@ -953,9 +933,9 @@ class _DynamicAttributeTableWidgetState
         return;
       }
 
-      // 仮想座標カラム(_x, _y)は表示専用（編集不可）
-      if (field == '_x' || field == '_y') {
-        AppLogger.debug('[DynamicAttributeTable] 座標変換カラムは表示専用です: $field');
+      // 仮想カラム（_で始まる）は表示専用（編集不可・DBに保存しない）
+      if (field.startsWith('_')) {
+        AppLogger.debug('[DynamicAttributeTable] 仮想カラムは表示専用です: $field');
         return;
       }
 

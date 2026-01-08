@@ -206,9 +206,24 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 属性テーブルのカラム名キャッシュ
   List<String>? _cachedColumnNames;
+  
+  /// PRIMARY KEYスキップ時のカラム名キャッシュ
+  List<String>? _cachedColumnNamesWithoutPK;
 
   /// 属性テーブルのカラム名を取得（キャッシュ機能付き）
-  Future<List<String>> getAttributeColumnNames({bool getAll = false}) async {
+  /// [skipPrimaryKey] trueの場合、PRIMARY KEYカラムを除外（属性テーブル表示用）
+  Future<List<String>> getAttributeColumnNames({
+    bool getAll = false,
+    bool skipPrimaryKey = false,
+  }) async {
+    if (skipPrimaryKey) {
+      _cachedColumnNamesWithoutPK ??= await geoPackageFile.getColumnNames(
+        layerName,
+        getAll: getAll,
+        skipPrimaryKey: true,
+      );
+      return _cachedColumnNamesWithoutPK!;
+    }
     _cachedColumnNames ??= await geoPackageFile.getColumnNames(
         layerName,
         getAll: getAll,
@@ -219,6 +234,7 @@ abstract class LayerNode extends LayerTreeNode {
   /// 属性テーブルのカラム名キャッシュをクリア
   void clearColumnNamesCache() {
     _cachedColumnNames = null;
+    _cachedColumnNamesWithoutPK = null;
   }
 
   /// データベースからFeatureNodeを非同期で読み込み（プライベートメソッド）

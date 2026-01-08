@@ -132,9 +132,11 @@ class GeoPackageSchema {
   }
 
   /// 指定テーブルのカラム名一覧を返す
+  /// [skipPrimaryKey] trueの場合、PRIMARY KEYカラムを除外（属性テーブル表示用）
   Future<List<String>> getColumnNames(
     String tableName, {
     bool getAll = false,
+    bool skipPrimaryKey = false,
   }) async {
     try {
       final db = await connection.getDatabase();
@@ -142,7 +144,13 @@ class GeoPackageSchema {
       final columns = result.map((row) => row['name'] as String).toList();
 
       // geom は属性データではないため常に除外
-      final filteredColumns = columns.where((c) => c != 'geom').toList();
+      var filteredColumns = columns.where((c) => c != 'geom').toList();
+
+      // PRIMARY KEYをスキップ（属性テーブル表示用）
+      if (skipPrimaryKey) {
+        final pkColumn = await getPrimaryKeyColumn(tableName);
+        filteredColumns = filteredColumns.where((c) => c != pkColumn).toList();
+      }
 
       if (getAll) return filteredColumns;
       return filteredColumns.where((c) => supportedAttributes.contains(c)).toList();

@@ -140,8 +140,13 @@ class GeoPackageFile {
       _schema.getPrimaryKeyColumn(tableName);
 
   /// 指定テーブルのカラム名一覧を返す
-  Future<List<String>> getColumnNames(String tableName, {bool getAll = false}) =>
-      _schema.getColumnNames(tableName, getAll: getAll);
+  /// [skipPrimaryKey] trueの場合、PRIMARY KEYカラムを除外（属性テーブル表示用）
+  Future<List<String>> getColumnNames(
+    String tableName, {
+    bool getAll = false,
+    bool skipPrimaryKey = false,
+  }) =>
+      _schema.getColumnNames(tableName, getAll: getAll, skipPrimaryKey: skipPrimaryKey);
 
   /// テーブルのカラム名リストを取得
   Future<List<String>> getTableColumns(String tableName) =>

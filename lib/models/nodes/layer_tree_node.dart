@@ -126,6 +126,10 @@ abstract class LayerTreeNode {
   /// 展開状態（デフォルトはtrue）
   bool get expanded => true;
 
+  /// グローバルフォルダ関連ノードかどうか（デフォルトはfalse）
+  /// GlobalFolderNode/GlobalSubFolderNodeでオーバーライドしてtrueを返す
+  bool get isGlobalNode => false;
+
   /// ファイル構造を参照して自分のchildrenを更新する（非同期化）
   /// サブクラスで必ずoverrideすること
   Future<void> updateChildren() async {}

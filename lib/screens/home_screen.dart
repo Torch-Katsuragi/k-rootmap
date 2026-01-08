@@ -4,8 +4,11 @@ import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../utils/global_config.dart';
 import '../models/nodes/folder_node.dart';
+import '../models/nodes/global_folder_node.dart';
 import 'map_page/map_page.dart';
 
 /// ホーム画面（最小構成）
@@ -202,6 +205,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// グローバルフォルダの初期化
+  /// アプリケーションDocumentsディレクトリにk_maps_globalフォルダを作成し、
+  /// ルートノードの先頭に追加
+  Future<void> _initializeGlobalFolder() async {
+    try {
+      // アプリケーションDocumentsディレクトリを取得
+      final appDir = await getApplicationDocumentsDirectory();
+      final globalPath = p.join(appDir.path, 'k_maps_global');
+      
+      // グローバルフォルダパスを保存
+      GlobalConfig.instance.globalFolderPath = globalPath;
+      AppLogger.debug('[HomeScreen] グローバルフォルダパス: $globalPath');
+
+      // グローバルフォルダノードを作成
+      final globalFolderNode = GlobalFolderNode(
+        'Global',
+        globalPath: globalPath,
+        visible: true,
+        parent: GlobalConfig.instance.folderTree,
+      );
+
+      // ルートノードの先頭に追加
+      final rootNode = GlobalConfig.instance.folderTree;
+      if (rootNode != null) {
+        // 既存のグローバルフォルダがあれば削除
+        rootNode.children.removeWhere((child) => child is GlobalFolderNode);
+        // 先頭に挿入
+        rootNode.children.insert(0, globalFolderNode);
+        AppLogger.debug('[HomeScreen] グローバルフォルダをルートノードに追加');
+      }
+    } catch (e) {
+      AppLogger.debug('[HomeScreen] グローバルフォルダ初期化エラー: $e');
+    }
+  }
+
   Future<void> _pickProjectDir() async {
     AppLogger.debug('[HomeScreen] プロジェクトフォルダ選択開始');
     AppLogger.debug('[HomeScreen] 権限状態: $_permissionsGranted');
@@ -229,6 +267,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       AppLogger.debug('[HomeScreen] GlobalConfigを初期化中...');
       GlobalConfig.instance.projectRootDir = dir;
       GlobalConfig.instance.folderTree = FolderNode('rootNode', visible: true);
+
+      // グローバルフォルダの初期化
+      await _initializeGlobalFolder();
+
       AppLogger.debug(
         '[HomeScreen] GlobalConfig初期化完了: ${GlobalConfig.instance.folderTree?.toMap()}',
       );

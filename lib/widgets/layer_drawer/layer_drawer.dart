@@ -3,7 +3,7 @@
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
-import 'dart:io';
+import 'dart:io'; // Debug logging + file operations
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -13,6 +13,7 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
 import '../../models/nodes/image_node.dart';
+import '../../models/nodes/global_folder_node.dart'; // グローバルフォルダ
 import '../../models/geopackage/geopackage_file.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
@@ -408,9 +409,31 @@ class _LayerDrawerState extends State<LayerDrawer>
         return;
       }
       Directory(path).createSync();
-      folderNode.addChild(
-        FolderNode(result, visible: true, parent: folderNode),
-      );
+      
+      // グローバルフォルダ内の場合はGlobalSubFolderNodeとして作成
+      if (folderNode is GlobalFolderNode) {
+        folderNode.addChild(
+          GlobalSubFolderNode(
+            result,
+            basePath: folderNode.globalPath,
+            visible: true,
+            parent: folderNode,
+          ),
+        );
+      } else if (folderNode is GlobalSubFolderNode) {
+        folderNode.addChild(
+          GlobalSubFolderNode(
+            result,
+            basePath: folderNode.basePath,
+            visible: true,
+            parent: folderNode,
+          ),
+        );
+      } else {
+        folderNode.addChild(
+          FolderNode(result, visible: true, parent: folderNode),
+        );
+      }
       widget.setStateCallback(() {});
     }
   }
@@ -470,17 +493,35 @@ class _LayerDrawerState extends State<LayerDrawer>
 
       AppLogger.debug('[LayerDrawer] GeoPackageNodeを作成中...');
       final parentNode = widget.currentNode as FolderNode;
-      final parentPath = parentNode.getAbsolutePathSegments();
-      final fileNameList = [fileName];
-      final gpkgFile = GeoPackageFile([...parentPath, ...fileNameList]);
+      
+      // グローバルフォルダ内の場合は絶対パスモードでGeoPackageを作成
+      final bool isGlobalFolder = parentNode is GlobalFolderNode || parentNode is GlobalSubFolderNode;
+      final GeoPackageFile gpkgFile;
+      final GeoPackageNode newNode;
+      
+      if (isGlobalFolder) {
+        // グローバルフォルダ内：絶対パスモード
+        gpkgFile = GeoPackageFile([fileName], absolutePath: path);
+        newNode = GlobalGeoPackageNode(
+          gpkgFile,
+          absolutePath: path,
+          visible: true,
+          parent: folderNode,
+        );
+        AppLogger.debug('[LayerDrawer] GlobalGeoPackageFile作成: absolutePath=$path');
+      } else {
+        // 通常フォルダ：相対パスモード
+        final parentPath = parentNode.getAbsolutePathSegments();
+        final fileNameList = [fileName];
+        gpkgFile = GeoPackageFile([...parentPath, ...fileNameList]);
+        newNode = GeoPackageNode(
+          gpkgFile,
+          visible: true,
+          parent: folderNode,
+        );
+        AppLogger.debug('[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}');
+      }
 
-      AppLogger.debug('[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}');
-
-      final newNode = GeoPackageNode(
-        gpkgFile,
-        visible: true,
-        parent: folderNode,
-      );
       folderNode.addChild(newNode);
 
       // 空のGeoPackageファイルを即座に作成

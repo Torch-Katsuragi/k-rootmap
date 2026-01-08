@@ -13,6 +13,10 @@ class GeoPackageConnection {
   /// ルートからのパスリスト
   final List<String> pathList;
 
+  /// 絶対パス（指定時はpathListを無視）
+  /// グローバルフォルダ内のGeoPackageで使用
+  final String? absolutePath;
+
   /// データベース接続インスタンス
   Database? _database;
 
@@ -23,7 +27,7 @@ class GeoPackageConnection {
   bool get isInitialized => _isInitialized;
 
   /// コンストラクタ
-  GeoPackageConnection(this.pathList);
+  GeoPackageConnection(this.pathList, {this.absolutePath});
 
   /// データベース接続取得（初期化を含む）
   Future<Database> getDatabase() async {
@@ -40,14 +44,18 @@ class GeoPackageConnection {
       return;
     }
 
-    final baseDir = GlobalConfig.instance.projectRootDir;
-
-    if (baseDir == null) {
-      AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
-      return;
+    // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
+    final String absPath;
+    if (absolutePath != null) {
+      absPath = absolutePath!;
+    } else {
+      final baseDir = GlobalConfig.instance.projectRootDir;
+      if (baseDir == null) {
+        AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
+        return;
+      }
+      absPath = p.joinAll([baseDir, ...pathList]);
     }
-
-    final absPath = p.joinAll([baseDir, ...pathList]);
 
     final file = File(absPath);
     final dir = file.parent;
@@ -258,13 +266,18 @@ class GeoPackageConnection {
       // まずデータベース接続を閉じる
       await dispose();
 
-      final baseDir = GlobalConfig.instance.projectRootDir;
-      if (baseDir == null) {
-        AppLogger.debug('[GeoPackageConnection] deleteFile: projectRootDirが未設定');
-        return false;
+      // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
+      final String absPath;
+      if (absolutePath != null) {
+        absPath = absolutePath!;
+      } else {
+        final baseDir = GlobalConfig.instance.projectRootDir;
+        if (baseDir == null) {
+          AppLogger.debug('[GeoPackageConnection] deleteFile: projectRootDirが未設定');
+          return false;
+        }
+        absPath = p.joinAll([baseDir, ...pathList]);
       }
-
-      final absPath = p.joinAll([baseDir, ...pathList]);
       final file = File(absPath);
 
       if (!file.existsSync()) {

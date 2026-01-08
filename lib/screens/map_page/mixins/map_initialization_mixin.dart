@@ -25,8 +25,11 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   Future<void> initializeAllServices() async {
     AppLogger.debug('[DEBUG] initializeAllServices: start');
     
-    // ルートノード設定
-    GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
+    // ルートノード設定（既に存在する場合は再作成しない）
+    // home_screen.dartでグローバルフォルダ付きで作成済みの場合を考慮
+    if (GlobalConfig.instance.folderTree == null) {
+      GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
+    }
     currentNode = GlobalConfig.instance.folderTree;
     GlobalConfig.instance.mapState = this;
     

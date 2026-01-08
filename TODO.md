@@ -92,6 +92,13 @@
   - [x] FolderNode/GeoPackageNodeへのKMeta統合
   - [x] LayerStyleConfigとKMetaの連携
 
+- [x] グローバルフォルダ機能の実装（2026/01/08）
+  - [x] GlobalFolderNode/GlobalSubFolderNodeクラス作成
+  - [x] GeoPackageFile/GeoPackageConnectionに絶対パスモード追加
+  - [x] GlobalGeoPackageNode/GlobalImageNodeクラス作成
+  - [x] ホーム画面でのグローバルフォルダ初期化処理
+  - [x] レイヤードロワーでの青色アイコン表示対応
+
 - [ ] フィードバックフォームにバージョン情報を事前入力
   - Google FormsのURLパラメータを使用して、アプリバージョンを埋め込む
   - フォームを開いたときにバージョン情報が入力済みの状態で表示される

@@ -91,7 +91,12 @@ class FolderNode extends LayerTreeNode {
     };
 
     // 既存の子ノードで、ファイルシステムに存在しないものを削除
+    // ただし、グローバルノードはファイルシステム外に存在するため削除しない
     children.removeWhere((child) {
+      // グローバルノード（GlobalFolderNode/GlobalSubFolderNode等）は保持
+      if (child.isGlobalNode) {
+        return false;
+      }
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
         AppLogger.debug(

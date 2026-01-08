@@ -24,6 +24,10 @@ class GlobalConfig {
   /// プロジェクトのルートディレクトリパス
   String? projectRootDir;
 
+  /// グローバルフォルダの実体パス（アプリDocuments/k_maps_global）
+  /// どのプロジェクトを開いても共有されるフォルダ
+  String? globalFolderPath;
+
   /// レイヤツリーのルートノード
   LayerTreeNode? folderTree;
 

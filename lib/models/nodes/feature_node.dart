@@ -549,6 +549,9 @@ class PointFeatureNode extends FeatureNode {
     final node = PointFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
 
+    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
+    parent.addFeatureToMap(actualRowId, turfFeature);
+
     AppLogger.debug('[DEBUG] PointFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
   }
@@ -756,6 +759,9 @@ class LineFeatureNode extends FeatureNode {
     // FeatureNodeを作成して親に追加
     final node = LineFeatureNode.fromTurfFeature(turfFeature, parent);
     parent.addChild(node);
+
+    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
+    parent.addFeatureToMap(actualRowId, turfFeature);
 
     AppLogger.debug('[DEBUG] LineFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;
@@ -982,6 +988,9 @@ class PolygonFeatureNode extends FeatureNode {
     // rowデータを使用してFeatureNodeを作成
     final node = PolygonFeatureNode(row, parent);
     parent.addChild(node);
+
+    // _featureMapにも登録（updateFeatureAttributeが動作するために必要）
+    parent.addFeatureToMap(actualRowId, node.turfFeature);
 
     AppLogger.debug('[DEBUG] PolygonFeatureNode: DB保存完了 - $name (rowId: $actualRowId)');
     return node;

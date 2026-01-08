@@ -39,10 +39,26 @@ class BluetoothGnssService extends ChangeNotifier {
   double? _bearing;
   DateTime? _timestamp;
 
-  // 衛星情報とHDOP
+  // 衛星情報とDOP
   int? _satelliteCount;
   double? _hdop;
+  double? _pdop;
+  double? _vdop;
   int? _gpsQuality;
+  int? _fixMode; // GSAから取得: 1=No Fix, 2=2D, 3=3D
+
+  // SBAS衛星情報
+  List<int> _usedSatellites = []; // 使用中の衛星PRN番号
+  String? _detectedSbasSystem; // 検出されたSBASシステム名
+  List<int> _sbasInView = []; // 視野内のSBAS衛星（GSVから検出）
+  int? _sbasPrn; // 検出されたSBAS衛星のPRN番号
+
+  // DGPS基準局情報（GGA文フィールド14から取得）
+  String? _dgpsStationId; // 差分基準局ID（0000-1023）
+
+  // NMEAバッファリング（直近のセンテンスを保持）
+  static const int _maxNmeaBufferSize = 20;
+  final List<String> _nmeaBuffer = [];
 
   // 統計情報
   int _receivedSentenceCount = 0;
@@ -69,10 +85,155 @@ class BluetoothGnssService extends ChangeNotifier {
   int get validPositionCount => _validPositionCount;
   DateTime? get lastPositionUpdate => _lastPositionUpdate;
 
-  // 衛星情報・HDOP用のgetters
+  // 衛星情報・DOP用のgetters
   int? get satelliteCount => _satelliteCount;
   double? get hdop => _hdop;
+  double? get pdop => _pdop;
+  double? get vdop => _vdop;
   int? get gpsQuality => _gpsQuality;
+  int? get fixMode => _fixMode;
+  List<int> get usedSatellites => List.unmodifiable(_usedSatellites);
+  String? get detectedSbasSystem => _detectedSbasSystem;
+  int? get sbasPrn => _sbasPrn;
+  String? get dgpsStationId => _dgpsStationId;
+  List<int> get sbasInView => List.unmodifiable(_sbasInView);
+
+  /// 直近のNMEAセンテンスを取得
+  List<String> get recentNmeaSentences => List.unmodifiable(_nmeaBuffer);
+
+  /// 補正タイプを人間可読な文字列で取得
+  /// GGA Quality Indicatorに基づき、SBAS衛星の使用状況も反映
+  String get fixTypeString {
+    switch (_gpsQuality) {
+      case 0:
+        return 'No Fix';
+      case 1:
+        return 'GPS';
+      case 2:
+        // DGPSの場合、SBAS衛星を使用しているか確認
+        if (_detectedSbasSystem != null) {
+          return 'DGPS($_detectedSbasSystem)';
+        }
+        return 'DGPS';
+      case 3:
+        return 'PPS';
+      case 4:
+        return 'RTK Fixed';
+      case 5:
+        return 'RTK Float';
+      case 6:
+        return 'Estimated';
+      case 7:
+        return 'Manual';
+      case 8:
+        return 'Simulation';
+      case 9:
+        // Quality=9はSBASを明示
+        if (_detectedSbasSystem != null) {
+          return 'SBAS($_detectedSbasSystem)';
+        }
+        return 'SBAS';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  /// 詳細な補正源情報を取得（様式用）
+  /// 全世界スケールで適切な補正局情報を提供
+  String get correctionSource {
+    switch (_gpsQuality) {
+      case 0:
+        return '補正なし';
+      case 1:
+        return '単独測位（補正なし）';
+      case 2:
+      case 9:
+        // SBAS/DGPS補正
+        if (_detectedSbasSystem != null && _sbasPrn != null) {
+          final satName = _getSbasSatelliteName(_sbasPrn!);
+          return '$_detectedSbasSystem (PRN $_sbasPrn, $satName)';
+        } else if (_detectedSbasSystem != null) {
+          return _detectedSbasSystem!;
+        } else if (_dgpsStationId != null && _dgpsStationId!.isNotEmpty) {
+          return 'DGPS基準局 ID:$_dgpsStationId';
+        }
+        return 'DGPS（詳細不明）';
+      case 4:
+        return 'RTK Fixed（基準局情報なし）'; // NTRIP接続時に拡張可能
+      case 5:
+        return 'RTK Float（基準局情報なし）';
+      default:
+        return '不明';
+    }
+  }
+
+  /// SBAS衛星PRN番号から衛星名を取得
+  String _getSbasSatelliteName(int prn) {
+    // MSAS（日本）
+    if (prn == 129) return 'MTSAT-1R';
+    if (prn == 137) return 'MTSAT-2';
+    // QZSS SLAS
+    if (prn == 183) return 'QZS-1';
+    if (prn == 184) return 'QZS-2';
+    if (prn == 189) return 'QZS-3';
+    if (prn == 185) return 'QZS-4';
+    // WAAS（北米）
+    if (prn == 131) return 'Eutelsat 117WB';
+    if (prn == 133) return 'SES-15';
+    if (prn == 135) return 'Inmarsat-4F3';
+    if (prn == 138) return 'Anik F1R';
+    // EGNOS（欧州）
+    if (prn == 120) return 'Inmarsat-3F2';
+    if (prn == 123) return 'Astra 5B';
+    if (prn == 124) return 'Eutelsat-5WB';
+    if (prn == 126) return 'Inmarsat-4F2';
+    if (prn == 136) return 'SES-5';
+    // GAGAN（インド）
+    if (prn == 127) return 'GSAT-8';
+    if (prn == 128) return 'GSAT-10';
+    if (prn == 132) return 'GSAT-15';
+    // SDCM（ロシア）
+    if (prn == 125) return 'Luch-5A';
+    if (prn == 140) return 'Luch-5B';
+    if (prn == 141) return 'Luch-4';
+    // NMEA ID（33-64）からの変換
+    final actualPrn = prn < 100 ? prn + 87 : prn;
+    if (actualPrn != prn) {
+      return _getSbasSatelliteName(actualPrn);
+    }
+    return '衛星名不明';
+  }
+
+  /// SBAS衛星のPRN番号からシステム名を判定
+  /// PRN範囲: 120-158（NMEA衛星IDでは33-64として報告される場合あり）
+  String? _detectSbasSystem(List<int> satellites) {
+    for (final prn in satellites) {
+      // NMEAでの衛星ID（33-64）をPRNに変換する場合も考慮
+      final actualPrn = prn < 100 ? prn + 87 : prn;
+
+      // MSAS（日本）: PRN 129, 137
+      if (actualPrn == 129 || actualPrn == 137) {
+        return 'MSAS';
+      }
+      // WAAS（北米）: PRN 131, 133, 135, 138
+      if ([131, 133, 135, 138].contains(actualPrn)) {
+        return 'WAAS';
+      }
+      // EGNOS（欧州）: PRN 120, 123, 124, 126, 136
+      if ([120, 123, 124, 126, 136].contains(actualPrn)) {
+        return 'EGNOS';
+      }
+      // GAGAN（インド）: PRN 127, 128, 132
+      if ([127, 128, 132].contains(actualPrn)) {
+        return 'GAGAN';
+      }
+      // SDCM（ロシア）: PRN 125, 140, 141
+      if ([125, 140, 141].contains(actualPrn)) {
+        return 'SDCM';
+      }
+    }
+    return null;
+  }
 
   /// 利用可能なBluetoothデバイスをスキャン
   ///
@@ -244,12 +405,23 @@ class BluetoothGnssService extends ChangeNotifier {
     try {
       _receivedSentenceCount++;
 
-      // 簡易NMEA解析（GGAとRMCに対応）
+      // NMEAバッファに追加（サイズ制限）
+      _nmeaBuffer.add(sentence);
+      if (_nmeaBuffer.length > _maxNmeaBufferSize) {
+        _nmeaBuffer.removeAt(0);
+      }
+
+      // NMEA解析（GGA, RMC, GSA, GSVに対応）
       if (sentence.startsWith('\$GPGGA') || sentence.startsWith('\$GNGGA')) {
         _processGgaSentence(sentence);
       } else if (sentence.startsWith('\$GPRMC') ||
           sentence.startsWith('\$GNRMC')) {
         _processRmcSentence(sentence);
+      } else if (sentence.startsWith('\$GPGSA') ||
+          sentence.startsWith('\$GNGSA')) {
+        _processGsaSentence(sentence);
+      } else if (sentence.contains('GSV')) {
+        _processGsvSentence(sentence);
       }
     } catch (e) {
       AppLogger.debug('$_logTag: NMEA処理エラー: $sentence - $e');
@@ -290,6 +462,15 @@ class BluetoothGnssService extends ChangeNotifier {
         // 衛星数の取得（GGA文の7番目のフィールド）
         if (parts.length > 7 && parts[7].isNotEmpty) {
           _satelliteCount = int.tryParse(parts[7]);
+        }
+
+        // 差分基準局ID（GGA文の14番目のフィールド、DGPS使用時のみ）
+        // フォーマット: 0000-1023
+        if (parts.length > 14 && parts[14].isNotEmpty) {
+          final stationIdStr = parts[14].split('*').first; // チェックサム除去
+          if (stationIdStr.isNotEmpty) {
+            _dgpsStationId = stationIdStr;
+          }
         }
 
         if (_latitude != null && _longitude != null) {
@@ -371,6 +552,114 @@ class BluetoothGnssService extends ChangeNotifier {
     } catch (e) {
       AppLogger.debug('$_logTag: RMC処理エラー: $e');
     }
+  }
+
+  /// GSA文の処理（衛星選択・DOP情報）
+  /// フォーマット: $GPGSA,A,3,01,02,03,...(12個),PDOP,HDOP,VDOP*CS
+  void _processGsaSentence(String sentence) {
+    try {
+      List<String> parts = sentence.split(',');
+      if (parts.length >= 18) {
+        // Fix Mode: 1=No Fix, 2=2D, 3=3D
+        if (parts[2].isNotEmpty) {
+          _fixMode = int.tryParse(parts[2]);
+        }
+
+        // 使用衛星のPRN番号を抽出（フィールド3-14、最大12個）
+        final satellites = <int>[];
+        for (int i = 3; i <= 14 && i < parts.length; i++) {
+          if (parts[i].isNotEmpty) {
+            final prn = int.tryParse(parts[i]);
+            if (prn != null && prn > 0) {
+              satellites.add(prn);
+            }
+          }
+        }
+
+        // 既存のSBAS検出を維持しつつ、新しい衛星リストをマージ
+        // （複数のGSA文が送られる場合に対応）
+        if (_usedSatellites.isEmpty) {
+          _usedSatellites = satellites;
+        } else {
+          // 既存リストに新しい衛星を追加（重複除去）
+          final mergedSet = {..._usedSatellites, ...satellites};
+          _usedSatellites = mergedSet.toList();
+        }
+
+        // SBAS衛星を検出（まだ検出されていない場合のみ）
+        _detectedSbasSystem ??= _detectSbasSystem(_usedSatellites);
+
+        // PDOP（位置15）, HDOP（位置16）, VDOP（位置17、チェックサム除去）
+        // 注: フィールド位置は0-indexedなので、parts[15]はPDOP
+        if (parts.length > 15 && parts[15].isNotEmpty) {
+          _pdop = double.tryParse(parts[15]);
+        }
+        if (parts.length > 16 && parts[16].isNotEmpty) {
+          _hdop = double.tryParse(parts[16]);
+        }
+        // VDOPはチェックサム付きの場合があるので除去
+        if (parts.length > 17 && parts[17].isNotEmpty) {
+          String vdopStr = parts[17].split('*').first;
+          _vdop = double.tryParse(vdopStr);
+        }
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: GSA処理エラー: $e');
+    }
+  }
+
+  /// GSV文の処理（視野内衛星情報）
+  /// フォーマット: $GPGSV,総文数,文番号,視野内衛星数,{PRN,仰角,方位角,SNR}*最大4衛星,*CS
+  void _processGsvSentence(String sentence) {
+    try {
+      List<String> parts = sentence.split(',');
+      if (parts.length < 8) return;
+
+      // 衛星情報は4衛星分ずつ、各衛星4フィールド（PRN,仰角,方位角,SNR）
+      // フィールド4から開始
+      for (int i = 4; i + 3 < parts.length; i += 4) {
+        if (parts[i].isNotEmpty) {
+          final prn = int.tryParse(parts[i]);
+          if (prn != null && prn > 0) {
+            // SBAS衛星かどうかチェック（PRN 33-64 または 120-158）
+            if ((prn >= 33 && prn <= 64) || (prn >= 120 && prn <= 158)) {
+              if (!_sbasInView.contains(prn)) {
+                _sbasInView.add(prn);
+                final sbasName = _detectSbasSystemFromPrn(prn);
+
+                // SBAS衛星が視野内にあれば、検出システムとPRNを更新
+                if (_detectedSbasSystem == null && sbasName != null) {
+                  _detectedSbasSystem = sbasName;
+                  // PRN番号を保存（NMEA IDの場合は変換）
+                  _sbasPrn = prn < 100 ? prn + 87 : prn;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.debug('$_logTag: GSV処理エラー: $e');
+    }
+  }
+
+  /// 単一のPRN番号からSBASシステム名を判定
+  String? _detectSbasSystemFromPrn(int prn) {
+    // NMEAでの衛星ID（33-64）をPRNに変換
+    final actualPrn = prn < 100 ? prn + 87 : prn;
+
+    // MSAS（日本）: PRN 129, 137
+    if (actualPrn == 129 || actualPrn == 137) return 'MSAS';
+    // WAAS（北米）: PRN 131, 133, 135, 138
+    if ([131, 133, 135, 138].contains(actualPrn)) return 'WAAS';
+    // EGNOS（欧州）: PRN 120, 123, 124, 126, 136
+    if ([120, 123, 124, 126, 136].contains(actualPrn)) return 'EGNOS';
+    // GAGAN（インド）: PRN 127, 128, 132
+    if ([127, 128, 132].contains(actualPrn)) return 'GAGAN';
+    // SDCM（ロシア）: PRN 125, 140, 141
+    if ([125, 140, 141].contains(actualPrn)) return 'SDCM';
+
+    return 'SBAS'; // 不明なSBAS衛星
   }
 
   /// DMS（度分秒）形式を小数度に変換
@@ -468,9 +757,23 @@ class BluetoothGnssService extends ChangeNotifier {
         'bearing': _bearing,
         'satelliteCount': _satelliteCount,
         'hdop': _hdop,
+        'pdop': _pdop,
+        'vdop': _vdop,
         'gpsQuality': _gpsQuality,
+        'fixMode': _fixMode,
+        'fixType': fixTypeString,
       },
     };
+  }
+
+  /// NMEAバッファをクリア
+  void clearNmeaBuffer() {
+    _nmeaBuffer.clear();
+  }
+
+  /// 現在のNMEAバッファを文字列として取得
+  String getNmeaBufferAsString() {
+    return _nmeaBuffer.join('\n');
   }
 
   @override
@@ -479,5 +782,3 @@ class BluetoothGnssService extends ChangeNotifier {
     super.dispose();
   }
 }
-
-

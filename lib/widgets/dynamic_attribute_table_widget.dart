@@ -3,6 +3,7 @@
 
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
@@ -56,8 +57,10 @@ class _DynamicAttributeTableWidgetState
   List<FeatureNode> features = [];
   bool _isLoading = true;
 
-  // 座標表示用EPSG設定
-  EpsgDefinition _selectedEpsg = _epsgDefinitions.first;
+  // 座標表示設定
+  bool _showWgs84 = true; // WGS84座標（lat/lon）を表示するか
+  EpsgDefinition? _additionalEpsg; // 追加で表示する座標系（nullなら表示しない）
+  final TextEditingController _epsgController = TextEditingController();
 
   // PlutoGrid再構築用のKey
   Key _plutoGridKey = UniqueKey();
@@ -323,7 +326,9 @@ class _DynamicAttributeTableWidgetState
     });
 
     try {
-      AppLogger.debug('[DynamicAttributeTable] データ初期化開始: ${widget.layer.layerName}');
+      AppLogger.debug(
+        '[DynamicAttributeTable] データ初期化開始: ${widget.layer.layerName}',
+      );
 
       // LayerNodeから属性カラム名を取得
       columnNames = await widget.layer.getAttributeColumnNames(getAll: true);
@@ -394,6 +399,7 @@ class _DynamicAttributeTableWidgetState
 
     final List<PlutoColumn> tableColumns = [];
     final isPointLayer = _isPointLayer();
+    bool coordinateColumnsAdded = false; // 座標カラムが既に追加されたかどうか
 
     // LayerNodeから取得したカラム名を基にカラムを作成
     for (final columnName in columnNames) {
@@ -411,18 +417,69 @@ class _DynamicAttributeTableWidgetState
         ),
       );
 
-      // id列の直後にPointレイヤーの場合のみ_coordinate列を追加
-      if (isPointLayer && columnName.toLowerCase() == 'id') {
-        tableColumns.add(
-          PlutoColumn(
-            title: '_coordinate',
-            field: '_coordinate',
-            type: PlutoColumnType.text(),
-            enableEditingMode: true,
-            width: 150,
-          ),
-        );
+      // fid/id列の直後にPointレイヤーの場合のみ座標列を追加（1回のみ）
+      final lowerName = columnName.toLowerCase();
+      if (isPointLayer &&
+          !coordinateColumnsAdded &&
+          (lowerName == 'fid' || lowerName == 'id')) {
+        coordinateColumnsAdded = true;
+
+        // WGS84座標が有効な場合
+        if (_showWgs84) {
+          tableColumns.add(
+            PlutoColumn(
+              title: '_lat',
+              field: '_lat',
+              type: PlutoColumnType.text(),
+              enableEditingMode: false,
+              width: 100,
+            ),
+          );
+          tableColumns.add(
+            PlutoColumn(
+              title: '_lon',
+              field: '_lon',
+              type: PlutoColumnType.text(),
+              enableEditingMode: false,
+              width: 100,
+            ),
+          );
+        }
+
+        // 追加座標系が設定されている場合
+        if (_additionalEpsg != null) {
+          tableColumns.add(
+            PlutoColumn(
+              title: '_x',
+              field: '_x',
+              type: PlutoColumnType.text(),
+              enableEditingMode: false,
+              width: 110,
+            ),
+          );
+          tableColumns.add(
+            PlutoColumn(
+              title: '_y',
+              field: '_y',
+              type: PlutoColumnType.text(),
+              enableEditingMode: false,
+              width: 110,
+            ),
+          );
+        }
       }
+    }
+
+    // カラムが空の場合はNo Dataカラムを追加
+    if (tableColumns.isEmpty) {
+      return [
+        PlutoColumn(
+          title: 'No Data',
+          field: 'no_data',
+          type: PlutoColumnType.text(),
+          enableEditingMode: false,
+        ),
+      ];
     }
 
     return tableColumns;
@@ -433,90 +490,49 @@ class _DynamicAttributeTableWidgetState
     return widget.layer.runtimeType.toString().contains('PointLayerNode');
   }
 
-  /// 座標文字列を解析してLatLngに変換
-  /// [lat, lon]または[lon, lat]形式をサポート
-  /// 返り値: {'valid': bool, 'point': LatLng?, 'error': String?}
+  /// 座標文字列を解析してLatLngに変換（互換性のため残す）
   Map<String, dynamic> _parseCoordinate(String value) {
     try {
-      // 前後の空白を削除
       final trimmed = value.trim();
-
-      // []で囲まれているかチェック
       if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
         return {'valid': false, 'error': 'Must be in [...] format'};
       }
-
-      // []を除去してカンマで分割
       final content = trimmed.substring(1, trimmed.length - 1);
       final parts = content.split(',').map((s) => s.trim()).toList();
-
-      // 2つの要素があるかチェック
       if (parts.length != 2) {
         return {'valid': false, 'error': 'Must have exactly 2 values'};
       }
-
-      // 数値に変換
       final num1 = double.tryParse(parts[0]);
       final num2 = double.tryParse(parts[1]);
-
       if (num1 == null || num2 == null) {
         return {'valid': false, 'error': 'Values must be numbers'};
       }
-
-      // 選択されたEPSGがWGS84の場合は緯度経度として解析
-      if (_selectedEpsg.code == 'EPSG:4326' ||
-          _selectedEpsg.code == 'EPSG:6668') {
-        double lat, lon;
-        // 緯度は-90～90、経度は-180～180の範囲
-        if (num1.abs() <= 90 && num2.abs() <= 180) {
-          // [lat, lon]形式
-          lat = num1;
-          lon = num2;
-        } else if (num2.abs() <= 90 && num1.abs() <= 180) {
-          // [lon, lat]形式の可能性
-          lon = num1;
-          lat = num2;
-        } else {
-          return {
-            'valid': false,
-            'error': 'Out of range (lat: -90~90, lon: -180~180)',
-          };
-        }
-        return {'valid': true, 'point': LatLng(lat, lon)};
-      } else {
-        // 投影座標系の場合はXY座標として解析し、WGS84に変換
-        try {
-          final proj =
-              Projection.get(_selectedEpsg.code) ??
-              Projection.add(_selectedEpsg.code, _selectedEpsg.proj4String);
-
-          final wgs84 =
-              Projection.get('EPSG:4326') ??
-              Projection.add(
-                'EPSG:4326',
-                '+proj=longlat +datum=WGS84 +no_defs',
-              );
-
-          // XY座標をWGS84に変換
-          final point = Point(x: num1, y: num2);
-          final result = proj.transform(wgs84, point);
-          return {'valid': true, 'point': LatLng(result.y, result.x)};
-        } catch (e) {
-          return {'valid': false, 'error': 'Transform error: $e'};
-        }
+      // WGS84として解析
+      if (num1.abs() <= 90 && num2.abs() <= 180) {
+        return {'valid': true, 'point': LatLng(num1, num2)};
+      } else if (num2.abs() <= 90 && num1.abs() <= 180) {
+        return {'valid': true, 'point': LatLng(num2, num1)};
       }
+      return {'valid': false, 'error': 'Out of range'};
     } catch (e) {
       return {'valid': false, 'error': 'Parse error: $e'};
     }
   }
 
-  /// WGS84座標を選択されたEPSGの座標系に変換して文字列化
-  String _formatCoordinate(LatLng point) {
+  /// WGS84座標を指定されたEPSGの座標系に変換してX,Yを個別に取得
+  /// 戻り値: {'x': String, 'y': String}
+  ///
+  /// 日本の平面直角座標系（JGD2011/JGD2000）では:
+  ///   X = Northing（南北方向）、Y = Easting（東西方向）
+  /// proj4dartは (Easting, Northing) の順で返すため、軸を入れ替える必要がある
+  Map<String, String> _formatCoordinateXY(LatLng point, EpsgDefinition epsg) {
     try {
       // WGS84の場合はそのまま緯度経度を表示
-      if (_selectedEpsg.code == 'EPSG:4326' ||
-          _selectedEpsg.code == 'EPSG:6668') {
-        return '[${point.latitude}, ${point.longitude}]';
+      if (epsg.code == 'EPSG:4326' || epsg.code == 'EPSG:6668') {
+        return {
+          'x': point.longitude.toStringAsFixed(6),
+          'y': point.latitude.toStringAsFixed(6),
+        };
       }
 
       // 投影座標系の場合はWGS84からXY座標に変換
@@ -525,17 +541,80 @@ class _DynamicAttributeTableWidgetState
           Projection.add('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
 
       final proj =
-          Projection.get(_selectedEpsg.code) ??
-          Projection.add(_selectedEpsg.code, _selectedEpsg.proj4String);
+          Projection.get(epsg.code) ??
+          Projection.add(epsg.code, epsg.proj4String);
 
       // WGS84から目標座標系に変換
       final p = Point(x: point.longitude, y: point.latitude);
       final result = wgs84.transform(proj, p);
-      return '[${result.x.toStringAsFixed(3)}, ${result.y.toStringAsFixed(3)}]';
+
+      // 日本の平面直角座標系（JGD2011: 6669-6687, JGD2000: 2443-2461）は
+      // X=Northing, Y=Easting なので軸を入れ替える
+      if (_needsAxisSwap(epsg.code)) {
+        return {
+          'x': result.y.toStringAsFixed(3), // Northing → X
+          'y': result.x.toStringAsFixed(3), // Easting → Y
+        };
+      }
+
+      return {
+        'x': result.x.toStringAsFixed(3),
+        'y': result.y.toStringAsFixed(3),
+      };
     } catch (e) {
       AppLogger.debug('[DynamicAttributeTable] 座標変換エラー: $e');
-      return '[${point.latitude}, ${point.longitude}]';
+      return {
+        'x': point.longitude.toStringAsFixed(6),
+        'y': point.latitude.toStringAsFixed(6),
+      };
     }
+  }
+
+  /// 軸の入れ替えが必要な座標系かどうかを判定
+  /// 日本の平面直角座標系（JGD2011, JGD2000）: X=Northing, Y=Easting
+  bool _needsAxisSwap(String epsgCode) {
+    // EPSGコードから数値部分を抽出
+    final codeMatch = RegExp(r'EPSG:(\d+)').firstMatch(epsgCode);
+    if (codeMatch == null) return false;
+
+    final code = int.tryParse(codeMatch.group(1) ?? '') ?? 0;
+
+    // JGD2011 平面直角座標系 I-XIX系 (EPSG:6669-6687)
+    if (code >= 6669 && code <= 6687) return true;
+
+    // JGD2000 平面直角座標系 I-XIX系 (EPSG:2443-2461)
+    if (code >= 2443 && code <= 2461) return true;
+
+    return false;
+  }
+
+  /// EPSGコードからEpsgDefinitionを検索または作成
+  EpsgDefinition? _findOrCreateEpsg(String code) {
+    // 4桁の数字のみの場合は "EPSG:" を付与
+    final normalizedCode = code.startsWith('EPSG:') ? code : 'EPSG:$code';
+
+    // 既存の定義から検索
+    for (final epsg in _epsgDefinitions) {
+      if (epsg.code == normalizedCode) {
+        return epsg;
+      }
+    }
+
+    // 見つからない場合、proj4dartで利用可能かチェック
+    try {
+      final proj = Projection.get(normalizedCode);
+      if (proj != null) {
+        return EpsgDefinition(
+          code: normalizedCode,
+          name: 'Custom ($normalizedCode)',
+          proj4String: '', // proj4dartが既に持っている
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('[DynamicAttributeTable] EPSG検索エラー: $e');
+    }
+
+    return null;
   }
 
   /// 行データを作成
@@ -552,7 +631,9 @@ class _DynamicAttributeTableWidgetState
       return [];
     }
 
-    AppLogger.debug('[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ');
+    AppLogger.debug(
+      '[DynamicAttributeTable] 行データ作成開始: ${features.length}個のフィーチャ',
+    );
 
     // 重複チェック: rowIdのセットを作成
     final seenRowIds = <int>{};
@@ -567,7 +648,9 @@ class _DynamicAttributeTableWidgetState
     }
 
     if (duplicateRowIds.isNotEmpty) {
-      AppLogger.debug('[DynamicAttributeTable] ! 重複するrowIdを検出: $duplicateRowIds');
+      AppLogger.debug(
+        '[DynamicAttributeTable] ! 重複するrowIdを検出: $duplicateRowIds',
+      );
       AppLogger.debug('[DynamicAttributeTable] features配列に重複があります！');
     }
 
@@ -588,11 +671,22 @@ class _DynamicAttributeTableWidgetState
         }
       }
 
-      // Pointレイヤーの場合、仮想的な_coordinate列を追加
+      // Pointレイヤーの場合、仮想的な座標列を追加
       if (isPointLayer && feature is PointFeatureNode) {
         final point = feature.point;
-        // 選択されたEPSGで座標を変換して表示
-        cells['_coordinate'] = PlutoCell(value: _formatCoordinate(point));
+
+        // WGS84座標
+        if (_showWgs84) {
+          cells['_lat'] = PlutoCell(value: point.latitude.toStringAsFixed(6));
+          cells['_lon'] = PlutoCell(value: point.longitude.toStringAsFixed(6));
+        }
+
+        // 追加座標系
+        if (_additionalEpsg != null) {
+          final xy = _formatCoordinateXY(point, _additionalEpsg!);
+          cells['_x'] = PlutoCell(value: xy['x'] ?? '');
+          cells['_y'] = PlutoCell(value: xy['y'] ?? '');
+        }
       }
 
       tableRows.add(PlutoRow(cells: cells));
@@ -654,6 +748,52 @@ class _DynamicAttributeTableWidgetState
     }
   }
 
+  /// テーブル全体をタブ区切りでクリップボードにコピー
+  Future<void> _copyTableToClipboard() async {
+    try {
+      final buffer = StringBuffer();
+
+      // ヘッダー行を作成（表示中のカラム名）
+      final headerNames = columns.map((c) => c.title).toList();
+      buffer.writeln(headerNames.join('\t'));
+
+      // データ行を作成
+      for (final row in rows) {
+        final rowValues = <String>[];
+        for (final column in columns) {
+          final cell = row.cells[column.field];
+          final value = cell?.value?.toString() ?? '';
+          rowValues.add(value);
+        }
+        buffer.writeln(rowValues.join('\t'));
+      }
+
+      // クリップボードにコピー
+      await Clipboard.setData(ClipboardData(text: buffer.toString()));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${rows.length}行をクリップボードにコピーしました'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger.debug('[DynamicAttributeTable] クリップボードコピーエラー: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('コピーエラー: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   /// 選択されたフィーチャを削除（GlobalConfig統一処理を使用）
   Future<void> _deleteSelectedFeatures() async {
     try {
@@ -693,7 +833,9 @@ class _DynamicAttributeTableWidgetState
         }
       }
 
-      AppLogger.debug('[DynamicAttributeTable] 削除対象行インデックス（ソート前）: $rowIndicesToRemove');
+      AppLogger.debug(
+        '[DynamicAttributeTable] 削除対象行インデックス（ソート前）: $rowIndicesToRemove',
+      );
 
       // PlutoGridから該当する行を即座に削除（UI更新優先）
       if (stateManager != null && rowIndicesToRemove.isNotEmpty) {
@@ -706,7 +848,9 @@ class _DynamicAttributeTableWidgetState
         for (final index in rowIndicesToRemove) {
           if (index < rows.length) {
             final row = rows[index];
-            AppLogger.debug('[DynamicAttributeTable] 削除する行[$index]: ${row.cells}');
+            AppLogger.debug(
+              '[DynamicAttributeTable] 削除する行[$index]: ${row.cells}',
+            );
             rowsToRemove.add(row);
           } else {
             AppLogger.debug(
@@ -726,14 +870,18 @@ class _DynamicAttributeTableWidgetState
       }
 
       // ローカルのfeaturesリストからも削除
-      AppLogger.debug('[DynamicAttributeTable] featuresリストから削除開始（現在${features.length}個）');
+      AppLogger.debug(
+        '[DynamicAttributeTable] featuresリストから削除開始（現在${features.length}個）',
+      );
       for (final feature in selectedFeaturesToDelete) {
         features.remove(feature);
         AppLogger.debug(
           '[DynamicAttributeTable] features.remove: rowId=${feature.rowId}',
         );
       }
-      AppLogger.debug('[DynamicAttributeTable] featuresリスト削除完了（現在${features.length}個）');
+      AppLogger.debug(
+        '[DynamicAttributeTable] featuresリスト削除完了（現在${features.length}個）',
+      );
 
       // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
       await GlobalConfig.instance.disposeSelectedFeatures(
@@ -756,7 +904,9 @@ class _DynamicAttributeTableWidgetState
         AppLogger.debug('[DynamicAttributeTable] PlutoGrid更新完了');
       }
 
-      AppLogger.debug('[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個');
+      AppLogger.debug(
+        '[DynamicAttributeTable] 選択されたフィーチャを削除しました: $featureCount個',
+      );
 
       // 成功メッセージ
       if (mounted) {
@@ -789,7 +939,9 @@ class _DynamicAttributeTableWidgetState
     dynamic value,
   ) async {
     try {
-      AppLogger.debug('[DynamicAttributeTable] 属性変更保存: field=$field, value=$value');
+      AppLogger.debug(
+        '[DynamicAttributeTable] 属性変更保存: field=$field, value=$value',
+      );
 
       // 基本フィールドの処理
       if (field == 'id' ||
@@ -801,10 +953,18 @@ class _DynamicAttributeTableWidgetState
         return;
       }
 
-      // 仮想カラム(_coordinate)の処理
+      // 仮想座標カラム(_x, _y)は表示専用（編集不可）
+      if (field == '_x' || field == '_y') {
+        AppLogger.debug('[DynamicAttributeTable] 座標変換カラムは表示専用です: $field');
+        return;
+      }
+
+      // 互換性のため旧_coordinateカラムも処理（将来削除予定）
       if (field == '_coordinate') {
         if (feature is! PointFeatureNode) {
-          AppLogger.debug('[DynamicAttributeTable] _coordinateはPointレイヤーでのみ編集可能');
+          AppLogger.debug(
+            '[DynamicAttributeTable] _coordinateはPointレイヤーでのみ編集可能',
+          );
           return;
         }
 
@@ -813,7 +973,9 @@ class _DynamicAttributeTableWidgetState
 
         if (!coordinateResult['valid']) {
           AppLogger.debug('[DynamicAttributeTable] 無効な座標形式: $value');
-          AppLogger.debug('[DynamicAttributeTable] エラー: ${coordinateResult['error']}');
+          AppLogger.debug(
+            '[DynamicAttributeTable] エラー: ${coordinateResult['error']}',
+          );
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1078,56 +1240,84 @@ class _DynamicAttributeTableWidgetState
                   height: 1.0,
                 ),
               ),
-              // Pointレイヤーの場合のみEPSG選択を表示
+              // Pointレイヤーの場合のみ座標表示オプションを表示
               if (_isPointLayer()) ...[
                 const SizedBox(width: 8),
+                // WGS84表示チェックボックス
+                SizedBox(
+                  height: 22,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: Checkbox(
+                          value: _showWgs84,
+                          onChanged: (value) async {
+                            setState(() {
+                              _showWgs84 = value ?? true;
+                              _plutoGridKey = UniqueKey();
+                              stateManager = null; // PlutoGrid再構築のためリセット
+                            });
+                            await _initializeTableData();
+                          },
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      const Text('WGS84', style: TextStyle(fontSize: 9)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 追加座標系入力（4桁のEPSGコード + 俗称候補）
                 SizedBox(
                   width: 200,
                   height: 22,
                   child: Autocomplete<EpsgDefinition>(
                     initialValue: TextEditingValue(
-                      text: _selectedEpsg.toString(),
+                      text: _additionalEpsg != null
+                          ? '${_additionalEpsg!.code.replaceFirst('EPSG:', '')} ${_additionalEpsg!.name}'
+                          : '',
                     ),
                     optionsBuilder: (TextEditingValue textEditingValue) {
                       if (textEditingValue.text.isEmpty) {
-                        return _epsgDefinitions;
+                        // 空の場合は主要な座標系のみ表示（WGS84系は除外）
+                        return _epsgDefinitions.where(
+                          (e) => e.code != 'EPSG:4326' && e.code != 'EPSG:6668',
+                        );
                       }
-                      // 検索文字列にマッチするEPSGをフィルタリング
                       final searchText = textEditingValue.text.toLowerCase();
                       return _epsgDefinitions.where((epsg) {
-                        final epsgStr = epsg.toString().toLowerCase();
-                        return epsgStr.contains(searchText);
+                        if (epsg.code == 'EPSG:4326' ||
+                            epsg.code == 'EPSG:6668') {
+                          return false; // WGS84系は除外
+                        }
+                        final codeNum = epsg.code.replaceFirst('EPSG:', '');
+                        return codeNum.contains(searchText) ||
+                            epsg.name.toLowerCase().contains(searchText);
                       });
                     },
-                    displayStringForOption:
-                        (EpsgDefinition option) => option.toString(),
+                    displayStringForOption: (EpsgDefinition option) =>
+                        '${option.code.replaceFirst('EPSG:', '')} ${option.name}',
                     onSelected: (EpsgDefinition selection) async {
                       setState(() {
-                        _selectedEpsg = selection;
-                        // PlutoGridを完全に再構築するために新しいKeyを生成
+                        _additionalEpsg = selection;
+                        _epsgController.text =
+                            '${selection.code.replaceFirst('EPSG:', '')} ${selection.name}';
                         _plutoGridKey = UniqueKey();
+                        stateManager = null; // PlutoGrid再構築のためリセット
                       });
-                      // 座標表示を更新
                       await _initializeTableData();
                     },
                     fieldViewBuilder: (
                       BuildContext context,
-                      TextEditingController textEditingController,
+                      TextEditingController controller,
                       FocusNode focusNode,
                       VoidCallback onFieldSubmitted,
                     ) {
-                      // フォーカス時にテキストを全選択
-                      focusNode.addListener(() {
-                        if (focusNode.hasFocus) {
-                          textEditingController.selection = TextSelection(
-                            baseOffset: 0,
-                            extentOffset: textEditingController.text.length,
-                          );
-                        }
-                      });
-
                       return TextField(
-                        controller: textEditingController,
+                        controller: controller,
                         focusNode: focusNode,
                         style: const TextStyle(fontSize: 8, height: 1.0),
                         decoration: InputDecoration(
@@ -1137,11 +1327,37 @@ class _DynamicAttributeTableWidgetState
                           ),
                           border: const OutlineInputBorder(),
                           isDense: true,
-                          hintText: 'EPSG検索...',
+                          hintText: 'EPSG (例: 6677, IX系)',
                           hintStyle: const TextStyle(fontSize: 8),
+                          suffixIcon: _additionalEpsg != null
+                              ? GestureDetector(
+                                  onTap: () async {
+                                    setState(() {
+                                      _additionalEpsg = null;
+                                      controller.clear();
+                                      _plutoGridKey = UniqueKey();
+                                      stateManager = null; // PlutoGrid再構築のためリセット
+                                    });
+                                    await _initializeTableData();
+                                  },
+                                  child: const Icon(Icons.clear, size: 12),
+                                )
+                              : null,
                         ),
                         onSubmitted: (String value) {
-                          onFieldSubmitted();
+                          // 4桁の数字が入力された場合
+                          final code = value.split(' ').first.trim();
+                          if (code.isNotEmpty) {
+                            final epsg = _findOrCreateEpsg(code);
+                            if (epsg != null) {
+                              setState(() {
+                                _additionalEpsg = epsg;
+                                _plutoGridKey = UniqueKey();
+                                stateManager = null; // PlutoGrid再構築のためリセット
+                              });
+                              _initializeTableData();
+                            }
+                          }
                         },
                       );
                     },
@@ -1157,7 +1373,7 @@ class _DynamicAttributeTableWidgetState
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(
                               maxHeight: 200,
-                              maxWidth: 400,
+                              maxWidth: 380,
                             ),
                             child: ListView.builder(
                               padding: EdgeInsets.zero,
@@ -1166,14 +1382,15 @@ class _DynamicAttributeTableWidgetState
                               itemBuilder: (BuildContext context, int index) {
                                 final option = options.elementAt(index);
                                 return InkWell(
-                                  onTap: () {
-                                    onSelected(option);
-                                  },
+                                  onTap: () => onSelected(option),
                                   child: Padding(
-                                    padding: const EdgeInsets.all(8.0),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     child: Text(
-                                      option.toString(),
-                                      style: const TextStyle(fontSize: 10),
+                                      '${option.code.replaceFirst('EPSG:', '')} ${option.name}',
+                                      style: const TextStyle(fontSize: 9),
                                     ),
                                   ),
                                 );
@@ -1213,6 +1430,17 @@ class _DynamicAttributeTableWidgetState
                     _initializeTableData();
                   },
                   tooltip: '更新',
+                ),
+              ),
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 12,
+                  icon: const Icon(Icons.copy),
+                  onPressed: _copyTableToClipboard,
+                  tooltip: 'テーブルをコピー',
                 ),
               ),
               if (widget.onAddFeature != null)
@@ -1295,7 +1523,9 @@ class _DynamicAttributeTableWidgetState
                 if (GlobalConfig.instance.isAttributeTableEditing !=
                     isEditing) {
                   GlobalConfig.instance.isAttributeTableEditing = isEditing;
-                  AppLogger.debug('[DynamicAttributeTable] 編集モード変更: $isEditing');
+                  AppLogger.debug(
+                    '[DynamicAttributeTable] 編集モード変更: $isEditing',
+                  );
                 }
               });
 
@@ -1311,7 +1541,9 @@ class _DynamicAttributeTableWidgetState
                 AppLogger.debug(
                   '[DynamicAttributeTable] currentCell: ${currentCell != null ? "存在" : "null"}',
                 );
-                AppLogger.debug('[DynamicAttributeTable] currentRowIdx: $currentRowIdx');
+                AppLogger.debug(
+                  '[DynamicAttributeTable] currentRowIdx: $currentRowIdx',
+                );
                 AppLogger.debug(
                   '[DynamicAttributeTable] currentColumnField: $currentColumnField',
                 );
@@ -1364,15 +1596,21 @@ class _DynamicAttributeTableWidgetState
                         '  - [$i] ${selectedFeature.name} (ID: ${selectedFeature.rowId})',
                       );
                     } else {
-                      AppLogger.debug('  - [$i] 型不明: ${selectedFeature.runtimeType}');
+                      AppLogger.debug(
+                        '  - [$i] 型不明: ${selectedFeature.runtimeType}',
+                      );
                     }
                   }
 
-                  AppLogger.debug('[DynamicAttributeTable] onFeatureSelected コールバック呼び出し');
+                  AppLogger.debug(
+                    '[DynamicAttributeTable] onFeatureSelected コールバック呼び出し',
+                  );
                   widget.onFeatureSelected?.call(feature);
                   AppLogger.debug('[DynamicAttributeTable] フィーチャ選択処理完了');
                 } else {
-                  AppLogger.debug('[DynamicAttributeTable] 無効な選択状態 → フィーチャ選択スキップ');
+                  AppLogger.debug(
+                    '[DynamicAttributeTable] 無効な選択状態 → フィーチャ選択スキップ',
+                  );
                 }
                 AppLogger.debug(
                   '[DynamicAttributeTable] ========================================',
@@ -1427,4 +1665,3 @@ class _DynamicAttributeTableWidgetState
     );
   }
 }
-

@@ -590,7 +590,11 @@ class GpsManagerService extends ChangeNotifier {
           sourceType: GpsSourceType.external.sourceCode,
           satelliteCount: service.satelliteCount,
           hdop: service.hdop,
+          pdop: service.pdop,
+          vdop: service.vdop,
           gpsQuality: service.gpsQuality,
+          fixType: service.fixTypeString,
+          nmea: service.getNmeaBufferAsString(),
         );
       }
     }
@@ -608,7 +612,11 @@ class GpsManagerService extends ChangeNotifier {
     required String sourceType,
     int? satelliteCount,
     double? hdop,
+    double? pdop,
+    double? vdop,
     int? gpsQuality,
+    String? fixType,
+    String? nmea,
   }) {
     _latitude = latitude;
     _longitude = longitude;
@@ -636,7 +644,12 @@ class GpsManagerService extends ChangeNotifier {
         sourceType: sourceType,
         satelliteCount: satelliteCount,
         hdop: hdop,
+        pdop: pdop,
+        vdop: vdop,
         gpsQuality: gpsQuality,
+        fixType: fixType,
+        correctionSource: _externalGnssService?.correctionSource,
+        nmea: nmea,
       );
     }
 
@@ -655,7 +668,12 @@ class GpsManagerService extends ChangeNotifier {
     required String sourceType,
     int? satelliteCount,
     double? hdop,
+    double? pdop,
+    double? vdop,
     int? gpsQuality,
+    String? fixType,
+    String? correctionSource,
+    String? nmea,
   }) {
     final gpsData = {
       'latitude': latitude,
@@ -672,7 +690,12 @@ class GpsManagerService extends ChangeNotifier {
       // 外部GNSS機器の場合のみ衛星情報を追加
       if (satelliteCount != null) 'satelliteCount': satelliteCount,
       if (hdop != null) 'hdop': hdop,
+      if (pdop != null) 'pdop': pdop,
+      if (vdop != null) 'vdop': vdop,
       if (gpsQuality != null) 'gpsQuality': gpsQuality,
+      if (fixType != null) 'fixType': fixType,
+      if (correctionSource != null) 'correctionSource': correctionSource,
+      if (nmea != null) 'nmea': nmea,
     };
 
     _continuousSurveyData.add(gpsData);
@@ -707,6 +730,7 @@ class GpsManagerService extends ChangeNotifier {
   Map<String, dynamic> getCurrentGpsInfo() {
     // 外部GNSS使用時は、フォアグラウンドサービス実行中でもメインisolateの位置情報を返す
     // （外部GNSSデータはメインisolateでのみ取得可能）
+    final isExternal = _currentSource == GpsSourceType.external;
     return {
       'sourceType': _currentSource.sourceCode,
       'sourceName': _currentSource.displayName,
@@ -723,12 +747,16 @@ class GpsManagerService extends ChangeNotifier {
       'isInitialized': _isInitialized,
       'isSurveyMode': _isSurveyMode,
       'usesForegroundService': false,
-      // 外部GNSS機器の場合のみ衛星情報を追加
-      'satelliteCount':
-          _currentSource == GpsSourceType.external ? _satelliteCount : null,
-      'hdop': _currentSource == GpsSourceType.external ? _hdop : null,
-      'gpsQuality':
-          _currentSource == GpsSourceType.external ? _gpsQuality : null,
+      // 外部GNSS機器の場合のみ衛星情報・NMEA情報を追加
+      'satelliteCount': isExternal ? _satelliteCount : null,
+      'hdop': isExternal ? _hdop : null,
+      'pdop': isExternal ? _externalGnssService?.pdop : null,
+      'vdop': isExternal ? _externalGnssService?.vdop : null,
+      'gpsQuality': isExternal ? _gpsQuality : null,
+      'fixType': isExternal ? _externalGnssService?.fixTypeString : null,
+      'correctionSource':
+          isExternal ? _externalGnssService?.correctionSource : null,
+      'nmea': isExternal ? _externalGnssService?.getNmeaBufferAsString() : null,
     };
   }
 
@@ -896,7 +924,9 @@ class GpsManagerService extends ChangeNotifier {
     config.selectedGnssDeviceAddress = _selectedGnssDevice?.address;
     config.selectedGnssDeviceName = _selectedGnssDevice?.name;
 
-    AppLogger.debug('$_logTag: GPS設定をグローバル設定に保存: ${config.preferredGpsSourceType}');
+    AppLogger.debug(
+      '$_logTag: GPS設定をグローバル設定に保存: ${config.preferredGpsSourceType}',
+    );
   }
 
   /// グローバル設定からソース設定のみ読み込み（GPS開始はしない）
@@ -963,7 +993,9 @@ class GpsManagerService extends ChangeNotifier {
         );
 
         await switchGpsSource(GpsSourceType.external, targetDevice);
-        AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})');
+        AppLogger.debug(
+          '$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})',
+        );
       } else if (config.preferredGpsSourceType == 'internal') {
         await switchGpsSource(GpsSourceType.internal);
         AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 内蔵GPS');
@@ -1084,5 +1116,3 @@ class GpsManagerService extends ChangeNotifier {
     super.dispose();
   }
 }
-
-

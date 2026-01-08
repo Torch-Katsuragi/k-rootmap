@@ -661,14 +661,29 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      // SQLiteでサポートされていない型を除外
+      // 実際に存在するカラム名を取得
+      final existingColumns = await schema.getColumnNames(tableName, getAll: true);
+      final existingColumnSet = existingColumns.toSet();
+
+      // SQLiteでサポートされていない型と存在しないカラムを除外
       final filteredAttributes = <String, dynamic>{};
       for (final entry in attributes.entries) {
         final key = entry.key;
         final value = entry.value;
 
-        // ジオメトリ関連フィールドとPRIMARY KEYフィールドは除外
-        if (key == 'geometry' || key == 'geom' || key == pkColumn) {
+        // ジオメトリ関連フィールド、PRIMARY KEYフィールド、id（仮想カラム）は除外
+        if (key == 'geometry' ||
+            key == 'geom' ||
+            key == pkColumn ||
+            key == 'id') {
+          continue;
+        }
+
+        // 存在しないカラムは除外
+        if (!existingColumnSet.contains(key)) {
+          AppLogger.debug(
+            '[FeatureRepository] ⚠️ カラム未存在のためスキップ: $key',
+          );
           continue;
         }
 
@@ -679,7 +694,9 @@ class FeatureRepository {
             value is Uint8List) {
           filteredAttributes[key] = value;
         } else {
-          AppLogger.debug('[FeatureRepository] ⚠️ サポートされていない型: $key = ${value.runtimeType}');
+          AppLogger.debug(
+            '[FeatureRepository] ⚠️ サポートされていない型: $key = ${value.runtimeType}',
+          );
         }
       }
 
@@ -687,18 +704,20 @@ class FeatureRepository {
         return true;
       }
 
-      final columnAssignments = filteredAttributes.keys
-          .map((key) => '"$key" = ?')
-          .join(', ');
+      final columnAssignments =
+          filteredAttributes.keys.map((key) => '"$key" = ?').join(', ');
       final values = [...filteredAttributes.values, rowId];
 
       final whereClause = await schema.buildWhereClause(tableName);
-      final sql = 'UPDATE "$tableName" SET $columnAssignments WHERE $whereClause';
+      final sql =
+          'UPDATE "$tableName" SET $columnAssignments WHERE $whereClause';
       final rowsUpdated = await db.rawUpdate(sql, values);
 
       return rowsUpdated > 0;
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: updateFeatureAttributes failed: $e');
+      AppLogger.debug(
+        '[ERROR] FeatureRepository: updateFeatureAttributes failed: $e',
+      );
       return false;
     }
   }

@@ -113,8 +113,9 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
           ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        // エクスポートボタン（エクスポートモード時）
+        // エクスポートボタン（エクスポートモード時、左寄せ）
         if (isExportMode)
           ElevatedButton.icon(
             onPressed: _isProcessing ? null : _handleExport,
@@ -126,7 +127,10 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   )
                 : const Icon(Icons.file_download),
             label: Text(_isProcessing ? 'Exporting...' : 'Export Layer'),
-          ),
+          )
+        else
+          const SizedBox.shrink(), // インポートモード時はプレースホルダー
+        // Closeボタン（右寄せ）
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),

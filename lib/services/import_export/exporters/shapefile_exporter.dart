@@ -1,25 +1,38 @@
 // K-MAPS: Shapefile Exporter
-// Shapefileエクスポートクラス
+// Shapefileエクスポートクラス（CRS変換対応）
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:proj4dart/proj4dart.dart';
 import '../import_export_models.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/geometry_type.dart';
 import '../../../utils/binary_utils.dart';
 import '../../../utils/wkb_utils.dart';
+import '../../coordinate/epsg_registry.dart';
 import 'base_exporter.dart';
 
-/// Shapefileエクスポーター
+/// Shapefileエクスポーター（CRS変換対応）
 class ShapefileExporter extends BaseExporter {
+  final EpsgRegistry _epsgRegistry = EpsgRegistry();
+  
+  // WGS84の投影定義
+  static final Projection _wgs84 = Projection.WGS84;
+  
   @override
   FileFormat get format => FileFormat.shapefile;
 
   @override
-  Future<ImportExportResult> export(LayerNode layer, String outputPath) async {
+  Future<ImportExportResult> export(
+    LayerNode layer,
+    String outputPath, {
+    ExportOptions options = const ExportOptions(),
+  }) async {
     try {
-      AppLogger.debug('[ShapefileExporter] エクスポート開始: ${layer.layerName}');
+      final targetCrs = options.targetCrs;
+      final crsInfo = targetCrs != null ? targetCrs.code : 'WGS84';
+      AppLogger.debug('[ShapefileExporter] エクスポート開始: ${layer.layerName} (CRS: $crsInfo)');
 
       final features = await layer.geoPackageNode.geoPackageFile.getFeatures(
         layer.layerName,
@@ -31,8 +44,28 @@ class ShapefileExporter extends BaseExporter {
         return ImportExportResult.error('No features found in layer: ${layer.layerName}');
       }
 
-      // フィーチャをGeoJSON形式に変換
-      final geoJsonFeatures = await _convertFeaturesToGeoJson(features, geometryType);
+      // 座標変換用の投影を準備
+      Projection? targetProjection;
+      bool needsAxisSwap = false;
+      
+      if (targetCrs != null && !options.isWgs84) {
+        try {
+          targetProjection = Projection.parse(targetCrs.proj4String);
+          needsAxisSwap = _epsgRegistry.needsAxisSwap(targetCrs.code);
+          AppLogger.debug('[ShapefileExporter] 座標変換有効: ${targetCrs.code}, 軸入れ替え: $needsAxisSwap');
+        } catch (e) {
+          AppLogger.debug('[ShapefileExporter] 投影定義の解析に失敗: $e');
+          return ImportExportResult.error('Invalid CRS definition: ${targetCrs.code}');
+        }
+      }
+
+      // フィーチャをGeoJSON形式に変換（座標変換を含む）
+      final geoJsonFeatures = await _convertFeaturesToGeoJson(
+        features, 
+        geometryType,
+        targetProjection: targetProjection,
+        needsAxisSwap: needsAxisSwap,
+      );
 
       if (geoJsonFeatures.isEmpty) {
         return ImportExportResult.error('No valid features could be converted for export');
@@ -44,13 +77,13 @@ class ShapefileExporter extends BaseExporter {
       // ジオメトリタイプに応じてShapefileを生成
       switch (geometryType) {
         case GeometryType.point:
-          await _writePointShapefile(geoJsonFeatures, basePath);
+          await _writePointShapefile(geoJsonFeatures, basePath, targetCrs, options);
           break;
         case GeometryType.linestring:
-          await _writeLineShapefile(geoJsonFeatures, basePath);
+          await _writeLineShapefile(geoJsonFeatures, basePath, targetCrs, options);
           break;
         case GeometryType.polygon:
-          await _writePolygonShapefile(geoJsonFeatures, basePath);
+          await _writePolygonShapefile(geoJsonFeatures, basePath, targetCrs, options);
           break;
         default:
           return ImportExportResult.error('Unsupported geometry type: ${geometryType?.value}');
@@ -64,6 +97,7 @@ class ShapefileExporter extends BaseExporter {
           'featureCount': geoJsonFeatures.length,
           'geometryType': geometryType?.value ?? 'Unknown',
           'format': 'Shapefile',
+          'crs': targetCrs?.code ?? 'EPSG:4326',
         },
       );
     } catch (e, stackTrace) {
@@ -72,12 +106,41 @@ class ShapefileExporter extends BaseExporter {
       return ImportExportResult.error('Shapefile export failed: $e');
     }
   }
+  
+  /// WGS84座標をターゲットCRSに変換
+  /// [lon] 経度, [lat] 緯度
+  /// [targetProjection] ターゲット投影
+  /// [needsAxisSwap] 未使用（proj4dartは常にX=Easting, Y=Northing順で出力）
+  /// 戻り値: [x, y]（Shapefileに書き込む順序）
+  List<double> _transformCoordinate(
+    double lon,
+    double lat,
+    Projection? targetProjection,
+    bool needsAxisSwap,
+  ) {
+    if (targetProjection == null) {
+      // WGS84の場合はそのまま（経度, 緯度 = X, Y）
+      return [lon, lat];
+    }
+    
+    // WGS84からターゲットCRSに変換
+    // proj4dartは常に(X=Easting, Y=Northing)順で出力する
+    // 日本の平面直角座標系の公式定義は(X=Northing, Y=Easting)だが、
+    // QGISを含む多くのGISソフトは(Easting, Northing)として扱う
+    final sourcePoint = Point(x: lon, y: lat);
+    final transformedPoint = _wgs84.transform(targetProjection, sourcePoint);
+    
+    // proj4dartの出力をそのまま使用（軸入れ替え不要）
+    return [transformedPoint.x, transformedPoint.y];
+  }
 
-  /// フィーチャをGeoJSON形式に変換
+  /// フィーチャをGeoJSON形式に変換（座標変換対応）
   Future<List<Map<String, dynamic>>> _convertFeaturesToGeoJson(
     List<Map<String, dynamic>> features,
-    GeometryType? geometryType,
-  ) async {
+    GeometryType? geometryType, {
+    Projection? targetProjection,
+    bool needsAxisSwap = false,
+  }) async {
     final geoJsonFeatures = <Map<String, dynamic>>[];
     const reservedKeys = {'fid', 'geom', 'id', 'rowid', 'geometry', 'points', 'lines', 'polygons', 'rings', 'point', 'line'};
 
@@ -113,9 +176,14 @@ class ShapefileExporter extends BaseExporter {
           
           if (points != null && points.isNotEmpty) {
             final point = points.first;
+            // 座標変換を適用
+            final coords = _transformCoordinate(
+              point.longitude, point.latitude,
+              targetProjection, needsAxisSwap,
+            );
             geometry = {
               'type': 'Point',
-              'coordinates': [point.longitude, point.latitude],
+              'coordinates': coords,
             };
           }
           break;
@@ -141,8 +209,12 @@ class ShapefileExporter extends BaseExporter {
           
           if (lines != null && lines.isNotEmpty) {
             final linePoints = lines.first;
+            // 座標変換を適用
             final coordinates = linePoints
-                .map((point) => [point.longitude, point.latitude])
+                .map((point) => _transformCoordinate(
+                      point.longitude, point.latitude,
+                      targetProjection, needsAxisSwap,
+                    ))
                 .toList();
             geometry = {'type': 'LineString', 'coordinates': coordinates};
           }
@@ -168,8 +240,12 @@ class ShapefileExporter extends BaseExporter {
             final allRings = <List<List<double>>>[];
 
             for (final ring in polygons) {
+              // 座標変換を適用
               final ringCoordinates = ring
-                  .map((point) => [point.longitude, point.latitude])
+                  .map((point) => _transformCoordinate(
+                        point.longitude, point.latitude,
+                        targetProjection, needsAxisSwap,
+                      ))
                   .toList();
 
               // ポリゴンを閉じる
@@ -177,7 +253,7 @@ class ShapefileExporter extends BaseExporter {
                 final firstPoint = ringCoordinates.first;
                 final lastPoint = ringCoordinates.last;
                 if (firstPoint[0] != lastPoint[0] || firstPoint[1] != lastPoint[1]) {
-                  ringCoordinates.add(firstPoint);
+                  ringCoordinates.add(List.from(firstPoint));
                 }
               }
 
@@ -208,6 +284,8 @@ class ShapefileExporter extends BaseExporter {
   Future<void> _writePointShapefile(
     List<Map<String, dynamic>> features,
     String basePath,
+    EpsgDefinition? targetCrs,
+    ExportOptions options,
   ) async {
     final bbox = BoundingBox();
     final validFeatures = features.where((f) {
@@ -234,16 +312,18 @@ class ShapefileExporter extends BaseExporter {
     await _writePointShxFile(validFeatures, bbox, '$basePath.shx');
     
     // DBF
-    await _writeDbfFile(validFeatures, '$basePath.dbf');
+    await _writeDbfFile(validFeatures, '$basePath.dbf', options.includeRowNumber);
     
     // PRJ
-    await _writePrjFile('$basePath.prj');
+    await _writePrjFile('$basePath.prj', targetCrs);
   }
 
   /// LineString Shapefileを書き込み
   Future<void> _writeLineShapefile(
     List<Map<String, dynamic>> features,
     String basePath,
+    EpsgDefinition? targetCrs,
+    ExportOptions options,
   ) async {
     final bbox = BoundingBox();
     final validFeatures = features.where((f) {
@@ -267,14 +347,16 @@ class ShapefileExporter extends BaseExporter {
 
     await _writeLineShpFile(validFeatures, bbox, '$basePath.shp');
     await _writeLineShxFile(validFeatures, bbox, '$basePath.shx');
-    await _writeDbfFile(validFeatures, '$basePath.dbf');
-    await _writePrjFile('$basePath.prj');
+    await _writeDbfFile(validFeatures, '$basePath.dbf', options.includeRowNumber);
+    await _writePrjFile('$basePath.prj', targetCrs);
   }
 
   /// Polygon Shapefileを書き込み
   Future<void> _writePolygonShapefile(
     List<Map<String, dynamic>> features,
     String basePath,
+    EpsgDefinition? targetCrs,
+    ExportOptions options,
   ) async {
     final bbox = BoundingBox();
     final validFeatures = features.where((f) {
@@ -302,8 +384,8 @@ class ShapefileExporter extends BaseExporter {
 
     await _writePolygonShpFile(validFeatures, bbox, '$basePath.shp');
     await _writePolygonShxFile(validFeatures, bbox, '$basePath.shx');
-    await _writeDbfFile(validFeatures, '$basePath.dbf');
-    await _writePrjFile('$basePath.prj');
+    await _writeDbfFile(validFeatures, '$basePath.dbf', options.includeRowNumber);
+    await _writePrjFile('$basePath.prj', targetCrs);
   }
 
   /// Point SHPファイルを書き込み
@@ -625,9 +707,11 @@ class ShapefileExporter extends BaseExporter {
   }
 
   /// DBFファイルを書き込み
+  /// [includeRowNumber] 行番号カラム（#）を含めるか
   Future<void> _writeDbfFile(
     List<Map<String, dynamic>> features,
     String path,
+    bool includeRowNumber,
   ) async {
     if (features.isEmpty) {
       await File(path).writeAsBytes([0x03, ...List.filled(31, 0)]);
@@ -638,6 +722,16 @@ class ShapefileExporter extends BaseExporter {
     final fields = <Map<String, dynamic>>[];
     final allMetadata = <String, dynamic>{};
     const excludedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry'};
+
+    // 行番号カラムを先頭に追加
+    if (includeRowNumber) {
+      fields.add({
+        'name': 'ROW_NUM',
+        'type': 'N',
+        'length': 10,
+        'decimal': 0,
+      });
+    }
 
     for (final feature in features) {
       final metadata = feature['metadata'] as Map<String, dynamic>? ?? {};
@@ -708,7 +802,8 @@ class ShapefileExporter extends BaseExporter {
     bytes.add(0x0D);
 
     // レコード
-    for (final feature in features) {
+    for (int rowIndex = 0; rowIndex < features.length; rowIndex++) {
+      final feature = features[rowIndex];
       final metadata = feature['metadata'] as Map<String, dynamic>? ?? {};
       bytes.add(0x20);
 
@@ -716,13 +811,20 @@ class ShapefileExporter extends BaseExporter {
         final fieldName = field['name'] as String;
         final fieldLength = field['length'] as int;
 
-        final metaValue = metadata.entries
-            .firstWhere(
-              (entry) => entry.key.toUpperCase() == fieldName,
-              orElse: () => MapEntry('', ''),
-            )
-            .value;
-        String value = metaValue?.toString() ?? '';
+        String value;
+        
+        // 行番号カラムの場合は1始まりのインデックスを出力
+        if (fieldName == 'ROW_NUM' && includeRowNumber) {
+          value = (rowIndex + 1).toString();
+        } else {
+          final metaValue = metadata.entries
+              .firstWhere(
+                (entry) => entry.key.toUpperCase() == fieldName,
+                orElse: () => MapEntry('', ''),
+              )
+              .value;
+          value = metaValue?.toString() ?? '';
+        }
 
         if (field['type'] == 'N') {
           value = value.padLeft(fieldLength);
@@ -744,13 +846,31 @@ class ShapefileExporter extends BaseExporter {
     await File(cpgPath).writeAsString('CP932');
   }
 
-  /// PRJファイルを書き込み
-  Future<void> _writePrjFile(String path) async {
-    const wgs84Wkt =
-        'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
-        'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
-        'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
-    await File(path).writeAsString(wgs84Wkt);
+  /// PRJファイルを書き込み（動的CRS対応）
+  Future<void> _writePrjFile(String path, EpsgDefinition? targetCrs) async {
+    String wktString;
+    
+    if (targetCrs != null) {
+      // EpsgRegistryからWKT文字列を取得
+      final registryWkt = _epsgRegistry.getWktString(targetCrs.code);
+      if (registryWkt != null) {
+        wktString = registryWkt;
+        AppLogger.debug('[ShapefileExporter] PRJ: ${targetCrs.code} のWKT使用');
+      } else {
+        // 登録されていない場合はWGS84をフォールバック
+        wktString = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
+            'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+            'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+        AppLogger.debug('[ShapefileExporter] PRJ: ${targetCrs.code} 未登録、WGS84使用');
+      }
+    } else {
+      // デフォルト: WGS84
+      wktString = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",'
+          'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+          'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+    }
+    
+    await File(path).writeAsString(wktString);
   }
 
   /// 拡張子なしのベースパスを取得

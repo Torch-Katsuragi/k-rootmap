@@ -5,6 +5,7 @@ import 'base_converter.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../models/geometry_type.dart';
+import '../services/import_export/import_export_models.dart';
 
 /// レイヤーインポート用コンバーター
 class LayerImportConverter
@@ -76,10 +77,15 @@ class LayerExportConverter
     try {
       notifyProgress(0.4, 'Exporting layer...');
 
+      // optionsからExportOptionsを取得（あれば）
+      final exportOptions = input.options['exportOptions'] as ExportOptions? ??
+          ExportOptions.defaultOptions;
+
       final exportResult = await service.exportLayer(
         input.sourceLayer,
         input.outputPath,
         format: input.targetFormat,
+        options: exportOptions,
       );
 
       if (exportResult.success) {

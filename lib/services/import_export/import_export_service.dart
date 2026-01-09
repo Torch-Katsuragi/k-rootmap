@@ -96,13 +96,16 @@ class ImportExportService {
   /// [layer] エクスポート対象のレイヤ
   /// [outputPath] 出力先ファイルパス
   /// [format] 出力形式（省略時はパスの拡張子から自動判定）
+  /// [options] エクスポートオプション（CRS選択等）
   Future<ImportExportResult> exportLayer(
     LayerNode layer,
     String outputPath, {
     FileFormat? format,
+    ExportOptions options = const ExportOptions(),
   }) async {
     try {
-      AppLogger.debug('[ImportExportService] エクスポート開始: ${layer.layerName}');
+      final crsInfo = options.targetCrs?.code ?? 'WGS84';
+      AppLogger.debug('[ImportExportService] エクスポート開始: ${layer.layerName} (CRS: $crsInfo)');
 
       // 出力形式を決定
       final targetFormat = format ?? detectFormat(outputPath);
@@ -123,7 +126,7 @@ class ImportExportService {
 
       AppLogger.debug('[ImportExportService] エクスポーター: ${exporter.format.value}');
       
-      return await exporter.export(layer, outputPath);
+      return await exporter.export(layer, outputPath, options: options);
     } catch (e) {
       AppLogger.debug('[ImportExportService] エクスポートエラー: $e');
       return ImportExportResult.error('エクスポートに失敗しました: $e');

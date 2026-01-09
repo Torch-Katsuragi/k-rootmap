@@ -11,6 +11,11 @@ abstract class BaseExporter {
   /// レイヤをファイルにエクスポート
   /// [layer] エクスポート対象のレイヤ
   /// [outputPath] 出力先ファイルパス
-  Future<ImportExportResult> export(LayerNode layer, String outputPath);
+  /// [options] エクスポートオプション（CRS選択等）
+  Future<ImportExportResult> export(
+    LayerNode layer,
+    String outputPath, {
+    ExportOptions options = const ExportOptions(),
+  });
 }
 

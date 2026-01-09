@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
+import '../services/coordinate/epsg_registry.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 
@@ -54,6 +55,7 @@ class LayerImportExportDialog extends StatefulWidget {
 
 class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   final ImportExportService _importExportService = ImportExportService();
+  final EpsgRegistry _epsgRegistry = EpsgRegistry();
   bool _isProcessing = false;
   String? _statusMessage;
   ImportExportResult? _lastResult;
@@ -71,7 +73,10 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
 
   // エクスポート設定
   FileFormat _exportFormat = FileFormat.shapefile;
-  bool _exportAsPointCloud = true;
+  bool _exportAsPointCloud = false; // 初期値はオフ
+  bool _includeRowNumber = false; // 初期値はオフ
+  EpsgDefinition? _selectedCrs; // 選択されたCRS（nullはWGS84）
+  String _crsSearchQuery = ''; // CRS検索クエリ
 
   /// ダイアログのモード判定
   bool get isImportMode => widget.targetGeoPackage != null;
@@ -83,24 +88,26 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       title: Text(isImportMode ? 'Import Layer' : 'Export Layer'),
       content: SizedBox(
         width: 450,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // コンテキスト情報
-            _buildContextCard(),
-            const SizedBox(height: 16),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // コンテキスト情報
+              _buildContextCard(),
+              const SizedBox(height: 16),
 
-            // モード別UI
-            if (isImportMode) ..._buildImportUI(),
-            if (isExportMode) ..._buildExportUI(),
+              // モード別UI
+              if (isImportMode) ..._buildImportUI(),
+              if (isExportMode) ..._buildExportUI(),
 
-            // 進行状況表示
-            if (_isProcessing) _buildProgressCard(),
+              // 進行状況表示
+              if (_isProcessing) _buildProgressCard(),
 
-            // ステータス表示
-            if (_statusMessage != null) _buildStatusCard(),
-          ],
+              // ステータス表示
+              if (_statusMessage != null) _buildStatusCard(),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -214,7 +221,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       Text('Export Format:', style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 8),
       DropdownButtonFormField<FileFormat>(
-        initialValue: _exportFormat,
+        value: _exportFormat,
         decoration: const InputDecoration(
           border: OutlineInputBorder(),
           labelText: 'Select Export Format',
@@ -250,20 +257,36 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
                   'Shapefile Export Options',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
-                CheckboxListTile(
-                  title: const Text('Export as Point Cloud'),
-                  subtitle: const Text(
-                    'Convert line/polygon vertices to individual points',
+                // Point Cloudオプション（Line/Polygonレイヤーのみ）
+                if (widget.exportLayer is! PointLayerNode)
+                  CheckboxListTile(
+                    title: const Text('Export as Point Cloud'),
+                    subtitle: const Text(
+                      'Convert line/polygon vertices to individual points',
+                    ),
+                    value: _exportAsPointCloud,
+                    onChanged: (value) {
+                      setState(() => _exportAsPointCloud = value ?? false);
+                    },
                   ),
-                  value: _exportAsPointCloud,
+                CheckboxListTile(
+                  title: const Text('Include Row Number'),
+                  subtitle: const Text(
+                    'Add ROW_NUM column (like # in attribute table)',
+                  ),
+                  value: _includeRowNumber,
                   onChanged: (value) {
-                    setState(() => _exportAsPointCloud = value ?? true);
+                    setState(() => _includeRowNumber = value ?? false);
                   },
                 ),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 16),
+        
+        // CRS選択セクション
+        _buildCrsSelector(),
         const SizedBox(height: 16),
       ],
 
@@ -346,6 +369,143 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
               Text(
                 'Size: ${(_selectedFileSize! / 1024).toStringAsFixed(1)} KB',
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// CRS選択ウィジェット
+  Widget _buildCrsSelector() {
+    // 検索クエリに基づいてCRSをフィルタリング
+    final availableCrs = _crsSearchQuery.isEmpty
+        ? _epsgRegistry.allDefinitions
+        : _epsgRegistry.search(_crsSearchQuery);
+
+    return Card(
+      color: Colors.blue[50],
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Coordinate Reference System (CRS)',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            
+            // 現在の選択表示
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.public, size: 20, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _selectedCrs?.displayString ?? 'WGS 84 (EPSG:4326) - Default',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: _selectedCrs == null ? Colors.grey[600] : Colors.black,
+                      ),
+                    ),
+                  ),
+                  if (_selectedCrs != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() => _selectedCrs = null),
+                      tooltip: 'Reset to WGS84',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            // CRS検索
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search CRS (e.g., 6677, Tokyo, IX)',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onChanged: (value) => setState(() => _crsSearchQuery = value),
+            ),
+            const SizedBox(height: 8),
+            
+            // CRSリスト
+            Container(
+              height: 150,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: ListView.builder(
+                itemCount: availableCrs.length,
+                itemBuilder: (context, index) {
+                  final crs = availableCrs[index];
+                  final isSelected = _selectedCrs?.code == crs.code;
+                  final isWgs84 = crs.code == 'EPSG:4326';
+                  
+                  return ListTile(
+                    dense: true,
+                    selected: isSelected,
+                    selectedTileColor: Colors.blue[100],
+                    leading: Icon(
+                      isWgs84 ? Icons.language : Icons.grid_on,
+                      size: 18,
+                      color: isSelected ? Colors.blue : Colors.grey,
+                    ),
+                    title: Text(
+                      crs.displayString,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    subtitle: crs.prefectures != null
+                        ? Text(
+                            crs.prefectures!.take(3).join(', '),
+                            style: const TextStyle(fontSize: 11),
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedCrs = isWgs84 ? null : crs;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+            
+            // 注意書き
+            if (_selectedCrs != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Coordinates will be transformed from WGS84 to ${_selectedCrs!.code}',
+                      style: TextStyle(fontSize: 11, color: Colors.blue[700]),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -568,10 +728,18 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
 
       _updateProgress(0.3, 'Analyzing layer...');
 
+      // エクスポートオプションを作成
+      final exportOptions = ExportOptions(
+        targetCrs: _selectedCrs,
+        convertToPointCloud: _exportAsPointCloud,
+        includeRowNumber: _includeRowNumber,
+      );
+
       final exportResult = await _importExportService.exportLayer(
         widget.exportLayer!,
         result,
         format: _exportFormat,
+        options: exportOptions,
       );
 
       _updateProgress(1.0, 'Export completed!');

@@ -17,7 +17,11 @@ class GeoJSONExporter extends BaseExporter {
   FileFormat get format => FileFormat.geojson;
 
   @override
-  Future<ImportExportResult> export(LayerNode layer, String outputPath) async {
+  Future<ImportExportResult> export(
+    LayerNode layer,
+    String outputPath, {
+    ExportOptions options = const ExportOptions(),
+  }) async {
     try {
       AppLogger.debug('[GeoJSONExporter] エクスポート開始: ${layer.layerName}');
 

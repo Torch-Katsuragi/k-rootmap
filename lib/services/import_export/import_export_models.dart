@@ -1,6 +1,7 @@
 // K-MAPS: Import/Export Models
 // ファイル形式定義とインポート/エクスポート結果クラス
 import '../../../models/nodes/layer_node.dart';
+import '../coordinate/epsg_registry.dart';
 
 /// ファイル形式の種類
 enum FileFormat {
@@ -131,3 +132,27 @@ class ImportExportResult {
   }
 }
 
+/// エクスポートオプション
+/// CRS選択やその他のエクスポート設定を保持
+class ExportOptions {
+  /// 出力先のCRS（nullの場合はWGS84）
+  final EpsgDefinition? targetCrs;
+
+  /// ポイントクラウドに変換するか（Shapefile用）
+  final bool convertToPointCloud;
+
+  /// 行番号を出力カラムに含めるか（属性テーブルの仮想カラム# に相当）
+  final bool includeRowNumber;
+
+  const ExportOptions({
+    this.targetCrs,
+    this.convertToPointCloud = false,
+    this.includeRowNumber = false,
+  });
+
+  /// デフォルトオプション（WGS84、変換なし）
+  static const defaultOptions = ExportOptions();
+
+  /// WGS84かどうか判定
+  bool get isWgs84 => targetCrs == null || targetCrs!.code == 'EPSG:4326';
+}

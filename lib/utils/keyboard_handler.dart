@@ -23,6 +23,12 @@ class KeyboardHandler {
       return false;
     }
 
+    // デバッグ名にEditableTextが含まれているかチェック（IME切り替え時にも安定）
+    final debugLabel = focusNode.debugLabel ?? '';
+    if (debugLabel.contains('EditableText') || debugLabel.contains('TextField')) {
+      return true;
+    }
+
     // フォーカスノードのコンテキストからEditableTextを探す
     // TextField, TextFormField, EditableText等にフォーカスがある場合はtrue
     final focusContext = focusNode.context;
@@ -31,6 +37,21 @@ class KeyboardHandler {
       final editableText =
           focusContext.findAncestorStateOfType<EditableTextState>();
       if (editableText != null) {
+        return true;
+      }
+      
+      // 親ウィジェットツリーにTextFieldやTextFormFieldがあるか確認
+      // （CapsLock押下時のフォールバック）
+      bool hasTextField = false;
+      focusContext.visitAncestorElements((element) {
+        final widget = element.widget;
+        if (widget is TextField || widget is TextFormField || widget is EditableText) {
+          hasTextField = true;
+          return false; // 探索終了
+        }
+        return true; // 探索継続
+      });
+      if (hasTextField) {
         return true;
       }
     }
@@ -98,6 +119,35 @@ class KeyboardHandler {
       return false;
     }
 
+    // 修飾キー（CapsLock, Shift, Ctrl, Alt等）は無視
+    // IME切り替え時にこれらのキーが押されると、フォーカス判定が不安定になるため
+    final modifierKeys = {
+      LogicalKeyboardKey.capsLock,
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.shiftRight,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.controlRight,
+      LogicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.altRight,
+      LogicalKeyboardKey.metaLeft,
+      LogicalKeyboardKey.metaRight,
+      LogicalKeyboardKey.numLock,
+      LogicalKeyboardKey.scrollLock,
+      // IME関連キー
+      LogicalKeyboardKey.convert,
+      LogicalKeyboardKey.nonConvert,
+      LogicalKeyboardKey.kanaMode,
+      LogicalKeyboardKey.hiragana,
+      LogicalKeyboardKey.katakana,
+      LogicalKeyboardKey.hiraganaKatakana,
+      LogicalKeyboardKey.zenkakuHankaku,
+      LogicalKeyboardKey.hankaku,
+      LogicalKeyboardKey.zenkaku,
+    };
+    if (modifierKeys.contains(event.logicalKey)) {
+      return false;
+    }
+
     // IME関連の無効なキーイベントを安全にフィルタリング
     // Windows日本語入力との互換性のため、以下のケースを無視:
     // 1. 無効な物理キーID（IMEからの合成イベント）
@@ -113,17 +163,18 @@ class KeyboardHandler {
       return false;
     }
 
+    // テキスト入力中は全てのショートカットを無視
+    // CapsLock押下直後もEditableTextのフォーカスは維持されているはずなので、
+    // この判定を先に行う
+    if (_isTextInputFocused(context)) {
+      return false; // イベントを伝播させる（TextFieldで処理される）
+    }
+
     AppLogger.debug('[KeyboardHandler] キー押下: ${event.logicalKey}');
 
     // Deleteキーまたはバックスペースキー
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
-      // テキスト入力中は削除しない（ダイアログ、属性テーブル等）
-      if (_isTextInputFocused(context)) {
-        AppLogger.debug('[KeyboardHandler] テキスト入力中のため削除をスキップ');
-        return false; // イベントを伝播させる
-      }
-
       await handleDeleteKey(context, mapState);
       return true; // イベントを処理済みとしてマーク
     }
@@ -142,6 +193,9 @@ class KeyboardHandler {
 
 /// キーボードショートカットを有効にするウィジェット
 /// マップページ全体をラップして使用
+/// 
+/// HardwareKeyboardのハンドラーを直接使用して、
+/// IME関連のキーイベント不整合問題を回避
 class KeyboardShortcutWrapper extends StatefulWidget {
   final Widget child;
   final dynamic mapState;
@@ -158,51 +212,57 @@ class KeyboardShortcutWrapper extends StatefulWidget {
 }
 
 class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
-  final FocusNode _focusNode = FocusNode();
+  /// HardwareKeyboardのハンドラー
+  bool _handleKeyEvent(KeyEvent event) {
+    // IME関連の無効なキーイベントを早期にフィルタリング
+    // Windows日本語入力で発生する不正なキーイベントを除外
+    try {
+      final physicalKeyId = event.physicalKey.usbHidUsage;
+      // 無効な物理キーID（0x1600000000等のIME合成イベント）
+      if (physicalKeyId > 0x100000000 || physicalKeyId == 0) {
+        AppLogger.debug('[K-MAPS] IME関連キーボードイベントを無視');
+        return false; // イベントを伝播
+      }
+    } catch (e) {
+      // 物理キー情報の取得に失敗した場合も無視
+      return false;
+    }
+
+    // contextが利用可能な場合のみ処理
+    if (!mounted) return false;
+
+    // 非同期で処理（UIをブロックしない）
+    KeyboardHandler.handleKeyEvent(event, context, widget.mapState).then((
+      handled,
+    ) {
+      if (handled) {
+        AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理済み');
+      }
+    }).catchError((e) {
+      // エラーを静かに無視（IME関連の問題）
+      AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理エラー: $e');
+    });
+
+    // イベントを常に伝播させる（他のウィジェットがキーを受け取れるように）
+    return false;
+  }
 
   @override
   void initState() {
     super.initState();
-    // 初期フォーカスを要求
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
+    // HardwareKeyboardにハンドラーを登録
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
   @override
   void dispose() {
-    _focusNode.dispose();
+    // ハンドラーを解除
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        // キーイベントを処理
-        KeyboardHandler.handleKeyEvent(event, context, widget.mapState).then((
-          handled,
-        ) {
-          if (handled) {
-            AppLogger.debug('[KeyboardShortcutWrapper] キーイベント処理済み');
-          }
-        });
-
-        // イベントを常に伝播させる（マップの操作を妨げない）
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        // タップでフォーカスを回復
-        onTap: () {
-          if (!_focusNode.hasFocus) {
-            _focusNode.requestFocus();
-          }
-        },
-        behavior: HitTestBehavior.translucent,
-        child: widget.child,
-      ),
-    );
+    return widget.child;
   }
 }

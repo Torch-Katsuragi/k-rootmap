@@ -728,13 +728,22 @@ class _DynamicAttributeTableWidgetState
     }
   }
 
+  /// TSV用にセル値をエスケープ（改行・タブ・"を含む場合はダブルクォートで囲む）
+  String _escapeTsvValue(String value) {
+    if (value.contains('\n') || value.contains('\t') || value.contains('"')) {
+      // ダブルクォートは二重にエスケープし、全体をダブルクォートで囲む
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
   /// テーブル全体をタブ区切りでクリップボードにコピー
   Future<void> _copyTableToClipboard() async {
     try {
       final buffer = StringBuffer();
 
       // ヘッダー行を作成（表示中のカラム名）
-      final headerNames = columns.map((c) => c.title).toList();
+      final headerNames = columns.map((c) => _escapeTsvValue(c.title)).toList();
       buffer.writeln(headerNames.join('\t'));
 
       // データ行を作成
@@ -743,7 +752,7 @@ class _DynamicAttributeTableWidgetState
         for (final column in columns) {
           final cell = row.cells[column.field];
           final value = cell?.value?.toString() ?? '';
-          rowValues.add(value);
+          rowValues.add(_escapeTsvValue(value)); // 改行等を含む値をエスケープ
         }
         buffer.writeln(rowValues.join('\t'));
       }

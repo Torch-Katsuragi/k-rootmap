@@ -1,0 +1,371 @@
+// K-MAPS: 統合EPSG座標系レジストリ
+// 全プロジェクトのSingle Source of Truth
+// JGD2011/JGD2000平面直角座標系、UTM、WGS84を統合管理
+
+import 'package:latlong2/latlong.dart';
+
+/// EPSG座標系の定義
+class EpsgDefinition {
+  final String code;
+  final String name;
+  final String proj4String;
+  final List<String>? prefectures; // 対応する都道府県（JGD2011用）
+
+  const EpsgDefinition({
+    required this.code,
+    required this.name,
+    required this.proj4String,
+    this.prefectures,
+  });
+
+  /// EPSGコード番号部分を取得（例: "EPSG:6677" → "6677"）
+  String get codeNumber => code.replaceFirst('EPSG:', '');
+
+  /// 数値としてのEPSGコードを取得
+  int? get codeInt => int.tryParse(codeNumber);
+
+  @override
+  String toString() => '$code - $name';
+
+  /// 表示用文字列（EPSGコード + 名前）
+  String get displayString => '$codeNumber $name';
+}
+
+/// 緯度経度の範囲
+class LatLngBounds {
+  final LatLng southwest;
+  final LatLng northeast;
+
+  const LatLngBounds(this.southwest, this.northeast);
+
+  bool contains(LatLng point) {
+    return point.latitude >= southwest.latitude &&
+        point.latitude <= northeast.latitude &&
+        point.longitude >= southwest.longitude &&
+        point.longitude <= northeast.longitude;
+  }
+}
+
+/// 統合EPSG座標系レジストリ（シングルトン）
+class EpsgRegistry {
+  static final EpsgRegistry instance = EpsgRegistry._internal();
+  factory EpsgRegistry() => instance;
+  EpsgRegistry._internal();
+
+  /// 全EPSG定義のリスト
+  List<EpsgDefinition> get allDefinitions => _allDefinitions;
+
+  /// WGS84以外のEPSG定義（座標変換用、WGS84は変換先として不要）
+  List<EpsgDefinition> get transformableDefinitions =>
+      _allDefinitions.where((e) => e.code != 'EPSG:4326' && e.code != 'EPSG:6668').toList();
+
+  /// EPSGコードで検索
+  EpsgDefinition? getByCode(String code) {
+    final normalizedCode = code.startsWith('EPSG:') ? code : 'EPSG:$code';
+    return _allDefinitions.cast<EpsgDefinition?>().firstWhere(
+      (e) => e?.code == normalizedCode,
+      orElse: () => null,
+    );
+  }
+
+  /// クエリで検索（コード、名前、地域名で部分一致）
+  List<EpsgDefinition> search(String query) {
+    if (query.isEmpty) return transformableDefinitions;
+    
+    final lowerQuery = query.toLowerCase();
+    return _allDefinitions.where((epsg) {
+      // WGS84系は検索結果から除外（変換先としては不要）
+      if (epsg.code == 'EPSG:4326' || epsg.code == 'EPSG:6668') return false;
+      
+      return epsg.codeNumber.contains(lowerQuery) ||
+          epsg.name.toLowerCase().contains(lowerQuery) ||
+          (epsg.prefectures?.any((p) => p.contains(query)) ?? false);
+    }).toList();
+  }
+
+  /// 都道府県からJGD2011座標系を取得
+  EpsgDefinition? getJgd2011FromPrefecture(String prefecture) {
+    // 都道府県名を正規化（「県」「府」「都」「道」を含めて検索）
+    final normalizedPref = prefecture.replaceAll(RegExp(r'[県府都道]$'), '');
+    
+    for (final epsg in _jgd2011Definitions) {
+      if (epsg.prefectures?.any((p) => p.contains(normalizedPref)) ?? false) {
+        return epsg;
+      }
+    }
+    return null;
+  }
+
+  /// 軸入れ替えが必要か判定（日本の平面直角座標系）
+  /// JGD2011/JGD2000では X=Northing, Y=Easting のため軸入れ替えが必要
+  bool needsAxisSwap(String epsgCode) {
+    final code = int.tryParse(epsgCode.replaceFirst('EPSG:', '')) ?? 0;
+    // JGD2011 平面直角座標系 I-XIX系 (EPSG:6669-6687)
+    if (code >= 6669 && code <= 6687) return true;
+    // JGD2000 平面直角座標系 I-XIX系 (EPSG:2443-2461)
+    if (code >= 2443 && code <= 2461) return true;
+    return false;
+  }
+
+  /// 緯度経度からUTMゾーン番号を計算
+  int calculateUtmZone(double longitude) => ((longitude + 180) / 6).floor() + 1;
+
+  /// 緯度経度から最適なUTM座標系を取得
+  EpsgDefinition getUtmZone(LatLng point) {
+    final zone = calculateUtmZone(point.longitude);
+    final epsgCode = 'EPSG:326${zone.toString().padLeft(2, '0')}';
+    return getByCode(epsgCode) ?? EpsgDefinition(
+      code: epsgCode,
+      name: 'WGS 84 / UTM zone ${zone}N',
+      proj4String: '+proj=utm +zone=$zone +datum=WGS84 +units=m +no_defs',
+    );
+  }
+
+  // ========== JGD2011 平面直角座標系（全19系）==========
+
+  static const List<EpsgDefinition> _jgd2011Definitions = [
+    EpsgDefinition(
+      code: 'EPSG:6669',
+      name: 'JGD2011 / 平面直角 I系 (長崎・佐賀)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['長崎県', '佐賀県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6670',
+      name: 'JGD2011 / 平面直角 II系 (福岡・熊本・大分・宮崎・鹿児島)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['福岡県', '熊本県', '大分県', '宮崎県', '鹿児島県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6671',
+      name: 'JGD2011 / 平面直角 III系 (山口・島根・広島)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['山口県', '島根県', '広島県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6672',
+      name: 'JGD2011 / 平面直角 IV系 (香川・愛媛・徳島・高知)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['香川県', '愛媛県', '徳島県', '高知県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6673',
+      name: 'JGD2011 / 平面直角 V系 (兵庫・鳥取・岡山)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['兵庫県', '鳥取県', '岡山県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6674',
+      name: 'JGD2011 / 平面直角 VI系 (京都・大阪・福井・滋賀・三重・奈良・和歌山)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['京都府', '大阪府', '福井県', '滋賀県', '三重県', '奈良県', '和歌山県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6675',
+      name: 'JGD2011 / 平面直角 VII系 (石川・富山・岐阜・愛知)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['石川県', '富山県', '岐阜県', '愛知県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6676',
+      name: 'JGD2011 / 平面直角 VIII系 (新潟・長野・山梨・静岡)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['新潟県', '長野県', '山梨県', '静岡県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6677',
+      name: 'JGD2011 / 平面直角 IX系 (東京・福島・栃木・茨城・埼玉・千葉・群馬・神奈川)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['東京都', '福島県', '栃木県', '茨城県', '埼玉県', '千葉県', '群馬県', '神奈川県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6678',
+      name: 'JGD2011 / 平面直角 X系 (青森・秋田・山形・岩手・宮城)',
+      proj4String: '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['青森県', '秋田県', '山形県', '岩手県', '宮城県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6679',
+      name: 'JGD2011 / 平面直角 XI系 (北海道西部)',
+      proj4String: '+proj=tmerc +lat_0=44 +lon_0=140.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['北海道'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6680',
+      name: 'JGD2011 / 平面直角 XII系 (北海道中央部)',
+      proj4String: '+proj=tmerc +lat_0=44 +lon_0=142.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['北海道'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6681',
+      name: 'JGD2011 / 平面直角 XIII系 (北海道東部)',
+      proj4String: '+proj=tmerc +lat_0=44 +lon_0=144.25 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['北海道'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6682',
+      name: 'JGD2011 / 平面直角 XIV系 (東京都・島しょ部)',
+      proj4String: '+proj=tmerc +lat_0=26 +lon_0=142 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['東京都'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6683',
+      name: 'JGD2011 / 平面直角 XV系 (沖縄本島)',
+      proj4String: '+proj=tmerc +lat_0=26 +lon_0=127.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['沖縄県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6684',
+      name: 'JGD2011 / 平面直角 XVI系 (沖縄・宮古島)',
+      proj4String: '+proj=tmerc +lat_0=26 +lon_0=124 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['沖縄県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6685',
+      name: 'JGD2011 / 平面直角 XVII系 (沖縄・石垣島)',
+      proj4String: '+proj=tmerc +lat_0=26 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['沖縄県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6686',
+      name: 'JGD2011 / 平面直角 XVIII系 (小笠原諸島)',
+      proj4String: '+proj=tmerc +lat_0=20 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['東京都'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6687',
+      name: 'JGD2011 / 平面直角 XIX系 (南鳥島)',
+      proj4String: '+proj=tmerc +lat_0=26 +lon_0=154 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['東京都'],
+    ),
+  ];
+
+  // ========== JGD2000 平面直角座標系（互換性用、主要10系）==========
+
+  static const List<EpsgDefinition> _jgd2000Definitions = [
+    EpsgDefinition(
+      code: 'EPSG:2443',
+      name: 'JGD2000 / 平面直角 I系 (長崎・佐賀)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=129.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['長崎県', '佐賀県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2444',
+      name: 'JGD2000 / 平面直角 II系 (福岡・熊本・大分・宮崎・鹿児島)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=131 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['福岡県', '熊本県', '大分県', '宮崎県', '鹿児島県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2445',
+      name: 'JGD2000 / 平面直角 III系 (山口・島根・広島)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=132.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['山口県', '島根県', '広島県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2446',
+      name: 'JGD2000 / 平面直角 IV系 (香川・愛媛・徳島・高知)',
+      proj4String: '+proj=tmerc +lat_0=33 +lon_0=133.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['香川県', '愛媛県', '徳島県', '高知県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2447',
+      name: 'JGD2000 / 平面直角 V系 (兵庫・鳥取・岡山)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=134.333333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['兵庫県', '鳥取県', '岡山県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2448',
+      name: 'JGD2000 / 平面直角 VI系 (京都・大阪・福井・滋賀・三重・奈良・和歌山)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=136 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['京都府', '大阪府', '福井県', '滋賀県', '三重県', '奈良県', '和歌山県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2449',
+      name: 'JGD2000 / 平面直角 VII系 (石川・富山・岐阜・愛知)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=137.166666666667 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['石川県', '富山県', '岐阜県', '愛知県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2450',
+      name: 'JGD2000 / 平面直角 VIII系 (新潟・長野・山梨・静岡)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=138.5 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['新潟県', '長野県', '山梨県', '静岡県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2451',
+      name: 'JGD2000 / 平面直角 IX系 (東京・福島・栃木・茨城・埼玉・千葉・群馬・神奈川)',
+      proj4String: '+proj=tmerc +lat_0=36 +lon_0=139.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['東京都', '福島県', '栃木県', '茨城県', '埼玉県', '千葉県', '群馬県', '神奈川県'],
+    ),
+    EpsgDefinition(
+      code: 'EPSG:2452',
+      name: 'JGD2000 / 平面直角 X系 (青森・秋田・山形・岩手・宮城)',
+      proj4String: '+proj=tmerc +lat_0=40 +lon_0=140.833333333333 +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+      prefectures: ['青森県', '秋田県', '山形県', '岩手県', '宮城県'],
+    ),
+  ];
+
+  // ========== UTM座標系（日本周辺）==========
+
+  static const List<EpsgDefinition> _utmDefinitions = [
+    EpsgDefinition(
+      code: 'EPSG:32651',
+      name: 'WGS 84 / UTM zone 51N (九州西部)',
+      proj4String: '+proj=utm +zone=51 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32652',
+      name: 'WGS 84 / UTM zone 52N (九州・四国)',
+      proj4String: '+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32653',
+      name: 'WGS 84 / UTM zone 53N (本州西部)',
+      proj4String: '+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32654',
+      name: 'WGS 84 / UTM zone 54N (本州中部・東部)',
+      proj4String: '+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32655',
+      name: 'WGS 84 / UTM zone 55N (北海道・東北)',
+      proj4String: '+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:32656',
+      name: 'WGS 84 / UTM zone 56N (千島列島)',
+      proj4String: '+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs',
+    ),
+  ];
+
+  // ========== 地理座標系 ==========
+
+  static const List<EpsgDefinition> _geographicDefinitions = [
+    EpsgDefinition(
+      code: 'EPSG:4326',
+      name: 'WGS 84 (GPS/Webマップ標準)',
+      proj4String: '+proj=longlat +datum=WGS84 +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:3857',
+      name: 'Web Mercator (Google Maps等)',
+      proj4String: '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs',
+    ),
+    EpsgDefinition(
+      code: 'EPSG:6668',
+      name: 'JGD2011 地理座標系',
+      proj4String: '+proj=longlat +ellps=GRS80 +no_defs',
+    ),
+  ];
+
+  // ========== 全定義の統合リスト ==========
+
+  static final List<EpsgDefinition> _allDefinitions = [
+    ..._geographicDefinitions,
+    ..._jgd2011Definitions,
+    ..._jgd2000Definitions,
+    ..._utmDefinitions,
+  ];
+}

@@ -3,7 +3,6 @@
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'package:k_maps/utils/app_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import 'layer_tree_node.dart';
@@ -14,6 +13,7 @@ import '../geopackage/geopackage_file.dart';
 import '../geometry_type.dart';
 import '../kmeta.dart';
 import '../../converters/turf_converter.dart';
+import '../../core/node_types.dart';
 
 /// 重複レイヤ名のナンバリング処理ユーティリティ
 class LayerNameUtils {
@@ -338,7 +338,7 @@ abstract class LayerNode extends LayerTreeNode {
     this.layerName, {
     bool visible = true,
     LayerTreeNode? parent,
-  }) : super(layerName, visible: visible, parent: parent, nodeType: "layer");
+  }) : super(layerName, visible: visible, parent: parent, nodeType: NodeType.layer);
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
@@ -861,11 +861,8 @@ class PointLayerNode extends LayerNode {
 
     return features;
   }
-
-  @override
-  IconData get baseIcon => Icons.scatter_plot;
-  @override
-  Color get baseIconColor => Colors.blue;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
   /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
@@ -910,11 +907,8 @@ class LineLayerNode extends LayerNode {
 
     return features;
   }
-
-  @override
-  IconData get baseIcon => Icons.show_chart;
-  @override
-  Color get baseIconColor => Colors.green;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
   /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する
@@ -959,11 +953,8 @@ class PolygonLayerNode extends LayerNode {
 
     return features;
   }
-
-  @override
-  IconData get baseIcon => Icons.terrain;
-  @override
-  Color get baseIconColor => Colors.deepOrange;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
   /// 重複名がある場合は自動的にナンバリング（例: "道路_2", "道路_3"）する

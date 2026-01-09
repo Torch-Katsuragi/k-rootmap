@@ -5,7 +5,6 @@ import 'package:k_maps/utils/app_logger.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../utils/global_config.dart';
-import 'layer_drawer_extensions.dart';
 
 /// LayerDrawer用ユーティリティ関数を提供するミックスイン
 mixin LayerDrawerUtils {

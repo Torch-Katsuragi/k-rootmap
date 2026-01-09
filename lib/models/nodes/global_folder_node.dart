@@ -1,9 +1,11 @@
 // K-MAPS: グローバルフォルダノードクラス
 // どのプロジェクトを開いても表示される共有フォルダ
 // 実体はアプリケーションのDocumentsディレクトリに存在
+// 
+// NOTE: 将来的にはFolderNode + GlobalPathResolverで代替予定
+// 現在はPathResolverを注入してisGlobalNodeを自動判定
 
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 import 'package:k_maps/utils/app_logger.dart';
@@ -12,11 +14,13 @@ import 'folder_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
 import '../geopackage/geopackage_file.dart';
+import '../../core/path_resolver.dart';
+import '../../utils/exif_parser.dart';
 
 /// グローバルフォルダノード
 /// - どのプロジェクトを開いてもルートフォルダ直下に表示される
 /// - 実体は getApplicationDocumentsDirectory()/k_maps_global に存在
-/// - 青色アイコンで通常フォルダと差別化
+/// - 青色アイコンで通常フォルダと差別化（NodePresenter経由）
 class GlobalFolderNode extends FolderNode {
   /// グローバルフォルダの実体パス
   final String globalPath;
@@ -27,15 +31,13 @@ class GlobalFolderNode extends FolderNode {
     super.visible,
     super.parent,
     super.children,
-  });
-
-  /// グローバルノードフラグ
-  @override
-  bool get isGlobalNode => true;
-
-  /// 青色アイコンで差別化
-  @override
-  Color get baseIconColor => Colors.blue;
+  }) {
+    // GlobalPathResolverを注入（isGlobalNodeが自動的にtrueになる）
+    pathResolver = GlobalPathResolver.instance;
+  }
+  
+  // isGlobalNodeはPathResolverベースで判断される（pathResolver.isGlobal）
+  // UI関連（baseIconColor）はNodePresenterに移動
 
   /// グローバルフォルダ自体の絶対パスを返す
   @override
@@ -207,13 +209,8 @@ class GlobalSubFolderNode extends FolderNode {
     super.children,
   });
 
-  /// グローバルノードフラグ
-  @override
-  bool get isGlobalNode => true;
-
-  /// 青色アイコンで差別化
-  @override
-  Color get baseIconColor => Colors.blue;
+  // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
+  // UI関連（baseIconColor）はNodePresenterに移動
 
   /// グローバルフォルダベースの絶対パスを返す
   @override
@@ -373,17 +370,13 @@ class GlobalGeoPackageNode extends GeoPackageNode {
     super.visible,
     super.parent,
   });
-
-  /// グローバルノードフラグ
-  @override
-  bool get isGlobalNode => true;
-
-  /// 青色系のアイコン色で差別化
-  @override
-  Color get baseIconColor => Colors.blue.shade700;
+  
+  // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
+  // UI関連（baseIconColor）はNodePresenterに移動
 }
 
 /// グローバルフォルダ用の画像ノード
+/// ExifParserを使用してEXIF解析を行う
 class GlobalImageNode extends ImageNode {
   GlobalImageNode._(
     super.filePath,
@@ -393,12 +386,12 @@ class GlobalImageNode extends ImageNode {
     super.visible,
     super.parent,
   });
-
-  /// グローバルノードフラグ
-  @override
-  bool get isGlobalNode => true;
+  
+  // isGlobalNodeはPathResolverベースで判断されるため、オーバーライド不要
+  // UI関連（baseIconColor）はNodePresenterに移動
 
   /// 絶対パスからGlobalImageNodeを作成
+  /// ExifParserを使用してEXIF情報を抽出
   static Future<GlobalImageNode?> fromPath(
     String absolutePath, {
     LayerTreeNode? parent,
@@ -407,11 +400,8 @@ class GlobalImageNode extends ImageNode {
     if (!file.existsSync()) return null;
 
     try {
-      // ファイル情報を取得
-      final stats = await file.stat();
-      
-      // EXIFデータから位置情報を抽出（ImageNodeの内部メソッドと同様のロジック）
-      final exifData = await _extractExifDataFromPath(absolutePath, stats.size);
+      // ExifParserを使用してEXIFデータを抽出
+      final exifData = await ExifParser.extractFromFile(absolutePath);
       
       if (exifData != null) {
         return GlobalImageNode._(
@@ -424,6 +414,7 @@ class GlobalImageNode extends ImageNode {
         );
       } else {
         // 位置情報がない画像も表示（デフォルト座標）
+        final stats = await file.stat();
         return GlobalImageNode._(
           absolutePath,
           const LatLng(0, 0),
@@ -437,258 +428,4 @@ class GlobalImageNode extends ImageNode {
       return null;
     }
   }
-
-  /// EXIFデータから位置情報を抽出（ImageNode._extractExifDataと同様のロジック）
-  static Future<ExifImageData?> _extractExifDataFromPath(String filePath, int fileSize) async {
-    try {
-      final file = File(filePath);
-      // EXIF情報はファイルの先頭部分にあるため、最大256KBまで読み込む
-      final randomAccessFile = await file.open(mode: FileMode.read);
-      try {
-        final bytesToRead = fileSize < 256 * 1024 ? fileSize : 256 * 1024;
-        final bytes = await randomAccessFile.read(bytesToRead);
-        
-        // JPEG形式かチェック
-        if (bytes.length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) {
-          return null; // Not JPEG
-        }
-
-        // 簡易的なEXIF解析でGPS座標を取得
-        final gpsData = _parseGpsFromBytes(bytes);
-        if (gpsData == null) return null;
-
-        final metadata = ImageMetadata(
-          fileSize: fileSize,
-          width: gpsData['width'] as int?,
-          height: gpsData['height'] as int?,
-          camera: gpsData['camera'] as String?,
-        );
-
-        return ExifImageData(
-          location: LatLng(
-            gpsData['lat'] as double,
-            gpsData['lng'] as double,
-          ),
-          takenAt: gpsData['datetime'] as DateTime?,
-          metadata: metadata,
-        );
-      } finally {
-        await randomAccessFile.close();
-      }
-    } catch (e) {
-      AppLogger.debug('[GlobalImageNode] EXIF extraction error: $e');
-      return null;
-    }
-  }
-
-  /// バイト配列からGPS情報を解析
-  static Map<String, dynamic>? _parseGpsFromBytes(List<int> bytes) {
-    try {
-      int offset = 2;
-      while (offset < bytes.length - 1) {
-        if (bytes[offset] != 0xFF) break;
-
-        final marker = bytes[offset + 1];
-        offset += 2;
-
-        if (marker == 0xE1) {
-          final segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
-          offset += 2;
-
-          if (offset + 6 < bytes.length &&
-              bytes[offset] == 0x45 && // 'E'
-              bytes[offset + 1] == 0x78 && // 'x'
-              bytes[offset + 2] == 0x69 && // 'i'
-              bytes[offset + 3] == 0x66 && // 'f'
-              bytes[offset + 4] == 0x00 &&
-              bytes[offset + 5] == 0x00) {
-            final tiffStart = offset + 6;
-            return _parseTiffExif(bytes, tiffStart, segmentLength - 6);
-          }
-        } else if (marker == 0xDA) {
-          break; // Start of scan data
-        } else {
-          final segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
-          offset += segmentLength;
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// TIFFフォーマットのEXIFデータを解析
-  static Map<String, dynamic>? _parseTiffExif(List<int> bytes, int start, int length) {
-    try {
-      if (start + 8 > bytes.length) return null;
-
-      final isLittleEndian = bytes[start] == 0x49 && bytes[start + 1] == 0x49;
-      if (!isLittleEndian && !(bytes[start] == 0x4D && bytes[start + 1] == 0x4D)) {
-        return null;
-      }
-
-      final tiffId = isLittleEndian
-          ? bytes[start + 2] | (bytes[start + 3] << 8)
-          : (bytes[start + 2] << 8) | bytes[start + 3];
-      if (tiffId != 42) return null;
-
-      final ifdOffset = isLittleEndian
-          ? bytes[start + 4] | (bytes[start + 5] << 8) | (bytes[start + 6] << 16) | (bytes[start + 7] << 24)
-          : (bytes[start + 4] << 24) | (bytes[start + 5] << 16) | (bytes[start + 6] << 8) | bytes[start + 7];
-
-      return _parseIFD(bytes, start, start + ifdOffset, isLittleEndian);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// IFD（Image File Directory）を解析
-  static Map<String, dynamic>? _parseIFD(List<int> bytes, int tiffStart, int ifdStart, bool isLittleEndian) {
-    try {
-      if (ifdStart + 2 > bytes.length) return null;
-
-      final entryCount = isLittleEndian
-          ? bytes[ifdStart] | (bytes[ifdStart + 1] << 8)
-          : (bytes[ifdStart] << 8) | bytes[ifdStart + 1];
-
-      int offset = ifdStart + 2;
-      int? gpsIfdOffset;
-
-      for (int i = 0; i < entryCount; i++) {
-        if (offset + 12 > bytes.length) break;
-
-        final tag = isLittleEndian
-            ? bytes[offset] | (bytes[offset + 1] << 8)
-            : (bytes[offset] << 8) | bytes[offset + 1];
-
-        final valueOffset = isLittleEndian
-            ? bytes[offset + 8] | (bytes[offset + 9] << 8) | (bytes[offset + 10] << 16) | (bytes[offset + 11] << 24)
-            : (bytes[offset + 8] << 24) | (bytes[offset + 9] << 16) | (bytes[offset + 10] << 8) | bytes[offset + 11];
-
-        if (tag == 0x8825) { // GPS IFD pointer
-          gpsIfdOffset = tiffStart + valueOffset;
-        }
-
-        offset += 12;
-      }
-
-      if (gpsIfdOffset != null && gpsIfdOffset < bytes.length) {
-        return _parseGpsIFD(bytes, tiffStart, gpsIfdOffset, isLittleEndian);
-      }
-
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// GPS IFDを解析して緯度経度を取得
-  static Map<String, dynamic>? _parseGpsIFD(List<int> bytes, int tiffStart, int gpsIfdStart, bool isLittleEndian) {
-    try {
-      if (gpsIfdStart + 2 > bytes.length) return null;
-
-      final entryCount = isLittleEndian
-          ? bytes[gpsIfdStart] | (bytes[gpsIfdStart + 1] << 8)
-          : (bytes[gpsIfdStart] << 8) | bytes[gpsIfdStart + 1];
-
-      int offset = gpsIfdStart + 2;
-      String? latRef, lngRef;
-      List<double>? latDms, lngDms;
-
-      for (int i = 0; i < entryCount; i++) {
-        if (offset + 12 > bytes.length) break;
-
-        final tag = isLittleEndian
-            ? bytes[offset] | (bytes[offset + 1] << 8)
-            : (bytes[offset] << 8) | bytes[offset + 1];
-
-        final type = isLittleEndian
-            ? bytes[offset + 2] | (bytes[offset + 3] << 8)
-            : (bytes[offset + 2] << 8) | bytes[offset + 3];
-
-        final count = isLittleEndian
-            ? bytes[offset + 4] | (bytes[offset + 5] << 8) | (bytes[offset + 6] << 16) | (bytes[offset + 7] << 24)
-            : (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
-
-        final valueOffset = isLittleEndian
-            ? bytes[offset + 8] | (bytes[offset + 9] << 8) | (bytes[offset + 10] << 16) | (bytes[offset + 11] << 24)
-            : (bytes[offset + 8] << 24) | (bytes[offset + 9] << 16) | (bytes[offset + 10] << 8) | bytes[offset + 11];
-
-        switch (tag) {
-          case 1: // GPS Latitude Ref
-            if (type == 2 && count == 2) {
-              latRef = String.fromCharCode(bytes[offset + 8]);
-            }
-            break;
-          case 2: // GPS Latitude
-            if (type == 5 && count == 3) {
-              latDms = _parseRationalArray(bytes, tiffStart + valueOffset, 3, isLittleEndian);
-            }
-            break;
-          case 3: // GPS Longitude Ref
-            if (type == 2 && count == 2) {
-              lngRef = String.fromCharCode(bytes[offset + 8]);
-            }
-            break;
-          case 4: // GPS Longitude
-            if (type == 5 && count == 3) {
-              lngDms = _parseRationalArray(bytes, tiffStart + valueOffset, 3, isLittleEndian);
-            }
-            break;
-        }
-
-        offset += 12;
-      }
-
-      if (latRef != null && lngRef != null && latDms != null && lngDms != null) {
-        final lat = _dmsToDecimal(latDms) * (latRef == 'S' ? -1 : 1);
-        final lng = _dmsToDecimal(lngDms) * (lngRef == 'W' ? -1 : 1);
-        return {'lat': lat, 'lng': lng};
-      }
-
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// RATIONAL配列を解析
-  static List<double>? _parseRationalArray(List<int> bytes, int start, int count, bool isLittleEndian) {
-    try {
-      if (start + count * 8 > bytes.length) return null;
-
-      final result = <double>[];
-      for (int i = 0; i < count; i++) {
-        final offset = start + i * 8;
-
-        final numerator = isLittleEndian
-            ? bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)
-            : (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
-
-        final denominator = isLittleEndian
-            ? bytes[offset + 4] | (bytes[offset + 5] << 8) | (bytes[offset + 6] << 16) | (bytes[offset + 7] << 24)
-            : (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
-
-        if (denominator != 0) {
-          result.add(numerator / denominator);
-        } else {
-          result.add(0.0);
-        }
-      }
-      return result;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// DMS（度分秒）を十進度に変換
-  static double _dmsToDecimal(List<double> dms) {
-    if (dms.length < 3) return 0.0;
-    return dms[0] + (dms[1] / 60.0) + (dms[2] / 3600.0);
-  }
-
-  /// 青色系のアイコン色で差別化
-  @override
-  Color get baseIconColor => Colors.blue.shade300;
 }

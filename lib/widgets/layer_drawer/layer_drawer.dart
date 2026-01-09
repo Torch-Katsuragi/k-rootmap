@@ -19,7 +19,6 @@ import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
 import 'layer_drawer_utils.dart';
 import 'layer_drawer_import_export.dart';
-import 'layer_drawer_extensions.dart';
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開

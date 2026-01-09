@@ -3,7 +3,6 @@
 // turf_dartのFeatureオブジェクトをメインデータとして使用
 
 import 'package:k_maps/utils/app_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import 'dart:async';
@@ -13,6 +12,7 @@ import 'layer_node.dart';
 import '../geopackage/geopackage_file.dart';
 import '../../utils/global_config.dart';
 import '../../converters/turf_converter.dart';
+import '../../core/node_types.dart';
 
 /// フィーチャノード基底クラス
 /// LayerNodeの子としてfeature単位で生成される
@@ -397,7 +397,7 @@ abstract class FeatureNode extends LayerTreeNode {
         visible: parent.visible,
         parent: parent,
         children: [],
-        nodeType: 'feature',
+        nodeType: NodeType.feature,
       ) {
     // 親のMapにturfFeatureを登録
     final turfFeature = TurfConverter.createFeatureFromRow(row, geometryType) ??
@@ -416,7 +416,7 @@ abstract class FeatureNode extends LayerTreeNode {
         visible: parent.visible,
         parent: parent,
         children: [],
-        nodeType: 'feature',
+        nodeType: NodeType.feature,
       ) {
     // 親のMapにturfFeatureを登録
     parent.addFeatureToMap(_rowId, feature);
@@ -485,11 +485,9 @@ class PointFeatureNode extends FeatureNode {
   List<MapEntry<String, String>> get detailEntries {
     return [...super.detailEntries];
   }
-
-  @override
-  IconData get baseIcon => Icons.location_on;
-  @override
-  Color get baseIconColor => Colors.red;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
+  
   @override
   Future<void> updateChildren() async {
     children.clear();
@@ -696,11 +694,9 @@ class LineFeatureNode extends FeatureNode {
 
     return details;
   }
-
-  @override
-  IconData get baseIcon => Icons.timeline;
-  @override
-  Color get baseIconColor => Colors.blueGrey;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
+  
   @override
   Future<void> updateChildren() async {
     children.clear();
@@ -924,11 +920,9 @@ class PolygonFeatureNode extends FeatureNode {
 
     return details;
   }
-
-  @override
-  IconData get baseIcon => Icons.crop_square;
-  @override
-  Color get baseIconColor => Colors.orange;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
+  
   @override
   Future<void> updateChildren() async {
     children.clear();

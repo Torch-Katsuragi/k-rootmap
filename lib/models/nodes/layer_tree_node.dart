@@ -1,13 +1,9 @@
 // K-MAPS: レイヤツリー共通ノード基底クラス
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
-// JSON処理のため追加
-// EXIF処理のため追加
-import 'package:path/path.dart' as p;
-import '../../utils/global_config.dart';
-// ジオメトリタイプenumをインポート
 import 'package:flutter/material.dart';
-// centroid計算用
+import '../../core/node_types.dart';
+import '../../core/path_resolver.dart';
 
 /// レイヤツリーのノード共通基底クラス
 abstract class LayerTreeNode {
@@ -17,37 +13,64 @@ abstract class LayerTreeNode {
   /// 可視状態
   bool visible;
 
-  /// ノード種別（"folder"/"gpkg"/"layer"）
-  final String nodeType;
+  /// ノード種別（型安全なenum）
+  final NodeType nodeType;
 
   /// 親ノード（ルートはnull）
   LayerTreeNode? parent;
 
   /// 子ノードリスト（レイヤは空リスト）
   List<LayerTreeNode> children;
+  
+  /// パスリゾルバ（注入可能、未設定時は親から継承またはデフォルト使用）
+  PathResolver? _pathResolver;
 
-  /// nodeTypeがとりうる値（固定値リスト）
+  /// nodeTypeがとりうる値（後方互換性のため維持、非推奨）
+  @Deprecated('Use NodeType enum instead')
   static const List<String> nodeTypeValues = [
     "folder",
     "gpkg",
     "layer",
     "photo",
   ];
-
-  /// ノード種別ごとのベースアイコン（UI用）
-  IconData get baseIcon;
-  Color get baseIconColor;
+  
+  // UI関連の責務（baseIcon, baseIconColor）はNodePresenterに移動
+  // lib/presentation/node_presenter.dart を参照
 
   /// コンストラクタ
+  /// [pathResolver] パスリゾルバ（省略時は親から継承またはProjectPathResolverを使用）
   LayerTreeNode(
     this.name, {
     this.visible = true,
     this.parent,
     List<LayerTreeNode>? children,
     required this.nodeType,
-  }) : children = children ?? [] {
-    // 初期化時に非同期でupdateChildrenを呼ぶ（1回のみ） - コメントアウトして問題を修正
-    // _initializeChildren();
+    PathResolver? pathResolver,
+  }) : children = children ?? [],
+       _pathResolver = pathResolver;
+  
+  /// パスリゾルバを取得
+  /// 優先順位: 自身に設定 → 親から継承 → デフォルト（ProjectPathResolver）
+  PathResolver get pathResolver {
+    if (_pathResolver != null) return _pathResolver!;
+    if (parent != null) return parent!.pathResolver;
+    return ProjectPathResolver.instance;
+  }
+  
+  /// パスリゾルバを設定
+  set pathResolver(PathResolver resolver) {
+    _pathResolver = resolver;
+  }
+  
+  /// グローバルフォルダ関連ノードかどうか
+  /// PathResolverがGlobalPathResolverの場合true
+  bool get isGlobalNode => pathResolver.isGlobal;
+  
+  /// 文字列nodeTypeからの変換（後方互換性）
+  /// 新規コードではNodeType enumを直接使用すること
+  @Deprecated('Use NodeType enum directly')
+  static NodeType nodeTypeFromString(String value) {
+    return NodeType.fromString(value) ?? NodeType.folder;
   }
 
   /// 初期化フラグ（重複実行を防ぐ）
@@ -91,16 +114,24 @@ abstract class LayerTreeNode {
   Map<String, dynamic> toDict() {
     final Map<String, dynamic> dict = {
       'name': name,
-      'type': nodeType,
+      'type': nodeType.value,
       'visible': visible,
       'children': children.map((child) => child.toDict()).toList(),
     };
     return dict;
   }
 
-  /// 指定typeの子ノードリストを返す（例: "folder", "gpkg", "layer"）
-  List<LayerTreeNode> getChildrenByType(String type) {
+  /// 指定typeの子ノードリストを返す
+  List<LayerTreeNode> getChildrenByType(NodeType type) {
     return children.where((c) => c.nodeType == type).toList();
+  }
+  
+  /// 文字列指定で子ノードを取得（後方互換性）
+  @Deprecated('Use getChildrenByType(NodeType) instead')
+  List<LayerTreeNode> getChildrenByTypeString(String type) {
+    final nodeType = NodeType.fromString(type);
+    if (nodeType == null) return [];
+    return getChildrenByType(nodeType);
   }
 
   /// 可視状態のLayerNodeリストを再帰的に取得（高速化用）
@@ -114,7 +145,7 @@ abstract class LayerTreeNode {
   void _collectVisibleLayerNodes(List<LayerTreeNode> result) {
     if (!isVisibleRecursive()) return;
 
-    if (nodeType == "layer") {
+    if (nodeType == NodeType.layer) {
       result.add(this);
     } else {
       for (final child in children) {
@@ -125,10 +156,6 @@ abstract class LayerTreeNode {
 
   /// 展開状態（デフォルトはtrue）
   bool get expanded => true;
-
-  /// グローバルフォルダ関連ノードかどうか（デフォルトはfalse）
-  /// GlobalFolderNode/GlobalSubFolderNodeでオーバーライドしてtrueを返す
-  bool get isGlobalNode => false;
 
   /// ファイル構造を参照して自分のchildrenを更新する（非同期化）
   /// サブクラスで必ずoverrideすること
@@ -149,7 +176,7 @@ abstract class LayerTreeNode {
   /// 同名・同型の子ノードが存在しない場合のみ追加
   /// 既存ノードがある場合はそのノードを返し、ない場合は新規追加して返す
   LayerTreeNode addChildIfNotExists(LayerTreeNode newChild) {
-    final existing = getChild(newChild.name, nodeType: newChild.nodeType);
+    final existing = getChild(newChild.name, type: newChild.nodeType);
     if (existing != null) {
       // 既存ノードを返す（重複を避ける）
       return existing;
@@ -172,11 +199,11 @@ abstract class LayerTreeNode {
   }
 
   /// 自分自身を含むツリー構造を再帰的に辞書(Map)として出力
-  /// 例: {"ノード名": {"nodeType": "Folder", "children": [...], "visible": true}}
+  /// 例: {"ノード名": {"nodeType": "folder", "children": [...], "visible": true}}
   Map<String, dynamic> toMap() {
     return {
       name: {
-        "nodeType": nodeType,
+        "nodeType": nodeType.value,
         "children": children.map((c) => c.toMap()).toList(),
         "visible": visible,
       },
@@ -185,16 +212,23 @@ abstract class LayerTreeNode {
 
   /// 子ノード名と（必要なら）nodeTypeで該当ノードを取得。なければnull
   /// @param name 子ノード名
-  /// @param nodeType ノード種別（省略可）
+  /// @param type ノード種別（省略可）
   /// @return LayerTreeNode? 一致する子ノード、なければnull
-  LayerTreeNode? getChild(String name, {String? nodeType}) {
+  LayerTreeNode? getChild(String name, {NodeType? type}) {
     for (final child in children) {
       if (child.name == name &&
-          (nodeType == null || child.nodeType == nodeType)) {
+          (type == null || child.nodeType == type)) {
         return child;
       }
     }
     return null;
+  }
+  
+  /// 文字列nodeType指定で子ノードを取得（後方互換性）
+  @Deprecated('Use getChild with NodeType instead')
+  LayerTreeNode? getChildByTypeString(String name, {String? nodeType}) {
+    final type = nodeType != null ? NodeType.fromString(nodeType) : null;
+    return getChild(name, type: type);
   }
 
   /// パスリスト（このノードからのノード名リスト）を受け取り、該当する子孫ノードへの参照を返す
@@ -204,8 +238,8 @@ abstract class LayerTreeNode {
     if (pathList.isEmpty) return null;
     if (pathList[0] != name) return null;
     if (pathList.length == 1) return this;
-    for (final type in nodeTypeValues) {
-      final next = getChild(pathList[1], nodeType: type);
+    for (final type in NodeType.values) {
+      final next = getChild(pathList[1], type: type);
       if (next != null) {
         return next.getNodeByPath(pathList.sublist(1));
       }
@@ -215,13 +249,9 @@ abstract class LayerTreeNode {
   }
 
   /// ノードの絶対パス（ファイルシステム上のパス）を取得
-  /// projectRootDir + getAbsolutePathSegments()で構築
+  /// PathResolverを使用してパスを解決
   String? getAbsoluteFilePath() {
-    final root = GlobalConfig.instance.projectRootDir;
-    if (root == null) return null;
-    final segments = getAbsolutePathSegments();
-    if (segments.isEmpty) return root;
-    return p.joinAll([root, ...segments]);
+    return pathResolver.resolvePath(getAbsolutePathSegments());
   }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）

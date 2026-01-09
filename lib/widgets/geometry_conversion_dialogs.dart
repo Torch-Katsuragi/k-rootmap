@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import '../presentation/node_presenter.dart';
 
 /// ポイント→ライン/ポリゴン変換ダイアログ
 class ConvertPointsToGeometryDialog extends StatefulWidget {
@@ -83,7 +84,7 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
                       value: layer,
                       child: Row(
                         children: [
-                          Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
+                          NodePresenter.buildIcon(layer, size: 16),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -203,7 +204,7 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
                       value: layer,
                       child: Row(
                         children: [
-                          Icon(layer.baseIcon, size: 16, color: layer.baseIconColor),
+                          NodePresenter.buildIcon(layer, size: 16),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(

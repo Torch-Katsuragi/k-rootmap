@@ -3,13 +3,13 @@
 
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
 import '../kmeta.dart';
 import '../../services/kmeta_service.dart';
+import '../../core/node_types.dart';
 
 /// フォルダノード
 class FolderNode extends LayerTreeNode {
@@ -20,7 +20,7 @@ class FolderNode extends LayerTreeNode {
   bool _expanded = true;
 
   FolderNode(super.name, {super.visible, super.parent, super.children})
-    : super(nodeType: "folder");
+    : super(nodeType: NodeType.folder);
 
   /// 展開状態を取得
   @override
@@ -63,11 +63,8 @@ class FolderNode extends LayerTreeNode {
       KMetaService.instance.invalidateCache(folderPath);
     }
   }
-
-  @override
-  IconData get baseIcon => Icons.folder;
-  @override
-  Color get baseIconColor => Colors.amber;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// このフォルダ直下のFolderNode, GeoPackageNode, ImageNodeのみ生成
   @override

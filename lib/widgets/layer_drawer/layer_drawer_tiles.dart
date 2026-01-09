@@ -19,7 +19,7 @@ import '../../services/geometry_conversion_service.dart';
 import '../../widgets/dialog_manager.dart';
 import '../../widgets/geometry_conversion_dialogs.dart';
 import '../../screens/layer_style_settings_screen.dart';
-import 'layer_drawer_extensions.dart';
+import '../../presentation/node_presenter.dart';
 
 /// 各種タイル描画機能を提供するミックスイン
 mixin LayerDrawerTiles {
@@ -427,12 +427,12 @@ mixin LayerDrawerTiles {
               ),
               padding: const EdgeInsets.all(4),
               child: Icon(
-                node.baseIcon,
+                NodePresenter.getIcon(node),
                 color:
                     isSelected
                         ? Colors.blue
                         : (node.isVisibleRecursive()
-                            ? node.baseIconColor
+                            ? NodePresenter.getColor(node)
                             : Colors.grey),
               ),
             ),
@@ -615,7 +615,7 @@ mixin LayerDrawerTiles {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(node.baseIcon, color: node.baseIconColor),
+                NodePresenter.buildIcon(node),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -749,8 +749,8 @@ mixin LayerDrawerTiles {
         alignment: Alignment.center,
         children: [
           Icon(
-            node.baseIcon,
-            color: node.isVisibleRecursive() ? node.baseIconColor : Colors.grey,
+            NodePresenter.getIcon(node),
+            color: node.isVisibleRecursive() ? NodePresenter.getColor(node) : Colors.grey,
           ),
           if (!node.visible)
             Transform.rotate(

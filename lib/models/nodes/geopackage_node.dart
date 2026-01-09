@@ -3,7 +3,6 @@
 
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
@@ -11,6 +10,7 @@ import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'folder_node.dart';
 import '../../utils/global_config.dart';
+import '../../core/node_types.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
 /// LayerTreeNodeの共通機能はoverrideせず、GeoPackageFile参照のみ追加
@@ -27,14 +27,10 @@ class GeoPackageNode extends LayerTreeNode {
          geoPackageFile.pathList.isNotEmpty ? geoPackageFile.pathList.last : '',
          visible: visible,
          parent: parent,
-         nodeType: "gpkg",
+         nodeType: NodeType.geopackage,
        );
-
-  /// ノード種別ごとのベースアイコン（UI用）
-  @override
-  IconData get baseIcon => Icons.storage;
-  @override
-  Color get baseIconColor => Colors.blueGrey;
+  
+  // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// このGeoPackage内のLayerNodeのみ生成（非同期化）
   @override

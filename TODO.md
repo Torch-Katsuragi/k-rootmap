@@ -54,7 +54,7 @@
 - [ ] ServiceLocatorパターンの導入
 - [ ] 非同期競合状態防止の改善（Completer使用）
 - [x] フィーチャキャッシュの差分更新対応
-- [ ] LayerNodeサブクラスの個別ファイル分離
+- [x] LayerNodeサブクラスの個別ファイル分離（部分的完了：PathResolver、NodePresenter、ExifParser、LayerMigrationService分離済み）
 
 ## コード品質改善
 
@@ -98,6 +98,13 @@
   - [x] GlobalGeoPackageNode/GlobalImageNodeクラス作成
   - [x] ホーム画面でのグローバルフォルダ初期化処理
   - [x] レイヤードロワーでの青色アイコン表示対応
+
+- [x] LayerTreeNode大規模リファクタリング（2026/01/09）
+  - [x] NodeType enum作成（文字列からenumに移行）
+  - [x] PathResolverインターフェース作成（Project/Global実装）
+  - [x] NodePresenterクラス作成（UI責務分離）
+  - [x] ExifParserユーティリティ作成（EXIF解析ロジック集約）
+  - [x] LayerMigrationService作成（レイヤー移植処理分離）
 
 - [ ] フィードバックフォームにバージョン情報を事前入力
   - Google FormsのURLパラメータを使用して、アプリバージョンを埋め込む

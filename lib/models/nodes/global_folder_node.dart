@@ -56,6 +56,9 @@ class GlobalFolderNode extends FolderNode {
       AppLogger.debug('[GlobalFolderNode] Created global folder: $globalPath');
     }
 
+    // メタデータを読み込み（展開状態を復元）
+    await loadMetaState();
+
     // サブフォルダを読み込み
     final folderNodes = await _loadGlobalSubFolders();
     // GeoPackageを読み込み
@@ -95,6 +98,9 @@ class GlobalFolderNode extends FolderNode {
     for (final node in photoNodes) {
       addChildIfNotExists(node);
     }
+
+    // KMetaの可視性設定を子ノードに適用
+    await applyMetaVisibility();
 
     AppLogger.debug(
       '[GlobalFolderNode] ${children.length} children after update',
@@ -234,6 +240,9 @@ class GlobalSubFolderNode extends FolderNode {
     final dir = Directory(absPath);
     if (!dir.existsSync()) return;
 
+    // メタデータを読み込み（展開状態を復元）
+    await loadMetaState();
+
     // サブフォルダを読み込み
     final folderNodes = await _loadSubFolders(absPath);
     // GeoPackageを読み込み
@@ -267,6 +276,9 @@ class GlobalSubFolderNode extends FolderNode {
     for (final node in photoNodes) {
       addChildIfNotExists(node);
     }
+
+    // KMetaの可視性設定を子ノードに適用
+    await applyMetaVisibility();
   }
 
   Future<List<LayerTreeNode>> _loadSubFolders(String absPath) async {

@@ -70,7 +70,7 @@ class FolderNode extends LayerTreeNode {
   @override
   Future<void> updateChildren() async {
     // メタデータを読み込み（展開状態を復元）
-    await _loadMetaState();
+    await loadMetaState();
 
     // ファイルシステムから現在の構造を取得
     final folderNodes = await FolderNode.loadNodes(this);
@@ -116,23 +116,23 @@ class FolderNode extends LayerTreeNode {
     }
 
     // KMetaの可視性設定を子ノードに適用
-    await _applyMetaVisibility();
+    await applyMetaVisibility();
 
     AppLogger.debug(
       '[DEBUG] FolderNode.updateChildren: ${children.length} children after update',
     );
   }
 
-  /// メタデータから状態を読み込み
-  Future<void> _loadMetaState() async {
+  /// メタデータから状態を読み込み（サブクラスから呼び出し可能）
+  Future<void> loadMetaState() async {
     invalidateMetaCache(); // キャッシュをクリアして最新を読み込み
     final meta = await getMeta();
     // 展開状態を復元
     _expanded = meta.layout.expanded ?? true;
   }
 
-  /// メタデータの可視性設定を子ノードに適用
-  Future<void> _applyMetaVisibility() async {
+  /// メタデータの可視性設定を子ノードに適用（サブクラスから呼び出し可能）
+  Future<void> applyMetaVisibility() async {
     final meta = await getMeta();
     for (final child in children) {
       if (child is GeoPackageNode) {

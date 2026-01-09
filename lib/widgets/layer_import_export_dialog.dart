@@ -54,6 +54,9 @@ class LayerImportExportDialog extends StatefulWidget {
 }
 
 class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
+  // 最後に使用したCRSを保持（セッション中）
+  static EpsgDefinition? _lastUsedCrs;
+  
   final ImportExportService _importExportService = ImportExportService();
   final EpsgRegistry _epsgRegistry = EpsgRegistry();
   bool _isProcessing = false;
@@ -75,7 +78,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   FileFormat _exportFormat = FileFormat.shapefile;
   bool _exportAsPointCloud = false; // 初期値はオフ
   bool _includeRowNumber = false; // 初期値はオフ
-  EpsgDefinition? _selectedCrs; // 選択されたCRS（nullはWGS84）
+  EpsgDefinition? _selectedCrs = _lastUsedCrs; // 最後に使用したCRSを初期値に
   String _crsSearchQuery = ''; // CRS検索クエリ
 
   /// ダイアログのモード判定
@@ -743,6 +746,11 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       );
 
       _updateProgress(1.0, 'Export completed!');
+
+      // 成功時は選択したCRSを保持
+      if (exportResult.success) {
+        _lastUsedCrs = _selectedCrs;
+      }
 
       setState(() {
         _isProcessing = false;

@@ -114,6 +114,19 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         ),
       ),
       actions: [
+        // エクスポートボタン（エクスポートモード時）
+        if (isExportMode)
+          ElevatedButton.icon(
+            onPressed: _isProcessing ? null : _handleExport,
+            icon: _isProcessing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.file_download),
+            label: Text(_isProcessing ? 'Exporting...' : 'Export Layer'),
+          ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
@@ -292,23 +305,6 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
         _buildCrsSelector(),
         const SizedBox(height: 16),
       ],
-
-      // エクスポートボタン
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing ? null : _handleExport,
-          icon:
-              _isProcessing
-                  ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                  : const Icon(Icons.file_download),
-          label: Text(_isProcessing ? 'Exporting...' : 'Export Layer'),
-        ),
-      ),
     ];
   }
 

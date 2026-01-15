@@ -154,5 +154,3 @@ class _KMapsAppState extends State<KMapsApp> with WidgetsBindingObserver {
     );
   }
 }
-
-

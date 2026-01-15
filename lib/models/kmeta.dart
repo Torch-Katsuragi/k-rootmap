@@ -254,35 +254,160 @@ class KMetaLayout {
   bool get isEmpty => sortOrder == null && expanded == null;
 }
 
-/// 同期設定（Google Drive連携用、将来拡張）
+/// 同期対象ファイルの情報
+class KMetaSyncFile {
+  /// DriveファイルID
+  final String driveFileId;
+
+  /// 期待する親フォルダID（移動検出用）
+  final String? expectedParentId;
+
+  /// 最終同期時刻（同期完了時点のDateTime.now()）
+  final DateTime? lastSyncedTime;
+
+  const KMetaSyncFile({
+    required this.driveFileId,
+    this.expectedParentId,
+    this.lastSyncedTime,
+  });
+
+  factory KMetaSyncFile.fromJson(Map<String, dynamic> json) {
+    // 後方互換性：古いlastSyncedModifiedTimeも読み込む
+    final legacyTime = json['lastSyncedModifiedTime'] != null
+        ? DateTime.tryParse(json['lastSyncedModifiedTime'] as String)
+        : null;
+    return KMetaSyncFile(
+      driveFileId: json['driveFileId'] as String,
+      expectedParentId: json['expectedParentId'] as String?,
+      lastSyncedTime: json['lastSyncedTime'] != null
+          ? DateTime.tryParse(json['lastSyncedTime'] as String)
+          : legacyTime, // フォールバック
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'driveFileId': driveFileId,
+    };
+    if (expectedParentId != null) {
+      json['expectedParentId'] = expectedParentId;
+    }
+    if (lastSyncedTime != null) {
+      json['lastSyncedTime'] = lastSyncedTime!.toIso8601String();
+    }
+    return json;
+  }
+
+  /// コピーを作成（一部フィールドを更新）
+  KMetaSyncFile copyWith({
+    String? driveFileId,
+    String? expectedParentId,
+    DateTime? lastSyncedTime,
+  }) {
+    return KMetaSyncFile(
+      driveFileId: driveFileId ?? this.driveFileId,
+      expectedParentId: expectedParentId ?? this.expectedParentId,
+      lastSyncedTime: lastSyncedTime ?? this.lastSyncedTime,
+    );
+  }
+}
+
+/// 同期設定（Google Drive連携用）
 class KMetaSync {
   /// Google DriveのフォルダID
   final String? driveId;
 
+  /// Driveフォルダ名（表示用）
+  final String? driveFolderName;
+
+  /// Drive共有URL（元のURL）
+  final String? driveUrl;
+
+  /// 読み取り専用か
+  final bool? isReadOnly;
+
   /// 最終同期日時
   final DateTime? lastSynced;
 
+  /// 最後に同期したDriveリビジョンID
+  final String? driveRevisionId;
+
+  /// このデバイスの識別子（ローカル専用、同期対象外）
+  final String? deviceId;
+
+  /// 同期対象ファイル（ファイル名 → ファイル情報）
+  final Map<String, KMetaSyncFile> files;
+
   const KMetaSync({
     this.driveId,
+    this.driveFolderName,
+    this.driveUrl,
+    this.isReadOnly,
     this.lastSynced,
+    this.driveRevisionId,
+    this.deviceId,
+    this.files = const {},
   });
 
   /// JSONからパース
   factory KMetaSync.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const KMetaSync();
+
+    // filesフィールドをパース
+    final filesJson = json['files'] as Map<String, dynamic>?;
+    final files = <String, KMetaSyncFile>{};
+    if (filesJson != null) {
+      for (final entry in filesJson.entries) {
+        files[entry.key] = KMetaSyncFile.fromJson(
+          entry.value as Map<String, dynamic>,
+        );
+      }
+    }
+
     return KMetaSync(
       driveId: json['driveId'] as String?,
+      driveFolderName: json['driveFolderName'] as String?,
+      driveUrl: json['driveUrl'] as String?,
+      isReadOnly: json['isReadOnly'] as bool?,
       lastSynced: json['lastSynced'] != null
           ? DateTime.tryParse(json['lastSynced'] as String)
           : null,
+      driveRevisionId: json['driveRevisionId'] as String?,
+      deviceId: json['deviceId'] as String?,
+      files: files,
     );
   }
 
-  /// JSONへシリアライズ
+  /// JSONへシリアライズ（全フィールド含む）
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
     if (driveId != null) json['driveId'] = driveId;
+    if (driveFolderName != null) json['driveFolderName'] = driveFolderName;
+    if (driveUrl != null) json['driveUrl'] = driveUrl;
+    if (isReadOnly != null) json['isReadOnly'] = isReadOnly;
     if (lastSynced != null) json['lastSynced'] = lastSynced!.toIso8601String();
+    if (driveRevisionId != null) json['driveRevisionId'] = driveRevisionId;
+    if (deviceId != null) json['deviceId'] = deviceId;
+    if (files.isNotEmpty) {
+      json['files'] = files.map((k, v) => MapEntry(k, v.toJson()));
+    }
+    return json;
+  }
+
+  /// 同期用JSONへシリアライズ（deviceIdを除外）
+  /// Driveにアップロードする際はこちらを使用
+  Map<String, dynamic> toJsonForSync() {
+    final json = <String, dynamic>{};
+    if (driveId != null) json['driveId'] = driveId;
+    if (driveFolderName != null) json['driveFolderName'] = driveFolderName;
+    if (driveUrl != null) json['driveUrl'] = driveUrl;
+    if (isReadOnly != null) json['isReadOnly'] = isReadOnly;
+    if (lastSynced != null) json['lastSynced'] = lastSynced!.toIso8601String();
+    if (driveRevisionId != null) json['driveRevisionId'] = driveRevisionId;
+    // deviceIdは同期対象外なので含めない
+    if (files.isNotEmpty) {
+      json['files'] = files.map((k, v) => MapEntry(k, v.toJson()));
+    }
     return json;
   }
 
@@ -290,7 +415,39 @@ class KMetaSync {
   KMetaSync mergeWith(KMetaSync? parent) => this;
 
   /// 空かどうか
-  bool get isEmpty => driveId == null && lastSynced == null;
+  bool get isEmpty =>
+      driveId == null &&
+      driveFolderName == null &&
+      lastSynced == null &&
+      driveRevisionId == null &&
+      deviceId == null &&
+      files.isEmpty;
+
+  /// Drive連携済みかどうか
+  bool get isLinked => driveId != null;
+
+  /// コピーを作成（一部設定を変更）
+  KMetaSync copyWith({
+    String? driveId,
+    String? driveFolderName,
+    String? driveUrl,
+    bool? isReadOnly,
+    DateTime? lastSynced,
+    String? driveRevisionId,
+    String? deviceId,
+    Map<String, KMetaSyncFile>? files,
+  }) {
+    return KMetaSync(
+      driveId: driveId ?? this.driveId,
+      driveFolderName: driveFolderName ?? this.driveFolderName,
+      driveUrl: driveUrl ?? this.driveUrl,
+      isReadOnly: isReadOnly ?? this.isReadOnly,
+      lastSynced: lastSynced ?? this.lastSynced,
+      driveRevisionId: driveRevisionId ?? this.driveRevisionId,
+      deviceId: deviceId ?? this.deviceId,
+      files: files ?? this.files,
+    );
+  }
 }
 
 /// フォルダメタデータ（.kmeta.json）

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 
+        Google Sign-In用のWebクライアントID
+        Google Cloud Consoleで作成したWebクライアントIDを設定してください。
+        設定手順: docs/technical/google-drive-setup.md を参照
+    -->
+    <string name="default_web_client_id">560120495140-s3v4g3po0kc230lirhcvfeg0p7esrilj.apps.googleusercontent.com</string>
+</resources>

@@ -14,7 +14,11 @@ import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/global_folder_node.dart'; // グローバルフォルダ
+import '../../models/nodes/drive_folder_node.dart'; // Drive連携フォルダ
 import '../../models/geopackage/geopackage_file.dart';
+import '../../services/google_drive/index.dart';
+import '../dialogs/add_folder_type_dialog.dart';
+import '../dialogs/drive_url_input_dialog.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_tiles.dart';
 import 'layer_drawer_utils.dart';
@@ -365,75 +369,160 @@ class _LayerDrawerState extends State<LayerDrawer>
 
   /// フォルダ追加処理
   Future<void> _addFolder(BuildContext context) async {
-    String input = '';
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('新規サブフォルダ'),
-          content: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'フォルダ名'),
-            onChanged: (v) => input = v,
-            onSubmitted: (value) {
-              // Enterキーが押された場合、フォルダ名が空でなければ作成処理を実行
-              if (value.trim().isNotEmpty) {
-                Navigator.pop(context, value.trim());
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('キャンセル'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, input),
-              child: const Text('作成'),
-            ),
-          ],
+    // フォルダ種類選択ダイアログを表示
+    final typeResult = await AddFolderTypeDialog.show(context);
+    if (typeResult == null) return;
+
+    if (typeResult.type == AddFolderType.local) {
+      // 通常フォルダの作成
+      await _createLocalFolder(context, typeResult.folderName!);
+    } else {
+      // Drive連携フォルダの追加
+      await _addDriveFolder(context);
+    }
+  }
+
+  /// 通常のローカルフォルダを作成
+  Future<void> _createLocalFolder(BuildContext context, String folderName) async {
+    final folderNode = widget.currentNode as FolderNode;
+    final dir = folderNode.getAbsoluteFilePath();
+    final path = p.join(dir ?? '', folderName);
+    if (Directory(path).existsSync()) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('同名のフォルダが既に存在します')));
+      }
+      return;
+    }
+    Directory(path).createSync();
+    
+    // グローバルフォルダ内の場合はGlobalSubFolderNodeとして作成
+    if (folderNode is GlobalFolderNode) {
+      folderNode.addChild(
+        GlobalSubFolderNode(
+          folderName,
+          basePath: folderNode.globalPath,
+          visible: true,
+          parent: folderNode,
+        ),
+      );
+    } else if (folderNode is GlobalSubFolderNode) {
+      folderNode.addChild(
+        GlobalSubFolderNode(
+          folderName,
+          basePath: folderNode.basePath,
+          visible: true,
+          parent: folderNode,
+        ),
+      );
+    } else {
+      folderNode.addChild(
+        FolderNode(folderName, visible: true, parent: folderNode),
+      );
+    }
+    widget.setStateCallback(() {});
+  }
+
+  /// Drive連携フォルダを追加（URLからクローン）
+  Future<void> _addDriveFolder(BuildContext context) async {
+    // URL入力ダイアログを表示
+    final urlResult = await DriveUrlInputDialog.show(context);
+    if (urlResult == null) return;
+
+    final folderNode = widget.currentNode as FolderNode;
+    final parentDir = folderNode.getAbsoluteFilePath();
+    if (parentDir == null) return;
+
+    final localPath = p.join(parentDir, urlResult.folderName);
+
+    // 同名フォルダが既に存在する場合
+    if (Directory(localPath).existsSync()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('同名のフォルダが既に存在します')),
         );
-      },
-    );
-    if (result != null && result.isNotEmpty) {
-      final folderNode = widget.currentNode as FolderNode;
-      final dir = folderNode.getAbsoluteFilePath();
-      final path = p.join(dir ?? '', result);
-      if (Directory(path).existsSync()) {
+      }
+      return;
+    }
+
+    // ローディング表示
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Text('${urlResult.folderName} をクローン中...'),
+            ],
+          ),
+          duration: const Duration(seconds: 30),
+        ),
+      );
+    }
+
+    try {
+      // Driveからクローン
+      final syncEngine = SyncEngine();
+      final success = await syncEngine.cloneFromDrive(
+        driveId: urlResult.folderId,
+        localPath: localPath,
+        folderName: urlResult.folderName,
+        driveUrl: urlResult.url,
+        isReadOnly: urlResult.isReadOnly,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+
+      if (success) {
+        // DriveFolderNodeを追加
+        final driveFolderNode = DriveFolderNode(
+          urlResult.folderName,
+          driveId: urlResult.folderId,
+          driveUrl: urlResult.url,
+          isReadOnly: urlResult.isReadOnly,
+          visible: true,
+          parent: folderNode,
+        );
+        folderNode.addChild(driveFolderNode);
+        widget.setStateCallback(() {});
+
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('同名のフォルダが既に存在します')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${urlResult.folderName} をクローンしました'),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
-        return;
-      }
-      Directory(path).createSync();
-      
-      // グローバルフォルダ内の場合はGlobalSubFolderNodeとして作成
-      if (folderNode is GlobalFolderNode) {
-        folderNode.addChild(
-          GlobalSubFolderNode(
-            result,
-            basePath: folderNode.globalPath,
-            visible: true,
-            parent: folderNode,
-          ),
-        );
-      } else if (folderNode is GlobalSubFolderNode) {
-        folderNode.addChild(
-          GlobalSubFolderNode(
-            result,
-            basePath: folderNode.basePath,
-            visible: true,
-            parent: folderNode,
-          ),
-        );
       } else {
-        folderNode.addChild(
-          FolderNode(result, visible: true, parent: folderNode),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('クローンに失敗しました'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
-      widget.setStateCallback(() {});
     }
   }
 

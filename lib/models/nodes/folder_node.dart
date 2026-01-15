@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
+import 'drive_folder_node.dart';
 import '../kmeta.dart';
 import '../../services/kmeta_service.dart';
 import '../../core/node_types.dart';
@@ -147,6 +148,7 @@ class FolderNode extends LayerTreeNode {
   }
 
   /// このフォルダ直下のFolderNodeリストのみ返す（名前昇順でソート）
+  /// .kmeta.jsonにDrive連携情報があればDriveFolderNodeとして作成
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
@@ -162,16 +164,86 @@ class FolderNode extends LayerTreeNode {
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
     
     for (var entity in directories) {
-      nodes.add(
-        FolderNode(
-          p.basename(entity.path),
-          visible: true,
-          parent: parent,
-          children: [],
-        ),
+      final folderPath = entity.path;
+      final folderName = p.basename(folderPath);
+      
+      // .kmeta.jsonをチェックしてDrive連携情報があるか確認
+      final driveNode = await _tryCreateDriveFolderNode(
+        folderPath,
+        folderName,
+        parent,
       );
+      
+      if (driveNode != null) {
+        nodes.add(driveNode);
+      } else {
+        nodes.add(
+          FolderNode(
+            folderName,
+            visible: true,
+            parent: parent,
+            children: [],
+          ),
+        );
+      }
     }
     return nodes;
+  }
+
+  /// .kmeta.jsonからDrive連携情報を読み込み、DriveFolderNodeを作成
+  static Future<LayerTreeNode?> _tryCreateDriveFolderNode(
+    String folderPath,
+    String folderName,
+    LayerTreeNode parent,
+  ) async {
+    try {
+      final meta = await KMetaService.instance.getRawMeta(folderPath);
+      if (meta == null || !meta.sync.isLinked) {
+        return null;
+      }
+      
+      final driveId = meta.sync.driveId;
+      if (driveId == null) return null;
+      
+      // Drive連携情報がある場合はDriveFolderNodeを作成
+      // 動的インポートを避けるため、ここで直接インポートが必要
+      // drive_folder_node.dartをインポートする必要がある
+      AppLogger.debug('[FolderNode] Drive連携フォルダを検出: $folderName (driveId: $driveId)');
+      
+      // DriveFolderNodeの作成は呼び出し元で行う（循環参照を避けるため）
+      // ここではメタデータを持つマーカーとしてnullを返し、
+      // 呼び出し元で処理する設計も考えられるが、
+      // 今回は直接インポートして作成する
+      return _createDriveFolderNodeFromMeta(folderName, meta, parent);
+    } catch (e) {
+      AppLogger.debug('[FolderNode] Drive連携チェックエラー: $e');
+      return null;
+    }
+  }
+
+  /// メタデータからDriveFolderNodeを作成
+  static LayerTreeNode? _createDriveFolderNodeFromMeta(
+    String folderName,
+    KMeta meta,
+    LayerTreeNode parent,
+  ) {
+    final driveId = meta.sync.driveId;
+    if (driveId == null) return null;
+    
+    // KMetaSyncからDrive連携情報を取得
+    final driveUrl = meta.sync.driveUrl ?? '';
+    final isReadOnly = meta.sync.isReadOnly ?? false;
+    
+    return DriveFolderNode(
+      folderName,
+      driveId: driveId,
+      driveUrl: driveUrl,
+      isReadOnly: isReadOnly,
+      lastSynced: meta.sync.lastSynced,
+      visible: true,
+      parent: parent,
+      children: [],
+    );
   }
 
   @override

@@ -495,9 +495,20 @@ class GpsManagerService extends ChangeNotifier {
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
+      // 他の権限リクエストとの競合を避けるため少し待機
+      await Future.delayed(const Duration(milliseconds: 500));
+      
       permission = await Geolocator.requestPermission();
+      
+      // 権限リクエストが競合で失敗した場合（空の結果）、再度確認
       if (permission == LocationPermission.denied) {
-        throw Exception('位置情報許可が拒否されました');
+        AppLogger.debug('$_logTag: 位置情報許可が拒否、500ms後に再確認...');
+        await Future.delayed(const Duration(milliseconds: 500));
+        permission = await Geolocator.checkPermission();
+        
+        if (permission == LocationPermission.denied) {
+          throw Exception('位置情報許可が拒否されました');
+        }
       }
     }
 

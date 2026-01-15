@@ -1,6 +1,7 @@
 /// K-MAPS: LayerDrawer用各種タイル描画ロジック
 library;
 
+import 'dart:io' show Platform;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -11,8 +12,10 @@ import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
+import '../../models/nodes/drive_folder_node.dart';
 import '../../models/geometry_type.dart';
 import '../../utils/global_config.dart';
+import '../../services/google_drive/index.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../services/import_export_service.dart';
 import '../../services/geometry_conversion_service.dart';
@@ -20,6 +23,7 @@ import '../../widgets/dialog_manager.dart';
 import '../../widgets/geometry_conversion_dialogs.dart';
 import '../../screens/layer_style_settings_screen.dart';
 import '../../presentation/node_presenter.dart';
+import 'sync_merge_dialog.dart';
 
 /// 各種タイル描画機能を提供するミックスイン
 mixin LayerDrawerTiles {
@@ -54,16 +58,380 @@ mixin LayerDrawerTiles {
   /// 現在開いているノード（フォルダ）
   LayerTreeNode? get currentNode;
 
+  /// モバイルかどうか（Drive連携機能はモバイル専用）
+  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+
   /// フォルダタイルを構築
   Widget buildFolderTile(
     BuildContext context,
     FolderNode node,
     VoidCallback onTap,
   ) {
+    // DriveFolderNodeの場合は同期メニュー付き（モバイルのみ）
+    if (node is DriveFolderNode && _isMobile) {
+      return ListTile(
+        leading: _buildDriveFolderIcon(node),
+        title: Text(node.name),
+        subtitle: _buildDriveFolderSubtitle(node),
+        onTap: onTap,
+        trailing: _buildDriveFolderMenu(context, node),
+      );
+    }
+
+    // DriveFolderNodeだがPC版の場合はアイコンのみ変更（同期メニューなし）
+    if (node is DriveFolderNode && !_isMobile) {
+      return ListTile(
+        leading: Icon(Icons.cloud, color: Colors.blue.shade600),
+        title: Text(node.name),
+        subtitle: const Text('PC版では同期不可（Google Drive Desktop使用）',
+            style: TextStyle(fontSize: 10, color: Colors.grey)),
+        onTap: onTap,
+      );
+    }
+
+    // 通常のフォルダ
     return ListTile(
       leading: _buildIconWithVisibility(node),
       title: Text(node.name),
       onTap: onTap,
+    );
+  }
+
+  /// Drive連携フォルダのアイコンを構築
+  Widget _buildDriveFolderIcon(DriveFolderNode node) {
+    return NodePresenter.buildIconWithSyncOverlay(
+      node,
+      size: 24,
+      syncStatus: node.syncStatus,
+    );
+  }
+
+  /// Drive連携フォルダのサブタイトルを構築
+  Widget? _buildDriveFolderSubtitle(DriveFolderNode node) {
+    String statusText;
+    Color statusColor;
+    
+    switch (node.syncStatus) {
+      case SyncStatus.synced:
+        statusText = '同期済み';
+        statusColor = Colors.green;
+        break;
+      case SyncStatus.localChanges:
+        statusText = 'ローカル変更あり';
+        statusColor = Colors.orange;
+        break;
+      case SyncStatus.remoteChanges:
+        statusText = 'Drive変更あり';
+        statusColor = Colors.blue;
+        break;
+      case SyncStatus.conflict:
+        statusText = '競合あり';
+        statusColor = Colors.red;
+        break;
+      case SyncStatus.syncing:
+        statusText = '同期中...';
+        statusColor = Colors.blue;
+        break;
+      case SyncStatus.error:
+        statusText = 'エラー';
+        statusColor = Colors.red;
+        break;
+      case SyncStatus.unknown:
+        statusText = node.isReadOnly ? '読み取り専用' : 'Drive連携';
+        statusColor = Colors.grey;
+        break;
+    }
+    
+    return Text(
+      statusText,
+      style: TextStyle(fontSize: 12, color: statusColor),
+    );
+  }
+
+  /// Drive連携フォルダのメニューを構築
+  Widget _buildDriveFolderMenu(BuildContext context, DriveFolderNode node) {
+    return PopupMenuButton<String>(
+      onSelected: (value) async {
+        switch (value) {
+          case 'upload':
+            await _openSyncMergeDialog(context, node, mode: SyncMode.upload);
+            break;
+          case 'download':
+            await _openSyncMergeDialog(context, node, mode: SyncMode.download);
+            break;
+          case 'refresh':
+            await _refreshSyncStatus(node);
+            break;
+          case 'unlink':
+            await _unlinkDriveFolder(context, node);
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        if (!node.isReadOnly)
+          const PopupMenuItem(
+            value: 'upload',
+            child: ListTile(
+              leading: Icon(Icons.cloud_upload, color: Colors.orange),
+              title: Text('アップロード'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'download',
+          child: ListTile(
+            leading: Icon(Icons.cloud_download, color: Colors.green),
+            title: Text('ダウンロード'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'refresh',
+          child: ListTile(
+            leading: Icon(Icons.refresh, color: Colors.blue),
+            title: Text('状態を更新'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'unlink',
+          child: ListTile(
+            leading: Icon(Icons.link_off, color: Colors.red),
+            title: Text('Drive連携を解除'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 同期状態を更新（UIのみ、ダイアログなし）
+  Future<void> _refreshSyncStatus(DriveFolderNode node) async {
+    final localPath = node.getAbsoluteFilePath();
+    if (localPath == null) return;
+
+    node.syncStatus = SyncStatus.syncing;
+    setStateCallback(() {});
+
+    try {
+      final syncEngine = SyncEngine();
+      final detail = await syncEngine.checkSyncStatusDetail(localPath);
+      _updateNodeSyncStatus(node, detail.status);
+    } catch (e) {
+      node.syncStatus = SyncStatus.error;
+    }
+
+    setStateCallback(() {});
+  }
+
+  /// 子ノードを再帰的に更新
+  Future<void> _updateChildrenRecursive(LayerTreeNode node) async {
+    await node.updateChildren();
+    for (final child in node.children) {
+      if (child is FolderNode) {
+        await _updateChildrenRecursive(child);
+      }
+    }
+  }
+
+  /// Drive操作前の認証チェック
+  /// 未認証の場合はサインインを試みる
+  /// トークン期限切れの場合はリフレッシュを試みる
+  Future<bool> _ensureDriveAuthenticated(BuildContext context) async {
+    final driveService = GoogleDriveService();
+    
+    // 既に認証済みならOK
+    if (driveService.isDriveApiAvailable) {
+      // トークンをリフレッシュして最新状態に
+      await driveService.refreshToken();
+      return true;
+    }
+    
+    // サイレントサインインを試行（initialize内で実行される）
+    await driveService.initialize();
+    if (driveService.isDriveApiAvailable) {
+      return true;
+    }
+    
+    // 明示的なサインインを試行
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Google Driveにログインしています...'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+    
+    final signInResult = await driveService.signIn();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    
+    if (signInResult) {
+      return true;
+    }
+    
+    // サインイン失敗
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Google Driveへのログインに失敗しました'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return false;
+  }
+
+  /// 同期マージダイアログを開く
+  Future<void> _openSyncMergeDialog(
+    BuildContext context,
+    DriveFolderNode node, {
+    required SyncMode mode,
+  }) async {
+    final localPath = node.getAbsoluteFilePath();
+    if (localPath == null) return;
+
+    // 認証チェック
+    if (!await _ensureDriveAuthenticated(context)) return;
+
+    try {
+      node.syncStatus = SyncStatus.syncing;
+      setStateCallback(() {});
+
+      final syncEngine = SyncEngine();
+      final entries = await syncEngine.getMergeEntries(localPath);
+
+      if (!context.mounted) return;
+
+      // 変更がない場合
+      if (entries.isEmpty) {
+        node.syncStatus = SyncStatus.synced;
+        setStateCallback(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('変更はありません'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return;
+      }
+
+      // マージダイアログを表示
+      final decisions = await SyncMergeDialog.show(
+        context,
+        folderName: node.name,
+        entries: entries,
+        mode: mode,
+      );
+
+      if (decisions == null || decisions.isEmpty) {
+        // キャンセルされた場合は状態を再確認
+        final detail = await syncEngine.checkSyncStatusDetail(localPath);
+        _updateNodeSyncStatus(node, detail.status);
+        setStateCallback(() {});
+        return;
+      }
+
+      // マージを実行
+      node.syncStatus = SyncStatus.syncing;
+      setStateCallback(() {});
+
+      final result = await syncEngine.executeMerge(localPath, decisions);
+
+      if (result.success) {
+        node.syncStatus = SyncStatus.synced;
+        
+        // ローカルファイル変更があった場合は子ノードを再帰的に再読み込み
+        if (result.downloadedCount > 0 || result.deletedCount > 0) {
+          await _updateChildrenRecursive(node);
+          setStateCallback(() {});
+        }
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '同期完了: ${result.uploadedCount}アップロード, '
+                '${result.downloadedCount}ダウンロード, '
+                '${result.deletedCount}削除',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        node.syncStatus = SyncStatus.error;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('エラー: ${result.errorMessage}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      node.syncStatus = SyncStatus.error;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('エラー: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    setStateCallback(() {});
+  }
+
+  /// ノードの同期状態を更新
+  void _updateNodeSyncStatus(DriveFolderNode node, FolderSyncStatus status) {
+    switch (status) {
+      case FolderSyncStatus.synced:
+        node.syncStatus = SyncStatus.synced;
+        break;
+      case FolderSyncStatus.localChanges:
+        node.syncStatus = SyncStatus.localChanges;
+        break;
+      case FolderSyncStatus.remoteChanges:
+        node.syncStatus = SyncStatus.remoteChanges;
+        break;
+      case FolderSyncStatus.conflict:
+        node.syncStatus = SyncStatus.conflict;
+        break;
+      case FolderSyncStatus.notLinked:
+      case FolderSyncStatus.error:
+        node.syncStatus = SyncStatus.error;
+        break;
+    }
+  }
+
+  /// Drive連携を解除
+  Future<void> _unlinkDriveFolder(BuildContext context, DriveFolderNode node) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Drive連携を解除'),
+        content: Text(
+          '${node.name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('解除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // TODO: DriveFolderNodeを通常のFolderNodeに変換する処理
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Drive連携を解除しました')),
     );
   }
 

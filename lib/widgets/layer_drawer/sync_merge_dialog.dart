@@ -1,0 +1,359 @@
+/// K-MAPS: 同期マージダイアログ
+/// ファイル単位でローカル/クラウドを選択できるマージUI
+
+import 'package:flutter/material.dart';
+import '../../services/google_drive/sync_engine.dart';
+import '../../utils/app_logger.dart';
+
+/// 同期モード
+enum SyncMode {
+  upload,   // ローカル → クラウド
+  download, // クラウド → ローカル
+}
+
+/// 同期マージダイアログ
+class SyncMergeDialog extends StatefulWidget {
+  final String folderName;
+  final List<MergeFileEntry> entries;
+  final SyncMode mode;
+
+  const SyncMergeDialog({
+    super.key,
+    required this.folderName,
+    required this.entries,
+    required this.mode,
+  });
+
+  /// ダイアログを表示してマージ決定を取得
+  static Future<List<MergeDecision>?> show(
+    BuildContext context, {
+    required String folderName,
+    required List<MergeFileEntry> entries,
+    required SyncMode mode,
+  }) {
+    return showDialog<List<MergeDecision>>(
+      context: context,
+      builder: (context) => SyncMergeDialog(
+        folderName: folderName,
+        entries: entries,
+        mode: mode,
+      ),
+    );
+  }
+
+  @override
+  State<SyncMergeDialog> createState() => _SyncMergeDialogState();
+}
+
+class _SyncMergeDialogState extends State<SyncMergeDialog> {
+  late Map<String, MergeChoice> _choices;
+
+  @override
+  void initState() {
+    super.initState();
+    _initChoices();
+  }
+
+  void _initChoices() {
+    _choices = {};
+    for (final entry in widget.entries) {
+      // モードに応じて初期値を設定
+      if (widget.mode == SyncMode.upload) {
+        // アップロードモード: ローカル変更があればローカル、なければリモート
+        _choices[entry.relativePath] = 
+            entry.localChange != MergeChangeType.none 
+                ? MergeChoice.local 
+                : MergeChoice.remote;
+      } else {
+        // ダウンロードモード: リモート変更があればリモート、なければローカル
+        _choices[entry.relativePath] = 
+            entry.remoteChange != MergeChangeType.none 
+                ? MergeChoice.remote 
+                : MergeChoice.local;
+      }
+    }
+  }
+
+  String get _title {
+    if (widget.mode == SyncMode.upload) {
+      return 'アップロード: ${widget.folderName}';
+    } else {
+      return 'ダウンロード: ${widget.folderName}';
+    }
+  }
+
+  String get _description {
+    if (widget.mode == SyncMode.upload) {
+      return 'チェックしたファイルをクラウドに反映します\n'
+             '※クラウド側のチェックを外すと端末の状態に復元します';
+    } else {
+      return 'チェックしたファイルを端末に反映します\n'
+             '※端末側のチェックを外すとクラウドの状態に復元します';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_title),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: widget.entries.isEmpty
+            ? const Center(child: Text('変更はありません'))
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 説明文
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      _description,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  // ヘッダー
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '端末',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'クラウド',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  // ファイルリスト
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: widget.entries.length,
+                      itemBuilder: (context, index) {
+                        return _buildFileRow(widget.entries[index]);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('キャンセル'),
+        ),
+        if (widget.entries.isNotEmpty)
+          FilledButton(
+            onPressed: _onSync,
+            child: const Text('同期実行'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFileRow(MergeFileEntry entry) {
+    final choice = _choices[entry.relativePath] ?? MergeChoice.local;
+    final isLocalSelected = choice == MergeChoice.local;
+    final hasLocalChange = entry.localChange != MergeChangeType.none;
+    final hasRemoteChange = entry.remoteChange != MergeChangeType.none;
+    final isConflict = hasLocalChange && hasRemoteChange;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          // ローカル側（変更がある場合のみ表示）
+          Expanded(
+            child: hasLocalChange
+                ? _buildFileMarker(
+                    entry.relativePath,
+                    entry.localChange,
+                    isChecked: isLocalSelected,
+                    onTap: () {
+                      setState(() {
+                        if (isConflict) {
+                          _choices[entry.relativePath] = MergeChoice.local;
+                        } else {
+                          _choices[entry.relativePath] = 
+                              isLocalSelected ? MergeChoice.remote : MergeChoice.local;
+                        }
+                      });
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+          // クラウド側（変更がある場合のみ表示）
+          Expanded(
+            child: hasRemoteChange
+                ? _buildFileMarker(
+                    entry.relativePath,
+                    entry.remoteChange,
+                    isChecked: !isLocalSelected,
+                    onTap: () {
+                      setState(() {
+                        if (isConflict) {
+                          _choices[entry.relativePath] = MergeChoice.remote;
+                        } else {
+                          _choices[entry.relativePath] = 
+                              !isLocalSelected ? MergeChoice.local : MergeChoice.remote;
+                        }
+                      });
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ファイルマーカー（チェックボックス + ファイル名 + アイコン）
+  Widget _buildFileMarker(
+    String relativePath,
+    MergeChangeType changeType, {
+    required bool isChecked,
+    required VoidCallback onTap,
+  }) {
+    // サブフォルダも含めて表示
+    final fileName = relativePath;
+    final icon = _getChangeIcon(changeType);
+    final baseColor = _getChangeColor(changeType);
+    // チェックされていない場合はグレーアウト
+    final color = isChecked ? baseColor : baseColor.withValues(alpha: 0.4);
+    final textColor = isChecked 
+        ? Theme.of(context).colorScheme.onSurface
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4);
+
+    return InkWell(
+      onTap: onTap,
+      child: Opacity(
+        opacity: isChecked ? 1.0 : 0.6,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSelectionIndicator(isChecked, baseColor),
+            Flexible(
+              child: Text(
+                fileName,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                  color: textColor,
+                  decoration: changeType == MergeChangeType.deleted 
+                      ? TextDecoration.lineThrough 
+                      : null,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(icon, size: 14, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionIndicator(bool isSelected, Color changeColor) {
+    return Container(
+      width: 14,
+      height: 14,
+      margin: const EdgeInsets.only(right: 4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isSelected ? changeColor : Colors.transparent,
+        border: Border.all(
+          color: isSelected ? changeColor : Colors.grey,
+          width: 1.5,
+        ),
+      ),
+      child: isSelected
+          ? const Icon(Icons.check, size: 10, color: Colors.white)
+          : null,
+    );
+  }
+
+  IconData _getChangeIcon(MergeChangeType changeType) {
+    switch (changeType) {
+      case MergeChangeType.added:
+        return Icons.add;
+      case MergeChangeType.modified:
+        return Icons.circle;
+      case MergeChangeType.deleted:
+        return Icons.remove;
+      case MergeChangeType.moved:
+        return Icons.arrow_forward;
+      case MergeChangeType.none:
+        return Icons.circle;
+    }
+  }
+
+  Color _getChangeColor(MergeChangeType changeType) {
+    switch (changeType) {
+      case MergeChangeType.added:
+        return Colors.green;
+      case MergeChangeType.modified:
+        return Colors.orange;
+      case MergeChangeType.deleted:
+        return Colors.red;
+      case MergeChangeType.moved:
+        return Colors.blue;
+      case MergeChangeType.none:
+        return Colors.grey;
+    }
+  }
+
+  void _onSync() {
+    final decisions = <MergeDecision>[];
+    AppLogger.debug('[SyncMergeDialog] _onSync: ${widget.entries.length}件のエントリを処理');
+    
+    for (final entry in widget.entries) {
+      final choice = _choices[entry.relativePath];
+      if (choice == null) {
+        AppLogger.debug('  ${entry.relativePath}: choiceがnull、スキップ');
+        continue;
+      }
+
+      final hasLocalChange = entry.localChange != MergeChangeType.none;
+      final hasRemoteChange = entry.remoteChange != MergeChangeType.none;
+
+      AppLogger.debug('  ${entry.relativePath}:');
+      AppLogger.debug('    choice=$choice, localChange=${entry.localChange}, remoteChange=${entry.remoteChange}');
+      AppLogger.debug('    driveFileId=${entry.driveFileId}');
+      AppLogger.debug('    hasLocalChange=$hasLocalChange, hasRemoteChange=$hasRemoteChange');
+
+      // 何かしら変更があるエントリのみ追加
+      // - ローカル選択時: ローカル変更を反映 or リモート変更を無視（復元）
+      // - リモート選択時: リモート変更を反映 or ローカル変更を無視（復元）
+      if (hasLocalChange || hasRemoteChange) {
+        decisions.add(MergeDecision(entry: entry, choice: choice));
+        AppLogger.debug('    → decisionに追加');
+      } else {
+        AppLogger.debug('    → 変更なし、スキップ');
+      }
+    }
+    
+    AppLogger.debug('[SyncMergeDialog] 最終decisions: ${decisions.length}件');
+    Navigator.of(context).pop(decisions);
+  }
+}

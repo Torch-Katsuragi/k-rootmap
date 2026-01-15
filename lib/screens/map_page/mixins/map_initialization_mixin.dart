@@ -1,6 +1,7 @@
 // K-MAPS: 初期化処理Mixin
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -10,6 +11,8 @@ import '../../../utils/global_config.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
+import '../../../models/nodes/drive_folder_node.dart';
+import '../../../services/google_drive/index.dart';
 import '../map_page_state_base.dart';
 import '../../layer_style_settings_screen.dart';
 
@@ -91,8 +94,88 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       await updateFeatures();
       // UI更新
       triggerSetState(() {});
+      
+      // Drive連携フォルダの同期状態をバックグラウンドでチェック
+      _checkDriveFoldersSyncStatus(rootNode);
     }
     AppLogger.debug('[DEBUG] initializeProjectTree: complete');
+  }
+
+  /// Drive連携フォルダの同期状態をチェック（バックグラウンド実行）
+  /// PC版では実行しない（Google Drive Desktop使用を想定）
+  Future<void> _checkDriveFoldersSyncStatus(LayerTreeNode rootNode) async {
+    // PC版ではDrive連携機能を無効化
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      AppLogger.debug('[DEBUG] PC版のためDrive同期状態チェックをスキップ');
+      return;
+    }
+
+    final driveFolders = _collectDriveFolderNodes(rootNode);
+    if (driveFolders.isEmpty) return;
+
+    AppLogger.debug('[DEBUG] Drive連携フォルダ同期状態チェック: ${driveFolders.length}件');
+
+    // Drive認証を確認
+    final driveService = GoogleDriveService();
+    await driveService.initialize();
+    if (!driveService.isDriveApiAvailable) {
+      AppLogger.debug('[DEBUG] Drive未認証のため同期状態チェックをスキップ');
+      return;
+    }
+
+    // トークンをリフレッシュ
+    await driveService.refreshToken();
+
+    final syncEngine = SyncEngine();
+
+    for (final node in driveFolders) {
+      final localPath = node.getAbsoluteFilePath();
+      if (localPath == null) continue;
+
+      try {
+        final status = await syncEngine.checkSyncStatus(localPath);
+        switch (status) {
+          case FolderSyncStatus.synced:
+            node.syncStatus = SyncStatus.synced;
+            break;
+          case FolderSyncStatus.localChanges:
+            node.syncStatus = SyncStatus.localChanges;
+            break;
+          case FolderSyncStatus.remoteChanges:
+            node.syncStatus = SyncStatus.remoteChanges;
+            break;
+          case FolderSyncStatus.conflict:
+            node.syncStatus = SyncStatus.conflict;
+            break;
+          case FolderSyncStatus.notLinked:
+          case FolderSyncStatus.error:
+            node.syncStatus = SyncStatus.error;
+            break;
+        }
+        AppLogger.debug('[DEBUG] ${node.name} 同期状態: ${node.syncStatus}');
+      } catch (e) {
+        AppLogger.debug('[DEBUG] ${node.name} 同期状態チェックエラー: $e');
+        node.syncStatus = SyncStatus.error;
+      }
+    }
+
+    // UI更新
+    triggerSetState(() {});
+  }
+
+  /// ツリーからDriveFolderNodeを収集
+  List<DriveFolderNode> _collectDriveFolderNodes(LayerTreeNode node) {
+    final result = <DriveFolderNode>[];
+
+    if (node is DriveFolderNode) {
+      result.add(node);
+    }
+
+    for (final child in node.children) {
+      result.addAll(_collectDriveFolderNodes(child));
+    }
+
+    return result;
   }
   
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）

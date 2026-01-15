@@ -6,6 +6,7 @@ import '../core/node_types.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import '../models/nodes/drive_folder_node.dart';
 
 /// ノードのUI表示情報を提供するクラス
 /// 
@@ -40,6 +41,10 @@ class NodePresenter {
   /// ノードインスタンスに基づくアイコンを取得
   /// サブクラス固有のアイコンがある場合はそれを返す
   static IconData getIcon(LayerTreeNode node) {
+    // Drive連携フォルダはクラウドフォルダアイコン
+    if (node is DriveFolderNode) return Icons.cloud;
+    if (node is DriveSubFolderNode) return Icons.folder;
+    
     // LayerNodeのサブクラスは特別なアイコンを持つ
     if (node is PointLayerNode) return Icons.scatter_plot;
     if (node is LineLayerNode) return Icons.show_chart;
@@ -77,6 +82,11 @@ class NodePresenter {
   /// ノードインスタンスに基づく色を取得
   /// グローバルノードは青色系、サブクラス固有の色がある場合はそれを返す
   static Color getColor(LayerTreeNode node) {
+    // Drive連携フォルダは青色（クラウドを象徴）
+    if (node is DriveFolderNode || node is DriveSubFolderNode) {
+      return Colors.blue.shade600;
+    }
+    
     // グローバルノードは青色で差別化
     if (node.isGlobalNode) {
       return Colors.blue.shade700;
@@ -94,6 +104,107 @@ class NodePresenter {
     
     // 基本タイプの色
     return getColorForType(node.nodeType);
+  }
+  
+  // ========================================
+  // Drive連携フォルダ関連
+  // ========================================
+  
+  /// Drive連携フォルダかどうか
+  static bool isDriveFolder(LayerTreeNode node) {
+    return node is DriveFolderNode || node is DriveSubFolderNode;
+  }
+  
+  /// 同期状態に対応するオーバーレイアイコンを取得
+  static IconData? getSyncOverlayIcon(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return null; // オーバーレイなし
+      case SyncStatus.localChanges:
+        return Icons.arrow_upward;
+      case SyncStatus.remoteChanges:
+        return Icons.arrow_downward;
+      case SyncStatus.conflict:
+        return Icons.warning;
+      case SyncStatus.syncing:
+        return Icons.sync;
+      case SyncStatus.error:
+        return Icons.error_outline;
+      case SyncStatus.unknown:
+        return null;
+    }
+  }
+  
+  /// 同期状態に対応する色を取得
+  static Color? getSyncOverlayColor(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.synced:
+        return null;
+      case SyncStatus.localChanges:
+        return Colors.orange;
+      case SyncStatus.remoteChanges:
+        return Colors.green;
+      case SyncStatus.conflict:
+        return Colors.red;
+      case SyncStatus.syncing:
+        return Colors.blue;
+      case SyncStatus.error:
+        return Colors.red;
+      case SyncStatus.unknown:
+        return null;
+    }
+  }
+  
+  /// 同期状態オーバーレイ付きアイコンウィジェットを生成
+  static Widget buildIconWithSyncOverlay(
+    LayerTreeNode node, {
+    double size = 24,
+    SyncStatus? syncStatus,
+  }) {
+    final baseIcon = Icon(
+      getIcon(node),
+      color: getColor(node),
+      size: size,
+    );
+    
+    // DriveFolderNodeでない場合、または同期状態がない場合はベースアイコンのみ
+    if (node is! DriveFolderNode || syncStatus == null) {
+      return baseIcon;
+    }
+    
+    final overlayIcon = getSyncOverlayIcon(syncStatus);
+    if (overlayIcon == null) {
+      return baseIcon;
+    }
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        baseIcon,
+        Positioned(
+          right: -4,
+          bottom: -4,
+          child: Container(
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 2,
+                ),
+              ],
+            ),
+            child: Icon(
+              overlayIcon,
+              size: size * 0.5,
+              color: getSyncOverlayColor(syncStatus),
+            ),
+          ),
+        ),
+      ],
+    );
   }
   
   // ========================================

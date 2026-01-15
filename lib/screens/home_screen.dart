@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String? _projectDir;
   bool _permissionsGranted = false;
   bool _isCheckingPermissions = false; // 権限チェック中フラグ
+  bool _navigatedToMapPage = false; // マップ画面に遷移済みフラグ
 
   @override
   void initState() {
@@ -40,8 +41,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // アプリがフォアグラウンドに戻ったときに権限を再確認
-      // ただし、既に権限チェック中の場合はスキップ
-      if (!_isCheckingPermissions) {
+      // ただし、既に権限チェック中またはマップ画面に遷移済みの場合はスキップ
+      // （MapPageでのGPS権限リクエストと競合を防ぐため）
+      if (!_isCheckingPermissions && !_navigatedToMapPage) {
         _checkPermissions();
       }
     }
@@ -278,10 +280,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // フォルダ選択後すぐ地図編集画面へ遷移
       if (mounted) {
         AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
+        // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
+        _navigatedToMapPage = true;
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const KMapsHomePage()),
-        );
+        ).then((_) {
+          // マップ画面から戻ってきた場合はフラグをリセット
+          _navigatedToMapPage = false;
+        });
       }
     }
   }

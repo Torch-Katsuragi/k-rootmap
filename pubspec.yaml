@@ -83,6 +83,13 @@ dependencies:
   camerawesome: ^2.5.0
   flex_color_picker: ^3.7.2
   url_launcher: ^6.3.1              # 外部URL起動用
+  
+  # Google Drive連携用パッケージ
+  google_sign_in: ^6.2.2            # Google OAuth認証用
+  googleapis: ^14.0.0               # Google APIs（Drive API含む）
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12  # google_sign_inとgoogleapisの連携
+  flutter_secure_storage: ^9.2.4    # トークン安全保存用
+  mobile_scanner: ^7.1.4
 
 dependency_overrides:
   rxdart: ^0.28.0

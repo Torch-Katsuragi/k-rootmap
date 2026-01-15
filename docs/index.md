@@ -33,6 +33,8 @@ tags: [index, navigation]
 | [[technical/import-export]] | Import/Exportアーキテクチャ（モジュール構造） |
 | [[technical/foreground-service]] | フォアグラウンドサービス・Bluetooth通信制約 |
 | [[technical/gps-architecture]] | GPS追跡・測量アーキテクチャ |
+| [[technical/google-drive-setup]] | Google Drive連携セットアップガイド |
+| [[technical/ui-layer-tree]] | レイヤツリーUI更新ガイド（updateChildren） |
 
 ---
 

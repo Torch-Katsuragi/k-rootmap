@@ -211,12 +211,35 @@ class KMetaService {
   Future<bool> setDriveSync(
     String folderPath, {
     String? driveId,
+    String? driveFolderName,
+    String? driveUrl,
+    bool? isReadOnly,
     DateTime? lastSynced,
+    String? driveRevisionId,
+    String? deviceId,
+    Map<String, KMetaSyncFile>? files,
   }) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
     final updatedSync = KMetaSync(
       driveId: driveId ?? rawMeta.sync.driveId,
+      driveFolderName: driveFolderName ?? rawMeta.sync.driveFolderName,
+      driveUrl: driveUrl ?? rawMeta.sync.driveUrl,
+      isReadOnly: isReadOnly ?? rawMeta.sync.isReadOnly,
       lastSynced: lastSynced ?? rawMeta.sync.lastSynced,
+      driveRevisionId: driveRevisionId ?? rawMeta.sync.driveRevisionId,
+      deviceId: deviceId ?? rawMeta.sync.deviceId,
+      files: files ?? rawMeta.sync.files,
+    );
+    final updatedMeta = rawMeta.copyWith(sync: updatedSync);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// Drive連携を解除
+  Future<bool> unlinkDrive(String folderPath) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    // deviceIdは維持し、Drive関連フィールドのみクリア
+    final updatedSync = KMetaSync(
+      deviceId: rawMeta.sync.deviceId,
     );
     final updatedMeta = rawMeta.copyWith(sync: updatedSync);
     return saveMeta(folderPath, updatedMeta);

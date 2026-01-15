@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   charset_converter
   desktop_drop
   file_selector_linux
+  flutter_secure_storage_linux
   url_launcher_linux
 )
 

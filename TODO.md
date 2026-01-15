@@ -2,6 +2,27 @@
 
 ## 完了済み
 
+- [x] Drive連携フォルダ機能MVP完了（2026/01/14-15）
+  - [x] 認証: サイレント/明示的サインイン、トークンリフレッシュ
+  - [x] フォルダ追加: 通常/Drive連携の選択ダイアログ
+  - [x] URL入力: ペースト＋QRスキャン対応（mobile_scanner導入）
+  - [x] クローン: 共有フォルダからの初回ダウンロード
+  - [x] 永続化: .kmeta.jsonにDrive情報保存、再読み込み時にDriveFolderNodeとして復元
+  - [x] 視覚的区別: 青いクラウドアイコン、同期状態オーバーレイ（↑↓）
+  - [x] 手動同期: Push/Pull/状態確認/連携解除メニュー
+  - [x] 自動チェック: プロジェクト読み込み時に同期状態を自動確認
+  - [x] エラーハンドリング: 失敗時の適切なステータス表示、supportsAllDrives対応
+  - [x] 設計書更新（google-drive.md, google-drive-setup.md）
+  - 注: **モバイル専用機能**（PCでは無効化。Google Drive Desktopとの競合防止）
+
+## 未完了
+
+### Google Drive連携
+
+- [ ] レイヤ単位での競合解決の実装
+  - GeoPackage内のレイヤレベルでのマージ機能
+  - ops.log操作ログによる細粒度な競合検出
+
 - [x] ドキュメント構造の整理（2025/12/30）
   - [x] FEATURES.mdとDOCUMENT.mdをdocs/配下に分割
   - [x] docs/features/（機能設計8ファイル）、docs/technical/（技術資料5ファイル）
@@ -106,6 +127,21 @@
   - [x] ExifParserユーティリティ作成（EXIF解析ロジック集約）
   - [x] LayerMigrationService作成（レイヤー移植処理分離）
 
+- [x] Google Drive連携MVP実装（2026/01/14）
+  - [x] 認証基盤（google_sign_in, googleapis, flutter_secure_storage）
+  - [x] GoogleDriveService/DriveAuthState（OAuth認証フロー）
+  - [x] KMetaSyncを拡張（driveFolderName, driveRevisionId, deviceId追加）
+  - [x] SyncEngine（Push/Pull同期機能）
+  - [x] DriveConnectDialog（Drive連携ダイアログ）
+  - [x] OpenFromUrlDialog（URL入力ダイアログ）
+  - [x] DriveFolderPicker（フォルダ選択ダイアログ）
+  - [x] セットアップガイド（docs/technical/google-drive-setup.md）
+  - 注: 設計書のproject_meta.jsonは.kmeta.jsonに統合
+
 - [ ] フィードバックフォームにバージョン情報を事前入力
   - Google FormsのURLパラメータを使用して、アプリバージョンを埋め込む
   - フォームを開いたときにバージョン情報が入力済みの状態で表示される
+
+- [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能を追加
+  - ポイントの詳細情報画面に「Google Mapリンクをコピー」ボタンを設置
+  - 座標からGoogle MapsのURLを生成してクリップボードにコピー

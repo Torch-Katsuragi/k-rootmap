@@ -583,7 +583,7 @@ class _LayerDrawerState extends State<LayerDrawer>
       final parentNode = widget.currentNode as FolderNode;
       
       // グローバルフォルダ内の場合は絶対パスモードでGeoPackageを作成
-      final bool isGlobalFolder = parentNode is GlobalFolderNode || parentNode is GlobalSubFolderNode;
+      final bool isGlobalFolder = parentNode.isInsideGlobalFolder;
       final GeoPackageFile gpkgFile;
       final GeoPackageNode newNode;
       

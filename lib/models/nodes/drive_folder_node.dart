@@ -5,11 +5,31 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'folder_node.dart';
 import 'layer_tree_node.dart';
+import 'global_folder_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
 import '../../services/kmeta_service.dart';
 import '../../core/node_types.dart';
 import '../../utils/app_logger.dart';
+
+/// グローバルフォルダ内のノードのパスを解決するヘルパー
+/// 親チェインにGlobalFolderNodeがあればそこからパスを構築、なければnull
+String? _resolveGlobalPath(LayerTreeNode node) {
+  LayerTreeNode? ancestor = node.parent;
+  while (ancestor != null) {
+    if (ancestor is GlobalFolderNode) {
+      final segments = <String>[];
+      LayerTreeNode? current = node;
+      while (current != null && current is! GlobalFolderNode) {
+        segments.insert(0, current.name);
+        current = current.parent;
+      }
+      return p.joinAll([ancestor.globalPath, ...segments]);
+    }
+    ancestor = ancestor.parent;
+  }
+  return null;
+}
 
 /// 同期状態
 enum SyncStatus {
@@ -67,6 +87,11 @@ class DriveFolderNode extends FolderNode {
 
   /// Drive連携フォルダかどうか
   bool get isDriveLinked => true;
+
+  /// グローバルフォルダ内の場合はグローバルパスから解決
+  @override
+  String? getAbsoluteFilePath() =>
+      _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
 
   /// このフォルダ直下の子ノードを更新
   @override
@@ -196,6 +221,11 @@ class DriveSubFolderNode extends FolderNode {
 
   /// 読み取り専用か
   bool get isReadOnly => rootDriveNode.isReadOnly;
+
+  /// グローバルフォルダ内の場合はグローバルパスから解決
+  @override
+  String? getAbsoluteFilePath() =>
+      _resolveGlobalPath(this) ?? super.getAbsoluteFilePath();
 
   @override
   Future<void> updateChildren() async {

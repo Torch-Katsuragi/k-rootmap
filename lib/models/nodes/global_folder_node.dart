@@ -17,6 +17,17 @@ import '../geopackage/geopackage_file.dart';
 import '../../core/path_resolver.dart';
 import '../../utils/exif_parser.dart';
 
+/// グローバルフォルダ内サブフォルダのDrive連携チェック
+/// .kmeta.jsonにDrive連携情報があればDriveFolderNodeを作成
+Future<LayerTreeNode?> _tryCreateGlobalDriveNode(
+  String folderPath,
+  String folderName,
+  String basePath,
+  LayerTreeNode parent,
+) async {
+  return FolderNode.tryCreateDriveFolderNode(folderPath, folderName, parent);
+}
+
 /// グローバルフォルダノード
 /// - どのプロジェクトを開いてもルートフォルダ直下に表示される
 /// - 実体は getApplicationDocumentsDirectory()/k_maps_global に存在
@@ -121,15 +132,23 @@ class GlobalFolderNode extends FolderNode {
 
     for (var entity in directories) {
       final name = p.basename(entity.path);
-      nodes.add(
-        GlobalSubFolderNode(
-          name,
-          basePath: globalPath,
-          visible: true,
-          parent: this,
-          children: [],
-        ),
+      // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
+      final driveNode = await _tryCreateGlobalDriveNode(
+        entity.path, name, globalPath, this,
       );
+      if (driveNode != null) {
+        nodes.add(driveNode);
+      } else {
+        nodes.add(
+          GlobalSubFolderNode(
+            name,
+            basePath: globalPath,
+            visible: true,
+            parent: this,
+            children: [],
+          ),
+        );
+      }
     }
     return nodes;
   }
@@ -292,15 +311,24 @@ class GlobalSubFolderNode extends FolderNode {
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
     for (var entity in directories) {
-      nodes.add(
-        GlobalSubFolderNode(
-          p.basename(entity.path),
-          basePath: basePath,
-          visible: true,
-          parent: this,
-          children: [],
-        ),
+      final name = p.basename(entity.path);
+      // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
+      final driveNode = await _tryCreateGlobalDriveNode(
+        entity.path, name, basePath, this,
       );
+      if (driveNode != null) {
+        nodes.add(driveNode);
+      } else {
+        nodes.add(
+          GlobalSubFolderNode(
+            name,
+            basePath: basePath,
+            visible: true,
+            parent: this,
+            children: [],
+          ),
+        );
+      }
     }
     return nodes;
   }

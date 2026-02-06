@@ -65,6 +65,17 @@ abstract class LayerTreeNode {
   /// グローバルフォルダ関連ノードかどうか
   /// PathResolverがGlobalPathResolverの場合true
   bool get isGlobalNode => pathResolver.isGlobal;
+
+  /// このノードまたは祖先がグローバルフォルダ内にあるか
+  /// 祖先チェインにisGlobalNode=trueのノードがあればtrue
+  bool get isInsideGlobalFolder {
+    LayerTreeNode? current = this;
+    while (current != null) {
+      if (current.isGlobalNode) return true;
+      current = current.parent;
+    }
+    return false;
+  }
   
   /// 文字列nodeTypeからの変換（後方互換性）
   /// 新規コードではNodeType enumを直接使用すること

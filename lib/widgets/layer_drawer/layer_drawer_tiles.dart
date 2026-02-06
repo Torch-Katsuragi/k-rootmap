@@ -1,7 +1,7 @@
 /// K-MAPS: LayerDrawer用各種タイル描画ロジック
 library;
 
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -13,9 +13,11 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/nodes/global_folder_node.dart';
 import '../../models/geometry_type.dart';
 import '../../utils/global_config.dart';
 import '../../services/google_drive/index.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../services/import_export_service.dart';
 import '../../services/geometry_conversion_service.dart';
@@ -165,6 +167,9 @@ mixin LayerDrawerTiles {
           case 'unlink':
             await _unlinkDriveFolder(context, node);
             break;
+          case 'delete':
+            await _deleteDriveFolder(context, node);
+            break;
         }
       },
       itemBuilder: (context) => [
@@ -199,6 +204,14 @@ mixin LayerDrawerTiles {
           child: ListTile(
             leading: Icon(Icons.link_off, color: Colors.red),
             title: Text('Drive連携を解除'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            leading: Icon(Icons.delete_forever, color: Colors.red),
+            title: Text('フォルダごと削除'),
             contentPadding: EdgeInsets.zero,
           ),
         ),
@@ -429,10 +442,107 @@ mixin LayerDrawerTiles {
 
     if (confirm != true) return;
 
-    // TODO: DriveFolderNodeを通常のFolderNodeに変換する処理
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Drive連携を解除しました')),
+    final folderPath = node.getAbsoluteFilePath();
+    if (folderPath == null) return;
+
+    // .kmeta.jsonからDrive連携情報をクリア
+    await KMetaService.instance.unlinkDrive(folderPath);
+
+    // DriveFolderNodeを通常のFolderNode（またはGlobalSubFolderNode）に置換
+    final parentNode = node.parent;
+    if (parentNode != null) {
+      final index = parentNode.children.indexOf(node);
+      if (index >= 0) {
+        LayerTreeNode replacement;
+        if (parentNode is GlobalFolderNode) {
+          replacement = GlobalSubFolderNode(
+            node.name,
+            basePath: parentNode.globalPath,
+            visible: node.visible,
+            parent: parentNode,
+            children: [],
+          );
+        } else if (parentNode is GlobalSubFolderNode) {
+          replacement = GlobalSubFolderNode(
+            node.name,
+            basePath: parentNode.basePath,
+            visible: node.visible,
+            parent: parentNode,
+            children: [],
+          );
+        } else {
+          replacement = FolderNode(
+            node.name,
+            visible: node.visible,
+            parent: parentNode,
+            children: [],
+          );
+        }
+        parentNode.children[index] = replacement;
+        node.parent = null;
+      }
+    }
+
+    setStateCallback(() {});
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Drive連携を解除しました')),
+      );
+    }
+  }
+
+  /// Drive連携フォルダをローカルから完全削除
+  Future<void> _deleteDriveFolder(BuildContext context, DriveFolderNode node) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('フォルダ削除'),
+        content: Text(
+          '${node.name} をローカルから完全に削除しますか？\n\n'
+          'フォルダ内のすべてのファイルが削除されます。\n'
+          'Drive上のデータには影響しません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
     );
+
+    if (confirm != true) return;
+
+    final folderPath = node.getAbsoluteFilePath();
+    if (folderPath == null) return;
+
+    try {
+      final dir = Directory(folderPath);
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+      node.parent?.removeChild(node);
+      setStateCallback(() {});
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${node.name} を削除しました')),
+        );
+      }
+    } catch (e) {
+      AppLogger.error('[LayerDrawerTiles] フォルダ削除エラー: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('削除に失敗しました: $e')),
+        );
+      }
+    }
   }
 
   /// 写真タイルを構築（位置情報付き画像ファイル）

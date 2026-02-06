@@ -123,13 +123,20 @@ class GeoPackageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
     
+    final isInsideGlobal = parent.isInsideGlobalFolder;
     for (var entity in gpkgFiles) {
       final fileName = p.basename(entity.path);
       AppLogger.debug('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
-      final parentPathSegments = parent.getAbsolutePathSegments();
-      final pathList = [...parentPathSegments, fileName];
-      final gpkgFile = GeoPackageFile(pathList);
 
+      final GeoPackageFile gpkgFile;
+      if (isInsideGlobal) {
+        // グローバルフォルダ内：絶対パスモード
+        gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
+      } else {
+        // 通常フォルダ：相対パスモード
+        final parentPathSegments = parent.getAbsolutePathSegments();
+        gpkgFile = GeoPackageFile([...parentPathSegments, fileName]);
+      }
       nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
       AppLogger.debug(
         '[DEBUG] GeoPackageNode.loadNodes: created GeoPackageNode for $fileName',

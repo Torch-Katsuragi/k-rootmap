@@ -13,20 +13,23 @@ import '../../utils/exif_parser.dart';
 // ExifParserからクラスを再エクスポート（後方互換性のため）
 export '../../utils/exif_parser.dart' show ExifImageData, ImageMetadata;
 
-/// 画像ファイルノード（位置情報付き画像ファイル管理）
-/// EXIFデータから緯度経度を取得し、位置情報がある画像のみを管理する
+/// 画像ファイルノード（画像ファイル管理）
+/// EXIFデータから緯度経度を取得できる場合は位置情報も保持する
 class ImageNode extends LayerTreeNode {
   /// 画像ファイルの絶対パス
   final String filePath;
 
-  /// 画像の撮影位置（EXIFから取得）
-  final LatLng location;
+  /// 画像の撮影位置（EXIFから取得、位置情報なしの場合はnull）
+  final LatLng? location;
 
   /// 撮影日時（EXIFから取得、nullable）
   final DateTime? takenAt;
 
   /// 画像ファイルの詳細情報
   final ImageMetadata metadata;
+
+  /// 位置情報を持っているか
+  bool get hasLocation => location != null;
 
   /// コンストラクタ
   ImageNode(
@@ -50,8 +53,11 @@ class ImageNode extends LayerTreeNode {
   List<MapEntry<String, String>> get detailEntries => [
     MapEntry('name', name),
     MapEntry('file_path', filePath),
-    MapEntry('latitude', location.latitude.toStringAsFixed(6)),
-    MapEntry('longitude', location.longitude.toStringAsFixed(6)),
+    if (hasLocation) ...[
+      MapEntry('latitude', location!.latitude.toStringAsFixed(6)),
+      MapEntry('longitude', location!.longitude.toStringAsFixed(6)),
+    ] else
+      const MapEntry('location', '位置情報なし'),
     if (takenAt != null) MapEntry('taken_at', takenAt!.toLocal().toString()),
     MapEntry('file_size', _formatFileSize(metadata.fileSize)),
     if (metadata.width != null && metadata.height != null)
@@ -72,7 +78,7 @@ class ImageNode extends LayerTreeNode {
   /// 画像ファイルが存在するかチェック
   bool get fileExists => File(filePath).existsSync();
 
-  /// 指定したフォルダ内の画像ファイルをスキャンし、位置情報付きのImageNodeリストを返す
+  /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     AppLogger.debug('[DEBUG] ImageNode.loadNodes: called with parent=${parent?.name}');
     final nodes = <LayerTreeNode>[];
@@ -93,7 +99,6 @@ class ImageNode extends LayerTreeNode {
     }
 
     AppLogger.debug('[DEBUG] ImageNode.loadNodes: scanning directory: $absPath');
-    // ディレクトリ内の画像ファイルをスキャンして名前順にソート
     final supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
     
     final imageFiles = dir
@@ -108,26 +113,20 @@ class ImageNode extends LayerTreeNode {
       AppLogger.debug('[DEBUG] ImageNode.loadNodes: found image file: $fileName');
 
       try {
-        // EXIFデータから位置情報を抽出（ExifParser使用）
         final exifData = await ExifParser.extractFromFile(entity.path);
-        if (exifData != null) {
-          final imageNode = ImageNode(
-            entity.path,
-            exifData.location,
-            exifData.metadata,
-            takenAt: exifData.takenAt,
-            visible: true,
-            parent: parent,
-          );
-          nodes.add(imageNode);
-          AppLogger.debug(
-            '[DEBUG] ImageNode.loadNodes: created ImageNode for $fileName at ${exifData.location}',
-          );
-        } else {
-          AppLogger.debug(
-            '[DEBUG] ImageNode.loadNodes: no GPS data found in $fileName, skipping',
-          );
-        }
+        final imageNode = ImageNode(
+          entity.path,
+          exifData?.location,
+          exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync()),
+          takenAt: exifData?.takenAt,
+          visible: true,
+          parent: parent,
+        );
+        nodes.add(imageNode);
+        AppLogger.debug(
+          '[DEBUG] ImageNode.loadNodes: created ImageNode for $fileName'
+          '${exifData != null ? ' at ${exifData.location}' : ' (no GPS)'}',
+        );
       } catch (e) {
         AppLogger.debug(
           '[ERROR] ImageNode.loadNodes: failed to process $fileName: $e',
@@ -136,7 +135,7 @@ class ImageNode extends LayerTreeNode {
     }
 
     AppLogger.debug(
-      '[DEBUG] ImageNode.loadNodes: found ${nodes.length} images with GPS data, returning',
+      '[DEBUG] ImageNode.loadNodes: found ${nodes.length} images, returning',
     );
     return nodes;
   }

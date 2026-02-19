@@ -7,7 +7,6 @@
 
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:latlong2/latlong.dart';
 import 'package:k_maps/utils/app_logger.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
@@ -440,29 +439,15 @@ class GlobalImageNode extends ImageNode {
     if (!file.existsSync()) return null;
 
     try {
-      // ExifParserを使用してEXIFデータを抽出
       final exifData = await ExifParser.extractFromFile(absolutePath);
-      
-      if (exifData != null) {
-        return GlobalImageNode._(
-          absolutePath,
-          exifData.location,
-          exifData.metadata,
-          takenAt: exifData.takenAt,
-          visible: true,
-          parent: parent,
-        );
-      } else {
-        // 位置情報がない画像も表示（デフォルト座標）
-        final stats = await file.stat();
-        return GlobalImageNode._(
-          absolutePath,
-          const LatLng(0, 0),
-          ImageMetadata(fileSize: stats.size),
-          visible: true,
-          parent: parent,
-        );
-      }
+      return GlobalImageNode._(
+        absolutePath,
+        exifData?.location,
+        exifData?.metadata ?? ImageMetadata(fileSize: file.lengthSync()),
+        takenAt: exifData?.takenAt,
+        visible: true,
+        parent: parent,
+      );
     } catch (e) {
       AppLogger.debug('[GlobalImageNode] Error loading image: $e');
       return null;

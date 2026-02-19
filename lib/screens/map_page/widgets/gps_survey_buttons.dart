@@ -1,19 +1,15 @@
 // K-MAPS: GPS測量ボタンウィジェット
-// GPS測量と追跡のためのボタン群
-import 'dart:io';
+// GPS測量と軌跡抽出のためのボタン群
 import 'package:flutter/material.dart';
 
 /// GPS測量ボタンウィジェット
-/// GPS測量ボタン（長押し対応）とGPS追跡ボタンを含む
+/// GPS測量ボタン（長押し対応）とGPS軌跡抽出ボタンを含む
 class GpsSurveyButtons extends StatelessWidget {
   /// 長押し中フラグ
   final bool isLongPressing;
   
   /// 長押しGPSカウント
   final int longPressGpsCount;
-  
-  /// GPS追跡サービス実行中フラグ
-  final bool isGpsTrackingServiceRunning;
   
   /// GPS測量タップコールバック
   final VoidCallback onRecordGpsPosition;
@@ -24,22 +20,17 @@ class GpsSurveyButtons extends StatelessWidget {
   /// GPS長押し測量停止コールバック
   final VoidCallback onStopLongPressGpsSurvey;
   
-  /// GPS追跡開始コールバック
-  final VoidCallback onStartGpsTracking;
-  
-  /// GPS追跡停止コールバック
-  final VoidCallback onStopGpsTracking;
+  /// GPS軌跡抽出ダイアログ表示コールバック
+  final VoidCallback onOpenTrackExtraction;
 
   const GpsSurveyButtons({
     super.key,
     required this.isLongPressing,
     required this.longPressGpsCount,
-    required this.isGpsTrackingServiceRunning,
     required this.onRecordGpsPosition,
     required this.onStartLongPressGpsSurvey,
     required this.onStopLongPressGpsSurvey,
-    required this.onStartGpsTracking,
-    required this.onStopGpsTracking,
+    required this.onOpenTrackExtraction,
   });
 
   @override
@@ -127,32 +118,22 @@ class GpsSurveyButtons extends StatelessWidget {
             ],
           ),
         ),
-        // GPS追跡ボタン（Windows以外の環境でのみ表示）
-        if (!Platform.isWindows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: FloatingActionButton(
-              heroTag: 'gps_tracking_left',
-              onPressed: isGpsTrackingServiceRunning
-                  ? onStopGpsTracking
-                  : onStartGpsTracking,
-              backgroundColor: isGpsTrackingServiceRunning
-                  ? Colors.red
-                  : Colors.green,
-              foregroundColor: Colors.white,
-              tooltip: isGpsTrackingServiceRunning
-                  ? 'GPS追跡停止'
-                  : 'GPS追跡開始',
-              child: Icon(
-                isGpsTrackingServiceRunning
-                    ? Icons.stop
-                    : Icons.pets,
-                size: 28,
-              ),
+        // GPS軌跡抽出ボタン
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: FloatingActionButton(
+            heroTag: 'gps_track_extract',
+            onPressed: onOpenTrackExtraction,
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            tooltip: 'GPS軌跡の抽出',
+            child: const Icon(
+              Icons.timeline,
+              size: 28,
             ),
           ),
+        ),
       ],
     );
   }
 }
-

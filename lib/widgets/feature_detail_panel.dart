@@ -129,8 +129,14 @@ class FeatureDetailPanel extends StatelessWidget {
               const Text('座標: ', style: TextStyle(fontWeight: FontWeight.bold)),
               Expanded(
                 child: Text(
-                  '${photo.location.latitude.toStringAsFixed(6)}, ${photo.location.longitude.toStringAsFixed(6)}',
-                  style: const TextStyle(fontSize: 11),
+                  photo.hasLocation
+                      ? '${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}'
+                      : '位置情報なし',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: photo.hasLocation ? null : Colors.grey,
+                    fontStyle: photo.hasLocation ? null : FontStyle.italic,
+                  ),
                 ),
               ),
             ],

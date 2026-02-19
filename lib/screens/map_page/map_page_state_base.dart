@@ -4,14 +4,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
+import '../../models/gps_position_record.dart';
 import '../../services/gps_manager_service.dart';
-import '../../services/foreground_service.dart';
+import '../../services/internal_gps_location_store.dart';
+import '../../services/gps_history_recorder.dart';
 import '../../interfaces/map_state_interface.dart';
 
 /// MapPageの状態変数を定義する基底mixin
@@ -28,11 +29,8 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
   /// 現在位置
   LatLng? currentLocation;
   
-  /// 位置情報ストリーム
-  Stream<Position>? positionStream;
-  
-  /// 位置情報ストリームサブスクリプション
-  StreamSubscription<Position>? positionSubscription;
+  /// 位置情報ストリームサブスクリプション（Store.positionStream購読用）
+  StreamSubscription<GpsPositionRecord>? positionSubscription;
   
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
@@ -80,6 +78,12 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
   /// 統合GPS管理サービス
   final GpsManagerService gpsManager = GpsManagerService();
   
+  /// 内蔵GPS位置情報ストア
+  final InternalGpsLocationStore locationStore = InternalGpsLocationStore();
+  
+  /// GPS履歴レコーダー
+  final GpsHistoryRecorder gpsHistoryRecorder = GpsHistoryRecorder();
+  
   /// 現在のGPS情報
   Map<String, dynamic>? currentGpsInfo;
   
@@ -88,56 +92,6 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
   
   /// GPS待機タイマー
   Timer? gpsWaitTimer;
-  
-  // =============================================
-  // GPS追跡サービス関連
-  // =============================================
-  
-  /// フォアグラウンドサービスマネージャー
-  final ForegroundServiceManager serviceManager = ForegroundServiceManager();
-  
-  /// GPS追跡サービス実行中フラグ
-  bool isGpsTrackingServiceRunning = false;
-  
-  /// 最後の追跡位置
-  LatLng? lastTrackedPosition;
-  
-  /// 追跡対象のポイントレイヤー
-  PointLayerNode? trackingTargetPointLayer;
-  
-  /// 追跡ポイント数
-  int trackedPointCount = 0;
-  
-  /// 追跡ポイントサブスクリプション
-  StreamSubscription<dynamic>? trackPointSubscription;
-  
-  /// 追跡保存間隔（秒）
-  int trackingSaveIntervalSeconds = 10;
-  
-  /// 追跡最小移動距離（cm）
-  int trackingMinDistanceCm = 0;
-  
-  /// 最後の追跡保存時刻
-  DateTime? lastTrackingSaveTime;
-  
-  /// 最後に保存した追跡位置
-  LatLng? lastSavedTrackingPosition;
-  
-  /// メインisolateでのGPS追跡（外部GNSS用）
-  bool isMainIsolateTracking = false;
-  
-  /// サービス状態更新タイマー
-  Timer? serviceStatusUpdateTimer;
-  
-  // =============================================
-  // GPS追跡アニメーション
-  // =============================================
-  
-  /// 追跡アニメーションコントローラー
-  late AnimationController trackingAnimationController;
-  
-  /// 追跡回転アニメーション
-  late Animation<double> trackingRotationAnimation;
   
   // =============================================
   // GPS測量関連
@@ -236,9 +190,6 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
   /// 現在のGPS情報を更新
   void updateCurrentGpsInfo();
   
-  /// GPS追跡サービス状態を更新
-  void updateGpsTrackingServiceStatus();
-  
   // =============================================
   // ヘルパーメソッド
   // =============================================
@@ -250,4 +201,3 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
     }
   }
 }
-

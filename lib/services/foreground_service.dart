@@ -1,15 +1,17 @@
 // K-MAPS: フォアグラウンドサービス管理クラス
-// 1秒間隔でログ出力を行う最小限のフォアグラウンドサービス実装（内蔵GPS専用）
+// Android: アプリ起動時から常時稼働し、1秒間隔で位置情報をメインisolateに送信
+// InternalGpsLocationStore の delegatedモード のバックエンドとして機能
 import 'dart:async';
 import 'dart:ui';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
-import '../models/gps_track.dart';
-import 'gps_manager_service.dart';
 
 /// フォアグラウンドサービス管理クラス
 /// シングルトンパターンで実装し、サービスの開始・停止を管理
+///
+/// InternalGpsLocationStore.start() から呼び出される。
+/// 直接使用せず、Store経由でアクセスすること。
 class ForegroundServiceManager {
   // シングルトンインスタンス
   static final ForegroundServiceManager _instance =
@@ -17,40 +19,14 @@ class ForegroundServiceManager {
   factory ForegroundServiceManager() => _instance;
   ForegroundServiceManager._internal();
 
-  /// サービス実行フラグ
-  bool _isServiceRunning = false;
+  /// 初期化済みフラグ（configure()が完了したか）
+  bool _isConfigured = false;
 
-  /// メインIsolate側のトラックポイント受信リスナー
-  StreamSubscription<Map<String, dynamic>?>? _trackPointSubscription;
+  /// サービスの初期化（configure）
+  /// アプリ起動時にInternalGpsLocationStoreから呼び出される
+  Future<void> initializeService() async {
+    if (_isConfigured) return;
 
-  /// 現在のGNSS設定を取得（統合GPS管理サービスから取得）
-  static Map<String, String?> getGnssDevice() {
-    final gpsManager = GpsManagerService();
-    final sources = gpsManager.getAvailableGpsSources();
-
-    // 選択されている外部GNSS機器を探す
-    final selectedExternal =
-        sources
-            .where(
-              (source) =>
-                  source['type'] == GpsSourceType.external &&
-                  source['isSelected'] == true,
-            )
-            .firstOrNull;
-
-    if (selectedExternal != null) {
-      return {
-        'address': selectedExternal['device']?.address,
-        'name': selectedExternal['name'],
-      };
-    }
-
-    return {'address': null, 'name': null};
-  }
-
-  /// サービスの初期化
-  /// アプリ起動時に呼び出される
-  static Future<void> initializeService() async {
     final service = FlutterBackgroundService();
 
     await service.configure(
@@ -58,16 +34,16 @@ class ForegroundServiceManager {
         // サービスエントリーポイント（@pragma('vm:entry-point')が必要）
         onStart: onStart,
 
-        // オートスタート（アプリ起動時に自動開始）
+        // Store.start()が明示的に起動する
         autoStart: false,
 
         // フォアグラウンドモードとして実行
         isForegroundMode: true,
 
-        // 通知設定（詳細に設定）
+        // 通知設定
         notificationChannelId: 'k_maps_foreground_channel',
-        initialNotificationTitle: 'K-MAPS 位置追跡実行中',
-        initialNotificationContent: '1秒間隔でGPS情報をログ出力中...',
+        initialNotificationTitle: 'K-MAPS GPS取得中',
+        initialNotificationContent: 'GPS位置情報を取得しています...',
         foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(
@@ -77,51 +53,34 @@ class ForegroundServiceManager {
         onBackground: onIosBackground,
       ),
     );
+
+    _isConfigured = true;
+    AppLogger.debug('[ForegroundService] configure完了');
   }
 
   /// サービス開始
+  /// InternalGpsLocationStore._startDelegated() から呼び出される
+  ///
+  /// 重要: Dartのフラグではなく、FlutterBackgroundService.isRunning() で
+  /// 実際のサービス状態を確認する。デバッグ終了後の再起動や
+  /// プロセス再生成でDartフラグがリセットされても正しく動作する。
   Future<void> startService() async {
-    if (_isServiceRunning) {
-      return;
-    }
-
     try {
-      // 統合GPS管理サービスに追跡開始を通知
-      GpsManagerService().notifyForegroundTrackingStarted();
+      // 実際のサービス状態を確認（Dart側のフラグではなくOS側に問い合わせ）
+      final service = FlutterBackgroundService();
+      final alreadyRunning = await service.isRunning();
 
-      // GPS軌跡追跡開始
-      GpsTrackManager().startTracking();
+      if (alreadyRunning) {
+        // 前回のセッションからサービスが生き残っている場合
+        // → まず停止して、クリーンな状態から再起動
+        AppLogger.debug('[ForegroundService] 既存サービスを検出、再起動します');
+        service.invoke("stopService");
+        // サービス停止を少し待機
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
 
-      // 既存のリスナーがあればキャンセル（二重登録防止）
-      await _trackPointSubscription?.cancel();
-
-      // バックグラウンドサービスからのメッセージ受信設定（リスナーを保存）
-      _trackPointSubscription = FlutterBackgroundService()
-          .on('addTrackPoint')
-          .listen((event) {
-        if (event != null) {
-          try {
-            final pointData = Map<String, dynamic>.from(event);
-            final point = GpsTrackPoint(
-              latitude: pointData['latitude'].toDouble(),
-              longitude: pointData['longitude'].toDouble(),
-              altitude: pointData['altitude']?.toDouble(),
-              accuracy: pointData['accuracy']?.toDouble(),
-              speed: pointData['speed']?.toDouble(),
-              bearing: pointData['bearing']?.toDouble(),
-              timestamp: DateTime.parse(pointData['timestamp']),
-              sourceType: pointData['sourceType'] ?? 'GPS',
-            );
-            GpsTrackManager().addPoint(point);
-          } catch (e) {
-            AppLogger.debug('[ForegroundService] 軌跡ポイント追加エラー: $e');
-          }
-        }
-      });
-
-      await FlutterBackgroundService().startService();
-      _isServiceRunning = true;
-      AppLogger.debug('[ForegroundService] GPS追跡サービス開始');
+      await service.startService();
+      AppLogger.debug('[ForegroundService] GPS位置取得サービス開始');
     } catch (e) {
       AppLogger.debug('[ForegroundService] サービス開始エラー: $e');
       AppLogger.debug('[ForegroundService] エラー詳細: ${e.toString()}');
@@ -130,22 +89,18 @@ class ForegroundServiceManager {
   }
 
   /// サービス停止
+  /// InternalGpsLocationStore.stop() から呼び出される
   Future<void> stopService() async {
-    if (!_isServiceRunning) {
-      return;
-    }
-
     try {
-      // 統合GPS管理サービスに追跡停止を通知
-      GpsManagerService().notifyForegroundTrackingStopped();
+      final service = FlutterBackgroundService();
+      final isRunning = await service.isRunning();
 
-      // メインIsolate側のリスナーをキャンセル
-      await _trackPointSubscription?.cancel();
-      _trackPointSubscription = null;
-
-      FlutterBackgroundService().invoke("stopService");
-      _isServiceRunning = false;
-      AppLogger.debug('[ForegroundService] GPS追跡サービス停止');
+      if (isRunning) {
+        service.invoke("stopService");
+        AppLogger.debug('[ForegroundService] GPS位置取得サービス停止');
+      } else {
+        AppLogger.debug('[ForegroundService] サービスは既に停止済み');
+      }
     } catch (e) {
       AppLogger.debug('[ForegroundService] サービス停止エラー: $e');
     }
@@ -153,29 +108,20 @@ class ForegroundServiceManager {
 
   /// アプリ終了時のクリーンアップ（強制停止）
   Future<void> dispose() async {
-    await _trackPointSubscription?.cancel();
-    _trackPointSubscription = null;
-    if (_isServiceRunning) {
+    try {
       FlutterBackgroundService().invoke("stopService");
-      _isServiceRunning = false;
-    }
+    } catch (_) {}
     AppLogger.debug('[ForegroundService] クリーンアップ完了');
   }
 
-  /// 軌跡追跡を停止して軌跡データを取得
-  GpsTrack? stopTrackingAndGetTrack() {
-    final track = GpsTrackManager().stopTracking();
-    if (track != null) {
-      final stats = track.getStatistics();
-      AppLogger.debug(
-        '[ForegroundService] 軌跡記録完了: ${stats['pointCount']}ポイント、距離: ${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
-      );
+  /// サービス実行状態取得（OS側に問い合わせ）
+  Future<bool> isServiceRunning() async {
+    try {
+      return await FlutterBackgroundService().isRunning();
+    } catch (_) {
+      return false;
     }
-    return track;
   }
-
-  /// サービス実行状態取得
-  bool get isServiceRunning => _isServiceRunning;
 }
 
 /// サービスのエントリーポイント
@@ -190,7 +136,7 @@ void onStart(ServiceInstance service) async {
     // 内蔵GPS専用の位置情報ストリーム
     StreamSubscription<Position>? positionSubscription;
     Position? lastPosition;
-    Timer? periodicTimer; // タイマー参照を保持
+    Timer? periodicTimer;
 
     // 内蔵GPS位置情報ストリームを開始
     positionSubscription = Geolocator.getPositionStream(
@@ -202,20 +148,20 @@ void onStart(ServiceInstance service) async {
       lastPosition = position;
     });
 
-    // サービス停止要求の監視を設定（タイマーもキャンセル）
+    // サービス停止要求の監視を設定
     service.on('stopService').listen((event) {
-      periodicTimer?.cancel(); // タイマーをキャンセル
+      periodicTimer?.cancel();
       positionSubscription?.cancel();
       service.stopSelf();
     });
 
-    // 1秒間隔のタイマー設定（内蔵GPSのみ使用）
+    // 1秒間隔で位置情報をメインisolateに送信
     periodicTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
-        Position? currentPosition = lastPosition;
+        final currentPosition = lastPosition;
 
         if (currentPosition != null) {
-          // 軌跡に位置情報を追加（メインIsolateに送信）
+          // メインisolateに位置情報を送信（positionUpdateイベント）
           final pointData = {
             'latitude': currentPosition.latitude,
             'longitude': currentPosition.longitude,
@@ -226,7 +172,7 @@ void onStart(ServiceInstance service) async {
             'timestamp': DateTime.now().toIso8601String(),
             'sourceType': 'GPS',
           };
-          service.invoke('addTrackPoint', pointData);
+          service.invoke('positionUpdate', pointData);
         }
 
         // Android通知更新
@@ -234,17 +180,17 @@ void onStart(ServiceInstance service) async {
           if (await service.isForegroundService()) {
             try {
               String notificationContent =
-                  "位置追跡中: ${DateTime.now().toString().substring(11, 19)}";
+                  "GPS取得中: ${DateTime.now().toString().substring(11, 19)}";
               if (currentPosition != null) {
                 notificationContent +=
-                    "\nGPS: ${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
+                    "\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
               }
               service.setForegroundNotificationInfo(
-                title: "K-MAPS GPS追跡実行中",
+                title: "K-MAPS GPS取得中",
                 content: notificationContent,
               );
             } catch (_) {
-              // 通知更新エラーは無視（GPS追跡継続）
+              // 通知更新エラーは無視
             }
           }
         }
@@ -266,5 +212,3 @@ void onStart(ServiceInstance service) async {
 Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
-
-

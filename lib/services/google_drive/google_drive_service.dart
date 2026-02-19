@@ -324,6 +324,47 @@ class GoogleDriveService {
     }
   }
 
+  /// 既知のDriveファイルIDを指定してアップロード（_findFileByName不要）
+  /// [existingFileId] が指定されていれば files.update、なければ files.create
+  Future<drive.File?> uploadFileById(
+    File localFile,
+    String parentId, {
+    String? existingFileId,
+  }) async {
+    if (_driveApi == null) return null;
+
+    try {
+      final fileName = localFile.uri.pathSegments.last;
+      final fileSize = await localFile.length();
+      final media = drive.Media(localFile.openRead(), fileSize);
+
+      if (existingFileId != null) {
+        final result = await _driveApi!.files.update(
+          drive.File(),
+          existingFileId,
+          uploadMedia: media,
+          supportsAllDrives: true,
+        );
+        AppLogger.debug('[GoogleDriveService] ファイル更新(byId): $fileName');
+        return result;
+      } else {
+        final driveFile = drive.File()
+          ..name = fileName
+          ..parents = [parentId];
+        final result = await _driveApi!.files.create(
+          driveFile,
+          uploadMedia: media,
+          supportsAllDrives: true,
+        );
+        AppLogger.debug('[GoogleDriveService] ファイル新規作成(byId): $fileName');
+        return result;
+      }
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] アップロードエラー(byId): $e');
+      return null;
+    }
+  }
+
   /// ファイルを削除
   /// [fileId] DriveファイルID
   /// ファイルをゴミ箱に移動（削除）

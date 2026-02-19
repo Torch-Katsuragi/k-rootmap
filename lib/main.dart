@@ -7,7 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
-import 'services/foreground_service.dart';
+import 'services/internal_gps_location_store.dart';
 import 'services/gps_manager_service.dart';
 import 'services/basemap_service.dart';
 import 'utils/background_save_manager.dart';
@@ -46,15 +46,9 @@ void main() async {
     }
   });
 
-  // フォアグラウンドサービスの初期化（遅延実行に変更）
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    try {
-      await ForegroundServiceManager.initializeService();
-      AppLogger.debug('[K-MAPS] フォアグラウンドサービス初期化完了');
-    } catch (e) {
-      AppLogger.debug('[K-MAPS] フォアグラウンドサービス初期化エラー: $e');
-    }
-  });
+  // フォアグラウンドサービスの初期化は InternalGpsLocationStore.start() に委譲
+  // GpsManagerService.startGps() → Store.start() → ForegroundServiceManager.initializeService()
+  // の順で自動的に呼び出される
 
   runApp(const KMapsApp());
 }
@@ -126,8 +120,8 @@ class _KMapsAppState extends State<KMapsApp> with WidgetsBindingObserver {
   Future<void> _cleanupOnAppExit() async {
     AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ開始');
     try {
-      // フォアグラウンドサービスを停止
-      await ForegroundServiceManager().dispose();
+      // 内蔵GPS位置情報ストアを停止（ForegroundServiceも一緒に停止される）
+      await InternalGpsLocationStore().dispose();
 
       // 保留中の変更を保存しタイマーをクリーンアップ
       await BackgroundSaveManager.instance.dispose();

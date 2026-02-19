@@ -492,6 +492,10 @@ class _LayerDrawerState extends State<LayerDrawer>
           parent: folderNode,
         );
         folderNode.addChild(driveFolderNode);
+
+        // ダウンロードしたファイルを読み込んでツリーに反映
+        await _reloadChildrenRecursive(driveFolderNode);
+        triggerMapRefresh();
         widget.setStateCallback(() {});
 
         if (mounted) {
@@ -522,6 +526,18 @@ class _LayerDrawerState extends State<LayerDrawer>
             backgroundColor: Colors.red,
           ),
         );
+      }
+    }
+  }
+
+  /// 子ノードを再帰的に読み込み
+  Future<void> _reloadChildrenRecursive(LayerTreeNode node) async {
+    await node.updateChildren();
+    for (final child in node.children) {
+      if (child is FolderNode) {
+        await _reloadChildrenRecursive(child);
+      } else if (child is GeoPackageNode) {
+        await child.updateChildren();
       }
     }
   }

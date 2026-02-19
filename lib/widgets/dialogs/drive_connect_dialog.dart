@@ -348,11 +348,17 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
               _syncProgress?.currentFile ?? 'Preparing...',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (_syncProgress != null)
+            if (_syncProgress != null) ...[
               Text(
                 '${_syncProgress!.processedCount} / ${_syncProgress!.totalCount}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (_syncProgress!.sizeProgressText != null)
+                Text(
+                  _syncProgress!.sizeProgressText!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
           ],
         );
     }

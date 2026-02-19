@@ -71,14 +71,33 @@ class SyncProgress {
   /// 総ファイル数
   final int totalCount;
 
+  /// 処理済みバイト数（null = 不明）
+  final int? processedBytes;
+
+  /// 総バイト数（null = 不明）
+  final int? totalBytes;
+
   /// 進捗率（0.0〜1.0）
   double get progress =>
       totalCount > 0 ? processedCount / totalCount : 0.0;
+
+  /// サイズ進捗の表示文字列（例: "12.3 MB / 45.6 MB"）
+  String? get sizeProgressText {
+    if (totalBytes == null || totalBytes == 0) return null;
+    return '${_formatBytes(processedBytes ?? 0)} / ${_formatBytes(totalBytes!)}';
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 
   const SyncProgress({
     required this.currentFile,
     required this.processedCount,
     required this.totalCount,
+    this.processedBytes,
+    this.totalBytes,
   });
 }
 
@@ -109,10 +128,18 @@ class SyncEngine {
   final GoogleDriveService _driveService;
   final KMetaService _kmetaService;
 
+  static const int _downloadConcurrency = 5;
+  static const int _uploadConcurrency = 3;
+
   /// 同期対象のファイルパターン
   static const List<String> syncPatterns = [
     '*.gpkg',
     '*.kmeta.json',
+    '*.jpg',
+    '*.jpeg',
+    '*.png',
+    '*.tiff',
+    '*.tif',
   ];
 
   SyncEngine({
@@ -249,64 +276,109 @@ class SyncEngine {
         '[SyncEngine] Push開始: ${filesToSync.length}ファイル → $targetFolderName (移動: $movedCount)',
       );
 
-      // ファイルをアップロード
+      // ファイルをアップロード（並列）
       int uploadedCount = 0;
       int skippedCount = 0;
+      int completedCount = 0;
       final syncedFiles = <String, KMetaSyncFile>{};
 
-      for (int i = 0; i < filesToSync.length; i++) {
-        final localFile = filesToSync[i];
+      // バイト数集計用
+      final totalBytes = filesToSync.fold<int>(
+        0, (sum, f) => sum + f.file.lengthSync(),
+      );
+      int processedBytes = 0;
+
+      // .kmeta.json と通常ファイルを分離
+      final kmetaFiles = <LocalSyncFile>[];
+      final normalFiles = <LocalSyncFile>[];
+      for (final f in filesToSync) {
+        if (p.basename(f.file.path) == kMetaFileName) {
+          kmetaFiles.add(f);
+        } else {
+          normalFiles.add(f);
+        }
+      }
+
+      // .kmeta.json を先に直列処理
+      for (final localFile in kmetaFiles) {
         final file = localFile.file;
-        final fileName = p.basename(file.path);
         final relativePath = localFile.relativePath;
         final relativeDir = p.posix.dirname(relativePath);
-
-        // 進捗通知
-        onProgress?.call(SyncProgress(
-          currentFile: fileName,
-          processedCount: i,
-          totalCount: filesToSync.length,
-        ));
+        final fileSize = file.lengthSync();
 
         final targetFolderForFile = await _getDriveFolderIdForRelativeDir(
-          targetFolderId,
-          relativeDir,
-          folderIdCache,
+          targetFolderId, relativeDir, folderIdCache,
         );
         if (targetFolderForFile == null) {
           skippedCount++;
+          processedBytes += fileSize;
           continue;
         }
-
-        // .kmeta.jsonの場合は特別処理（deviceIdを除外）
-        if (fileName == kMetaFileName) {
-          final success = await _uploadKmetaFile(file, targetFolderForFile);
-          if (success) {
-            uploadedCount++;
-            // kmetaファイルのDrive IDも記録
-            final kmetaFiles = await _driveService.listFiles(targetFolderForFile);
-            drive.File? kmetaFile;
-            for (final item in kmetaFiles) {
-              if (item.name == kMetaFileName) {
-                kmetaFile = item;
-                break;
-              }
-            }
-            if (kmetaFile != null) {
-              syncedFiles[relativePath] = KMetaSyncFile(
-                driveFileId: kmetaFile.id!,
-                expectedParentId: targetFolderForFile,
-                lastSyncedTime: DateTime.now(),
-              );
-            }
-          } else {
-            skippedCount++;
+        final success = await _uploadKmetaFile(file, targetFolderForFile);
+        if (success) {
+          uploadedCount++;
+          final kmetaList = await _driveService.listFiles(targetFolderForFile);
+          drive.File? kmetaFile;
+          for (final item in kmetaList) {
+            if (item.name == kMetaFileName) { kmetaFile = item; break; }
+          }
+          if (kmetaFile != null) {
+            syncedFiles[relativePath] = KMetaSyncFile(
+              driveFileId: kmetaFile.id!,
+              expectedParentId: targetFolderForFile,
+              lastSyncedTime: DateTime.now(),
+            );
           }
         } else {
-          // 通常ファイルをアップロード
-          final result = await _driveService.uploadFile(
+          skippedCount++;
+        }
+        processedBytes += fileSize;
+        completedCount++;
+      }
+
+      // フォルダIDを事前に解決（並列中のキャッシュ競合回避）
+      final resolvedFolders = <int, String?>{};
+      for (int i = 0; i < normalFiles.length; i++) {
+        final relativeDir = p.posix.dirname(normalFiles[i].relativePath);
+        resolvedFolders[i] = await _getDriveFolderIdForRelativeDir(
+          targetFolderId, relativeDir, folderIdCache,
+        );
+      }
+
+      onProgress?.call(SyncProgress(
+        currentFile: '開始',
+        processedCount: completedCount,
+        totalCount: filesToSync.length,
+        processedBytes: processedBytes,
+        totalBytes: totalBytes,
+      ));
+
+      // 通常ファイルを並列アップロード（uploadFileByIdで検索スキップ）
+      await _runParallel(
+        normalFiles.asMap().entries.map((entry) => () async {
+          final i = entry.key;
+          final localFile = entry.value;
+          final file = localFile.file;
+          final fileName = p.basename(file.path);
+          final relativePath = localFile.relativePath;
+          final fileSize = file.lengthSync();
+
+          final targetFolderForFile = resolvedFolders[i];
+          if (targetFolderForFile == null) {
+            skippedCount++;
+            processedBytes += fileSize;
+            completedCount++;
+            return;
+          }
+
+          // previousSyncedFilesから既知のDriveファイルIDを取得
+          final existingFileId =
+              previousSyncedFiles[relativePath]?.driveFileId;
+
+          final result = await _driveService.uploadFileById(
             file,
             targetFolderForFile,
+            existingFileId: existingFileId,
           );
           if (result != null) {
             uploadedCount++;
@@ -318,8 +390,18 @@ class SyncEngine {
           } else {
             skippedCount++;
           }
-        }
-      }
+          processedBytes += fileSize;
+          completedCount++;
+          onProgress?.call(SyncProgress(
+            currentFile: fileName,
+            processedCount: completedCount,
+            totalCount: filesToSync.length,
+            processedBytes: processedBytes,
+            totalBytes: totalBytes,
+          ));
+        }),
+        maxConcurrency: _uploadConcurrency,
+      );
 
       // ローカルにないファイルをDriveから削除（移動済みファイルは除外）
       int deletedCount = 0;
@@ -372,6 +454,8 @@ class SyncEngine {
         currentFile: '完了',
         processedCount: filesToSync.length,
         totalCount: filesToSync.length,
+        processedBytes: totalBytes,
+        totalBytes: totalBytes,
       ));
 
       AppLogger.debug(
@@ -521,76 +605,67 @@ class SyncEngine {
     return currentId;
   }
 
-  /// Driveフォルダ配下のファイルを再帰的に取得
-  Future<List<DriveFileEntry>> _listDriveFilesRecursive(
-    String folderId, {
+  /// Driveフォルダ配下のファイル一覧とフォルダマップを一括取得
+  /// 1フォルダにつきAPI 1回（listFiles）でフォルダ/ファイル両方を取得
+  Future<({List<DriveFileEntry> files, Map<String, String> folderMap})>
+      _listDriveFilesWithFolders(
+    String rootFolderId, {
     String currentPath = '',
+    Map<String, String>? folderMap,
   }) async {
     final entries = <DriveFileEntry>[];
+    final map = folderMap ?? <String, String>{};
 
-    final folders = await _driveService.listFolders(folderId);
+    if (currentPath.isEmpty) {
+      map[rootFolderId] = '';
+    }
+
+    final allItems = await _driveService.listFiles(rootFolderId);
+
+    // フォルダとファイルを分類
+    final folders = <drive.File>[];
+    for (final item in allItems) {
+      if (item.mimeType == 'application/vnd.google-apps.folder') {
+        folders.add(item);
+      } else {
+        final name = item.name ?? '';
+        if (name.isEmpty) continue;
+        if (!_matchesSyncPattern(name)) continue;
+        final relativePath = currentPath.isEmpty ? name : '$currentPath/$name';
+        entries.add(DriveFileEntry(
+          file: item,
+          relativePath: _normalizeRelativePath(relativePath),
+        ));
+      }
+    }
+
+    // サブフォルダを再帰処理
     for (final folder in folders) {
       final folderName = folder.name ?? '';
       if (folderName.isEmpty) continue;
       final nextPath =
           currentPath.isEmpty ? folderName : '$currentPath/$folderName';
-      final subEntries = await _listDriveFilesRecursive(
+      map[folder.id!] = nextPath;
+
+      final sub = await _listDriveFilesWithFolders(
         folder.id!,
         currentPath: nextPath,
+        folderMap: map,
       );
-      entries.addAll(subEntries);
+      entries.addAll(sub.files);
     }
 
-    final files = await _driveService.listFiles(folderId);
-    for (final file in files) {
-      if (file.mimeType == 'application/vnd.google-apps.folder') continue;
-      final name = file.name ?? '';
-      if (name.isEmpty) continue;
-      if (!_matchesSyncPattern(name)) continue;
-      final relativePath = currentPath.isEmpty ? name : '$currentPath/$name';
-      entries.add(
-        DriveFileEntry(
-          file: file,
-          relativePath: _normalizeRelativePath(relativePath),
-        ),
-      );
-    }
-
-    return entries;
+    return (files: entries, folderMap: map);
   }
 
-  /// DriveフォルダID→相対パスのマップを構築（移動検出用）
-  /// ルートフォルダは空文字列としてマップされる
-  Future<Map<String, String>> _buildDriveFolderMap(
-    String rootFolderId, {
-    String currentPath = '',
-  }) async {
-    final map = <String, String>{};
-    
-    // ルートフォルダ自身を登録
-    if (currentPath.isEmpty) {
-      map[rootFolderId] = '';
-    }
-
-    final folders = await _driveService.listFolders(rootFolderId);
-    for (final folder in folders) {
-      final folderName = folder.name ?? '';
-      if (folderName.isEmpty) continue;
-      
-      final folderPath =
-          currentPath.isEmpty ? folderName : '$currentPath/$folderName';
-      map[folder.id!] = folderPath;
-      
-      // 再帰的にサブフォルダも処理
-      final subMap = await _buildDriveFolderMap(
-        folder.id!,
-        currentPath: folderPath,
-      );
-      map.addAll(subMap);
-    }
-
-    return map;
+  /// Driveフォルダ配下のファイルを再帰的に取得（後方互換ラッパー）
+  Future<List<DriveFileEntry>> _listDriveFilesRecursive(
+    String folderId,
+  ) async {
+    final result = await _listDriveFilesWithFolders(folderId);
+    return result.files;
   }
+
 
   /// ファイル名が同期パターンにマッチするか
   bool _matchesSyncPattern(String fileName) {
@@ -603,6 +678,31 @@ class SyncEngine {
       }
     }
     return false;
+  }
+
+  /// 並列数を制限して非同期タスクを実行
+  static Future<List<T>> _runParallel<T>(
+    Iterable<Future<T> Function()> tasks, {
+    int maxConcurrency = 3,
+  }) async {
+    final results = <T>[];
+    final active = <Future<void>>[];
+
+    for (final task in tasks) {
+      if (active.length >= maxConcurrency) {
+        await Future.any(active);
+      }
+
+      final future = task().then((result) {
+        results.add(result);
+      });
+      active.add(future);
+      // ignore: unawaited_futures
+      future.whenComplete(() => active.remove(future));
+    }
+
+    await Future.wait(active);
+    return results;
   }
 
   /// DriveからプロジェクトをPull（ダウンロード）
@@ -642,46 +742,72 @@ class SyncEngine {
         '[SyncEngine] Pull開始: ${filesToDownload.length}ファイル ← ${folderInfo.name}',
       );
 
-      // ファイルをダウンロード
+      // ファイルをダウンロード（並列）
       int downloadedCount = 0;
       int skippedCount = 0;
+      int completedCount = 0;
       final syncedFiles = <String, KMetaSyncFile>{};
 
-      for (int i = 0; i < filesToDownload.length; i++) {
-        final driveEntry = filesToDownload[i];
-        final driveFile = driveEntry.file;
-        final fileName = p.posix.basename(driveEntry.relativePath);
+      // バイト数集計用
+      final totalBytes = filesToDownload.fold<int>(
+        0, (sum, e) => sum + (int.tryParse(e.file.size ?? '') ?? 0),
+      );
+      int processedBytes = 0;
 
-        // 進捗通知
-        onProgress?.call(SyncProgress(
-          currentFile: fileName,
-          processedCount: i,
-          totalCount: filesToDownload.length,
-        ));
-
-        final localFilePath =
-            _relativePathToLocalPath(localPath, driveEntry.relativePath);
-        final localFileDir = Directory(p.dirname(localFilePath));
-        if (!await localFileDir.exists()) {
-          await localFileDir.create(recursive: true);
-        }
-        final success = await _driveService.downloadFile(
-          driveFile.id!,
-          localFilePath,
-        );
-
-        if (success) {
-          downloadedCount++;
-          final parentId = driveFile.parents?.firstOrNull;
-          syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
-            driveFileId: driveFile.id!,
-            expectedParentId: parentId,
-            lastSyncedTime: DateTime.now(),
-          );
-        } else {
-          skippedCount++;
-        }
+      // ディレクトリを事前に一括作成（並列中の競合回避）
+      final dirs = filesToDownload
+          .map((e) => p.dirname(
+              _relativePathToLocalPath(localPath, e.relativePath)))
+          .toSet();
+      for (final dir in dirs) {
+        final d = Directory(dir);
+        if (!await d.exists()) await d.create(recursive: true);
       }
+
+      onProgress?.call(SyncProgress(
+        currentFile: '開始',
+        processedCount: 0,
+        totalCount: filesToDownload.length,
+        processedBytes: 0,
+        totalBytes: totalBytes,
+      ));
+
+      await _runParallel(
+        filesToDownload.map((driveEntry) => () async {
+          final driveFile = driveEntry.file;
+          final fileName = p.posix.basename(driveEntry.relativePath);
+          final fileSize = int.tryParse(driveFile.size ?? '') ?? 0;
+          final localFilePath =
+              _relativePathToLocalPath(localPath, driveEntry.relativePath);
+
+          final success = await _driveService.downloadFile(
+            driveFile.id!,
+            localFilePath,
+          );
+
+          if (success) {
+            downloadedCount++;
+            final parentId = driveFile.parents?.firstOrNull;
+            syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
+              driveFileId: driveFile.id!,
+              expectedParentId: parentId,
+              lastSyncedTime: DateTime.now(),
+            );
+          } else {
+            skippedCount++;
+          }
+          processedBytes += fileSize;
+          completedCount++;
+          onProgress?.call(SyncProgress(
+            currentFile: fileName,
+            processedCount: completedCount,
+            totalCount: filesToDownload.length,
+            processedBytes: processedBytes,
+            totalBytes: totalBytes,
+          ));
+        }),
+        maxConcurrency: _downloadConcurrency,
+      );
 
       // Driveにないファイルをローカルから削除
       int deletedCount = 0;
@@ -711,6 +837,8 @@ class SyncEngine {
         currentFile: '完了',
         processedCount: filesToDownload.length,
         totalCount: filesToDownload.length,
+        processedBytes: totalBytes,
+        totalBytes: totalBytes,
       ));
 
       AppLogger.debug(
@@ -786,142 +914,30 @@ class SyncEngine {
     required bool isReadOnly,
     void Function(SyncProgress progress)? onProgress,
   }) async {
-    if (!_driveService.isDriveApiAvailable) {
-      AppLogger.error('[SyncEngine] Google Driveに接続されていません');
+    AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
+
+    final result = await pull(
+      driveId,
+      localPath,
+      onProgress: onProgress,
+    );
+
+    if (!result.success) {
+      AppLogger.error('[SyncEngine] クローン失敗: ${result.errorMessage}');
       return false;
     }
 
-    try {
-      AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
+    // クローン固有: driveUrl / isReadOnly を追加保存
+    await _kmetaService.setDriveSync(
+      localPath,
+      driveUrl: driveUrl,
+      isReadOnly: isReadOnly,
+    );
 
-      // ローカルフォルダを作成
-      final localDir = Directory(localPath);
-      if (!await localDir.exists()) {
-        await localDir.create(recursive: true);
-      }
-
-      // フォルダ内のファイル一覧を取得
-      final driveFiles = await _driveService.listFiles(driveId);
-      
-      // サブフォルダも再帰的にクローン
-      final allFiles = <drive.File>[];
-      final subFolders = <drive.File>[];
-      
-      for (final file in driveFiles) {
-        if (file.mimeType == 'application/vnd.google-apps.folder') {
-          subFolders.add(file);
-        } else if (_matchesSyncPattern(file.name ?? '')) {
-          allFiles.add(file);
-        }
-      }
-
-      AppLogger.debug(
-        '[SyncEngine] クローン対象: ${allFiles.length}ファイル, ${subFolders.length}サブフォルダ',
-      );
-
-      // ファイルをダウンロード
-      int downloadedCount = 0;
-      final totalCount = allFiles.length;
-
-      for (int i = 0; i < allFiles.length; i++) {
-        final driveFile = allFiles[i];
-        final fileName = driveFile.name!;
-
-        onProgress?.call(SyncProgress(
-          currentFile: fileName,
-          processedCount: i,
-          totalCount: totalCount,
-        ));
-
-        final localFilePath = p.join(localPath, fileName);
-        final success = await _driveService.downloadFile(
-          driveFile.id!,
-          localFilePath,
-        );
-
-        if (success) {
-          downloadedCount++;
-        }
-      }
-
-      // サブフォルダを再帰的にクローン
-      for (final subFolder in subFolders) {
-        final subFolderPath = p.join(localPath, subFolder.name!);
-        await _cloneSubFolder(subFolder.id!, subFolderPath, onProgress);
-      }
-
-      // 最終進捗通知
-      onProgress?.call(SyncProgress(
-        currentFile: '完了',
-        processedCount: totalCount,
-        totalCount: totalCount,
-      ));
-
-      // .kmeta.jsonにDrive連携情報を保存
-      await _kmetaService.setDriveSync(
-        localPath,
-        driveId: driveId,
-        driveFolderName: folderName,
-        lastSynced: DateTime.now(),
-      );
-
-      // Drive URLと読み取り専用フラグも保存
-      final kmetaPath = p.join(localPath, kMetaFileName);
-      final kmetaFile = File(kmetaPath);
-      Map<String, dynamic> kmetaJson = {};
-      
-      if (await kmetaFile.exists()) {
-        final content = await kmetaFile.readAsString();
-        kmetaJson = jsonDecode(content) as Map<String, dynamic>;
-      }
-
-      // sync情報を更新
-      final syncInfo = (kmetaJson['sync'] as Map<String, dynamic>?) ?? {};
-      syncInfo['driveUrl'] = driveUrl;
-      syncInfo['isReadOnly'] = isReadOnly;
-      kmetaJson['sync'] = syncInfo;
-
-      await kmetaFile.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(kmetaJson),
-      );
-
-      AppLogger.debug(
-        '[SyncEngine] クローン完了: $downloadedCount ファイルダウンロード',
-      );
-
-      return true;
-    } catch (e, stack) {
-      AppLogger.error('[SyncEngine] クローンエラー: $e\n$stack');
-      return false;
-    }
-  }
-
-  /// サブフォルダを再帰的にクローン
-  Future<void> _cloneSubFolder(
-    String driveId,
-    String localPath,
-    void Function(SyncProgress progress)? onProgress,
-  ) async {
-    // ローカルフォルダを作成
-    final localDir = Directory(localPath);
-    if (!await localDir.exists()) {
-      await localDir.create(recursive: true);
-    }
-
-    // ファイル一覧を取得
-    final driveFiles = await _driveService.listFiles(driveId);
-    
-    for (final file in driveFiles) {
-      if (file.mimeType == 'application/vnd.google-apps.folder') {
-        // サブフォルダを再帰的にクローン
-        final subFolderPath = p.join(localPath, file.name!);
-        await _cloneSubFolder(file.id!, subFolderPath, onProgress);
-      } else if (_matchesSyncPattern(file.name ?? '')) {
-        // ファイルをダウンロード
-        final localFilePath = p.join(localPath, file.name!);
-        await _driveService.downloadFile(file.id!, localFilePath);
-      }
-    }
+    AppLogger.debug(
+      '[SyncEngine] クローン完了: ${result.downloadedCount} ファイルダウンロード',
+    );
+    return true;
   }
 
   /// フォルダの同期状態をチェック
@@ -953,8 +969,17 @@ class SyncEngine {
         return const FolderSyncStatusDetail(status: FolderSyncStatus.error);
       }
 
-      // Driveフォルダ構造を取得（移動検出用）
-      final driveFolderMap = await _buildDriveFolderMap(driveId);
+      // Driveのファイル一覧とフォルダマップを一括取得（API呼び出しを最小化）
+      final driveData = await _listDriveFilesWithFolders(driveId);
+      final driveAllEntries = driveData.files;
+      final driveFolderMap = driveData.folderMap;
+
+      // Drive fileId → DriveFileEntry のマップを構築（O(1)参照用）
+      final driveIdMap = <String, DriveFileEntry>{};
+      for (final entry in driveAllEntries) {
+        final fileId = entry.file.id;
+        if (fileId != null) driveIdMap[fileId] = entry;
+      }
 
       // ローカルファイルを収集（再帰）
       final localDir = Directory(localPath);
@@ -962,7 +987,6 @@ class SyncEngine {
       if (await localDir.exists()) {
         await for (final entity in localDir.list(recursive: true)) {
           final fileName = p.basename(entity.path);
-          // kmeta.jsonは変更検出から除外（Push/Pullには含める）
           if (fileName == kMetaFileName) continue;
           if (entity is File && _matchesSyncPattern(fileName)) {
             final relativePath = _normalizeRelativePath(
@@ -989,51 +1013,46 @@ class SyncEngine {
       final remoteModifiedFiles = <String>[];
       final remoteMovedFiles = <FileChangeInfo>[];
       
-      // 移動されたファイルのIDと移動先パスを記録（重複検出除外用）
       final movedFileIds = <String>{};
       final movedToPathSet = <String>{};
 
-      // 記録済みファイルをチェック
+      // 記録済みファイルをチェック（driveIdMapからO(1)参照、API呼び出しなし）
       for (final entry in syncedFiles.entries) {
         final fileName = entry.key;
-        // kmeta.jsonは変更検出から除外
         if (p.basename(fileName) == kMetaFileName) continue;
         
         final syncInfo = entry.value;
         final lastSyncedTime = syncInfo.lastSyncedTime;
         final expectedParentId = syncInfo.expectedParentId;
 
-        // Drive側のメタデータを取得
-        final driveMetadata =
-            await _driveService.getFileMetadata(syncInfo.driveFileId);
+        // driveIdMapから参照（getFileMetadata API呼び出し不要）
+        final driveEntry = driveIdMap[syncInfo.driveFileId];
 
-        if (driveMetadata == null || driveMetadata.trashed) {
-          // Drive側で削除された
+        if (driveEntry == null) {
+          // Drive上に存在しない = 削除された
           remoteDeleted++;
           remoteDeletedFiles.add(fileName);
         } else {
+          final driveFile = driveEntry.file;
           // 移動検出: parentsをチェック
           bool isMoved = false;
-          String? newParentPath;
           
-          if (expectedParentId != null && driveMetadata.parents.isNotEmpty) {
-            final currentParentId = driveMetadata.parents.first;
+          if (expectedParentId != null &&
+              driveFile.parents != null &&
+              driveFile.parents!.isNotEmpty) {
+            final currentParentId = driveFile.parents!.first;
             if (currentParentId != expectedParentId) {
-              // 親が変わった = 移動
               isMoved = true;
-              // 新しい親のパスを取得
-              newParentPath = driveFolderMap[currentParentId];
+              final newParentPath = driveFolderMap[currentParentId];
               
               if (newParentPath != null) {
-                // 共有フォルダ内への移動
                 final newPath = newParentPath.isEmpty
-                    ? driveMetadata.name ?? fileName
-                    : '$newParentPath/${driveMetadata.name ?? fileName}';
+                    ? driveFile.name ?? fileName
+                    : '$newParentPath/${driveFile.name ?? fileName}';
                 
-                // 変更もあるかチェック
                 final alsoModified = lastSyncedTime != null &&
-                    driveMetadata.modifiedTime != null &&
-                    driveMetadata.modifiedTime!.isAfter(lastSyncedTime);
+                    driveFile.modifiedTime != null &&
+                    driveFile.modifiedTime!.isAfter(lastSyncedTime);
                 
                 remoteMoved++;
                 remoteMovedFiles.add(FileChangeInfo(
@@ -1044,11 +1063,9 @@ class SyncEngine {
                   movedFrom: fileName,
                   movedTo: newPath,
                 ));
-                // 移動したファイルを記録（追加・削除から除外するため）
                 movedFileIds.add(syncInfo.driveFileId);
                 movedToPathSet.add(newPath);
               } else {
-                // 共有フォルダ外への移動 = 削除扱い
                 remoteDeleted++;
                 remoteDeletedFiles.add(fileName);
               }
@@ -1060,8 +1077,8 @@ class SyncEngine {
             if (lastSyncedTime == null) {
               remoteModified++;
               remoteModifiedFiles.add(fileName);
-            } else if (driveMetadata.modifiedTime != null &&
-                driveMetadata.modifiedTime!.isAfter(lastSyncedTime)) {
+            } else if (driveFile.modifiedTime != null &&
+                driveFile.modifiedTime!.isAfter(lastSyncedTime)) {
               remoteModified++;
               remoteModifiedFiles.add(fileName);
             }
@@ -1069,10 +1086,8 @@ class SyncEngine {
         }
 
         // ローカル側の変更を確認
-        // 移動されたファイルはローカル削除として扱わない
         if (movedFileIds.contains(syncInfo.driveFileId)) {
-          // 移動されたファイルはスキップ（ローカル削除ではない）
-          localFiles.remove(fileName); // チェック済みとしてマーク
+          localFiles.remove(fileName);
         } else if (localFiles.containsKey(fileName)) {
           final localModifiedTime = localFiles[fileName]!;
           if (lastSyncedTime == null) {
@@ -1082,9 +1097,8 @@ class SyncEngine {
             localModified++;
             localModifiedFiles.add(fileName);
           }
-          localFiles.remove(fileName); // チェック済み
+          localFiles.remove(fileName);
         } else {
-          // ローカルにない → ローカル削除
           localDeleted++;
           localDeletedFiles.add(fileName);
         }
@@ -1096,21 +1110,11 @@ class SyncEngine {
         localAddedFiles.addAll(localFiles.keys);
       }
 
-      // Driveに新規ファイルがあるか確認
-      final driveEntries = await _listDriveFilesRecursive(driveId);
-      for (final entry in driveEntries) {
-        // kmeta.jsonは変更検出から除外
-        if (p.basename(entry.relativePath) == kMetaFileName) {
-          continue;
-        }
-        // 移動先パスは「追加」として扱わない
-        if (movedToPathSet.contains(entry.relativePath)) {
-          continue;
-        }
-        // 移動したファイルのIDも除外
-        if (movedFileIds.contains(entry.file.id)) {
-          continue;
-        }
+      // Driveに新規ファイルがあるか確認（driveAllEntriesを再利用、API呼び出し不要）
+      for (final entry in driveAllEntries) {
+        if (p.basename(entry.relativePath) == kMetaFileName) continue;
+        if (movedToPathSet.contains(entry.relativePath)) continue;
+        if (movedFileIds.contains(entry.file.id)) continue;
         if (!syncedFiles.containsKey(entry.relativePath)) {
           remoteAdded++;
           remoteAddedFiles.add(entry.relativePath);
@@ -1218,8 +1222,17 @@ class SyncEngine {
         return entries;
       }
 
-      // Driveフォルダ構造を取得（移動検出用）
-      final driveFolderMap = await _buildDriveFolderMap(driveId);
+      // Driveのファイル一覧とフォルダマップを一括取得（API呼び出しを最小化）
+      final driveData = await _listDriveFilesWithFolders(driveId);
+      final driveAllEntries = driveData.files;
+      final driveFolderMap = driveData.folderMap;
+
+      // Drive fileId → DriveFileEntry のマップを構築（O(1)参照用）
+      final driveIdMap = <String, DriveFileEntry>{};
+      for (final entry in driveAllEntries) {
+        final fileId = entry.file.id;
+        if (fileId != null) driveIdMap[fileId] = entry;
+      }
 
       // ローカルファイルを収集（再帰）
       final localDir = Directory(localPath);
@@ -1241,11 +1254,10 @@ class SyncEngine {
       // 処理済みファイルを追跡
       final processedFiles = <String>{};
       
-      // 移動されたファイルのIDを記録
       final movedFileIds = <String>{};
       final movedToPathSet = <String>{};
 
-      // 記録済みファイルをチェック
+      // 記録済みファイルをチェック（driveIdMapからO(1)参照、API呼び出しなし）
       for (final entry in syncedFiles.entries) {
         final fileName = entry.key;
         if (p.basename(fileName) == kMetaFileName) continue;
@@ -1254,30 +1266,32 @@ class SyncEngine {
         final lastSyncedTime = syncInfo.lastSyncedTime;
         final expectedParentId = syncInfo.expectedParentId;
 
-        // Drive側のメタデータを取得
-        final driveMetadata =
-            await _driveService.getFileMetadata(syncInfo.driveFileId);
+        // driveIdMapから参照（getFileMetadata API呼び出し不要）
+        final driveEntry = driveIdMap[syncInfo.driveFileId];
 
         MergeChangeType localChange = MergeChangeType.none;
         MergeChangeType remoteChange = MergeChangeType.none;
         DateTime? localModTime;
-        DateTime? remoteModTime = driveMetadata?.modifiedTime;
+        DateTime? remoteModTime = driveEntry?.file.modifiedTime;
         FileChangeInfo? moveInfo;
 
         // リモート変更を判定
-        if (driveMetadata == null || driveMetadata.trashed) {
+        if (driveEntry == null) {
           remoteChange = MergeChangeType.deleted;
         } else {
+          final driveFile = driveEntry.file;
           // 移動検出
-          if (expectedParentId != null && driveMetadata.parents.isNotEmpty) {
-            final currentParentId = driveMetadata.parents.first;
+          if (expectedParentId != null &&
+              driveFile.parents != null &&
+              driveFile.parents!.isNotEmpty) {
+            final currentParentId = driveFile.parents!.first;
             if (currentParentId != expectedParentId) {
               final newParentPath = driveFolderMap[currentParentId];
               if (newParentPath != null) {
                 remoteChange = MergeChangeType.moved;
                 final newPath = newParentPath.isEmpty
-                    ? driveMetadata.name ?? fileName
-                    : '$newParentPath/${driveMetadata.name ?? fileName}';
+                    ? driveFile.name ?? fileName
+                    : '$newParentPath/${driveFile.name ?? fileName}';
                 moveInfo = FileChangeInfo(
                   fileName: fileName,
                   type: FileChangeType.moved,
@@ -1295,8 +1309,8 @@ class SyncEngine {
           // 内容変更検出（移動がなかった場合）
           if (remoteChange == MergeChangeType.none) {
             if (lastSyncedTime != null &&
-                driveMetadata.modifiedTime != null &&
-                driveMetadata.modifiedTime!.isAfter(lastSyncedTime)) {
+                driveFile.modifiedTime != null &&
+                driveFile.modifiedTime!.isAfter(lastSyncedTime)) {
               remoteChange = MergeChangeType.modified;
             }
           }
@@ -1304,7 +1318,6 @@ class SyncEngine {
 
         // ローカル変更を判定
         if (movedFileIds.contains(syncInfo.driveFileId)) {
-          // 移動されたファイルは特別処理
           localChange = MergeChangeType.none;
         } else if (localFiles.containsKey(fileName)) {
           localModTime = localFiles[fileName];
@@ -1343,10 +1356,9 @@ class SyncEngine {
         ));
       }
 
-      // Driveに新規ファイルがあるか確認
-      final driveEntries = await _listDriveFilesRecursive(driveId);
-      AppLogger.debug('[SyncEngine] getMergeEntries: Drive新規ファイル確認 (${driveEntries.length}件)');
-      for (final driveEntry in driveEntries) {
+      // Driveに新規ファイルがあるか確認（driveAllEntriesを再利用、API呼び出し不要）
+      AppLogger.debug('[SyncEngine] getMergeEntries: Drive新規ファイル確認 (${driveAllEntries.length}件)');
+      for (final driveEntry in driveAllEntries) {
         if (p.basename(driveEntry.relativePath) == kMetaFileName) continue;
         if (movedToPathSet.contains(driveEntry.relativePath)) continue;
         if (movedFileIds.contains(driveEntry.file.id)) continue;

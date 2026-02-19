@@ -3,7 +3,8 @@
 /// 内蔵GPSと外部GNSS機器を統一的に管理し、GPS記録・追跡機能を提供
 ///
 /// Features:
-/// - 内蔵GPS・外部GNSS機器の切り替え管理
+/// - 内蔵GPS: InternalGpsLocationStore に委譲（常に1ストリーム）
+/// - 外部GNSS機器の切り替え管理
 /// - 統一されたGPS位置情報取得API
 /// - GPS記録の開始・停止機能
 /// - オプション設定対応（取得インターバル、最短記録移動距離）
@@ -15,12 +16,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../models/bluetooth_gnss_service.dart';
+import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
 import '../utils/global_config.dart';
-import 'foreground_service.dart';
+import 'internal_gps_location_store.dart';
 
 /// GPS データソースの種類
 enum GpsSourceType {
@@ -88,8 +89,11 @@ class GpsManagerService extends ChangeNotifier {
   // 現在のGPSソース設定
   GpsSourceType _currentSource = GpsSourceType.internal;
 
-  // 内蔵GPS関連
-  StreamSubscription<Position>? _positionSubscription;
+  // 内蔵GPS: InternalGpsLocationStore に委譲
+  final InternalGpsLocationStore _locationStore = InternalGpsLocationStore();
+
+  // Store の位置更新を監視するサブスクリプション
+  StreamSubscription<GpsPositionRecord>? _storeSubscription;
 
   // 外部GNSS関連
   BluetoothGnssService? _externalGnssService;
@@ -104,7 +108,7 @@ class GpsManagerService extends ChangeNotifier {
   DateTime? _recordingStartTime;
   GpsTrackPoint? _lastRecordedPoint;
 
-  // 現在の位置情報（統一）
+  // 現在の位置情報（内蔵GPS時はStoreから取得、外部GNSS時は直接保持）
   double? _latitude;
   double? _longitude;
   double? _altitude;
@@ -133,6 +137,9 @@ class GpsManagerService extends ChangeNotifier {
       List.unmodifiable(_availableGnssDevices);
   BluetoothDevice? get selectedGnssDevice => _selectedGnssDevice;
   bool get isRecording => _isRecording;
+
+  /// 内蔵GPS位置情報ストアへのアクセス
+  InternalGpsLocationStore get locationStore => _locationStore;
 
   /// 外部GNSS機器が実際にBluetooth接続されているかを確認
   bool get isExternalGnssConnected =>
@@ -335,23 +342,8 @@ class GpsManagerService extends ChangeNotifier {
       AppLogger.debug('$_logTag: GPS測量停止中...');
       _isSurveyMode = false;
 
-      final serviceManager = ForegroundServiceManager();
-
-      // フォアグラウンドサービス（軌跡記録）が動作中の場合は何もしない
-      if (serviceManager.isServiceRunning) {
-        AppLogger.debug('$_logTag: GPS測量停止 - フォアグラウンドサービス（軌跡記録）継続中のためGPS継続');
-        notifyListeners();
-        return;
-      }
-
-      // 記録中でもなく、フォアグラウンドサービスも動作していない場合の処理
-      if (!_isRecording) {
-        // 外部GNSS接続は維持し、内部GPSのみ停止
-        await _stopGpsKeepingBluetoothConnection();
-        AppLogger.debug('$_logTag: GPS測量停止 - 内部GPS停止、外部GNSS接続は維持（データ蓄積なし）');
-      } else {
-        AppLogger.debug('$_logTag: GPS測量停止 - GPS位置情報取得は継続（記録中）');
-      }
+      // Store（内蔵GPS）は常時稼働のため停止しない
+      // 外部GNSSの場合も接続を維持
 
       AppLogger.debug('$_logTag: GPS測量停止完了 - 測量モード: $_isSurveyMode');
       notifyListeners();
@@ -359,24 +351,6 @@ class GpsManagerService extends ChangeNotifier {
       AppLogger.debug('$_logTag: GPS測量停止エラー: $e');
     }
   }
-
-  // フォアグラウンドサービス追跡状態
-  bool _foregroundServiceTracking = false;
-
-  /// フォアグラウンドサービス追跡開始通知
-  void notifyForegroundTrackingStarted() {
-    _foregroundServiceTracking = true;
-    AppLogger.debug('$_logTag: フォアグラウンドサービス追跡開始を通知');
-  }
-
-  /// フォアグラウンドサービス追跡停止通知
-  void notifyForegroundTrackingStopped() {
-    _foregroundServiceTracking = false;
-    AppLogger.debug('$_logTag: フォアグラウンドサービス追跡停止を通知');
-  }
-
-  /// フォアグラウンドサービス追跡状態取得
-  bool get isForegroundTracking => _foregroundServiceTracking;
 
   /// 外部GNSS機器をスキャン
   Future<void> scanExternalGnssDevices() async {
@@ -435,96 +409,33 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// 統合アーキテクチャでの推奨参照GPS（基準GPS）切り替えメソッド
-  ///
-  /// **重要：参照GPS切り替えの推奨実装箇所**
-  ///
-  /// **使用方法：**
-  /// ```dart
-  /// // 統合GPS管理サービスインスタンス取得
-  /// final gpsManager = GpsManagerService();
-  ///
-  /// // 内蔵GPSに切り替え（基準GPSとして使用）
-  /// await gpsManager.switchReferenceGps(GpsSourceType.internal);
-  ///
-  /// // 外部GNSS機器に切り替え（基準GPSとして使用）
-  /// await gpsManager.switchReferenceGps(GpsSourceType.external, gnssDevice);
-  /// ```
-  ///
-  /// **実装詳細：**
-  /// - フォアグラウンドサービス動作中は一時停止して切り替え
-  /// - GPS測量・GPS追跡の両方で統一的に動作
-  /// - リソース競合を回避して安全に切り替え
+  /// 参照GPS（基準GPS）切り替えメソッド
   Future<void> switchReferenceGps(
     GpsSourceType sourceType, [
     BluetoothDevice? device,
   ]) async {
     AppLogger.debug('$_logTag: 参照GPS（基準GPS）を${sourceType.displayName}に切り替え...');
 
-    final serviceManager = ForegroundServiceManager();
-
-    if (serviceManager.isServiceRunning) {
-      // フォアグラウンドサービスが動作中の場合は、まず停止
-      AppLogger.debug('$_logTag: フォアグラウンドサービス動作中のため一時停止して切り替え');
-      await serviceManager.stopService();
-
-      // 少し待機してリソース解放を確保
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // GPSソース切り替え
-      await switchGpsSource(sourceType, device);
-
-      // フォアグラウンドサービス再開
-      await serviceManager.startService();
-      AppLogger.debug('$_logTag: 参照GPS切り替え後、フォアグラウンドサービス再開');
-    } else {
-      // フォアグラウンドサービス未動作時は直接切り替え
-      await switchGpsSource(sourceType, device);
-    }
+    // Store は常時稼働のため停止不要。ソース切り替えのみ。
+    await switchGpsSource(sourceType, device);
 
     AppLogger.debug('$_logTag: 参照GPS（基準GPS）切り替え完了: ${sourceType.displayName}');
   }
 
-  /// 内蔵GPS開始
+  /// 内蔵GPS開始（InternalGpsLocationStoreに委譲）
   Future<void> _startInternalGps() async {
-    // 位置情報許可確認
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw Exception('位置情報サービスが無効です');
+    // Store が未起動の場合は起動
+    if (!_locationStore.isActive) {
+      await _locationStore.start();
     }
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      // 他の権限リクエストとの競合を避けるため少し待機
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      permission = await Geolocator.requestPermission();
-      
-      // 権限リクエストが競合で失敗した場合（空の結果）、再度確認
-      if (permission == LocationPermission.denied) {
-        AppLogger.debug('$_logTag: 位置情報許可が拒否、500ms後に再確認...');
-        await Future.delayed(const Duration(milliseconds: 500));
-        permission = await Geolocator.checkPermission();
-        
-        if (permission == LocationPermission.denied) {
-          throw Exception('位置情報許可が拒否されました');
-        }
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception('位置情報許可が永続的に拒否されています');
-    }
-
-    // 位置情報監視開始
-    const LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 1, // 1メートル以上移動した場合のみ更新（0だと頻繁すぎる）
+    // Store の位置更新を監視して内部状態を同期
+    await _storeSubscription?.cancel();
+    _storeSubscription = _locationStore.positionStream.listen(
+      _onStorePositionUpdate,
     );
 
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen(_onInternalPositionUpdate);
+    AppLogger.debug('$_logTag: 内蔵GPS開始（Store委譲）');
   }
 
   /// 外部GNSS開始
@@ -540,9 +451,9 @@ class GpsManagerService extends ChangeNotifier {
 
   /// 現在のソースを停止
   Future<void> _stopCurrentSource() async {
-    // 内蔵GPS停止
-    await _positionSubscription?.cancel();
-    _positionSubscription = null;
+    // Store監視を停止（Store自体は常時稼働のため停止しない）
+    await _storeSubscription?.cancel();
+    _storeSubscription = null;
 
     // 外部GNSS停止
     if (_externalGnssService != null) {
@@ -554,32 +465,32 @@ class GpsManagerService extends ChangeNotifier {
     _clearCurrentPosition();
   }
 
-  /// GPS測量停止時に外部GNSS接続を維持したまま内部GPSのみ停止
-  Future<void> _stopGpsKeepingBluetoothConnection() async {
+  /// Store位置更新コールバック（内蔵GPS）
+  void _onStorePositionUpdate(GpsPositionRecord record) {
     if (_currentSource == GpsSourceType.internal) {
-      // 内蔵GPSの場合は通常のGPS停止
-      await stopGps();
-    } else if (_currentSource == GpsSourceType.external) {
-      // 外部GNSSの場合は接続を維持したまま位置監視のみ停止
-      _isGpsActive = false;
-      AppLogger.debug('$_logTag: 外部GNSS接続は維持、位置監視のみ停止');
-      notifyListeners();
-    }
-  }
+      _latitude = record.latitude;
+      _longitude = record.longitude;
+      _altitude = record.altitude;
+      _accuracy = record.accuracy;
+      _speed = record.speed;
+      _bearing = record.bearing;
+      _timestamp = record.timestamp;
 
-  /// 内蔵GPS位置更新コールバック
-  void _onInternalPositionUpdate(Position position) {
-    if (_currentSource == GpsSourceType.internal) {
-      _updateCurrentPosition(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        altitude: position.altitude,
-        accuracy: position.accuracy,
-        speed: position.speed,
-        bearing: position.heading,
-        timestamp: position.timestamp,
-        sourceType: GpsSourceType.internal.sourceCode,
-      );
+      // 連続測量中の場合はデータを収集
+      if (_isContinuousSurvey) {
+        _collectContinuousSurveyData(
+          latitude: record.latitude,
+          longitude: record.longitude,
+          altitude: record.altitude,
+          accuracy: record.accuracy,
+          speed: record.speed,
+          bearing: record.bearing,
+          timestamp: record.timestamp,
+          sourceType: GpsSourceType.internal.sourceCode,
+        );
+      }
+
+      notifyListeners();
     }
   }
 
@@ -611,7 +522,7 @@ class GpsManagerService extends ChangeNotifier {
     }
   }
 
-  /// 現在位置情報を更新
+  /// 現在位置情報を更新（外部GNSS用）
   void _updateCurrentPosition({
     required double latitude,
     required double longitude,
@@ -639,8 +550,6 @@ class GpsManagerService extends ChangeNotifier {
     _satelliteCount = satelliteCount;
     _hdop = hdop;
     _gpsQuality = gpsQuality;
-
-    // ログ出力は削減（エラー時のみ出力）
 
     // 連続測量中の場合はデータを収集
     if (_isContinuousSurvey) {
@@ -739,8 +648,15 @@ class GpsManagerService extends ChangeNotifier {
 
   /// 現在のGPS情報を取得
   Map<String, dynamic> getCurrentGpsInfo() {
-    // 外部GNSS使用時は、フォアグラウンドサービス実行中でもメインisolateの位置情報を返す
-    // （外部GNSSデータはメインisolateでのみ取得可能）
+    // 内蔵GPS使用時はStoreからhasNewUpdateを取得
+    final bool hasNewUpdate;
+    if (_currentSource == GpsSourceType.internal) {
+      final response = _locationStore.requestPosition();
+      hasNewUpdate = response.hasNewUpdate;
+    } else {
+      hasNewUpdate = true; // 外部GNSSは常に最新
+    }
+
     final isExternal = _currentSource == GpsSourceType.external;
     return {
       'sourceType': _currentSource.sourceCode,
@@ -757,7 +673,8 @@ class GpsManagerService extends ChangeNotifier {
       'isGpsActive': _isGpsActive,
       'isInitialized': _isInitialized,
       'isSurveyMode': _isSurveyMode,
-      'usesForegroundService': false,
+      'usesForegroundService': _locationStore.isDelegated,
+      'hasNewUpdate': hasNewUpdate,
       // 外部GNSS機器の場合のみ衛星情報・NMEA情報を追加
       'satelliteCount': isExternal ? _satelliteCount : null,
       'hdop': isExternal ? _hdop : null,
@@ -1098,9 +1015,9 @@ class GpsManagerService extends ChangeNotifier {
     _recordingTimer?.cancel();
     _recordingTimer = null;
 
-    // GPS位置情報ストリームを停止（同期的に実行）
-    _positionSubscription?.cancel();
-    _positionSubscription = null;
+    // Store監視を停止
+    _storeSubscription?.cancel();
+    _storeSubscription = null;
 
     // 外部GNSSサービスのクリーンアップ
     if (_externalGnssService != null) {
@@ -1113,7 +1030,6 @@ class GpsManagerService extends ChangeNotifier {
     _isGpsActive = false;
     _isSurveyMode = false;
     _isRecording = false;
-    _foregroundServiceTracking = false;
 
     // 連続測量もクリーンアップ
     _isContinuousSurvey = false;

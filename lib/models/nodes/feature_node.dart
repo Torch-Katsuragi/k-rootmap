@@ -308,6 +308,17 @@ abstract class FeatureNode extends LayerTreeNode {
     details['latitude'] = centroid.latitude.toStringAsFixed(6);
     details['longitude'] = centroid.longitude.toStringAsFixed(6);
 
+    // カスタム属性（属性テーブルのユーザー定義カラム）
+    final systemKeys = details.keys.toSet();
+    final props = turfFeature.properties;
+    if (props != null) {
+      for (final entry in props.entries) {
+        if (systemKeys.contains(entry.key)) continue;
+        if (entry.value == null) continue;
+        details[entry.key] = entry.value.toString();
+      }
+    }
+
     return details;
   }
 

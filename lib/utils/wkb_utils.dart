@@ -38,9 +38,6 @@ Uint8List _createGpbHeader({
     envelopeBytes.setFloat64(16, minY, Endian.little);
     envelopeBytes.setFloat64(24, maxY, Endian.little);
     header.add(envelopeBytes.buffer.asUint8List());
-    AppLogger.debug(
-      '[GPB] Envelope bytes added, total header size: ${header.length + 32}',
-    );
   }
 
   return header.toBytes();

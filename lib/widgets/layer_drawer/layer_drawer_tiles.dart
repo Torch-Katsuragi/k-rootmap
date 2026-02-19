@@ -238,12 +238,14 @@ mixin LayerDrawerTiles {
     setStateCallback(() {});
   }
 
-  /// 子ノードを再帰的に更新
+  /// 子ノードを再帰的に更新（フォルダ・GeoPackage両方）
   Future<void> _updateChildrenRecursive(LayerTreeNode node) async {
     await node.updateChildren();
     for (final child in node.children) {
       if (child is FolderNode) {
         await _updateChildrenRecursive(child);
+      } else if (child is GeoPackageNode) {
+        await child.updateChildren();
       }
     }
   }
@@ -354,6 +356,7 @@ mixin LayerDrawerTiles {
         // ローカルファイル変更があった場合は子ノードを再帰的に再読み込み
         if (result.downloadedCount > 0 || result.deletedCount > 0) {
           await _updateChildrenRecursive(node);
+          triggerMapRefresh();
           setStateCallback(() {});
         }
         
@@ -545,7 +548,7 @@ mixin LayerDrawerTiles {
     }
   }
 
-  /// 写真タイルを構築（位置情報付き画像ファイル）
+  /// 写真タイルを構築（画像ファイル）
   Widget buildPhotoTile(
     BuildContext context,
     ImageNode node, {
@@ -553,15 +556,17 @@ mixin LayerDrawerTiles {
   }) {
     return ListTile(
       leading: _buildIconWithVisibility(node),
-      title: Text(node.name),
+      title: Text(
+        node.name,
+        style: node.hasLocation ? null : const TextStyle(fontStyle: FontStyle.italic),
+      ),
+      subtitle: node.hasLocation ? null : const Text('位置情報なし', style: TextStyle(fontSize: 11)),
       onTap: () {
-        // ImageNode選択処理（地図上でハイライト表示）
         GlobalConfig.instance.selectedFeatures.clear();
         GlobalConfig.instance.selectedFeatures.add(node);
 
-        // 地図の中心を写真の位置に移動
-        if (onJumpTo != null) {
-          onJumpTo!(node.location);
+        if (node.hasLocation && onJumpTo != null) {
+          onJumpTo!(node.location!);
         }
 
         setStateCallback(() {});

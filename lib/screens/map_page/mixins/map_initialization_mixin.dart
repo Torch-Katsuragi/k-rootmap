@@ -3,7 +3,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../utils/app_logger.dart';
@@ -40,17 +39,14 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     LayerStyleConfig().load();
     LayerStyleConfig().addListener(onLayerStyleChanged);
     
-    // 追跡アニメーション初期化
-    initializeTrackingAnimation();
-    
     // プロジェクトツリー初期化
     await initializeProjectTree();
     
     // GPS管理サービス初期化
     await initializeGpsManager();
     
-    // GPS追跡サービス状態の初期化
-    updateGpsTrackingServiceStatus();
+    // GPS履歴レコーダー初期化
+    await initializeGpsHistoryRecorder();
     
     // 背景地図サービス初期化
     await initializeBaseMapService();
@@ -58,30 +54,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     // コンパス機能の初期化
     await initializeCompass();
     
-    // 定期的にサービス状態を更新（10秒間隔）
-    serviceStatusUpdateTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (timer) => updateGpsTrackingServiceStatus(),
-    );
-    
     AppLogger.debug('[DEBUG] initializeAllServices: complete');
-  }
-  
-  /// 追跡アニメーション初期化
-  void initializeTrackingAnimation() {
-    trackingAnimationController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    );
-    trackingRotationAnimation = Tween<double>(
-      begin: 0.0,
-      end: 2 * 3.14159, // 2π（360度）
-    ).animate(
-      CurvedAnimation(
-        parent: trackingAnimationController,
-        curve: Curves.linear,
-      ),
-    );
   }
   
   /// プロジェクトツリーの初期化（非同期）
@@ -249,22 +222,17 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       // 外部GNSS機器をスキャン（バックグラウンドで実行）
       scanGnssDevicesBackground();
       
-      // GPS位置情報取得を開始
+      // GPS位置情報取得を開始（InternalGpsLocationStore経由）
       await gpsManager.startGps();
       
       // 初期GPS情報を取得
       updateCurrentGpsInfo();
       
-      // 標準のGeolocatorストリーム（マップ中心移動用）
-      positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      positionSubscription = positionStream!.listen(
-        (pos) {
+      // Store.positionStream を購読（マップマーカー・中心移動用）
+      positionSubscription = locationStore.positionStream.listen(
+        (record) {
           triggerSetState(() {
-            currentLocation = LatLng(pos.latitude, pos.longitude);
+            currentLocation = LatLng(record.latitude, record.longitude);
             if (!movedToCurrentLocationOnce && currentLocation != null) {
               mapController.move(currentLocation!, 16.0);
               movedToCurrentLocationOnce = true;
@@ -272,7 +240,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
           });
         },
         onError: (error) {
-          AppLogger.debug('[DEBUG] GPS: Geolocator stream error: $error');
+          AppLogger.debug('[DEBUG] GPS: Store position stream error: $error');
         },
       );
       
@@ -287,6 +255,39 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化完了');
     } catch (e) {
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
+    }
+  }
+  
+  /// GPS履歴レコーダー初期化
+  Future<void> initializeGpsHistoryRecorder() async {
+    AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化開始');
+    
+    try {
+      final globalPath = GlobalConfig.instance.globalFolderPath;
+      if (globalPath == null) {
+        AppLogger.debug('[DEBUG] GPS: グローバルフォルダパスが未設定のためスキップ');
+        return;
+      }
+      
+      // GpsHistoryRecorder を初期化
+      await gpsHistoryRecorder.initialize(globalPath);
+      
+      // positionStream の購読開始（常時記録）
+      gpsHistoryRecorder.startRecording(locationStore.positionStream);
+      
+      // 軌跡更新リスナー登録（地図上にリアルタイム表示するため）
+      gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
+      
+      AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化完了');
+    } catch (e) {
+      AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化エラー: $e');
+    }
+  }
+  
+  /// GPS履歴更新コールバック（軌跡ポリライン更新用）
+  void _onGpsHistoryUpdate() {
+    if (mounted) {
+      triggerSetState(() {});
     }
   }
   
@@ -313,6 +314,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     gpsManager.removeListener(onGpsManagerUpdate);
     GlobalConfig.instance.baseMapService.removeListener(onBaseMapServiceUpdate);
     LayerStyleConfig().removeListener(onLayerStyleChanged);
+    gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
     
     // GPS取得を停止（測量モードでない場合のみ）
     if (gpsManager.isGpsActive && !gpsManager.isSurveyMode) {
@@ -322,10 +324,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     positionSubscription?.cancel();
     compassSubscription?.cancel();
     gpsWaitTimer?.cancel();
-    serviceStatusUpdateTimer?.cancel();
     longPressCountUpdateTimer?.cancel();
-    trackPointSubscription?.cancel();
-    trackingAnimationController.dispose();
   }
   
   // =============================================
@@ -335,4 +334,3 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// フィーチャデータを更新
   Future<void> updateFeatures();
 }
-

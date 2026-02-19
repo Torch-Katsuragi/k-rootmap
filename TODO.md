@@ -72,6 +72,22 @@
   - GpsInfoBar, GpsTrackingOverlay, GpsSurveyButtons（ウィジェット）
 - [x] import_export_service.dartのフォーマット別分割
 - [x] geopackage_file.dartの機能別分割
+- [x] 内蔵GPSリファクタリング（2026/02/06）
+  - [x] InternalGpsLocationStore導入（常に1ストリーム原則）
+  - [x] GpsPositionRecord / GpsPositionResponse 型安全モデル作成
+  - [x] Android: ForegroundService常時稼働（delegatedモード）
+  - [x] Windows: Geolocator直接実行（directモード）
+  - [x] Geolocatorストリーム3重重複を1本に統一
+  - [x] map_initialization_mixin / map_gps_tracking_mixin をStore経由に変更
+  - [x] WindowsでのGPS追跡ボタン有効化
+  - [x] requestPosition()にhasNewUpdateフラグ追加
+- [x] GPS軌跡の常時記録と切り取りUI（2026/02/06）
+  - [x] GpsHistoryRecorder: グローバルフォルダのGeoPackageに日付別レイヤで常時記録
+  - [x] 本日のGPS軌跡をPolylineLayerでリアルタイム表示（緑ライン）
+  - [x] TrackExtractionDialog: 日付選択、時間範囲スライダー、Douglas-Peucker簡略化、ライン保存
+  - [x] 既存の「追跡開始/停止」フローを完全廃止
+  - [x] GpsTrackingOverlay（回転光エフェクト）を廃止、実際の軌跡表示に置換
+  - [x] GPS追跡ボタンを軌跡抽出ボタンに変更（全プラットフォーム対応）
 - [ ] ServiceLocatorパターンの導入
 - [ ] 非同期競合状態防止の改善（Completer使用）
 - [x] フィーチャキャッシュの差分更新対応

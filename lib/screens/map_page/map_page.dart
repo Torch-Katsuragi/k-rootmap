@@ -8,7 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
-import '../../models/gps_track.dart';
+// gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/resizable_side_panel.dart';
 import '../../widgets/dynamic_attribute_table_widget.dart';
@@ -18,6 +18,7 @@ import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
+import '../../core/constants.dart';
 import '../../utils/global_config.dart';
 import '../../utils/global_drawing_state.dart';
 import '../../utils/app_logger.dart';
@@ -268,12 +269,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                   _buildFlutterMap(isPanTool),
                   _buildGestureLayer(),
                   _buildDrawingPreviewInfo(),
-                  // GPS追跡オーバーレイ
-                  if (isGpsTrackingServiceRunning && currentLocation != null)
-                    GpsTrackingOverlay(
-                      rotationAnimation: trackingRotationAnimation,
-                      screenPosition: latLngToOffset(currentLocation!),
-                    ),
                 ],
               ),
             ),
@@ -303,12 +298,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                     GpsSurveyButtons(
                       isLongPressing: isLongPressing,
                       longPressGpsCount: longPressGpsCount,
-                      isGpsTrackingServiceRunning: isGpsTrackingServiceRunning,
                       onRecordGpsPosition: recordGpsPosition,
                       onStartLongPressGpsSurvey: startLongPressGpsSurvey,
                       onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
-                      onStartGpsTracking: startGpsTrackingService,
-                      onStopGpsTracking: stopGpsTrackingService,
+                      onOpenTrackExtraction: openTrackExtractionDialog,
                     ),
                   const LeftBottomFab(),
                 ],
@@ -356,6 +349,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     
     return PolylineLayer(
       polylines: [
+        // 本日のGPS軌跡（常時表示）
+        if (gpsHistoryRecorder.todayPoints.length >= 2)
+          Polyline(
+            points: gpsHistoryRecorder.todayPoints,
+            color: MapColors.trackingRoute,
+            strokeWidth: 3.0,
+          ),
         // 既存のラインフィーチャ
         for (final f in lineFeatures)
           if (f.geometry != null)
@@ -404,15 +404,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             color: Colors.orange,
             strokeWidth: 1.5,
           ),
-        // GPS追跡軌跡プレビュー
-        if (isGpsTrackingServiceRunning &&
-            GpsTrackManager().currentTrack != null &&
-            GpsTrackManager().currentTrack!.points.length >= 2)
-          Polyline(
-            points: GpsTrackManager().currentTrack!.toLatLngList(),
-            color: Colors.cyan,
-            strokeWidth: 2.0,
-          ),
+        // (旧 GPS追跡軌跡プレビューは本日軌跡ポリラインに統合済み)
       ],
     );
   }
@@ -548,10 +540,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 ),
               );
             })),
-        // ImageNodeマーカー
-        for (final photo in photoNodes)
+        // ImageNodeマーカー（位置情報ありのみ）
+        for (final photo in photoNodes.where((p) => p.hasLocation))
           Marker(
-            point: photo.location,
+            point: photo.location!,
             width: 20,
             height: 20,
             child: GestureDetector(
@@ -562,7 +554,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                 });
               },
               child: Tooltip(
-                message: '📸 ${photo.name}\n撮影位置: ${photo.location.latitude.toStringAsFixed(6)}, ${photo.location.longitude.toStringAsFixed(6)}',
+                message: '${photo.name}\n撮影位置: ${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}',
                 child: Container(
                   decoration: BoxDecoration(
                     color: GlobalConfig.instance.selectedFeatures.contains(photo)

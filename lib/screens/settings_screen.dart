@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
@@ -11,6 +12,7 @@ enum SettingsCategory {
   gps,
   layerStyle,
   feedback,
+  appInfo,
 }
 
 extension SettingsCategoryExt on SettingsCategory {
@@ -24,6 +26,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'レイヤ描画';
       case SettingsCategory.feedback:
         return 'フィードバック';
+      case SettingsCategory.appInfo:
+        return 'アプリ情報';
     }
   }
 
@@ -37,6 +41,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return Icons.palette;
       case SettingsCategory.feedback:
         return Icons.feedback;
+      case SettingsCategory.appInfo:
+        return Icons.info_outline;
     }
   }
 
@@ -50,6 +56,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return '点・線・ポリゴンの描画スタイル';
       case SettingsCategory.feedback:
         return '要望・バグ報告をお送りください';
+      case SettingsCategory.appInfo:
+        return 'バージョン情報、ライセンス';
     }
   }
 }
@@ -216,6 +224,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.feedback:
         return FeedbackScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.appInfo:
+        return AppInfoScreen(key: key, isEmbedded: isEmbedded);
     }
   }
 }
@@ -308,6 +318,106 @@ class FeedbackScreen extends StatelessWidget {
                 leading: Icon(Icons.thumb_up_outlined, color: Colors.green),
                 title: Text('その他'),
                 subtitle: Text('感想、質問、改善提案など何でも'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// アプリ情報画面
+class AppInfoScreen extends StatefulWidget {
+  final bool isEmbedded;
+
+  const AppInfoScreen({
+    super.key,
+    this.isEmbedded = false,
+  });
+
+  @override
+  State<AppInfoScreen> createState() => _AppInfoScreenState();
+}
+
+class _AppInfoScreenState extends State<AppInfoScreen> {
+  PackageInfo? _packageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackageInfo();
+  }
+
+  Future<void> _loadPackageInfo() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() => _packageInfo = info);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScaffold(
+      title: 'アプリ情報',
+      isEmbedded: widget.isEmbedded,
+      body: SettingsBody(
+        sections: [
+          SettingsSection(
+            title: 'K-MAPS',
+            icon: Icons.map,
+            iconColor: Colors.blue,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.numbers, color: Colors.blueGrey),
+                title: const Text('バージョン'),
+                subtitle: Text(
+                  _packageInfo != null
+                      ? '${_packageInfo!.version} (ビルド ${_packageInfo!.buildNumber})'
+                      : '読み込み中...',
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.android, color: Colors.green),
+                title: const Text('パッケージ名'),
+                subtitle: Text(_packageInfo?.packageName ?? '読み込み中...'),
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: '概要',
+            icon: Icons.description,
+            iconColor: Colors.teal,
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'K-MAPSはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\n'
+                  'GeoPackage形式でのデータ管理、GPS測量・軌跡記録、'
+                  '外部GNSS機器連携、オフライン地図対応などの機能を提供します。',
+                  style: TextStyle(height: 1.5),
+                ),
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: 'ライセンス',
+            icon: Icons.gavel,
+            iconColor: Colors.orange,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.open_in_new, color: Colors.blue),
+                title: const Text('オープンソースライセンス'),
+                subtitle: const Text('使用しているパッケージのライセンス一覧'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  showLicensePage(
+                    context: context,
+                    applicationName: 'K-MAPS',
+                    applicationVersion: _packageInfo?.version ?? '',
+                  );
+                },
               ),
             ],
           ),

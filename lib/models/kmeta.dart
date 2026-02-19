@@ -10,7 +10,7 @@ import '../utils/app_logger.dart';
 const String kMetaFileName = '.kmeta.json';
 
 /// 現在のスキーマバージョン
-const int kMetaSchemaVersion = 1;
+const int kMetaSchemaVersion = 2;
 
 /// レイヤースタイル設定（個別レイヤー用）
 class KMetaLayerStyle {
@@ -67,7 +67,8 @@ class KMetaLayerStyle {
     if (polygonFillColor != null) {
       json['polygonFillColor'] = _colorToHex(polygonFillColor!);
     }
-    if (polygonFillOpacity != null) json['polygonFillOpacity'] = polygonFillOpacity;
+    if (polygonFillOpacity != null)
+      json['polygonFillOpacity'] = polygonFillOpacity;
     if (polygonBorderOpacity != null) {
       json['polygonBorderOpacity'] = polygonBorderOpacity;
     }
@@ -105,30 +106,39 @@ class KMetaLayerStyle {
 
 /// 可視性設定
 class KMetaVisibility {
-  /// レイヤー名 → 可視状態
+  /// レイヤーキー（gpkgName/layerName形式） → 可視状態
   final Map<String, bool> layers;
 
   /// GeoPackageファイル名 → 可視状態
   final Map<String, bool> geopackages;
 
+  /// フォルダ名 → 可視状態
+  final Map<String, bool> folders;
+
+  /// 画像ファイル名 → 可視状態
+  final Map<String, bool> images;
+
   const KMetaVisibility({
     this.layers = const {},
     this.geopackages = const {},
+    this.folders = const {},
+    this.images = const {},
   });
 
   /// JSONからパース
   factory KMetaVisibility.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const KMetaVisibility();
     return KMetaVisibility(
-      layers: (json['layers'] as Map<String, dynamic>?)?.map(
-            (k, v) => MapEntry(k, v as bool),
-          ) ??
-          {},
-      geopackages: (json['geopackages'] as Map<String, dynamic>?)?.map(
-            (k, v) => MapEntry(k, v as bool),
-          ) ??
-          {},
+      layers: _parseBoolMap(json['layers']),
+      geopackages: _parseBoolMap(json['geopackages']),
+      folders: _parseBoolMap(json['folders']),
+      images: _parseBoolMap(json['images']),
     );
+  }
+
+  static Map<String, bool> _parseBoolMap(dynamic value) {
+    if (value is! Map<String, dynamic>) return {};
+    return value.map((k, v) => MapEntry(k, v as bool));
   }
 
   /// JSONへシリアライズ
@@ -136,6 +146,8 @@ class KMetaVisibility {
     final json = <String, dynamic>{};
     if (layers.isNotEmpty) json['layers'] = layers;
     if (geopackages.isNotEmpty) json['geopackages'] = geopackages;
+    if (folders.isNotEmpty) json['folders'] = folders;
+    if (images.isNotEmpty) json['images'] = images;
     return json;
   }
 
@@ -145,11 +157,17 @@ class KMetaVisibility {
     return KMetaVisibility(
       layers: {...parent.layers, ...layers},
       geopackages: {...parent.geopackages, ...geopackages},
+      folders: {...parent.folders, ...folders},
+      images: {...parent.images, ...images},
     );
   }
 
   /// 空かどうか
-  bool get isEmpty => layers.isEmpty && geopackages.isEmpty;
+  bool get isEmpty =>
+      layers.isEmpty &&
+      geopackages.isEmpty &&
+      folders.isEmpty &&
+      images.isEmpty;
 }
 
 /// スタイル設定（デフォルト＋レイヤー個別）
@@ -160,19 +178,20 @@ class KMetaStyles {
   /// レイヤー名 → スタイル
   final Map<String, KMetaLayerStyle> layers;
 
-  const KMetaStyles({
-    this.defaultStyle,
-    this.layers = const {},
-  });
+  const KMetaStyles({this.defaultStyle, this.layers = const {}});
 
   /// JSONからパース
   factory KMetaStyles.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const KMetaStyles();
     return KMetaStyles(
-      defaultStyle: json['default'] != null
-          ? KMetaLayerStyle.fromJson(json['default'] as Map<String, dynamic>)
-          : null,
-      layers: (json['layers'] as Map<String, dynamic>?)?.map(
+      defaultStyle:
+          json['default'] != null
+              ? KMetaLayerStyle.fromJson(
+                json['default'] as Map<String, dynamic>,
+              )
+              : null,
+      layers:
+          (json['layers'] as Map<String, dynamic>?)?.map(
             (k, v) => MapEntry(
               k,
               KMetaLayerStyle.fromJson(v as Map<String, dynamic>),
@@ -200,8 +219,8 @@ class KMetaStyles {
   KMetaStyles mergeWith(KMetaStyles? parent) {
     if (parent == null) return this;
     return KMetaStyles(
-      defaultStyle: defaultStyle?.mergeWith(parent.defaultStyle) ??
-          parent.defaultStyle,
+      defaultStyle:
+          defaultStyle?.mergeWith(parent.defaultStyle) ?? parent.defaultStyle,
       layers: layers, // 継承しない（自フォルダの設定のみ）
     );
   }
@@ -219,10 +238,7 @@ class KMetaLayout {
   /// 展開状態
   final bool? expanded;
 
-  const KMetaLayout({
-    this.sortOrder,
-    this.expanded,
-  });
+  const KMetaLayout({this.sortOrder, this.expanded});
 
   /// JSONからパース
   factory KMetaLayout.fromJson(Map<String, dynamic>? json) {
@@ -273,22 +289,22 @@ class KMetaSyncFile {
 
   factory KMetaSyncFile.fromJson(Map<String, dynamic> json) {
     // 後方互換性：古いlastSyncedModifiedTimeも読み込む
-    final legacyTime = json['lastSyncedModifiedTime'] != null
-        ? DateTime.tryParse(json['lastSyncedModifiedTime'] as String)
-        : null;
+    final legacyTime =
+        json['lastSyncedModifiedTime'] != null
+            ? DateTime.tryParse(json['lastSyncedModifiedTime'] as String)
+            : null;
     return KMetaSyncFile(
       driveFileId: json['driveFileId'] as String,
       expectedParentId: json['expectedParentId'] as String?,
-      lastSyncedTime: json['lastSyncedTime'] != null
-          ? DateTime.tryParse(json['lastSyncedTime'] as String)
-          : legacyTime, // フォールバック
+      lastSyncedTime:
+          json['lastSyncedTime'] != null
+              ? DateTime.tryParse(json['lastSyncedTime'] as String)
+              : legacyTime, // フォールバック
     );
   }
 
   Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'driveFileId': driveFileId,
-    };
+    final json = <String, dynamic>{'driveFileId': driveFileId};
     if (expectedParentId != null) {
       json['expectedParentId'] = expectedParentId;
     }
@@ -369,9 +385,10 @@ class KMetaSync {
       driveFolderName: json['driveFolderName'] as String?,
       driveUrl: json['driveUrl'] as String?,
       isReadOnly: json['isReadOnly'] as bool?,
-      lastSynced: json['lastSynced'] != null
-          ? DateTime.tryParse(json['lastSynced'] as String)
-          : null,
+      lastSynced:
+          json['lastSynced'] != null
+              ? DateTime.tryParse(json['lastSynced'] as String)
+              : null,
       driveRevisionId: json['driveRevisionId'] as String?,
       deviceId: json['deviceId'] as String?,
       files: files,
@@ -493,9 +510,7 @@ class KMeta {
 
   /// JSONへシリアライズ
   Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'version': version,
-    };
+    final json = <String, dynamic>{'version': version};
     if (!visibility.isEmpty) json['visibility'] = visibility.toJson();
     if (!styles.isEmpty) json['styles'] = styles.toJson();
     if (!layout.isEmpty) json['layout'] = layout.toJson();
@@ -606,5 +621,3 @@ Color? _parseColor(dynamic value) {
 String _colorToHex(Color color) {
   return '#${color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}';
 }
-
-

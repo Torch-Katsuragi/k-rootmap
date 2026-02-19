@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
 import '../../core/node_types.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
 
 // ExifParserからクラスを再エクスポート（後方互換性のため）
@@ -48,6 +49,15 @@ class ImageNode extends LayerTreeNode {
        );
   
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
+
+  @override
+  Future<void> persistVisibility() async {
+    final parentFolder = parent;
+    if (parentFolder is! FolderNode) return;
+    final parentPath = parentFolder.getAbsoluteFilePath();
+    if (parentPath == null) return;
+    await KMetaService.instance.setImageVisibility(parentPath, name, visible);
+  }
 
   /// 詳細情報（項目名と値のペア、順序付き）
   List<MapEntry<String, String>> get detailEntries => [

@@ -40,6 +40,15 @@ class FolderNode extends LayerTreeNode {
     await KMetaService.instance.setExpanded(folderPath, value);
   }
 
+  @override
+  Future<void> persistVisibility() async {
+    final parentFolder = parent;
+    if (parentFolder is! FolderNode) return;
+    final parentPath = parentFolder.getAbsoluteFilePath();
+    if (parentPath == null) return;
+    await KMetaService.instance.setFolderVisibility(parentPath, name, visible);
+  }
+
   /// マージ済みメタデータを取得（キャッシュ対応）
   Future<KMeta> getMeta() async {
     if (_cachedMeta != null) return _cachedMeta!;
@@ -135,15 +144,19 @@ class FolderNode extends LayerTreeNode {
   /// メタデータの可視性設定を子ノードに適用（サブクラスから呼び出し可能）
   Future<void> applyMetaVisibility() async {
     final meta = await getMeta();
+    final vis = meta.visibility;
     for (final child in children) {
+      final bool? saved;
       if (child is GeoPackageNode) {
-        // GeoPackageの可視性を適用
-        final gpkgVisible = meta.visibility.geopackages[child.name];
-        if (gpkgVisible != null) {
-          child.visible = gpkgVisible;
-        }
+        saved = vis.geopackages[child.name];
+      } else if (child is FolderNode) {
+        saved = vis.folders[child.name];
+      } else if (child is ImageNode) {
+        saved = vis.images[child.name];
+      } else {
+        continue;
       }
-      // LayerNodeの可視性はGeoPackageNode側で処理
+      if (saved != null) child.visible = saved;
     }
   }
 

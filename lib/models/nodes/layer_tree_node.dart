@@ -21,7 +21,7 @@ abstract class LayerTreeNode {
 
   /// 子ノードリスト（レイヤは空リスト）
   List<LayerTreeNode> children;
-  
+
   /// パスリゾルバ（注入可能、未設定時は親から継承またはデフォルト使用）
   PathResolver? _pathResolver;
 
@@ -33,7 +33,7 @@ abstract class LayerTreeNode {
     "layer",
     "photo",
   ];
-  
+
   // UI関連の責務（baseIcon, baseIconColor）はNodePresenterに移動
   // lib/presentation/node_presenter.dart を参照
 
@@ -48,7 +48,7 @@ abstract class LayerTreeNode {
     PathResolver? pathResolver,
   }) : children = children ?? [],
        _pathResolver = pathResolver;
-  
+
   /// パスリゾルバを取得
   /// 優先順位: 自身に設定 → 親から継承 → デフォルト（ProjectPathResolver）
   PathResolver get pathResolver {
@@ -56,12 +56,12 @@ abstract class LayerTreeNode {
     if (parent != null) return parent!.pathResolver;
     return ProjectPathResolver.instance;
   }
-  
+
   /// パスリゾルバを設定
   set pathResolver(PathResolver resolver) {
     _pathResolver = resolver;
   }
-  
+
   /// グローバルフォルダ関連ノードかどうか
   /// PathResolverがGlobalPathResolverの場合true
   bool get isGlobalNode => pathResolver.isGlobal;
@@ -76,7 +76,7 @@ abstract class LayerTreeNode {
     }
     return false;
   }
-  
+
   /// 文字列nodeTypeからの変換（後方互換性）
   /// 新規コードではNodeType enumを直接使用すること
   @Deprecated('Use NodeType enum directly')
@@ -136,7 +136,7 @@ abstract class LayerTreeNode {
   List<LayerTreeNode> getChildrenByType(NodeType type) {
     return children.where((c) => c.nodeType == type).toList();
   }
-  
+
   /// 文字列指定で子ノードを取得（後方互換性）
   @Deprecated('Use getChildrenByType(NodeType) instead')
   List<LayerTreeNode> getChildrenByTypeString(String type) {
@@ -227,14 +227,13 @@ abstract class LayerTreeNode {
   /// @return LayerTreeNode? 一致する子ノード、なければnull
   LayerTreeNode? getChild(String name, {NodeType? type}) {
     for (final child in children) {
-      if (child.name == name &&
-          (type == null || child.nodeType == type)) {
+      if (child.name == name && (type == null || child.nodeType == type)) {
         return child;
       }
     }
     return null;
   }
-  
+
   /// 文字列nodeType指定で子ノードを取得（後方互換性）
   @Deprecated('Use getChild with NodeType instead')
   LayerTreeNode? getChildByTypeString(String name, {String? nodeType}) {
@@ -265,6 +264,9 @@ abstract class LayerTreeNode {
     return pathResolver.resolvePath(getAbsolutePathSegments());
   }
 
+  /// 可視状態をkmetaに永続化（サブクラスでオーバーライド）
+  Future<void> persistVisibility() async {}
+
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     // 基底クラスでは空のリストを返す
@@ -272,4 +274,3 @@ abstract class LayerTreeNode {
     return <LayerTreeNode>[];
   }
 }
-

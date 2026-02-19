@@ -14,25 +14,29 @@ import '../geometry_type.dart';
 import '../kmeta.dart';
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
+import '../../services/kmeta_service.dart';
 
 /// 重複レイヤ名のナンバリング処理ユーティリティ
 class LayerNameUtils {
   /// 重複しない新しいレイヤ名を生成する
   /// 例: "道路" が既存の場合 → "道路_2"
   /// "道路_2" も既存の場合 → "道路_3" と番号を増やしていく
-  static String generateUniqueLayerName(String baseName, List<String> existingNames) {
+  static String generateUniqueLayerName(
+    String baseName,
+    List<String> existingNames,
+  ) {
     if (!existingNames.contains(baseName)) {
       return baseName;
     }
 
     int number = 2;
     String candidateName;
-    
+
     do {
       candidateName = '${baseName}_$number';
       number++;
     } while (existingNames.contains(candidateName));
-    
+
     return candidateName;
   }
 }
@@ -52,13 +56,13 @@ abstract class LayerNode extends LayerTreeNode {
   /// 変更の追跡フラグ（将来的なバッチ保存最適化用に予約）
   // ignore: unused_field
   bool _isDirty = false;
-  
+
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
-  
+
   /// updateChildren実行中フラグ（競合状態防止）
   bool _isUpdatingChildren = false;
-  
+
   /// dispose済みかどうかを取得
   bool get isDisposed => _isDisposed;
 
@@ -86,11 +90,26 @@ abstract class LayerNode extends LayerTreeNode {
     return null;
   }
 
+  @override
+  Future<void> persistVisibility() async {
+    final folder = folderNode;
+    if (folder == null) return;
+    final folderPath = folder.getAbsoluteFilePath();
+    if (folderPath == null) return;
+    await KMetaService.instance.setLayerVisibility(
+      folderPath,
+      layerKey,
+      visible,
+    );
+  }
+
   /// レイヤーの一意キー（gpkgName/layerName形式）
   /// 同一フォルダ内の異なるGeoPackageの同名レイヤーを区別するため
   String get layerKey {
     if (_isDisposed) {
-      throw StateError('Cannot access layerKey on disposed LayerNode: $layerName');
+      throw StateError(
+        'Cannot access layerKey on disposed LayerNode: $layerName',
+      );
     }
     final gpkg = geoPackageNode;
     return '${gpkg.name}/$layerName';
@@ -139,17 +158,15 @@ abstract class LayerNode extends LayerTreeNode {
     if (_isDisposed) {
       throw StateError('LayerNode is disposed');
     }
-    return TurfConverter.createFeatureCollection(
-      _featureMap.values.toList(),
-    );
+    return TurfConverter.createFeatureCollection(_featureMap.values.toList());
   }
-  
+
   /// rowIdでFeatureを取得（null安全）
   turf.Feature? getFeatureById(int rowId) {
     if (_isDisposed) return null;
     return _featureMap[rowId];
   }
-  
+
   /// Featureを追加（FeatureNodeから呼ばれる、null参照対策含む）
   void addFeatureToMap(int rowId, turf.Feature feature) {
     if (_isDisposed) {
@@ -159,7 +176,7 @@ abstract class LayerNode extends LayerTreeNode {
     _featureMap[rowId] = feature;
     _markDirty();
   }
-  
+
   /// Featureを削除（内部用、null参照対策含む）
   void _removeFeatureFromMap(int rowId) {
     if (_isDisposed) {
@@ -169,16 +186,18 @@ abstract class LayerNode extends LayerTreeNode {
     _featureMap.remove(rowId);
     _markDirty();
   }
-  
+
   /// Featureの属性を更新（内部用、null参照対策含む）
   bool updateFeatureAttribute(int rowId, String key, dynamic value) {
     if (_isDisposed) {
-      AppLogger.debug('[WARNING] LayerNode is disposed, cannot update attribute');
+      AppLogger.debug(
+        '[WARNING] LayerNode is disposed, cannot update attribute',
+      );
       return false;
     }
     final feature = _featureMap[rowId];
     if (feature == null) return false;
-    
+
     feature.properties ??= {};
     feature.properties![key] = value;
     _markDirty();
@@ -189,12 +208,29 @@ abstract class LayerNode extends LayerTreeNode {
   List<FeatureNode> get features =>
       super.children
           .whereType<FeatureNode>()
-          .where((f) => !f.isDisposed)  // dispose済みを除外
+          .where((f) => !f.isDisposed) // dispose済みを除外
           .toList();
 
   /// position型の座標データを取得（全フィーチャの重心座標リスト）
   List<List<double>> get positions {
     return features.map((feature) => feature.position).toList();
+  }
+
+  /// 全フィーチャの実座標を収集（バウンディングボックス計算等に使用）
+  List<LatLng> getAllCoordinates() {
+    final coords = <LatLng>[];
+    for (final feature in features) {
+      if (feature is PointFeatureNode) {
+        coords.add(feature.point);
+      } else if (feature is LineFeatureNode) {
+        coords.addAll(feature.line);
+      } else if (feature is PolygonFeatureNode) {
+        for (final ring in feature.polygon) {
+          coords.addAll(ring);
+        }
+      }
+    }
+    return coords;
   }
 
   /// 変更フラグをセット
@@ -206,7 +242,7 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// 属性テーブルのカラム名キャッシュ
   List<String>? _cachedColumnNames;
-  
+
   /// PRIMARY KEYスキップ時のカラム名キャッシュ
   List<String>? _cachedColumnNamesWithoutPK;
 
@@ -225,9 +261,9 @@ abstract class LayerNode extends LayerTreeNode {
       return _cachedColumnNamesWithoutPK!;
     }
     _cachedColumnNames ??= await geoPackageFile.getColumnNames(
-        layerName,
-        getAll: getAll,
-      );
+      layerName,
+      getAll: getAll,
+    );
     return _cachedColumnNames!;
   }
 
@@ -338,7 +374,12 @@ abstract class LayerNode extends LayerTreeNode {
     this.layerName, {
     bool visible = true,
     LayerTreeNode? parent,
-  }) : super(layerName, visible: visible, parent: parent, nodeType: NodeType.layer);
+  }) : super(
+         layerName,
+         visible: visible,
+         parent: parent,
+         nodeType: NodeType.layer,
+       );
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
@@ -386,17 +427,17 @@ abstract class LayerNode extends LayerTreeNode {
       AppLogger.debug('[WARNING] LayerNode already disposed');
       return;
     }
-    
+
     // 先に子のFeatureNodeを全てdispose（_isDisposed = trueを設定する前に）
     // これにより、子がparent.removeFeature()を呼んだ時に正常に_featureMapから削除される
     await super.dispose();
-    
+
     // 子のdispose完了後にdispose済みフラグを設定
     _isDisposed = true;
-    
+
     // レイヤ（DBテーブル）削除
     await geoPackageFile.removeLayer(layerName);
-    
+
     // Mapをクリア（メモリ解放）
     _featureMap.clear();
   }
@@ -404,38 +445,46 @@ abstract class LayerNode extends LayerTreeNode {
   @override
   Future<void> updateChildren() async {
     if (_isDisposed) {
-      AppLogger.debug('[WARNING] LayerNode is disposed, cannot update children');
+      AppLogger.debug(
+        '[WARNING] LayerNode is disposed, cannot update children',
+      );
       return;
     }
-    
+
     // 競合状態を防止：既に実行中の場合はスキップ
     if (_isUpdatingChildren) {
-      AppLogger.debug('[LayerNode] updateChildren already in progress for $layerName, skipping');
+      AppLogger.debug(
+        '[LayerNode] updateChildren already in progress for $layerName, skipping',
+      );
       return;
     }
-    
+
     _isUpdatingChildren = true;
-    
+
     try {
       AppLogger.debug('[LayerNode] updateChildren開始: $layerName');
-      
+
       children.clear();
-      _featureMap.clear();  // Mapもクリア
-      
+      _featureMap.clear(); // Mapもクリア
+
       AppLogger.debug('[LayerNode] children.clear()完了: $layerName');
-      
+
       // _loadFeaturesFromDBからFeatureNodeをchildrenに追加
       final featureList = await _loadFeaturesFromDB();
-      AppLogger.debug('[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)');
-      
+      AppLogger.debug(
+        '[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)',
+      );
+
       for (final node in featureList) {
         addChild(node);
         // _featureMapにも追加
         addFeatureToMap(node.rowId, node.turfFeature);
       }
-      
-      AppLogger.debug('[LayerNode] updateChildren完了: $layerName (${children.length}個)');
-      
+
+      AppLogger.debug(
+        '[LayerNode] updateChildren完了: $layerName (${children.length}個)',
+      );
+
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
       _markDirty();
@@ -455,7 +504,9 @@ abstract class LayerNode extends LayerTreeNode {
     bool moveLayer = true,
   }) async {
     try {
-      AppLogger.debug('[LayerNode] レイヤ移植開始: $layerName → ${targetGeoPackage.name}');
+      AppLogger.debug(
+        '[LayerNode] レイヤ移植開始: $layerName → ${targetGeoPackage.name}',
+      );
 
       // 移植先のレイヤ名を決定
       final targetLayerName = newLayerName ?? layerName;
@@ -480,7 +531,9 @@ abstract class LayerNode extends LayerTreeNode {
         targetLayerName,
         geometryType,
       );
-      AppLogger.debug('[LayerNode] 移植先レイヤ作成完了: $targetLayerName (${geometryType.value})');
+      AppLogger.debug(
+        '[LayerNode] 移植先レイヤ作成完了: $targetLayerName (${geometryType.value})',
+      );
 
       // 移植元の属性スキーマを取得して移植先に適用
       await _migrateAttributeSchema(targetGeoPackage, targetLayerName);
@@ -571,17 +624,21 @@ abstract class LayerNode extends LayerTreeNode {
       );
 
       // 移植先のカラムを確認し、不足カラムがあれば警告
-      final targetColumns = await targetGeoPackage.geoPackageFile.getTableColumns(targetLayerName);
+      final targetColumns = await targetGeoPackage.geoPackageFile
+          .getTableColumns(targetLayerName);
       final targetColumnSet = targetColumns.map((c) => c.toLowerCase()).toSet();
-      final missingColumns = attributeSchema.keys
-          .where((c) => !targetColumnSet.contains(c.toLowerCase()))
-          .toList();
+      final missingColumns =
+          attributeSchema.keys
+              .where((c) => !targetColumnSet.contains(c.toLowerCase()))
+              .toList();
 
       if (missingColumns.isNotEmpty) {
         AppLogger.debug('[LayerNode] 追加されなかったカラム: $missingColumns');
       }
 
-      AppLogger.debug('[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個中${targetColumns.length - 2}個のカラム追加');
+      AppLogger.debug(
+        '[LayerNode] 属性スキーマ移植完了: ${attributeSchema.length}個中${targetColumns.length - 2}個のカラム追加',
+      );
     } catch (e) {
       AppLogger.debug('[LayerNode] 属性スキーマ移植エラー: $e');
       // エラーが発生しても継続（基本的な属性は移植可能）
@@ -630,7 +687,9 @@ abstract class LayerNode extends LayerTreeNode {
           continue;
         }
 
-        AppLogger.debug('[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}');
+        AppLogger.debug(
+          '[LayerNode] フィーチャ詳細 ID=$featureId: ${completeFeature.keys}',
+        );
 
         // ジオメトリデータを取得
         final geometryData = _extractGeometryData(
@@ -638,7 +697,9 @@ abstract class LayerNode extends LayerTreeNode {
           geometryType,
         );
         if (geometryData == null) {
-          AppLogger.debug('[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType');
+          AppLogger.debug(
+            '[LayerNode] ジオメトリ抽出失敗 ID=$featureId, type=$geometryType',
+          );
           AppLogger.debug('[LayerNode] フィーチャ内容: $completeFeature');
           skippedCount++;
           continue;
@@ -690,7 +751,9 @@ abstract class LayerNode extends LayerTreeNode {
         migratedCount += processedCount;
       }
 
-      AppLogger.debug('[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ');
+      AppLogger.debug(
+        '[LayerNode] 移植完了: $migratedCount個成功, $skippedCount個スキップ',
+      );
       return migratedCount;
     } catch (e, stack) {
       AppLogger.debug('[LayerNode] フィーチャデータ移植エラー: $e');
@@ -747,13 +810,17 @@ abstract class LayerNode extends LayerTreeNode {
         case GeometryType.polygon:
           // ポリゴンの場合：List<List<LatLng>> で返される
           if (geometryData is List<List<LatLng>> && geometryData.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング');
+            AppLogger.debug(
+              '[LayerNode] ポリゴン抽出成功: ${geometryData.length}個のリング',
+            );
             return {'rings': geometryData};
           }
           // 旧形式との互換性
           final polygons = feature['polygons'] as List<List<LatLng>>?;
           if (polygons != null && polygons.isNotEmpty) {
-            AppLogger.debug('[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング');
+            AppLogger.debug(
+              '[LayerNode] ポリゴン抽出成功（旧形式）: ${polygons.length}個のリング',
+            );
             return {'rings': polygons};
           }
           break;
@@ -861,7 +928,7 @@ class PointLayerNode extends LayerNode {
 
     return features;
   }
-  
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいPointレイヤを作成し、PointLayerNodeインスタンスを返す
@@ -873,10 +940,13 @@ class PointLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    
+
     // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
-    
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(
+      name,
+      existingLayers,
+    );
+
     await gpkgFile.addLayer(uniqueName, GeometryType.point);
     final node = PointLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
@@ -907,7 +977,7 @@ class LineLayerNode extends LayerNode {
 
     return features;
   }
-  
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいLineレイヤを作成し、LineLayerNodeインスタンスを返す
@@ -919,10 +989,13 @@ class LineLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    
+
     // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
-    
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(
+      name,
+      existingLayers,
+    );
+
     await gpkgFile.addLayer(uniqueName, GeometryType.linestring);
     final node = LineLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
@@ -953,7 +1026,7 @@ class PolygonLayerNode extends LayerNode {
 
     return features;
   }
-  
+
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
 
   /// 指定したGeoPackageNodeの下に新しいPolygonレイヤを作成し、PolygonLayerNodeインスタンスを返す
@@ -965,14 +1038,16 @@ class PolygonLayerNode extends LayerNode {
     if (parent is! GeoPackageNode) return null;
     final gpkgFile = parent.geoPackageFile;
     final existingLayers = await gpkgFile.getLayerNames();
-    
+
     // 重複しない名前を生成
-    final uniqueName = LayerNameUtils.generateUniqueLayerName(name, existingLayers);
-    
+    final uniqueName = LayerNameUtils.generateUniqueLayerName(
+      name,
+      existingLayers,
+    );
+
     await gpkgFile.addLayer(uniqueName, GeometryType.polygon);
     final node = PolygonLayerNode(gpkgFile, uniqueName, parent: parent);
     parent.addChild(node);
     return node;
   }
 }
-

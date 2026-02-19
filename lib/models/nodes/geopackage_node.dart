@@ -9,6 +9,7 @@ import 'layer_node.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'folder_node.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/global_config.dart';
 import '../../core/node_types.dart';
 
@@ -31,6 +32,19 @@ class GeoPackageNode extends LayerTreeNode {
        );
   
   // UI関連（baseIcon, baseIconColor）はNodePresenterに移動
+
+  @override
+  Future<void> persistVisibility() async {
+    final parentFolder = parent;
+    if (parentFolder is! FolderNode) return;
+    final parentPath = parentFolder.getAbsoluteFilePath();
+    if (parentPath == null) return;
+    await KMetaService.instance.setGeoPackageVisibility(
+      parentPath,
+      name,
+      visible,
+    );
+  }
 
   /// このGeoPackage内のLayerNodeのみ生成（非同期化）
   @override
@@ -75,14 +89,14 @@ class GeoPackageNode extends LayerTreeNode {
     return null;
   }
 
-  /// KMetaの可視性設定をレイヤーに適用
+  /// KMetaの可視性設定をレイヤーに適用（layerKey形式で照合）
   Future<void> _applyMetaVisibility() async {
     final meta = await _getParentMeta();
     if (meta == null) return;
 
     for (final child in children) {
       if (child is LayerNode) {
-        final layerVisible = meta.visibility.layers[child.layerName];
+        final layerVisible = meta.visibility.layers[child.layerKey];
         if (layerVisible != null) {
           child.visible = layerVisible;
         }

@@ -639,23 +639,46 @@ class SyncEngine {
       }
     }
 
-    // サブフォルダを再帰処理
+    // サブフォルダを並列で再帰処理
+    final futures = <Future<({List<DriveFileEntry> files, Map<String, String> folderMap})>>[];
     for (final folder in folders) {
       final folderName = folder.name ?? '';
       if (folderName.isEmpty) continue;
       final nextPath =
           currentPath.isEmpty ? folderName : '$currentPath/$folderName';
       map[folder.id!] = nextPath;
-
-      final sub = await _listDriveFilesWithFolders(
+      futures.add(_listDriveFilesWithFolders(
         folder.id!,
         currentPath: nextPath,
         folderMap: map,
-      );
+      ));
+    }
+    final results = await Future.wait(futures);
+    for (final sub in results) {
       entries.addAll(sub.files);
     }
 
     return (files: entries, folderMap: map);
+  }
+
+  /// ローカルフォルダ内のファイルを再帰スキャンし、相対パス→更新日時のマップを返す
+  Future<Map<String, DateTime>> _scanLocalFiles(String localPath) async {
+    final localFiles = <String, DateTime>{};
+    final localDir = Directory(localPath);
+    if (!await localDir.exists()) return localFiles;
+
+    await for (final entity in localDir.list(recursive: true)) {
+      final fileName = p.basename(entity.path);
+      if (fileName == kMetaFileName) continue;
+      if (entity is File && _matchesSyncPattern(fileName)) {
+        final relativePath = _normalizeRelativePath(
+          p.relative(entity.path, from: localPath),
+        );
+        final stat = await entity.stat();
+        localFiles[relativePath] = stat.modified;
+      }
+    }
+    return localFiles;
   }
 
   /// Driveフォルダ配下のファイルを再帰的に取得（後方互換ラッパー）
@@ -1216,13 +1239,14 @@ class SyncEngine {
         return entries;
       }
 
-      // Driveフォルダ情報を取得（存在確認）
+      // ローカルスキャンとDriveフォルダ存在確認を並列開始
+      final localFilesFuture = _scanLocalFiles(localPath);
       final folderInfo = await _driveService.getFolderInfo(driveId);
       if (folderInfo == null) {
         return entries;
       }
 
-      // Driveのファイル一覧とフォルダマップを一括取得（API呼び出しを最小化）
+      // folderInfo確認後にDriveファイル一覧取得（folderInfoがnullなら不要なため）
       final driveData = await _listDriveFilesWithFolders(driveId);
       final driveAllEntries = driveData.files;
       final driveFolderMap = driveData.folderMap;
@@ -1234,22 +1258,8 @@ class SyncEngine {
         if (fileId != null) driveIdMap[fileId] = entry;
       }
 
-      // ローカルファイルを収集（再帰）
-      final localDir = Directory(localPath);
-      final localFiles = <String, DateTime>{};
-      if (await localDir.exists()) {
-        await for (final entity in localDir.list(recursive: true)) {
-          final fileName = p.basename(entity.path);
-          if (fileName == kMetaFileName) continue;
-          if (entity is File && _matchesSyncPattern(fileName)) {
-            final relativePath = _normalizeRelativePath(
-              p.relative(entity.path, from: localPath),
-            );
-            final stat = await entity.stat();
-            localFiles[relativePath] = stat.modified;
-          }
-        }
-      }
+      // ローカルスキャン結果を取得（先行開始済み）
+      final localFiles = await localFilesFuture;
 
       // 処理済みファイルを追跡
       final processedFiles = <String>{};

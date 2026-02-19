@@ -5,6 +5,7 @@ import 'dart:io' show Directory, Platform;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -310,8 +311,26 @@ mixin LayerDrawerTiles {
       node.syncStatus = SyncStatus.syncing;
       setStateCallback(() {});
 
+      // ローディングダイアログを即座に表示
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('変更を確認しています...'),
+            ],
+          ),
+        ),
+      );
+
       final syncEngine = SyncEngine();
       final entries = await syncEngine.getMergeEntries(localPath);
+
+      // ローディングダイアログを閉じる
+      if (context.mounted) Navigator.of(context).pop();
 
       if (!context.mounted) return;
 
@@ -886,61 +905,73 @@ mixin LayerDrawerTiles {
   Widget buildLayerTile(BuildContext context, LayerNode node) {
     final isSelected = GlobalConfig.instance.selectedLayerNode == node;
 
-    // レイヤタイルの内容を構築
-    final layerTileContent = ListTile(
-      // GeoPackageノード配下のレイヤはインデントして階層感を出す
-      contentPadding: const EdgeInsets.only(left: 32, right: 16),
-      leading: GestureDetector(
-        onTap: () {
-          node.visible = !node.visible;
-          // フィーチャ表示を更新
-          GlobalConfig.instance.mapState?.refreshFeatures();
-          setStateCallback(() {});
-        },
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color:
-                    isSelected
-                        ? Colors.blue.withValues(alpha: 0.15)
-                        : Colors.transparent,
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Icon(
-                NodePresenter.getIcon(node),
-                color:
-                    isSelected
-                        ? Colors.blue
-                        : (node.isVisibleRecursive()
-                            ? NodePresenter.getColor(node)
-                            : Colors.grey),
-              ),
-            ),
-            if (!node.visible)
-              Transform.rotate(
-                angle: -0.7,
-                child: Container(width: 32, height: 4, color: Colors.grey),
-              ),
-          ],
-        ),
-      ),
-      title: Text(
-        node.name,
-        style: TextStyle(
-          color:
-              isSelected
-                  ? Colors.blue
-                  : (node.isVisibleRecursive() ? null : Colors.grey),
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
+    // レイヤタイルの内容を構築（GestureDetectorでonTap/onDoubleTapを制御）
+    final layerTileContent = GestureDetector(
       onTap: () {
         GlobalConfig.instance.selectedLayerNode = node;
         setStateCallback(() {});
       },
+      onDoubleTap: () {
+        final coords = node.getAllCoordinates();
+        if (coords.isEmpty) return;
+        final mapController = GlobalConfig.instance.mapState?.mapController;
+        if (mapController == null) return;
+        mapController.fitCamera(
+          CameraFit.coordinates(
+            coordinates: coords,
+            padding: const EdgeInsets.all(50),
+          ),
+        );
+      },
+      child: ListTile(
+        contentPadding: const EdgeInsets.only(left: 32, right: 16),
+        leading: GestureDetector(
+          onTap: () {
+            node.visible = !node.visible;
+            node.persistVisibility();
+            GlobalConfig.instance.mapState?.refreshFeatures();
+            setStateCallback(() {});
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color:
+                      isSelected
+                          ? Colors.blue.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  NodePresenter.getIcon(node),
+                  color:
+                      isSelected
+                          ? Colors.blue
+                          : (node.isVisibleRecursive()
+                              ? NodePresenter.getColor(node)
+                              : Colors.grey),
+                ),
+              ),
+              if (!node.visible)
+                Transform.rotate(
+                  angle: -0.7,
+                  child: Container(width: 32, height: 4, color: Colors.grey),
+                ),
+            ],
+          ),
+        ),
+        title: Text(
+          node.name,
+          style: TextStyle(
+            color:
+                isSelected
+                    ? Colors.blue
+                    : (node.isVisibleRecursive() ? null : Colors.grey),
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       trailing: PopupMenuButton<String>(
         onSelected: (value) async {
           if (value == 'rename') {
@@ -1069,6 +1100,7 @@ mixin LayerDrawerTiles {
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'delete', child: Text('削除')),
             ],
+      ),
       ),
     );
 
@@ -1224,7 +1256,7 @@ mixin LayerDrawerTiles {
     return GestureDetector(
       onTap: () {
         node.visible = !node.visible;
-        // フィーチャ表示を更新
+        node.persistVisibility();
         GlobalConfig.instance.mapState?.refreshFeatures();
         setStateCallback(() {});
       },

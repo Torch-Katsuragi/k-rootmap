@@ -263,7 +263,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                       ? TextDecoration.lineThrough 
                       : null,
                 ),
-                overflow: TextOverflow.ellipsis,
+                softWrap: true,
               ),
             ),
             const SizedBox(width: 4),

@@ -37,18 +37,27 @@ class KMetaService {
     AppLogger.debug('[KMetaService] Cache invalidated for: $folderPath');
   }
 
-  /// フォルダの生メタデータを取得（キャッシュ対応）
+  /// フォルダの生メタデータを取得（キャッシュ対応・バージョンゲート付き）
   Future<KMeta?> getRawMeta(String folderPath) async {
-    // キャッシュ確認
     if (_rawCache.containsKey(folderPath)) {
       return _rawCache[folderPath];
     }
 
-    // ファイルから読み込み
     final meta = await KMeta.loadFromFile(folderPath);
-    if (meta != null) {
-      _rawCache[folderPath] = meta;
+    if (meta == null) return null;
+
+    // バージョンゲート: 旧バージョンはsyncのみ保持して再保存
+    if (meta.version < kMetaSchemaVersion) {
+      AppLogger.debug(
+        '[KMetaService] 旧バージョン(v${meta.version})検出、マイグレーション実行: $folderPath',
+      );
+      final migrated = KMeta(sync: meta.sync);
+      await saveMeta(folderPath, migrated);
+      _rawCache[folderPath] = migrated;
+      return migrated;
     }
+
+    _rawCache[folderPath] = meta;
     return meta;
   }
 
@@ -123,17 +132,22 @@ class KMetaService {
   }
 
   /// レイヤーの可視状態を更新
+  /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
   Future<bool> setLayerVisibility(
     String folderPath,
-    String layerName,
+    String layerKey,
     bool visible,
   ) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedVisibility = KMetaVisibility(
-      layers: {...rawMeta.visibility.layers, layerName: visible},
-      geopackages: rawMeta.visibility.geopackages,
+    final v = rawMeta.visibility;
+    final updatedMeta = rawMeta.copyWith(
+      visibility: KMetaVisibility(
+        layers: {...v.layers, layerKey: visible},
+        geopackages: v.geopackages,
+        folders: v.folders,
+        images: v.images,
+      ),
     );
-    final updatedMeta = rawMeta.copyWith(visibility: updatedVisibility);
     return saveMeta(folderPath, updatedMeta);
   }
 
@@ -144,11 +158,53 @@ class KMetaService {
     bool visible,
   ) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
-    final updatedVisibility = KMetaVisibility(
-      layers: rawMeta.visibility.layers,
-      geopackages: {...rawMeta.visibility.geopackages, gpkgName: visible},
+    final v = rawMeta.visibility;
+    final updatedMeta = rawMeta.copyWith(
+      visibility: KMetaVisibility(
+        layers: v.layers,
+        geopackages: {...v.geopackages, gpkgName: visible},
+        folders: v.folders,
+        images: v.images,
+      ),
     );
-    final updatedMeta = rawMeta.copyWith(visibility: updatedVisibility);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// フォルダの可視状態を更新
+  Future<bool> setFolderVisibility(
+    String folderPath,
+    String folderName,
+    bool visible,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final v = rawMeta.visibility;
+    final updatedMeta = rawMeta.copyWith(
+      visibility: KMetaVisibility(
+        layers: v.layers,
+        geopackages: v.geopackages,
+        folders: {...v.folders, folderName: visible},
+        images: v.images,
+      ),
+    );
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// 画像の可視状態を更新
+  Future<bool> setImageVisibility(
+    String folderPath,
+    String imageName,
+    bool visible,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final v = rawMeta.visibility;
+    final updatedMeta = rawMeta.copyWith(
+      visibility: KMetaVisibility(
+        layers: v.layers,
+        geopackages: v.geopackages,
+        folders: v.folders,
+        images: {...v.images, imageName: visible},
+      ),
+    );
     return saveMeta(folderPath, updatedMeta);
   }
 
@@ -169,10 +225,7 @@ class KMetaService {
   }
 
   /// デフォルトスタイルを更新
-  Future<bool> setDefaultStyle(
-    String folderPath,
-    KMetaLayerStyle style,
-  ) async {
+  Future<bool> setDefaultStyle(String folderPath, KMetaLayerStyle style) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
     final updatedStyles = KMetaStyles(
       defaultStyle: style,
@@ -183,10 +236,7 @@ class KMetaService {
   }
 
   /// レイアウトの並び順を更新
-  Future<bool> setSortOrder(
-    String folderPath,
-    List<String> sortOrder,
-  ) async {
+  Future<bool> setSortOrder(String folderPath, List<String> sortOrder) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
     final updatedLayout = KMetaLayout(
       sortOrder: sortOrder,
@@ -238,9 +288,7 @@ class KMetaService {
   Future<bool> unlinkDrive(String folderPath) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
     // deviceIdは維持し、Drive関連フィールドのみクリア
-    final updatedSync = KMetaSync(
-      deviceId: rawMeta.sync.deviceId,
-    );
+    final updatedSync = KMetaSync(deviceId: rawMeta.sync.deviceId);
     final updatedMeta = rawMeta.copyWith(sync: updatedSync);
     return saveMeta(folderPath, updatedMeta);
   }
@@ -263,5 +311,3 @@ class KMetaService {
     return null;
   }
 }
-
-

@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_node.dart';
@@ -48,53 +49,52 @@ class KMapsHomePage extends StatefulWidget {
 enum ToolType { pen, eraser, gps }
 
 class _KMapsHomePageState extends State<KMapsHomePage>
-    with 
-      TickerProviderStateMixin,
-      MapPageStateBase,
-      MapInitializationMixin,
-      MapGpsTrackingMixin,
-      MapGpsSurveyMixin,
-      MapFeatureCacheMixin,
-      MapDrawingMixin {
-  
+    with
+        TickerProviderStateMixin,
+        MapPageStateBase,
+        MapInitializationMixin,
+        MapGpsTrackingMixin,
+        MapGpsSurveyMixin,
+        MapFeatureCacheMixin,
+        MapDrawingMixin {
   @override
   void initState() {
     super.initState();
     AppLogger.debug('[DEBUG] initState: KMapsHomePage start');
     initializeAllServices();
   }
-  
+
   @override
   void dispose() {
     disposeAllServices();
     super.dispose();
   }
-  
+
   // =============================================
   // 抽象メソッド実装（MapPageStateBaseより）
   // =============================================
-  
+
   @override
   void onGpsManagerUpdate() {
     if (mounted) {
       updateCurrentGpsInfo();
     }
   }
-  
+
   @override
   void onBaseMapServiceUpdate() {
     if (mounted) {
       triggerSetState(() {});
     }
   }
-  
+
   @override
   void onLayerStyleChanged() {
     if (mounted) {
       triggerSetState(() {});
     }
   }
-  
+
   @override
   void updateCurrentGpsInfo() {
     triggerSetState(() {
@@ -104,21 +104,21 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       }
     });
   }
-  
+
   @override
   Future<void> updateFeatures() async {
     await updateFeaturesImpl();
   }
-  
+
   // =============================================
   // 属性テーブル管理
   // =============================================
-  
+
   /// 属性テーブルを開く
   Future<void> _openAttributeTable([LayerNode? targetLayer]) async {
     try {
       final layer = targetLayer ?? GlobalConfig.instance.selectedLayerNode;
-      
+
       if (layer == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -128,9 +128,9 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         );
         return;
       }
-      
+
       AppLogger.debug('[MAP] 属性テーブルを開く: ${layer.name}');
-      
+
       triggerSetState(() {
         attributeTableLayer = layer;
         showAttributeTable = true;
@@ -146,7 +146,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       );
     }
   }
-  
+
   /// 属性テーブルを閉じる
   void _closeAttributeTable() {
     triggerSetState(() {
@@ -155,7 +155,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     });
     AppLogger.debug('[MAP] 属性テーブル表示終了');
   }
-  
+
   /// 属性テーブルでフィーチャが選択されたときの処理
   void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
@@ -167,11 +167,11 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       AppLogger.debug('[MAP] フィーチャ選択処理エラー: $e');
     }
   }
-  
+
   // =============================================
   // コンパス方向付きの現在位置マーカー
   // =============================================
-  
+
   Widget _buildLocationMarkerWithCompass() {
     return Stack(
       alignment: Alignment.center,
@@ -204,16 +204,16 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ],
     );
   }
-  
+
   // =============================================
   // ビルドメソッド
   // =============================================
-  
+
   @override
   Widget build(BuildContext context) {
     final currentTool = GlobalConfig.instance.currentTool;
     final isPanTool = currentTool.name == 'Pan';
-    
+
     return KeyboardShortcutWrapper(
       mapState: this,
       child: Scaffold(
@@ -257,9 +257,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             // 左側ツールバー
             MapToolbar(
               onToolChanged: () => triggerSetState(() {}),
-              currentFolder: currentNode is FolderNode
-                  ? currentNode as FolderNode
-                  : null,
+              currentFolder:
+                  currentNode is FolderNode ? currentNode as FolderNode : null,
             ),
             // 地図本体
             Positioned.fill(
@@ -273,8 +272,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               ),
             ),
             // Layer Drawer Panel
-            if (drawerOpen)
-              _buildLayerDrawerPanel(),
+            if (drawerOpen) _buildLayerDrawerPanel(),
             // Attribute Table Panel
             if (showAttributeTable && attributeTableLayer != null)
               _buildAttributeTablePanel(),
@@ -314,7 +312,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
     );
   }
-  
+
   /// FlutterMap構築
   Widget _buildFlutterMap(bool isPanTool) {
     return FlutterMap(
@@ -324,11 +322,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         initialZoom: 16.0,
         maxZoom: PanTool.maxZoom,
         interactionOptions: InteractionOptions(
-          flags: isPanTool
-              ? InteractiveFlag.all
-              : (InteractiveFlag.pinchZoom | InteractiveFlag.scrollWheelZoom),
+          flags:
+              isPanTool
+                  ? InteractiveFlag.all
+                  : (InteractiveFlag.pinchZoom |
+                      InteractiveFlag.scrollWheelZoom),
         ),
         keepAlive: true,
+        onPositionChanged: (_, __) => scheduleMarkerRefresh(),
       ),
       children: [
         CachedTileLayer(
@@ -337,16 +338,17 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         ),
         _buildPolylineLayer(),
         _buildPolygonLayer(),
-        _buildMarkerLayer(),
+        _buildClusteredMarkerLayer(),
+        _buildOverlayMarkerLayer(),
       ],
     );
   }
-  
+
   /// ポリラインレイヤー構築
   PolylineLayer _buildPolylineLayer() {
     final styleConfig = LayerStyleConfig();
     final drawingState = GlobalDrawingState.instance;
-    
+
     return PolylineLayer(
       polylines: [
         // 本日のGPS軌跡（常時表示）
@@ -361,15 +363,17 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           if (f.geometry != null)
             (() {
               final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+              final isSelected = GlobalConfig.instance.selectedFeatures
+                  .contains(f);
               final lineColor = styleConfig.getLineColor(kmetaStyle);
               final lineWidth = styleConfig.getLineWidth(kmetaStyle);
               return Polyline(
                 points: f.geometry as List<LatLng>,
                 color: isSelected ? styleConfig.selectedColor : lineColor,
-                strokeWidth: isSelected
-                    ? lineWidth * styleConfig.selectedMultiplier
-                    : lineWidth,
+                strokeWidth:
+                    isSelected
+                        ? lineWidth * styleConfig.selectedMultiplier
+                        : lineWidth,
               );
             })(),
         // GPS測量ラインプレビュー
@@ -408,12 +412,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ],
     );
   }
-  
+
   /// ポリゴンレイヤー構築
   PolygonLayer _buildPolygonLayer() {
     final styleConfig = LayerStyleConfig();
     final drawingState = GlobalDrawingState.instance;
-    
+
     return PolygonLayer(
       polygons: [
         // 既存のポリゴンフィーチャ
@@ -421,24 +425,31 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           if (f.geometry != null)
             (() {
               final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+              final isSelected = GlobalConfig.instance.selectedFeatures
+                  .contains(f);
               final fillColor = styleConfig.getPolygonFillColor(kmetaStyle);
               final fillOpacity = styleConfig.getPolygonFillOpacity(kmetaStyle);
               final borderColor = styleConfig.getPolygonBorderColor(kmetaStyle);
-              final borderOpacity = styleConfig.getPolygonBorderOpacity(kmetaStyle);
+              final borderOpacity = styleConfig.getPolygonBorderOpacity(
+                kmetaStyle,
+              );
               final borderWidth = styleConfig.getPolygonBorderWidth(kmetaStyle);
               return Polygon(
                 points: (f.geometry as List<List<LatLng>>).first,
-                holePointsList: (f.geometry as List<List<LatLng>>).skip(1).toList(),
-                color: isSelected
-                    ? styleConfig.selectedColor.withValues(alpha: 0.5)
-                    : fillColor.withValues(alpha: fillOpacity),
-                borderStrokeWidth: isSelected
-                    ? borderWidth * styleConfig.selectedMultiplier
-                    : borderWidth,
-                borderColor: isSelected
-                    ? styleConfig.selectedColor
-                    : borderColor.withValues(alpha: borderOpacity),
+                holePointsList:
+                    (f.geometry as List<List<LatLng>>).skip(1).toList(),
+                color:
+                    isSelected
+                        ? styleConfig.selectedColor.withValues(alpha: 0.5)
+                        : fillColor.withValues(alpha: fillOpacity),
+                borderStrokeWidth:
+                    isSelected
+                        ? borderWidth * styleConfig.selectedMultiplier
+                        : borderWidth,
+                borderColor:
+                    isSelected
+                        ? styleConfig.selectedColor
+                        : borderColor.withValues(alpha: borderOpacity),
               );
             })(),
         // GPS測量ポリゴンプレビュー
@@ -461,11 +472,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           ),
         // SelectTool lassoプレビュー
         if (GlobalConfig.instance.currentTool is SelectTool &&
-            (GlobalConfig.instance.currentTool as SelectTool).lassoPoints.length >= 3)
+            (GlobalConfig.instance.currentTool as SelectTool)
+                    .lassoPoints
+                    .length >=
+                3)
           Polygon(
             points: closeRing(
-              (GlobalConfig.instance.currentTool as SelectTool)
-                  .lassoPoints
+              (GlobalConfig.instance.currentTool as SelectTool).lassoPoints
                   .map((offset) => offsetToLatLng(offset))
                   .toList(),
             ),
@@ -476,15 +489,86 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ],
     );
   }
-  
-  /// マーカーレイヤー構築
-  MarkerLayer _buildMarkerLayer() {
+
+  /// ビューポートを拡張して返す（カリング用）
+  LatLngBounds? _getExpandedVisibleBounds(double factor) {
+    try {
+      final bounds = mapController.camera.visibleBounds;
+      final latSpan = bounds.north - bounds.south;
+      final lngSpan = bounds.east - bounds.west;
+      if (latSpan <= 0 || lngSpan <= 0) return null;
+      return LatLngBounds(
+        LatLng(bounds.south - latSpan * factor, bounds.west - lngSpan * factor),
+        LatLng(bounds.north + latSpan * factor, bounds.east + lngSpan * factor),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// マーカーレイヤー構築（クラスタリング設定に応じて切り替え）
+  Widget _buildClusteredMarkerLayer() {
+    final styleConfig = LayerStyleConfig();
+    final visibleBounds = _getExpandedVisibleBounds(0.5);
+    final markers = <Marker>[
+      ..._buildPointFeatureMarkers(styleConfig, visibleBounds),
+      ..._buildImageNodeMarkers(styleConfig, visibleBounds),
+    ];
+    if (markers.isEmpty) return const SizedBox.shrink();
+
+    if (!styleConfig.clusteringEnabled) {
+      return MarkerLayer(markers: markers);
+    }
+
+    return MarkerClusterLayerWidget(
+      options: MarkerClusterLayerOptions(
+        maxClusterRadius: styleConfig.clusteringRadius,
+        disableClusteringAtZoom: styleConfig.clusteringDisableZoom,
+        size: const Size(40, 40),
+        markers: markers,
+        builder: (context, clusterMarkers) {
+          final count = clusterMarkers.length;
+          final bgColor =
+              count < 10
+                  ? Colors.blue
+                  : count < 50
+                  ? Colors.orange
+                  : Colors.red;
+          return Container(
+            decoration: BoxDecoration(
+              color: bgColor.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// オーバーレイマーカーレイヤー（現在位置、測量ポイント、頂点マーカー）
+  MarkerLayer _buildOverlayMarkerLayer() {
     final styleConfig = LayerStyleConfig();
     final drawingState = GlobalDrawingState.instance;
-    
     return MarkerLayer(
       markers: [
-        // 現在位置マーカー
         if (currentLocation != null)
           Marker(
             point: currentLocation!,
@@ -492,37 +576,55 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             height: 64,
             child: _buildLocationMarkerWithCompass(),
           ),
-        // GPS測量ポイントマーカー
         if (GlobalConfig.instance.currentTool is GpsTool) ...[
           for (int i = 0; i < drawingState.drawingLine.length; i++)
             _buildSurveyPointMarker(drawingState.drawingLine[i], i, true),
           for (int i = 0; i < drawingState.drawingPolygon.length; i++)
             _buildSurveyPointMarker(drawingState.drawingPolygon[i], i, false),
         ],
-        // 頂点マーカー（ライン/ポリゴン）
         ..._buildVertexMarkers(styleConfig),
-        // ポイントフィーチャマーカー
-        for (final f in pointFeatures)
-          if (f.geometry != null)
-            ...((f.geometry as List<LatLng>).map((pt) {
-              final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
-              final pointSize = styleConfig.getPointSize(kmetaStyle);
-              final pointColor = styleConfig.getPointColor(kmetaStyle);
-              final size = isSelected
-                  ? pointSize * styleConfig.selectedMultiplier
-                  : pointSize;
-              return Marker(
-                point: pt,
-                width: size + 4,
-                height: size + 4,
-                child: Tooltip(
-                  message: f.name,
-                  child: Container(
+      ],
+    );
+  }
+
+  /// ポイント地物マーカーリストを構築
+  List<Marker> _buildPointFeatureMarkers(
+    LayerStyleConfig styleConfig,
+    LatLngBounds? visibleBounds,
+  ) {
+    final markers = <Marker>[];
+    for (final f in pointFeatures) {
+      if (f.geometry == null) continue;
+      final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
+      final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+      final pointSize = styleConfig.getPointSize(kmetaStyle);
+      final pointColor = styleConfig.getPointColor(kmetaStyle);
+      final size =
+          isSelected ? pointSize * styleConfig.selectedMultiplier : pointSize;
+      final labelEnabled = styleConfig.getLabelEnabled(kmetaStyle);
+      final labelProp = styleConfig.getLabelProperty(kmetaStyle);
+      final labelValue = f.turfFeature.properties?[labelProp]?.toString();
+      final showLabel =
+          labelEnabled && labelValue != null && labelValue.isNotEmpty;
+      for (final pt in f.geometry as List<LatLng>) {
+        if (visibleBounds != null && !visibleBounds.contains(pt)) continue;
+        markers.add(
+          Marker(
+            point: pt,
+            width: size + 4,
+            height: size + 4,
+            child: Tooltip(
+              message: f.name,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Container(
                     width: size,
                     height: size,
                     decoration: BoxDecoration(
-                      color: isSelected ? styleConfig.selectedColor : pointColor,
+                      color:
+                          isSelected ? styleConfig.selectedColor : pointColor,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Colors.white,
@@ -537,68 +639,152 @@ class _KMapsHomePageState extends State<KMapsHomePage>
                       ],
                     ),
                   ),
-                ),
-              );
-            })),
-        // ImageNodeマーカー（位置情報ありのみ）
-        for (final photo in photoNodes.where((p) => p.hasLocation))
-          Marker(
-            point: photo.location!,
-            width: 20,
-            height: 20,
-            child: GestureDetector(
-              onTap: () {
-                triggerSetState(() {
-                  GlobalConfig.instance.selectedFeatures.clear();
-                  GlobalConfig.instance.selectedFeatures.add(photo);
-                });
-              },
-              child: Tooltip(
-                message: '${photo.name}\n撮影位置: ${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}',
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: GlobalConfig.instance.selectedFeatures.contains(photo)
-                        ? Colors.yellow[100]
-                        : Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: GlobalConfig.instance.selectedFeatures.contains(photo)
-                          ? Colors.orange
-                          : Colors.purple,
-                      width: 1,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
+                  if (showLabel)
+                    Positioned(
+                      left: size + 4,
+                      top: 0,
+                      bottom: 0,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Opacity(
+                          opacity: styleConfig.getLabelOpacity(kmetaStyle),
+                          child: Text(
+                            labelValue,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                            style: TextStyle(
+                              fontSize: styleConfig.getLabelFontSize(
+                                kmetaStyle,
+                              ),
+                              color: styleConfig.getLabelColor(kmetaStyle),
+                              fontWeight: FontWeight.w500,
+                              shadows: _buildHaloShadows(
+                                styleConfig.getLabelHaloColor(kmetaStyle),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.photo_camera,
-                    color: GlobalConfig.instance.selectedFeatures.contains(photo)
-                        ? Colors.orange
-                        : Colors.purple,
-                    size: GlobalConfig.instance.selectedFeatures.contains(photo)
-                        ? 14
-                        : 12,
-                  ),
-                ),
+                    ),
+                ],
               ),
             ),
           ),
-      ],
-    );
+        );
+      }
+    }
+    return markers;
   }
-  
+
+  /// ImageNodeマーカーリストを構築
+  List<Marker> _buildImageNodeMarkers(
+    LayerStyleConfig styleConfig,
+    LatLngBounds? visibleBounds,
+  ) {
+    final markers = <Marker>[];
+    for (final photo in photoNodes.where((p) => p.hasLocation)) {
+      if (visibleBounds != null && !visibleBounds.contains(photo.location!))
+        continue;
+      final isPhotoSelected = GlobalConfig.instance.selectedFeatures.contains(
+        photo,
+      );
+      final showPhotoLabel = styleConfig.labelEnabled && photo.name.isNotEmpty;
+      markers.add(
+        Marker(
+          point: photo.location!,
+          width: 20,
+          height: 20,
+          child: GestureDetector(
+            onTap: () {
+              triggerSetState(() {
+                GlobalConfig.instance.selectedFeatures.clear();
+                GlobalConfig.instance.selectedFeatures.add(photo);
+              });
+            },
+            child: Tooltip(
+              message:
+                  '${photo.name}\n撮影位置: ${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}',
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color:
+                          isPhotoSelected ? Colors.yellow[100] : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isPhotoSelected ? Colors.orange : Colors.purple,
+                        width: 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.photo_camera,
+                      color: isPhotoSelected ? Colors.orange : Colors.purple,
+                      size: isPhotoSelected ? 14 : 12,
+                    ),
+                  ),
+                  if (showPhotoLabel)
+                    Positioned(
+                      left: 22,
+                      top: 0,
+                      bottom: 0,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Opacity(
+                          opacity: styleConfig.labelOpacity,
+                          child: Text(
+                            photo.name,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                            style: TextStyle(
+                              fontSize: styleConfig.labelFontSize,
+                              color: styleConfig.labelColor,
+                              fontWeight: FontWeight.w500,
+                              shadows: _buildHaloShadows(
+                                styleConfig.labelHaloColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return markers;
+  }
+
+  /// テキスト縁取り用のShadowリストを生成
+  List<Shadow> _buildHaloShadows(Color haloColor) {
+    return [
+      for (final offset in const [
+        Offset(1, 0),
+        Offset(-1, 0),
+        Offset(0, 1),
+        Offset(0, -1),
+      ])
+        Shadow(color: haloColor, offset: offset, blurRadius: 2),
+    ];
+  }
+
   /// GPS測量ポイントマーカー構築
   Marker _buildSurveyPointMarker(LatLng point, int index, bool isLine) {
     final drawingState = GlobalConfig.instance.drawingState;
-    final metadataList = isLine
-        ? drawingState.lineMetadata
-        : drawingState.polygonMetadata;
-    
+    final metadataList =
+        isLine ? drawingState.lineMetadata : drawingState.polygonMetadata;
+
     int pointCount = 1;
     try {
       if (index < metadataList.length) {
@@ -615,7 +801,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     } catch (e) {
       pointCount = index + 1;
     }
-    
+
     return Marker(
       point: point,
       width: 32,
@@ -639,45 +825,56 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
     );
   }
-  
+
   /// 頂点マーカー構築
   List<Marker> _buildVertexMarkers(LayerStyleConfig style) {
     final markers = <Marker>[];
-    
+
     if (style.lineVertexPointsEnabled) {
       for (final f in lineFeatures) {
         if (f.geometry == null) continue;
         final pts = f.geometry as List<LatLng>;
         if (pts.isEmpty) continue;
-        
+
         final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
         final color = isSelected ? style.selectedColor : style.lineColor;
-        final strokeWidth = isSelected
-            ? style.lineWidth * style.selectedMultiplier
-            : style.lineWidth;
-        final size = (strokeWidth * style.lineVertexPointSizeFactor).clamp(4.0, 48.0);
-        
+        final strokeWidth =
+            isSelected
+                ? style.lineWidth * style.selectedMultiplier
+                : style.lineWidth;
+        final size = (strokeWidth * style.lineVertexPointSizeFactor).clamp(
+          4.0,
+          48.0,
+        );
+
         for (final pt in pts) {
           markers.add(_buildVertexMarker(pt, size, color));
         }
       }
     }
-    
+
     if (style.polygonVertexPointsEnabled) {
       for (final f in polygonFeatures) {
         if (f.geometry == null) continue;
         final rings = f.geometry as List<List<LatLng>>;
         if (rings.isEmpty) continue;
-        
+
         final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
-        final color = isSelected
-            ? style.selectedColor
-            : style.polygonBorderColor.withValues(alpha: style.polygonBorderOpacity);
-        final strokeWidth = isSelected
-            ? style.polygonBorderWidth * style.selectedMultiplier
-            : style.polygonBorderWidth;
-        final size = (strokeWidth * style.polygonVertexPointSizeFactor).clamp(4.0, 48.0);
-        
+        final color =
+            isSelected
+                ? style.selectedColor
+                : style.polygonBorderColor.withValues(
+                  alpha: style.polygonBorderOpacity,
+                );
+        final strokeWidth =
+            isSelected
+                ? style.polygonBorderWidth * style.selectedMultiplier
+                : style.polygonBorderWidth;
+        final size = (strokeWidth * style.polygonVertexPointSizeFactor).clamp(
+          4.0,
+          48.0,
+        );
+
         for (final ring in rings) {
           if (ring.isEmpty) continue;
           final pts = List<LatLng>.from(ring);
@@ -690,10 +887,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         }
       }
     }
-    
+
     return markers;
   }
-  
+
   /// 単一頂点マーカー構築
   Marker _buildVertexMarker(LatLng point, double size, Color color) {
     return Marker(
@@ -706,10 +903,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white,
-            width: size > 10 ? 1.5 : 1.0,
-          ),
+          border: Border.all(color: Colors.white, width: size > 10 ? 1.5 : 1.0),
           boxShadow: const [
             BoxShadow(
               color: Colors.black26,
@@ -721,7 +915,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
     );
   }
-  
+
   /// ジェスチャーレイヤー構築
   Widget _buildGestureLayer() {
     return Positioned.fill(
@@ -730,14 +924,18 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           if (event.buttons == kMiddleMouseButton) {
             GlobalConfig.instance.currentTool.onMiddleButtonMove(event, this);
           } else {
-            GlobalConfig.instance.currentTool.addPointerToBuffer(event.localPosition);
+            GlobalConfig.instance.currentTool.addPointerToBuffer(
+              event.localPosition,
+            );
           }
         },
         onPointerDown: (event) {
           if (event.buttons == kMiddleMouseButton) {
             GlobalConfig.instance.currentTool.onMiddleButtonDown(event, this);
           } else {
-            GlobalConfig.instance.currentTool.addPointerToBuffer(event.localPosition);
+            GlobalConfig.instance.currentTool.addPointerToBuffer(
+              event.localPosition,
+            );
           }
         },
         onPointerUp: (event) {
@@ -768,41 +966,49 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
     );
   }
-  
+
   /// 描画プレビュー情報構築
   Widget _buildDrawingPreviewInfo() {
     if (GlobalConfig.instance.currentTool is! PenTool) {
       return const SizedBox.shrink();
     }
-    
+
     final selected = GlobalConfig.instance.selectedLayerNode;
     final penTool = GlobalConfig.instance.currentTool as PenTool;
     final drawingState = GlobalDrawingState.instance;
     String? previewText;
     Offset? previewOffset;
-    
+
     if (selected is PointLayerNode && penTool.pointPreview != null) {
       final pt = penTool.pointPreview!;
-      previewText = 'Coordinates: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
+      previewText =
+          'Coordinates: (${pt.latitude.toStringAsFixed(6)}, ${pt.longitude.toStringAsFixed(6)})';
       previewOffset = latLngToOffset(pt);
-    } else if (selected is LineLayerNode && drawingState.drawingLine.length >= 2) {
+    } else if (selected is LineLayerNode &&
+        drawingState.drawingLine.length >= 2) {
       final len = GeometryCalc.calcLineLength(drawingState.drawingLine);
       final centroid = GeometryCalc.calcLineCentroid(drawingState.drawingLine);
-      previewText = len >= 10000
-          ? 'Length: ${(len / 1000).toStringAsFixed(1)} km'
-          : 'Length: ${len.toStringAsFixed(2)} m';
+      previewText =
+          len >= 10000
+              ? 'Length: ${(len / 1000).toStringAsFixed(1)} km'
+              : 'Length: ${len.toStringAsFixed(2)} m';
       previewOffset = latLngToOffset(centroid);
-    } else if (selected is PolygonLayerNode && drawingState.drawingPolygon.length >= 3) {
+    } else if (selected is PolygonLayerNode &&
+        drawingState.drawingPolygon.length >= 3) {
       final closed = closeRing(drawingState.drawingPolygon);
       final areaDeg2 = GeometryCalc.calcPolygonArea([closed]);
       final centroid = GeometryCalc.calcPolygonCentroid([closed]);
-      final areaM2 = DegreeMeterConverter.convertAreaToMeters2(areaDeg2, centroid.latitude);
-      previewText = areaM2 >= 10000
-          ? 'Area: ${(areaM2 / 10000).toStringAsFixed(3)} ha'
-          : 'Area: ${areaM2.toStringAsFixed(3)} m²';
+      final areaM2 = DegreeMeterConverter.convertAreaToMeters2(
+        areaDeg2,
+        centroid.latitude,
+      );
+      previewText =
+          areaM2 >= 10000
+              ? 'Area: ${(areaM2 / 10000).toStringAsFixed(3)} ha'
+              : 'Area: ${areaM2.toStringAsFixed(3)} m²';
       previewOffset = latLngToOffset(centroid);
     }
-    
+
     if (previewText != null && previewOffset != null) {
       return Positioned(
         left: previewOffset.dx + 10,
@@ -822,7 +1028,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     }
     return const SizedBox.shrink();
   }
-  
+
   /// レイヤードロワーパネル構築
   Widget _buildLayerDrawerPanel() {
     return ResizableSidePanel(
@@ -857,7 +1063,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
     );
   }
-  
+
   /// 属性テーブルパネル構築
   Widget _buildAttributeTablePanel() {
     return ResizableSidePanel(
@@ -897,38 +1103,42 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         },
         onAddFeature: () {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')));
           }
         },
       ),
     );
   }
-  
+
   /// FloatingActionButton構築
   Widget? _buildFloatingActionButton() {
     final selected = GlobalConfig.instance.selectedLayerNode;
     final currentTool = GlobalConfig.instance.currentTool;
     final gpsTool = currentTool is GpsTool ? currentTool : null;
     final drawingState = GlobalDrawingState.instance;
-    
+
     // GPS測量中
-    final isGpsSurveyLine = selected is LineLayerNode &&
+    final isGpsSurveyLine =
+        selected is LineLayerNode &&
         gpsTool != null &&
         gpsTool.surveyLine.isNotEmpty;
-    final isGpsSurveyPolygon = selected is PolygonLayerNode &&
+    final isGpsSurveyPolygon =
+        selected is PolygonLayerNode &&
         gpsTool != null &&
         gpsTool.surveyPolygon.isNotEmpty;
-    
+
     // ペンツール描画中
-    final isLineDrawing = selected is LineLayerNode &&
+    final isLineDrawing =
+        selected is LineLayerNode &&
         currentTool is PenTool &&
         drawingState.drawingLine.isNotEmpty;
-    final isPolygonDrawing = selected is PolygonLayerNode &&
+    final isPolygonDrawing =
+        selected is PolygonLayerNode &&
         currentTool is PenTool &&
         drawingState.drawingPolygon.isNotEmpty;
-    
+
     if (isGpsSurveyLine || isGpsSurveyPolygon) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -1018,4 +1228,3 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     return null;
   }
 }
-

@@ -17,128 +17,144 @@ import '../../interfaces/map_state_interface.dart';
 
 /// MapPageの状態変数を定義する基底mixin
 /// 各機能別Mixinはこのmixinを継承（on）して状態にアクセス
-mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStateMixin<T>
+mixin MapPageStateBase<T extends StatefulWidget>
+    on State<T>, TickerProviderStateMixin<T>
     implements IMapState {
   // =============================================
   // 地図基本状態
   // =============================================
-  
+
   /// 地図の初期中心座標（東京駅）
   final LatLng defaultCenter = const LatLng(35.681236, 139.767125);
-  
+
   /// 現在位置
   LatLng? currentLocation;
-  
+
   /// 位置情報ストリームサブスクリプション（Store.positionStream購読用）
   StreamSubscription<GpsPositionRecord>? positionSubscription;
-  
+
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
-  
+
   /// 地図コントローラー
   final MapController mapControllerInstance = MapController();
-  
+
   @override
   MapController get mapController => mapControllerInstance;
-  
+
   // =============================================
   // コンパス関連
   // =============================================
-  
+
   /// 現在のデバイス方角（度数）
   double? currentHeading;
-  
+
   /// コンパスイベントサブスクリプション
   StreamSubscription<CompassEvent>? compassSubscription;
-  
+
   // =============================================
   // レイヤーツリー関連
   // =============================================
-  
+
   /// 現在選択中のノード
   LayerTreeNode? currentNode;
-  
+
   // =============================================
   // ドロワー関連
   // =============================================
-  
+
   /// ドロワー幅
   double drawerWidth = 320;
-  
+
   /// ドロワー開閉状態
   bool drawerOpen = true;
-  
+
   /// ドロワー最小幅
   final double minDrawerWidth = 200;
-  
+
   // =============================================
   // GPS管理サービス
   // =============================================
-  
+
   /// 統合GPS管理サービス
   final GpsManagerService gpsManager = GpsManagerService();
-  
+
   /// 内蔵GPS位置情報ストア
   final InternalGpsLocationStore locationStore = InternalGpsLocationStore();
-  
+
   /// GPS履歴レコーダー
   final GpsHistoryRecorder gpsHistoryRecorder = GpsHistoryRecorder();
-  
+
   /// 現在のGPS情報
   Map<String, dynamic>? currentGpsInfo;
-  
+
   /// GPS取得待機秒数
   int gpsWaitSeconds = 0;
-  
+
   /// GPS待機タイマー
   Timer? gpsWaitTimer;
-  
+
   // =============================================
   // GPS測量関連
   // =============================================
-  
+
   /// 長押し中フラグ
   bool isLongPressing = false;
-  
+
   /// 長押しGPSカウント
   int longPressGpsCount = 0;
-  
+
   /// 長押しカウント更新タイマー
   Timer? longPressCountUpdateTimer;
-  
+
   // =============================================
   // 属性テーブル関連
   // =============================================
-  
+
   /// 属性テーブル表示フラグ
   bool showAttributeTable = false;
-  
+
   /// 属性テーブル幅
   double attributeTableWidth = 400;
-  
+
   /// 属性テーブル対象レイヤー
   LayerNode? attributeTableLayer;
-  
+
   // =============================================
   // フィーチャキャッシュ
   // =============================================
-  
+
   /// ポイントフィーチャキャッシュ
   List<PointFeatureNode> pointFeatures = [];
-  
+
   /// ラインフィーチャキャッシュ
   List<LineFeatureNode> lineFeatures = [];
-  
+
   /// ポリゴンフィーチャキャッシュ
   List<PolygonFeatureNode> polygonFeatures = [];
-  
+
   /// 写真ノードキャッシュ
   List<ImageNode> photoNodes = [];
-  
+
+  // =============================================
+  // マーカーリフレッシュ（ビューポートカリング用）
+  // =============================================
+
+  /// マーカーリフレッシュ用デバウンスタイマー
+  Timer? markerRefreshTimer;
+
+  /// マップ移動時にデバウンス付きでマーカーを再構築
+  void scheduleMarkerRefresh() {
+    markerRefreshTimer?.cancel();
+    markerRefreshTimer = Timer(const Duration(milliseconds: 300), () {
+      triggerSetState(() {});
+    });
+  }
+
   // =============================================
   // IMapState実装
   // =============================================
-  
+
   @override
   LatLng offsetToLatLng(Offset offset) {
     try {
@@ -148,7 +164,7 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
       return mapControllerInstance.camera.center;
     }
   }
-  
+
   @override
   Offset latLngToOffset(LatLng latlng) {
     try {
@@ -159,7 +175,7 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
       return Offset(size.width / 2, size.height / 2);
     }
   }
-  
+
   @override
   List<LatLng> closeRing(List<LatLng> pts) {
     if (pts.length < 3) return [];
@@ -173,27 +189,27 @@ mixin MapPageStateBase<T extends StatefulWidget> on State<T>, TickerProviderStat
     }
     return pts;
   }
-  
+
   // =============================================
   // 抽象メソッド（各Mixinで実装）
   // =============================================
-  
+
   /// GPS情報更新コールバック
   void onGpsManagerUpdate();
-  
+
   /// 背景地図サービス更新コールバック
   void onBaseMapServiceUpdate();
-  
+
   /// レイヤスタイル変更コールバック
   void onLayerStyleChanged();
-  
+
   /// 現在のGPS情報を更新
   void updateCurrentGpsInfo();
-  
+
   // =============================================
   // ヘルパーメソッド
   // =============================================
-  
+
   /// setStateのラッパー（Mixinから呼び出し用）
   void triggerSetState(VoidCallback fn) {
     if (mounted) {

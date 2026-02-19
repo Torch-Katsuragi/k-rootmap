@@ -18,15 +18,14 @@ import '../../layer_style_settings_screen.dart';
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
 mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
-  
   // =============================================
   // 初期化処理
   // =============================================
-  
+
   /// 全サービスの初期化を実行
   Future<void> initializeAllServices() async {
     AppLogger.debug('[DEBUG] initializeAllServices: start');
-    
+
     // ルートノード設定（既に存在する場合は再作成しない）
     // home_screen.dartでグローバルフォルダ付きで作成済みの場合を考慮
     if (GlobalConfig.instance.folderTree == null) {
@@ -34,29 +33,29 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     }
     currentNode = GlobalConfig.instance.folderTree;
     GlobalConfig.instance.mapState = this;
-    
+
     // レイヤ描画設定を読み込み＆変更リスナー登録
     LayerStyleConfig().load();
     LayerStyleConfig().addListener(onLayerStyleChanged);
-    
+
     // プロジェクトツリー初期化
     await initializeProjectTree();
-    
+
     // GPS管理サービス初期化
     await initializeGpsManager();
-    
+
     // GPS履歴レコーダー初期化
     await initializeGpsHistoryRecorder();
-    
+
     // 背景地図サービス初期化
     await initializeBaseMapService();
-    
+
     // コンパス機能の初期化
     await initializeCompass();
-    
+
     AppLogger.debug('[DEBUG] initializeAllServices: complete');
   }
-  
+
   /// プロジェクトツリーの初期化（非同期）
   Future<void> initializeProjectTree() async {
     AppLogger.debug('[DEBUG] initializeProjectTree: start');
@@ -67,7 +66,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       await updateFeatures();
       // UI更新
       triggerSetState(() {});
-      
+
       // Drive連携フォルダの同期状態をバックグラウンドでチェック
       _checkDriveFoldersSyncStatus(rootNode);
     }
@@ -150,12 +149,12 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
 
     return result;
   }
-  
+
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
   Future<void> updateNodeRecursively(LayerTreeNode node) async {
     // まず明示的に初期化を実行
     await node.ensureInitialized();
-    
+
     // 子ノードも再帰的に更新
     for (final child in node.children) {
       if (child is FolderNode || child is GeoPackageNode) {
@@ -163,34 +162,34 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       }
     }
   }
-  
+
   /// 背景地図サービス初期化
   Future<void> initializeBaseMapService() async {
     try {
       AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
       await GlobalConfig.instance.baseMapService.initialize();
-      
+
       // 背景地図サービスの変更を監視
       GlobalConfig.instance.baseMapService.addListener(onBaseMapServiceUpdate);
-      
+
       AppLogger.debug('[DEBUG] BaseMapService: 初期化完了');
     } catch (e) {
       AppLogger.debug('[ERROR] BaseMapService: 初期化エラー: $e');
     }
   }
-  
+
   /// コンパス機能初期化
   Future<void> initializeCompass() async {
     try {
       AppLogger.debug('[DEBUG] Compass: 初期化開始');
-      
+
       // コンパスストリームが利用可能かチェック
       final compassStream = FlutterCompass.events;
       if (compassStream == null) {
         AppLogger.debug('[DEBUG] Compass: コンパスストリームが利用できません');
         return;
       }
-      
+
       // コンパスストリームの監視を開始
       compassSubscription = compassStream.listen((event) {
         if (mounted && event.heading != null) {
@@ -199,35 +198,35 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
           });
         }
       });
-      
+
       AppLogger.debug('[DEBUG] Compass: 初期化完了');
     } catch (e) {
       AppLogger.debug('[ERROR] Compass: 初期化エラー: $e');
     }
   }
-  
+
   /// GPS管理サービス初期化
   Future<void> initializeGpsManager() async {
     AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化開始');
-    
+
     try {
       // GPS管理サービスを初期化
       if (!gpsManager.isInitialized) {
         await gpsManager.initialize();
       }
-      
+
       // GPS管理サービスの更新を監視
       gpsManager.addListener(onGpsManagerUpdate);
-      
+
       // 外部GNSS機器をスキャン（バックグラウンドで実行）
       scanGnssDevicesBackground();
-      
+
       // GPS位置情報取得を開始（InternalGpsLocationStore経由）
       await gpsManager.startGps();
-      
+
       // 初期GPS情報を取得
       updateCurrentGpsInfo();
-      
+
       // Store.positionStream を購読（マップマーカー・中心移動用）
       positionSubscription = locationStore.positionStream.listen(
         (record) {
@@ -243,7 +242,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
           AppLogger.debug('[DEBUG] GPS: Store position stream error: $error');
         },
       );
-      
+
       // GPS待機タイマー開始
       gpsWaitSeconds = 0;
       gpsWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -251,46 +250,46 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
           gpsWaitSeconds++;
         });
       });
-      
+
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化完了');
     } catch (e) {
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
     }
   }
-  
+
   /// GPS履歴レコーダー初期化
   Future<void> initializeGpsHistoryRecorder() async {
     AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化開始');
-    
+
     try {
       final globalPath = GlobalConfig.instance.globalFolderPath;
       if (globalPath == null) {
         AppLogger.debug('[DEBUG] GPS: グローバルフォルダパスが未設定のためスキップ');
         return;
       }
-      
+
       // GpsHistoryRecorder を初期化
       await gpsHistoryRecorder.initialize(globalPath);
-      
+
       // positionStream の購読開始（常時記録）
       gpsHistoryRecorder.startRecording(locationStore.positionStream);
-      
+
       // 軌跡更新リスナー登録（地図上にリアルタイム表示するため）
       gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
-      
+
       AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化完了');
     } catch (e) {
       AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化エラー: $e');
     }
   }
-  
+
   /// GPS履歴更新コールバック（軌跡ポリライン更新用）
   void _onGpsHistoryUpdate() {
     if (mounted) {
       triggerSetState(() {});
     }
   }
-  
+
   /// 外部GNSS機器をバックグラウンドでスキャン
   Future<void> scanGnssDevicesBackground() async {
     try {
@@ -304,33 +303,34 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       // エラーでもマップ画面の表示は継続
     }
   }
-  
+
   // =============================================
   // 破棄処理
   // =============================================
-  
+
   /// 全サービスの破棄処理
   void disposeAllServices() {
     gpsManager.removeListener(onGpsManagerUpdate);
     GlobalConfig.instance.baseMapService.removeListener(onBaseMapServiceUpdate);
     LayerStyleConfig().removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
-    
+
     // GPS取得を停止（測量モードでない場合のみ）
     if (gpsManager.isGpsActive && !gpsManager.isSurveyMode) {
       gpsManager.stopGps();
     }
-    
+
     positionSubscription?.cancel();
     compassSubscription?.cancel();
     gpsWaitTimer?.cancel();
     longPressCountUpdateTimer?.cancel();
+    markerRefreshTimer?.cancel();
   }
-  
+
   // =============================================
   // 抽象メソッド（サブクラスで実装）
   // =============================================
-  
+
   /// フィーチャデータを更新
   Future<void> updateFeatures();
 }

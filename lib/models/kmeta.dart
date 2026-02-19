@@ -23,6 +23,12 @@ class KMetaLayerStyle {
   final Color? polygonFillColor;
   final double? polygonFillOpacity;
   final double? polygonBorderOpacity;
+  final bool? labelEnabled;
+  final String? labelProperty;
+  final double? labelFontSize;
+  final Color? labelColor;
+  final Color? labelHaloColor;
+  final double? labelOpacity;
 
   const KMetaLayerStyle({
     this.pointSize,
@@ -34,6 +40,12 @@ class KMetaLayerStyle {
     this.polygonFillColor,
     this.polygonFillOpacity,
     this.polygonBorderOpacity,
+    this.labelEnabled,
+    this.labelProperty,
+    this.labelFontSize,
+    this.labelColor,
+    this.labelHaloColor,
+    this.labelOpacity,
   });
 
   /// JSONからパース
@@ -48,6 +60,12 @@ class KMetaLayerStyle {
       polygonFillColor: _parseColor(json['polygonFillColor']),
       polygonFillOpacity: (json['polygonFillOpacity'] as num?)?.toDouble(),
       polygonBorderOpacity: (json['polygonBorderOpacity'] as num?)?.toDouble(),
+      labelEnabled: json['labelEnabled'] as bool?,
+      labelProperty: json['labelProperty'] as String?,
+      labelFontSize: (json['labelFontSize'] as num?)?.toDouble(),
+      labelColor: _parseColor(json['labelColor']),
+      labelHaloColor: _parseColor(json['labelHaloColor']),
+      labelOpacity: (json['labelOpacity'] as num?)?.toDouble(),
     );
   }
 
@@ -72,6 +90,14 @@ class KMetaLayerStyle {
     if (polygonBorderOpacity != null) {
       json['polygonBorderOpacity'] = polygonBorderOpacity;
     }
+    if (labelEnabled != null) json['labelEnabled'] = labelEnabled;
+    if (labelProperty != null) json['labelProperty'] = labelProperty;
+    if (labelFontSize != null) json['labelFontSize'] = labelFontSize;
+    if (labelColor != null) json['labelColor'] = _colorToHex(labelColor!);
+    if (labelHaloColor != null) {
+      json['labelHaloColor'] = _colorToHex(labelHaloColor!);
+    }
+    if (labelOpacity != null) json['labelOpacity'] = labelOpacity;
     return json;
   }
 
@@ -88,6 +114,12 @@ class KMetaLayerStyle {
       polygonFillColor: polygonFillColor ?? parent.polygonFillColor,
       polygonFillOpacity: polygonFillOpacity ?? parent.polygonFillOpacity,
       polygonBorderOpacity: polygonBorderOpacity ?? parent.polygonBorderOpacity,
+      labelEnabled: labelEnabled ?? parent.labelEnabled,
+      labelProperty: labelProperty ?? parent.labelProperty,
+      labelFontSize: labelFontSize ?? parent.labelFontSize,
+      labelColor: labelColor ?? parent.labelColor,
+      labelHaloColor: labelHaloColor ?? parent.labelHaloColor,
+      labelOpacity: labelOpacity ?? parent.labelOpacity,
     );
   }
 
@@ -101,7 +133,13 @@ class KMetaLayerStyle {
       polygonBorderColor == null &&
       polygonFillColor == null &&
       polygonFillOpacity == null &&
-      polygonBorderOpacity == null;
+      polygonBorderOpacity == null &&
+      labelEnabled == null &&
+      labelProperty == null &&
+      labelFontSize == null &&
+      labelColor == null &&
+      labelHaloColor == null &&
+      labelOpacity == null;
 }
 
 /// 可視性設定

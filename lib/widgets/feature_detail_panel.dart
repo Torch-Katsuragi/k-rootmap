@@ -1,16 +1,13 @@
 // フィーチャ詳細パネルウィジェット
-import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:io';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
-import '../models/nodes/layer_node.dart'; // PointLayerNode用
 import '../utils/global_config.dart';
-import '../widgets/line_simplification_dialog.dart';
-import '../widgets/geometry_conversion_dialogs.dart';
 import '../widgets/photo_viewer.dart';
-import '../services/geometry_conversion_service.dart';
+import '../widgets/feature_editor/feature_editor_screen.dart';
+import '../widgets/feature_editor/actions/simplify_action.dart';
+import '../widgets/feature_editor/actions/trim_action.dart';
 
 /// フィーチャ詳細パネル
 class FeatureDetailPanel extends StatelessWidget {
@@ -204,55 +201,19 @@ class FeatureDetailPanel extends StatelessWidget {
           ),
       ];
 
-      // LineFeatureNodeの場合は簡略化ボタンとポイント変換ボタンを追加
-      if (feature is LineFeatureNode) {
+      // Line/Polygonの場合は「編集」ボタンを追加
+      if (feature is LineFeatureNode || feature is PolygonFeatureNode) {
         children.addAll([
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _showLineSimplificationDialog(context, feature),
-              icon: const Icon(Icons.timeline, size: 16),
-              label: const Text('ライン簡略化'),
+              onPressed: () => _openFeatureEditor(context, feature),
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('編集'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade50,
                 foregroundColor: Colors.blue.shade700,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _showConvertToPointsDialog(context, feature),
-              icon: const Icon(Icons.scatter_plot, size: 16),
-              label: const Text('ポイントに変換'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade50,
-                foregroundColor: Colors.green.shade700,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
-        ]);
-      }
-
-      // PolygonFeatureNodeの場合はポイント変換ボタンを追加
-      if (feature is PolygonFeatureNode) {
-        children.addAll([
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _showConvertToPointsDialog(context, feature),
-              icon: const Icon(Icons.scatter_plot, size: 16),
-              label: const Text('ポイントに変換'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade50,
-                foregroundColor: Colors.green.shade700,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 8),
               ),
@@ -280,152 +241,20 @@ class FeatureDetailPanel extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  /// ライン簡略化ダイアログを表示
-  Future<void> _showLineSimplificationDialog(
-    BuildContext context,
-    LineFeatureNode lineFeature,
-  ) async {
-    final result = await showDialog<List<LatLng>?>(
-      context: context,
-      builder: (context) => LineSimplificationDialog(lineFeature: lineFeature),
+  /// フィーチャ編集画面に遷移
+  void _openFeatureEditor(BuildContext context, FeatureNode feature) {
+    Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FeatureEditorScreen(
+          feature: feature,
+          actions: [
+            SimplifyAction(),
+            TrimAction(),
+          ],
+        ),
+      ),
     );
-
-    if (result != null && result.isNotEmpty) {
-      // 簡略化を適用
-      try {
-        // LineFeatureNodeのupdateLineメソッドを使用してDBまで確実に保存
-        final success = await lineFeature.updateLine(result);
-
-        if (!success) {
-          throw Exception('ジオメトリの更新に失敗しました');
-        }
-
-        AppLogger.debug('[LineSimplification] 簡略化適用完了: ${lineFeature.name}');
-        AppLogger.debug('[LineSimplification] 点数: ${result.length}点');
-
-        // マップを更新
-        if (context.mounted) {
-          final mapState = GlobalConfig.instance.mapState;
-          if (mapState != null) {
-            mapState.refreshFeatures();
-            mapState.setState(() {});
-          }
-        }
-
-        // 成功メッセージ
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('ライン簡略化が適用されました')));
-        }
-      } catch (e) {
-        AppLogger.debug('[ERROR] ライン簡略化適用失敗: $e');
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('ライン簡略化の適用に失敗しました: $e')));
-        }
-      }
-    }
-  }
-
-  /// ライン/ポリゴン→ポイント変換ダイアログを表示
-  Future<void> _showConvertToPointsDialog(
-    BuildContext context,
-    FeatureNode feature,
-  ) async {
-    // 座標リストを取得（カウント用）
-    int pointCount = 0;
-    if (feature is LineFeatureNode) {
-      pointCount = feature.line.length;
-    } else if (feature is PolygonFeatureNode) {
-      final geometry = feature.geometry as List<List<LatLng>>?;
-      if (geometry != null && geometry.isNotEmpty) {
-        final outerRing = geometry.first;
-        // 閉じたポリゴンなら最後の座標を除外してカウント
-        if (outerRing.length >= 2) {
-          final first = outerRing.first;
-          final last = outerRing.last;
-          pointCount = (first.latitude == last.latitude && first.longitude == last.longitude)
-              ? outerRing.length - 1
-              : outerRing.length;
-        } else {
-          pointCount = outerRing.length;
-        }
-      }
-    }
-
-    if (pointCount == 0) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('座標データが見つかりません')),
-        );
-      }
-      return;
-    }
-
-    // カレントディレクトリ直下のポイントレイヤーを検索
-    final pointLayers = GeometryConversionService.findTargetLayersForGeometry(
-      GlobalConfig.instance.folderTree,
-    );
-
-    if (pointLayers.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('カレントディレクトリ直下にポイントレイヤーが見つかりません。\n先にポイントレイヤーを作成してください。')),
-        );
-      }
-      return;
-    }
-
-    // ダイアログを表示
-    final targetLayer = await showDialog<PointLayerNode>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return ConvertGeometryToPointsDialog(
-          sourceFeature: feature,
-          availableLayers: pointLayers,
-          pointCount: pointCount,
-        );
-      },
-    );
-
-    if (targetLayer == null) {
-      return;
-    }
-
-    // 変換サービスを使用してポイントを作成
-    try {
-      final createdFeatures = await GeometryConversionService.convertGeometryToPoints(
-        sourceFeature: feature,
-        targetLayer: targetLayer,
-      );
-
-      if (createdFeatures.isNotEmpty) {
-        // マップを更新
-        final mapState = GlobalConfig.instance.mapState;
-        if (mapState != null) {
-          mapState.refreshFeatures();
-          mapState.setState(() {});
-        }
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${createdFeatures.length}個のポイントを作成しました'),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      AppLogger.debug('[ERROR] ポイント変換失敗: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ポイント変換に失敗しました: $e')),
-        );
-      }
-    }
   }
 
   /// パネルウィジェットビルダー
@@ -437,11 +266,11 @@ class FeatureDetailPanel extends StatelessWidget {
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(12),
-      color: Colors.white,
+      color: Colors.white.withValues(alpha: 0.8),
       child: Container(
         width: 220,
         constraints: const BoxConstraints(
-          maxHeight: 300, // 最大高さを300pxに制限
+          maxHeight: 300,
         ),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

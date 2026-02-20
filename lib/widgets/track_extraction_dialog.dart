@@ -7,7 +7,6 @@ library;
 
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
@@ -18,8 +17,9 @@ import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../services/gps_history_recorder.dart';
 import '../utils/app_logger.dart';
-import '../utils/feature_calc_utils.dart';
 import '../utils/global_config.dart';
+import 'feature_editor/shared/line_preview_painter.dart';
+import 'feature_editor/shared/simplification_controls.dart';
 
 /// GPS軌跡抽出ダイアログ
 class TrackExtractionDialog extends StatefulWidget {
@@ -45,8 +45,7 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
   double _timeMin = 0;
   double _timeMax = 1;
 
-  // 簡略化
-  double _tolerance = 5.0;
+  // 簡略化結果
   List<LatLng> _simplifiedLine = [];
 
   // ローディング
@@ -113,21 +112,6 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
       (end + 1).clamp(0, _allPoints.length),
     );
 
-    _updateSimplification();
-  }
-
-  /// 簡略化を更新
-  void _updateSimplification() {
-    if (_selectedPoints.length < 2) {
-      _simplifiedLine = _selectedPoints.map((p) => p.toLatLng()).toList();
-      return;
-    }
-
-    final line = _selectedPoints.map((p) => p.toLatLng()).toList();
-    _simplifiedLine = LineSimplification.simplifyLineDouglasPeucker(
-      line,
-      _tolerance,
-    );
     setState(() {});
   }
 
@@ -422,11 +406,9 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: CustomPaint(
-                      painter: _TrackPreviewPainter(
-                        allPoints: _allPoints.map((p) => p.toLatLng()).toList(),
-                        selectedLine: _simplifiedLine,
-                        startIndex: _timeRange?.start.round() ?? 0,
-                        endIndex: _timeRange?.end.round() ?? _allPoints.length - 1,
+                      painter: LinePreviewPainter(
+                        backgroundLine: _allPoints.map((p) => p.toLatLng()).toList(),
+                        foregroundLine: _simplifiedLine,
                       ),
                       size: Size.infinite,
                     ),
@@ -436,7 +418,7 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
 
               const SizedBox(height: 8),
 
-              // 統計情報
+              // GPS固有の統計情報
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -471,13 +453,6 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              '簡略化後: ${_simplifiedLine.length}点 '
-                              '(${_selectedPoints.isNotEmpty ? (100 - _simplifiedLine.length / _selectedPoints.length * 100).toStringAsFixed(0) : 0}%削減)',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
                         ],
                       ),
                   ],
@@ -486,33 +461,15 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
 
               const SizedBox(height: 8),
 
-              // 簡略化スライダー
-              Row(
-                children: [
-                  const Text('許容誤差: ', style: TextStyle(fontSize: 12)),
-                  Expanded(
-                    child: Slider(
-                      value: _tolerance,
-                      min: 0.1,
-                      max: 50.0,
-                      divisions: 499,
-                      onChanged: (value) {
-                        setState(() => _tolerance = value);
-                      },
-                      onChangeEnd: (value) {
-                        _updateSimplification();
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: 50,
-                    child: Text(
-                      '${_tolerance.toStringAsFixed(1)}m',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
+              // 簡略化コントロール（共通ウィジェット）
+              SimplificationControls(
+                originalLine: _selectedPoints.map((p) => p.toLatLng()).toList(),
+                initialTolerance: 5.0,
+                onChanged: (simplified) =>
+                    setState(() => _simplifiedLine = simplified),
               ),
+
+              const SizedBox(height: 4),
 
               // 凡例
               Row(
@@ -571,100 +528,3 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
   }
 }
 
-/// 軌跡プレビュー用のCustomPainter
-class _TrackPreviewPainter extends CustomPainter {
-  final List<LatLng> allPoints;
-  final List<LatLng> selectedLine;
-  final int startIndex;
-  final int endIndex;
-
-  _TrackPreviewPainter({
-    required this.allPoints,
-    required this.selectedLine,
-    required this.startIndex,
-    required this.endIndex,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (allPoints.isEmpty) return;
-
-    // 全ポイントから座標範囲を計算
-    double minLat = allPoints.first.latitude;
-    double maxLat = allPoints.first.latitude;
-    double minLng = allPoints.first.longitude;
-    double maxLng = allPoints.first.longitude;
-
-    for (final point in allPoints) {
-      minLat = math.min(minLat, point.latitude);
-      maxLat = math.max(maxLat, point.latitude);
-      minLng = math.min(minLng, point.longitude);
-      maxLng = math.max(maxLng, point.longitude);
-    }
-
-    // マージンを追加
-    final latMargin = (maxLat - minLat) * 0.1 + 0.0001;
-    final lngMargin = (maxLng - minLng) * 0.1 + 0.0001;
-    minLat -= latMargin;
-    maxLat += latMargin;
-    minLng -= lngMargin;
-    maxLng += lngMargin;
-
-    final latRange = maxLat - minLat;
-    final lngRange = maxLng - minLng;
-
-    // 座標変換関数
-    Offset toOffset(LatLng point) {
-      final x = (point.longitude - minLng) / lngRange * size.width;
-      final y = (maxLat - point.latitude) / latRange * size.height;
-      return Offset(x, y);
-    }
-
-    // 全軌跡を灰色で描画
-    final allPaint = Paint()
-      ..color = Colors.grey.shade400
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    _drawLine(canvas, allPoints, toOffset, allPaint);
-
-    // 選択範囲を黒で描画
-    if (selectedLine.length >= 2) {
-      final selectedPaint = Paint()
-        ..color = Colors.black
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke;
-      _drawLine(canvas, selectedLine, toOffset, selectedPaint);
-
-      // 頂点を赤で表示
-      final pointPaint = Paint()
-        ..color = Colors.red
-        ..style = PaintingStyle.fill;
-      for (final point in selectedLine) {
-        canvas.drawCircle(toOffset(point), 2.5, pointPaint);
-      }
-    }
-  }
-
-  void _drawLine(
-    Canvas canvas,
-    List<LatLng> line,
-    Offset Function(LatLng) transform,
-    Paint paint,
-  ) {
-    if (line.length < 2) return;
-
-    final path = ui.Path();
-    final startPoint = transform(line.first);
-    path.moveTo(startPoint.dx, startPoint.dy);
-
-    for (int i = 1; i < line.length; i++) {
-      final point = transform(line[i]);
-      path.lineTo(point.dx, point.dy);
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}

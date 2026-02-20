@@ -1426,14 +1426,14 @@ mixin LayerDrawerTiles {
       String? featureName = await showDialog<String>(
         context: context,
         builder: (context) {
-          String text = '';
+          final controller = TextEditingController(text: sourceLayer.name);
           final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
           return AlertDialog(
             title: Text('$typeLabel フィーチャ名の入力'),
             content: TextField(
               autofocus: true,
+              controller: controller,
               decoration: const InputDecoration(labelText: '名前（任意）'),
-              onChanged: (v) => text = v,
             ),
             actions: [
               TextButton(
@@ -1441,7 +1441,7 @@ mixin LayerDrawerTiles {
                 child: const Text('キャンセル'),
               ),
               TextButton(
-                onPressed: () => Navigator.pop(context, text),
+                onPressed: () => Navigator.pop(context, controller.text),
                 child: const Text('OK'),
               ),
             ],

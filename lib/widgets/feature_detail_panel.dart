@@ -182,10 +182,12 @@ class FeatureDetailPanel extends StatelessWidget {
     // 既存のFeatureNode用の処理
     if (feature is FeatureNode) {
       final infoMap = feature.infoMap;
-      // metadataを含む属性名の項目を除外
+      const hiddenKeys = {'geom', 'sub_table'};
       final filteredEntries =
           infoMap.entries
-              .where((entry) => !entry.key.toLowerCase().contains('metadata'))
+              .where((entry) =>
+                  !entry.key.toLowerCase().contains('metadata') &&
+                  !hiddenKeys.contains(entry.key))
               .toList();
 
       final children = <Widget>[

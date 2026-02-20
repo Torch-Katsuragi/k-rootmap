@@ -2,7 +2,10 @@
 ///
 /// GpsHistoryRecorder から日付別のGPS軌跡を読み取り、
 /// 時間範囲の切り取り・Douglas-Peucker簡略化・ライン保存を行う。
-/// LineSimplificationDialog をベースにしたUI。
+/// 保存時は抽出範囲のポイント詳細をsub_table JSONとして付与。
+library;
+
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -167,6 +170,28 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
     return '${d.inSeconds}秒';
   }
 
+  /// 選択ポイントからsub_table JSON文字列を構築
+  String _buildSubTableJson() {
+    final header = [
+      'timestamp', 'latitude', 'longitude',
+      'altitude', 'accuracy', 'speed', 'bearing', 'source_type',
+    ];
+    final rows = <List<dynamic>>[header];
+    for (final pt in _selectedPoints) {
+      rows.add([
+        pt.timestamp.toIso8601String(),
+        pt.latitude,
+        pt.longitude,
+        pt.altitude,
+        pt.accuracy,
+        pt.speed,
+        pt.bearing,
+        pt.sourceType,
+      ]);
+    }
+    return jsonEncode(rows);
+  }
+
   /// 保存処理
   Future<void> _saveTrack() async {
     if (_simplifiedLine.length < 2) return;
@@ -178,15 +203,35 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
     setState(() => _isSaving = true);
 
     try {
+      final dateLabel =
+          GpsHistoryRecorder.formatLayerNameAsDate(_selectedDate ?? '');
+
       final feature = await LineFeatureNode.createIn(
         lineLayer,
         _simplifiedLine,
-        'GPS軌跡 ${GpsHistoryRecorder.formatLayerNameAsDate(_selectedDate ?? '')}',
+        'GPS軌跡 $dateLabel',
         '${_selectedPoints.length}点から抽出、${_simplifiedLine.length}点に簡略化',
       );
 
+      // sub_table JSON をフィーチャに付与
+      if (feature != null && _selectedPoints.isNotEmpty) {
+        try {
+          await lineLayer.geoPackageFile.addAttributeColumn(
+            lineLayer.layerName,
+            'sub_table',
+            'TEXT',
+          );
+        } catch (_) {
+          // カラムが既に存在する場合は無視
+        }
+
+        final subTableJson = _buildSubTableJson();
+        await feature.setAttributeValue('sub_table', subTableJson);
+        await feature.flushChanges();
+      }
+
       if (feature != null && mounted) {
-        Navigator.of(context).pop(true); // 保存成功
+        Navigator.of(context).pop(true);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/global_config.dart';
 import '../../../models/nodes/layer_tree_node.dart';
@@ -268,10 +269,13 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
         return;
       }
 
-      // GpsHistoryRecorder を初期化
-      await gpsHistoryRecorder.initialize(globalPath);
+      // AppSupportDir（rawバッファ用、プロジェクトUIに非表示）
+      final supportDir = await getApplicationSupportDirectory();
 
-      // positionStream の購読開始（常時記録）
+      // GpsHistoryRecorder を初期化（ハイブリッド方式）
+      await gpsHistoryRecorder.initialize(globalPath, supportDir.path);
+
+      // positionStream の購読開始（常時記録 + consolidationタイマー）
       gpsHistoryRecorder.startRecording(locationStore.positionStream);
 
       // 軌跡更新リスナー登録（地図上にリアルタイム表示するため）

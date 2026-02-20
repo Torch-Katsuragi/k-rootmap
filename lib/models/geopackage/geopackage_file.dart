@@ -3,6 +3,7 @@
 import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import '../../utils/background_save_manager.dart';
 import '../../utils/global_config.dart';
 import '../geometry_type.dart';
@@ -73,6 +74,9 @@ class GeoPackageFile {
   // ============================================================
   // DB接続管理（GeoPackageConnectionに委譲）
   // ============================================================
+
+  /// データベース接続を直接取得（非空間テーブル操作等の高度な用途向け）
+  Future<Database> getDatabase() => _connection.getDatabase();
 
   /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
   Future<bool> createEmptyDatabase() async {

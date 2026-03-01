@@ -1,78 +1,42 @@
-// K-MAPS: エントリーポイント
-// 本ファイルはアプリ起動・ルーティングのみを担当
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
+import 'core/path_resolver.dart';
+import 'providers/project_providers.dart';
+import 'providers/selection_providers.dart';
+import 'providers/service_providers.dart';
+import 'models/nodes/feature_node.dart';
 import 'services/internal_gps_location_store.dart';
-import 'services/gps_manager_service.dart';
-import 'services/basemap_service.dart';
 import 'utils/background_save_manager.dart';
 
 void main() async {
-  // sqflite使用前に必須の初期化処理
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Windows IME関連のキーボードエラーを無視するワークアラウンド
-  // Flutter既知の問題: IME使用時に不正なKeyDownEventが発生することがある
   _setupErrorHandlers();
 
-  // デスクトップ環境での sqflite_common_ffi 初期化
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
-  // GPS管理サービスの初期化（待機状態）
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    try {
-      await GpsManagerService().initialize();
-      AppLogger.debug('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
-    } catch (e) {
-      AppLogger.debug('[K-MAPS] GPS管理サービス初期化エラー: $e');
-    }
-  });
-
-  // 背景地図サービスの初期化
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    try {
-      await BaseMapService().initialize();
-      AppLogger.debug('[K-MAPS] 背景地図サービス初期化完了');
-    } catch (e) {
-      AppLogger.debug('[K-MAPS] 背景地図サービス初期化エラー: $e');
-    }
-  });
-
-  // フォアグラウンドサービスの初期化は InternalGpsLocationStore.start() に委譲
-  // GpsManagerService.startGps() → Store.start() → ForegroundServiceManager.initializeService()
-  // の順で自動的に呼び出される
-
-  runApp(const KMapsApp());
+  runApp(const ProviderScope(child: KMapsApp()));
 }
 
-/// エラーハンドラーの設定
-/// Windows IME関連のキーボードエラーなど、既知の非致命的エラーを無視
 void _setupErrorHandlers() {
-  // 元のエラーハンドラーを保存
   final originalOnError = FlutterError.onError;
-
   FlutterError.onError = (FlutterErrorDetails details) {
-    // IME関連のキーボードエラーを無視
-    // "A KeyDownEvent is dispatched, but the state shows that the physical key is already pressed"
     final errorString = details.exception.toString();
     if (errorString.contains('KeyDownEvent') &&
         errorString.contains('physical key is already pressed')) {
-      // このエラーは静かに無視（デバッグログのみ）
       if (kDebugMode) {
         AppLogger.debug('[K-MAPS] IME関連キーボードイベントを無視');
       }
       return;
     }
-
-    // その他のエラーは通常通り処理
     if (originalOnError != null) {
       originalOnError(details);
     } else {
@@ -81,19 +45,55 @@ void _setupErrorHandlers() {
   };
 }
 
-/// アプリのルートウィジェット（ライフサイクル監視付き）
-class KMapsApp extends StatefulWidget {
+class KMapsApp extends ConsumerStatefulWidget {
   const KMapsApp({super.key});
 
   @override
-  State<KMapsApp> createState() => _KMapsAppState();
+  ConsumerState<KMapsApp> createState() => _KMapsAppState();
 }
 
-class _KMapsAppState extends State<KMapsApp> with WidgetsBindingObserver {
+class _KMapsAppState extends ConsumerState<KMapsApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _setupGlobalCallbacks();
+    _initializeServices();
+  }
+
+  void _setupGlobalCallbacks() {
+    ProjectPathResolver.instance.setRootPathGetter(
+      () => ref.read(projectRootDirProvider),
+    );
+    GlobalPathResolver.instance.setRootPathGetter(
+      () => ref.read(globalFolderPathProvider),
+    );
+    FeatureNode.setOnDisposeCallback((node) {
+      final features = ref.read(selectedFeaturesProvider);
+      if (features.contains(node)) {
+        ref.read(selectedFeaturesProvider.notifier).remove(node);
+      }
+    });
+  }
+
+  Future<void> _initializeServices() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(gpsManagerServiceProvider).initialize();
+        AppLogger.debug('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
+      } catch (e) {
+        AppLogger.debug('[K-MAPS] GPS管理サービス初期化エラー: $e');
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(baseMapServiceProvider).initialize();
+        AppLogger.debug('[K-MAPS] 背景地図サービス初期化完了');
+      } catch (e) {
+        AppLogger.debug('[K-MAPS] 背景地図サービス初期化エラー: $e');
+      }
+    });
   }
 
   @override
@@ -102,33 +102,22 @@ class _KMapsAppState extends State<KMapsApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// アプリライフサイクル変更時の処理
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
     if (state == AppLifecycleState.detached) {
-      // アプリ終了時のクリーンアップ
       _cleanupOnAppExit();
     } else if (state == AppLifecycleState.paused) {
-      // バックグラウンドに移行時：保留中の変更を保存
       BackgroundSaveManager.instance.flushAllChanges();
     }
   }
 
-  /// アプリ終了時のクリーンアップ処理
   Future<void> _cleanupOnAppExit() async {
     AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ開始');
     try {
-      // 内蔵GPS位置情報ストアを停止（ForegroundServiceも一緒に停止される）
       await InternalGpsLocationStore().dispose();
-
-      // 保留中の変更を保存しタイマーをクリーンアップ
       await BackgroundSaveManager.instance.dispose();
-
-      // GPS管理サービスのクリーンアップ
-      GpsManagerService().dispose();
-
+      ref.read(gpsManagerServiceProvider).dispose();
       AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ完了');
     } catch (e) {
       AppLogger.debug('[K-MAPS] クリーンアップエラー: $e');

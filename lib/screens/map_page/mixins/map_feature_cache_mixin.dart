@@ -1,8 +1,8 @@
 // K-MAPS: フィーチャキャッシュMixin
 // 地図表示用のフィーチャキャッシュを効率的に管理
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -11,7 +11,7 @@ import '../map_page_state_base.dart';
 
 /// フィーチャキャッシュMixin
 /// 地図上に表示するフィーチャのキャッシュ管理を提供
-mixin MapFeatureCacheMixin<T extends StatefulWidget> on MapPageStateBase<T> {
+mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   
   // =============================================
   // フィーチャ更新処理
@@ -21,7 +21,7 @@ mixin MapFeatureCacheMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// LayerNodeが管理するFeatureNodeを直接参照し、DBアクセスを最小限に抑制
   Future<void> updateFeaturesImpl() async {
     AppLogger.debug('[DEBUG] updateFeatures: start');
-    final folderTree = GlobalConfig.instance.folderTree;
+    final folderTree = ref.read(folderTreeProvider);
     AppLogger.debug('[DEBUG] updateFeatures: folderTree=$folderTree');
     
     final visibleLayers =

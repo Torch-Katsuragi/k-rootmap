@@ -1,3 +1,3 @@
-// K-MAPS: map_page関連のwidgetエクスポート
+export 'drawing_action_buttons.dart';
 export 'gps_info_bar.dart';
 export 'gps_survey_buttons.dart';

@@ -17,10 +17,11 @@ import 'dart:math' as math;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/bluetooth_gnss_service.dart';
 import '../models/gps_position_record.dart';
 import '../models/gps_track.dart';
-import '../utils/global_config.dart';
+import '../providers/gps_providers.dart';
 import 'internal_gps_location_store.dart';
 
 /// GPS データソースの種類
@@ -80,6 +81,12 @@ class GpsManagerService extends ChangeNotifier {
   GpsManagerService._internal();
 
   static const String _logTag = 'GpsManagerService';
+
+  Ref? _ref;
+
+  void setRef(Ref ref) {
+    _ref = ref;
+  }
 
   // GPS機能の初期化状態
   bool _isInitialized = false;
@@ -846,40 +853,39 @@ class GpsManagerService extends ChangeNotifier {
 
   /// グローバル設定にソース設定を保存
   Future<void> _saveSourceToGlobalConfig() async {
-    final config = GlobalConfig.instance;
-    config.preferredGpsSourceType =
+    final sourceType =
         _currentSource == GpsSourceType.internal ? 'internal' : 'external';
-    config.selectedGnssDeviceAddress = _selectedGnssDevice?.address;
-    config.selectedGnssDeviceName = _selectedGnssDevice?.name;
+    _ref?.read(preferredGpsSourceTypeProvider.notifier).set(sourceType);
+    _ref?.read(selectedGnssDeviceAddressProvider.notifier)
+        .set(_selectedGnssDevice?.address);
+    _ref?.read(selectedGnssDeviceNameProvider.notifier)
+        .set(_selectedGnssDevice?.name);
 
     AppLogger.debug(
-      '$_logTag: GPS設定をグローバル設定に保存: ${config.preferredGpsSourceType}',
+      '$_logTag: GPS設定をグローバル設定に保存: $sourceType',
     );
   }
 
   /// グローバル設定からソース設定のみ読み込み（GPS開始はしない）
   Future<void> _loadSourceConfigOnly() async {
-    final config = GlobalConfig.instance;
+    final preferredSource =
+        _ref?.read(preferredGpsSourceTypeProvider);
+    final savedAddress =
+        _ref?.read(selectedGnssDeviceAddressProvider);
 
-    if (config.preferredGpsSourceType == null) {
-      // 初回起動時はデフォルト（内蔵GPS）を設定
+    if (preferredSource == null) {
       _currentSource = GpsSourceType.internal;
       AppLogger.debug('$_logTag: 初回起動のため内蔵GPSを設定');
       return;
     }
 
     try {
-      if (config.preferredGpsSourceType == 'external' &&
-          config.selectedGnssDeviceAddress != null) {
-        // 外部GNSS機器をスキャンして該当デバイスを探す
+      if (preferredSource == 'external' && savedAddress != null) {
         await scanExternalGnssDevices();
 
         final targetDevice =
             _availableGnssDevices
-                .where(
-                  (device) =>
-                      device.address == config.selectedGnssDeviceAddress,
-                )
+                .where((device) => device.address == savedAddress)
                 .firstOrNull;
 
         if (targetDevice != null) {
@@ -890,7 +896,7 @@ class GpsManagerService extends ChangeNotifier {
           AppLogger.debug('$_logTag: 保存されたGNSS機器が見つからないため内蔵GPSにフォールバック');
           _currentSource = GpsSourceType.internal;
         }
-      } else if (config.preferredGpsSourceType == 'internal') {
+      } else if (preferredSource == 'internal') {
         _currentSource = GpsSourceType.internal;
         AppLogger.debug('$_logTag: 内蔵GPS設定を復元');
       }
@@ -902,21 +908,21 @@ class GpsManagerService extends ChangeNotifier {
 
   /// グローバル設定からソース設定を読み込み（GPS開始も行う）
   Future<void> loadSourceFromGlobalConfig() async {
-    final config = GlobalConfig.instance;
+    final preferredSource =
+        _ref?.read(preferredGpsSourceTypeProvider);
+    final savedAddress =
+        _ref?.read(selectedGnssDeviceAddressProvider);
 
-    if (config.preferredGpsSourceType == null) {
-      // 初回起動時はデフォルト（内蔵GPS）を使用
+    if (preferredSource == null) {
       return;
     }
 
     try {
-      if (config.preferredGpsSourceType == 'external' &&
-          config.selectedGnssDeviceAddress != null) {
-        // 外部GNSS機器をスキャンして該当デバイスを探す
+      if (preferredSource == 'external' && savedAddress != null) {
         await scanExternalGnssDevices();
 
         final targetDevice = _availableGnssDevices.firstWhere(
-          (device) => device.address == config.selectedGnssDeviceAddress,
+          (device) => device.address == savedAddress,
           orElse: () => throw Exception('保存されたGNSS機器が見つかりません'),
         );
 
@@ -924,7 +930,7 @@ class GpsManagerService extends ChangeNotifier {
         AppLogger.debug(
           '$_logTag: 保存されたGPS設定を復元: 外部GNSS (${targetDevice.name})',
         );
-      } else if (config.preferredGpsSourceType == 'internal') {
+      } else if (preferredSource == 'internal') {
         await switchGpsSource(GpsSourceType.internal);
         AppLogger.debug('$_logTag: 保存されたGPS設定を復元: 内蔵GPS');
       }

@@ -4,23 +4,30 @@ import 'map_tool.dart';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import '../utils/global_config.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/global_drawing_state.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'package:latlong2/latlong.dart';
-import 'pan_tool.dart'; // てのひらツールを利用
+import 'pan_tool.dart';
 import 'select_tool.dart';
-import 'dart:async'; // デバウンス機能用
+import 'dart:async';
 import '../interfaces/map_state_interface.dart';
+import '../providers/tool_providers.dart';
+import '../providers/selection_providers.dart';
+import '../providers/ui_state_providers.dart';
+import '../providers/drawing_provider.dart';
 
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
+  final Ref _ref;
+  PenTool(this._ref);
+
   /// てのひらツールのグローバルインスタンス（2本指パン・回転用）
-  PanTool get panTool => GlobalConfig.instance.panTool;
+  PanTool get panTool => _ref.read(panToolProvider);
 
   /// グローバル描画状態への参照
-  GlobalDrawingState get drawingState => GlobalConfig.instance.drawingState;
+  GlobalDrawingState get drawingState => _ref.read(drawingStateProvider);
 
   @override
   String get name => 'Pen';
@@ -50,20 +57,18 @@ class PenTool extends MapTool {
     AppLogger.debug('[DEBUG] PenTool.onTap: タップイベント開始');
 
     // フロートボタン押下時は消しゴム動作
-    if (GlobalConfig.instance.isFabActive) {
+    if (_ref.read(isFabActiveProvider)) {
       final latlng = mapState.offsetToLatLng(details.localPosition);
       AppLogger.debug(
         '[DEBUG] PenTool.onTap: eraser mode - selecting feature at $latlng',
       );
 
-      // フィーチャーを選択
-      SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
+      SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState, ref: _ref);
       AppLogger.debug(
-        '[DEBUG] PenTool.onTap: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
+        '[DEBUG] PenTool.onTap: selected features count: ${_ref.read(selectedFeaturesProvider).length}',
       );
 
-      // 選択されたフィーチャーがある場合のみ削除
-      if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
+      if (_ref.read(selectedFeaturesProvider).isNotEmpty) {
         _disposeSelectedFeatures(mapState);
       } else {
         AppLogger.debug('[DEBUG] PenTool.onTap: no features selected for deletion');
@@ -72,7 +77,7 @@ class PenTool extends MapTool {
     }
 
     // 通常は描画
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = _ref.read(selectedLayerNodeProvider);
     if (selected == null) {
       AppLogger.debug('[DEBUG] PenTool.onTap: 選択されたレイヤーがありません');
       return;
@@ -133,9 +138,9 @@ class PenTool extends MapTool {
   @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (panTool.isMiddleButtonDragging) return;
 
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = _ref.read(selectedLayerNodeProvider);
 
     if (_pointerCount == 2) {
       //2本指を離すとき高確率で残った方の指でdetails.pointerCount=1としてonscalestartが呼ばれるので、その場合は一回スキップ(0にするとupdateとendで何もしなくなる)
@@ -160,7 +165,7 @@ class PenTool extends MapTool {
       return;
     }
     if (_pointerCount == 1) {
-      if (GlobalConfig.instance.isFabActive) {
+      if (_ref.read(isFabActiveProvider)) {
         return;
       }
       // Pointerバッファがあれば最初に反映
@@ -205,9 +210,9 @@ class PenTool extends MapTool {
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (panTool.isMiddleButtonDragging) return;
 
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = _ref.read(selectedLayerNodeProvider);
 
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
@@ -220,20 +225,18 @@ class PenTool extends MapTool {
     if (selected == null || !selected.isVisibleRecursive()) return;
     if (_pointerCount == 1) {
       // フロートボタン押下時は消しゴム動作
-      if (GlobalConfig.instance.isFabActive) {
+      if (_ref.read(isFabActiveProvider)) {
         final latlng = mapState.offsetToLatLng(details.localFocalPoint);
         AppLogger.debug(
           '[DEBUG] PenTool.onScaleUpdate: eraser mode - selecting feature at $latlng',
         );
 
-        // フィーチャーを選択
-        SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState);
+        SelectTool.selectFeatureAtLatLng(tapLatLng: latlng, mapState: mapState, ref: _ref);
         AppLogger.debug(
-          '[DEBUG] PenTool.onScaleUpdate: selected features count: ${GlobalConfig.instance.selectedFeatures.length}',
+          '[DEBUG] PenTool.onScaleUpdate: selected features count: ${_ref.read(selectedFeaturesProvider).length}',
         );
 
-        // 選択されたフィーチャーがある場合のみ削除
-        if (GlobalConfig.instance.selectedFeatures.isNotEmpty) {
+        if (_ref.read(selectedFeaturesProvider).isNotEmpty) {
           _disposeSelectedFeatures(mapState);
         } else {
           AppLogger.debug(
@@ -261,9 +264,9 @@ class PenTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない描画を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (panTool.isMiddleButtonDragging) return;
 
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = _ref.read(selectedLayerNodeProvider);
 
     // 2本指の場合は、選択レイヤーに関係なくパン操作を許可
     if (_pointerCount == 2) {
@@ -327,10 +330,9 @@ class PenTool extends MapTool {
 
   /// 選択されたフィーチャーを削除（GlobalConfig統一処理を使用）
   void _disposeSelectedFeatures(IMapState mapState) async {
-    AppLogger.debug('[DEBUG] PenTool._disposeSelectedFeatures: using GlobalConfig unified deletion');
+    AppLogger.debug('[DEBUG] PenTool._disposeSelectedFeatures: using SelectedFeatures provider deletion');
     
-    // GlobalConfigの統一削除処理を使用
-    await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
+    await _ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
   }
 
   /// マウスホイールスクロールイベント（ズーム機能）
@@ -338,24 +340,22 @@ class PenTool extends MapTool {
   @override
   void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
-      // PanToolの統一されたマウスホイールズーム処理を使用
-      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+      panTool.handleMouseWheelZoom(event, mapState);
     }
   }
 
-  /// 中ボタンドラッグイベント - PanToolに委譲
   @override
   void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+    panTool.onMiddleButtonDown(event, mapState);
   }
 
   @override
   void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+    panTool.onMiddleButtonMove(event, mapState);
   }
 
   @override
   void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
+    panTool.onMiddleButtonUp(event, mapState);
   }
 }

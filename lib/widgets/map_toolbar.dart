@@ -1,13 +1,14 @@
 // 地図画面の左側ツールバーウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io' show Platform;
-import '../utils/global_config.dart';
 import '../models/nodes/folder_node.dart';
+import '../providers/tool_providers.dart';
 import '../screens/camera_screen.dart';
 
 /// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン, カメラ）
-class MapToolbar extends StatelessWidget {
+class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
   final FolderNode? currentFolder;
 
@@ -18,8 +19,8 @@ class MapToolbar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final currentTool = GlobalConfig.instance.currentTool;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentTool = ref.watch(currentToolProvider);
     // プラットフォーム判定: モバイル（Android/iOS）のみカメラ使用可能
     final isMobilePlatform = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
@@ -40,7 +41,7 @@ class MapToolbar extends StatelessWidget {
               tooltip: 'Pan',
               isSelected: currentTool.name == 'Pan',
               onPressed: () {
-                GlobalConfig.instance.currentTool = GlobalConfig.instance.panTool;
+                ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
                 onToolChanged();
               },
             ),
@@ -51,7 +52,7 @@ class MapToolbar extends StatelessWidget {
               tooltip: 'Pen',
               isSelected: currentTool.name == 'Pen',
               onPressed: () {
-                GlobalConfig.instance.currentTool = GlobalConfig.instance.penTool;
+                ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
                 onToolChanged();
               },
             ),
@@ -62,7 +63,7 @@ class MapToolbar extends StatelessWidget {
               tooltip: 'Select',
               isSelected: currentTool.name == 'Select',
               onPressed: () {
-                GlobalConfig.instance.currentTool = GlobalConfig.instance.selectTool;
+                ref.read(currentToolProvider.notifier).set(ref.read(selectToolProvider));
                 onToolChanged();
               },
             ),
@@ -73,7 +74,7 @@ class MapToolbar extends StatelessWidget {
               tooltip: 'GPS Tool',
               isSelected: currentTool.name == 'GPS',
               onPressed: () {
-                GlobalConfig.instance.currentTool = GlobalConfig.instance.gpsTool;
+                ref.read(currentToolProvider.notifier).set(ref.read(gpsToolProvider));
                 onToolChanged();
               },
             ),
@@ -83,10 +84,9 @@ class MapToolbar extends StatelessWidget {
               _ToolButton(
                 icon: Icons.camera_alt,
                 tooltip: '写真撮影',
-                isSelected: false, // ツールではないので選択状態にはならない
+                isSelected: false,
                 onPressed: currentFolder != null
                     ? () async {
-                        // カメラ画面へ遷移
                         final result = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
@@ -96,18 +96,15 @@ class MapToolbar extends StatelessWidget {
                           ),
                         );
                         
-                        // 撮影成功時にフォルダを更新してImageNodeを読み込む
                         if (result == true) {
-                          // FolderNodeの子ノードを更新（ImageNodeを再読み込み）
                           await currentFolder!.updateChildren();
                         }
                       }
                     : () {
-                      // フォルダ未選択時のフィードバック（オプション）
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('写真を保存するフォルダを選択してください')),
-                      );
-                    },
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('写真を保存するフォルダを選択してください')),
+                        );
+                      },
               ),
             ],
           ],
@@ -153,4 +150,3 @@ class _ToolButton extends StatelessWidget {
     );
   }
 }
-

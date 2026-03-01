@@ -63,7 +63,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
     final stats = widget.track.getStatistics();
 
     return AlertDialog(
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.directions_walk, color: Colors.green),
           SizedBox(width: 8),
@@ -78,7 +78,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
           children: [
             // 軌跡の統計情報
             Container(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue[50],
                 borderRadius: BorderRadius.circular(8),
@@ -87,8 +87,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('軌跡情報', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
+                  const Text('軌跡情報', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   _buildStatRow('ポイント数', '${stats['pointCount']}個'),
                   _buildStatRow(
                     '距離',
@@ -107,28 +107,27 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                 ],
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-            // 軌跡名入力
             TextField(
               controller: _trackNameController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: '軌跡名',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.edit),
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
 
             // GeoPackage選択
-            Text(
+            const Text(
               '保存先GeoPackage:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             if (_geoPackageNodes.isEmpty)
               Container(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.orange[50],
                   borderRadius: BorderRadius.circular(8),
@@ -136,8 +135,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning, color: Colors.orange),
-                    SizedBox(width: 8),
+                    const Icon(Icons.warning, color: Colors.orange),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'GeoPackageファイルが見つかりません。\n先にGeoPackageを作成してください。',
@@ -149,7 +148,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
               )
             else
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey[300]!),
                   borderRadius: BorderRadius.circular(8),
@@ -164,8 +163,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                             value: gpkg,
                             child: Row(
                               children: [
-                                Icon(Icons.storage, size: 16),
-                                SizedBox(width: 8),
+                                const Icon(Icons.storage, size: 16),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     gpkg.name,
@@ -190,7 +189,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: Text('キャンセル'),
+          child: const Text('キャンセル'),
         ),
         ElevatedButton.icon(
           onPressed:
@@ -201,12 +200,12 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                     if (trackName.isEmpty) {
                       ScaffoldMessenger.of(
                         context,
-                      ).showSnackBar(SnackBar(content: Text('軌跡名を入力してください')));
+                      ).showSnackBar(const SnackBar(content: Text('軌跡名を入力してください')));
                       return;
                     }
                     if (_selectedGeoPackage == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('保存先GeoPackageを選択してください')),
+                        const SnackBar(content: Text('保存先GeoPackageを選択してください')),
                       );
                       return;
                     }
@@ -218,8 +217,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                       'geoPackage': _selectedGeoPackage!,
                     });
                   },
-          icon: Icon(Icons.save),
-          label: Text('保存'),
+          icon: const Icon(Icons.save),
+          label: const Text('保存'),
         ),
       ],
     );
@@ -227,13 +226,13 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
 
   Widget _buildStatRow(String label, String value) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           Expanded(flex: 2, child: Text(label)),
           Expanded(
             flex: 3,
-            child: Text(value, style: TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
           ),
         ],
       ),

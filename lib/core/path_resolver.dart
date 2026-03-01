@@ -3,7 +3,6 @@
 
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import '../utils/global_config.dart';
 
 /// パス解決のためのインターフェース
 /// 
@@ -50,15 +49,17 @@ abstract class PathResolver {
 /// プロジェクトフォルダ用のパスリゾルバ
 /// GlobalConfig.projectRootDirを基準にパスを解決
 class ProjectPathResolver extends PathResolver {
-  /// シングルトンインスタンス
   static final ProjectPathResolver _instance = ProjectPathResolver._();
-  
-  /// シングルトンアクセサ
   static ProjectPathResolver get instance => _instance;
   
   ProjectPathResolver._();
   
-  /// ファクトリコンストラクタ（テスト用にカスタムルートパスを指定可能）
+  String? Function()? _rootPathGetter;
+  
+  void setRootPathGetter(String? Function() getter) {
+    _rootPathGetter = getter;
+  }
+  
   factory ProjectPathResolver({String? customRootPath}) {
     if (customRootPath != null) {
       return _CustomProjectPathResolver(customRootPath);
@@ -67,7 +68,7 @@ class ProjectPathResolver extends PathResolver {
   }
   
   @override
-  String? get rootPath => GlobalConfig.instance.projectRootDir;
+  String? get rootPath => _rootPathGetter?.call();
   
   @override
   String? resolvePath(List<String> segments) {
@@ -94,15 +95,17 @@ class _CustomProjectPathResolver extends ProjectPathResolver {
 /// グローバルフォルダ用のパスリゾルバ
 /// GlobalConfig.globalFolderPathを基準にパスを解決
 class GlobalPathResolver extends PathResolver {
-  /// シングルトンインスタンス
   static final GlobalPathResolver _instance = GlobalPathResolver._();
-  
-  /// シングルトンアクセサ
   static GlobalPathResolver get instance => _instance;
   
   GlobalPathResolver._();
   
-  /// ファクトリコンストラクタ（テスト用にカスタムルートパスを指定可能）
+  String? Function()? _rootPathGetter;
+  
+  void setRootPathGetter(String? Function() getter) {
+    _rootPathGetter = getter;
+  }
+  
   factory GlobalPathResolver({String? customRootPath}) {
     if (customRootPath != null) {
       return _CustomGlobalPathResolver(customRootPath);
@@ -111,7 +114,7 @@ class GlobalPathResolver extends PathResolver {
   }
   
   @override
-  String? get rootPath => GlobalConfig.instance.globalFolderPath;
+  String? get rootPath => _rootPathGetter?.call();
   
   @override
   String? resolvePath(List<String> segments) {

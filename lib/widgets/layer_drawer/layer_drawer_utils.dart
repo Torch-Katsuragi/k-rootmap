@@ -2,24 +2,19 @@ import 'package:k_maps/utils/app_logger.dart';
 
 /// K-MAPS: LayerDrawer用ユーティリティ関数
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../utils/global_config.dart';
+import '../../providers/ui_state_providers.dart';
+import 'layer_drawer.dart';
 
 /// LayerDrawer用ユーティリティ関数を提供するミックスイン
-mixin LayerDrawerUtils {
+mixin LayerDrawerUtils on ConsumerState<LayerDrawer> {
   /// マップページのフィーチャ更新をトリガー
   void triggerMapRefresh() {
     try {
-      // GlobalConfigを通じてマップページの更新をトリガー（型安全）
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null && mapState.mounted) {
-        // レイヤ削除時は強制的にマップを更新（フィーチャキャッシュクリア）
-        mapState.forceMapRefresh();
-        AppLogger.debug('[LayerDrawer] マップ強制更新をトリガーしました');
-      } else {
-        AppLogger.debug('[LayerDrawer] マップページが見つからないか、マウントされていません');
-      }
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      AppLogger.debug('[LayerDrawer] マップ強制更新をトリガーしました');
     } catch (e) {
       AppLogger.debug('[LayerDrawer] マップ更新エラー: $e');
     }

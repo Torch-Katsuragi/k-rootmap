@@ -4,13 +4,13 @@ library;
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
-import '../../../utils/global_config.dart';
+import '../../../providers/project_providers.dart';
 import '../../../utils/metadata_parser.dart';
 
-/// メタデータ表示ダイアログ
-class MetadataTableDialog extends StatefulWidget {
+class MetadataTableDialog extends ConsumerStatefulWidget {
   final MetadataTableData tableData;
   final String gpkgName;
   final String layerName;
@@ -27,10 +27,10 @@ class MetadataTableDialog extends StatefulWidget {
   });
 
   @override
-  State<MetadataTableDialog> createState() => _MetadataTableDialogState();
+  ConsumerState<MetadataTableDialog> createState() => _MetadataTableDialogState();
 }
 
-class _MetadataTableDialogState extends State<MetadataTableDialog> {
+class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
   late MetadataTableData currentTableData;
 
   @override
@@ -67,7 +67,7 @@ class _MetadataTableDialogState extends State<MetadataTableDialog> {
   Future<void> _exportMetadataToTSV(BuildContext context) async {
     try {
       // プロジェクトルートディレクトリを取得
-      final projectRoot = GlobalConfig.instance.projectRootDir;
+      final projectRoot = ref.read(projectRootDirProvider);
       if (projectRoot == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -10,7 +10,6 @@ import 'dart:convert';
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage/geopackage_file.dart';
-import '../../utils/global_config.dart';
 import '../../converters/turf_converter.dart';
 import '../../core/node_types.dart';
 
@@ -18,6 +17,14 @@ import '../../core/node_types.dart';
 /// LayerNodeの子としてfeature単位で生成される
 /// データはLayerNode._featureMapに一元管理され、FeatureNodeは参照と操作を提供
 abstract class FeatureNode extends LayerTreeNode {
+  /// dispose時に呼び出されるコールバック（選択状態からの除去等）
+  static void Function(FeatureNode)? _onDispose;
+
+  /// disposeコールバックを設定
+  static void setOnDisposeCallback(void Function(FeatureNode) callback) {
+    _onDispose = callback;
+  }
+
   /// DB上のrowId（主キー）- データは持たず、IDのみ保持
   final int _rowId;
 
@@ -27,6 +34,10 @@ abstract class FeatureNode extends LayerTreeNode {
   
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
+
+  LatLng? _cachedCentroid;
+  bool _metadataCacheValid = false;
+  Map<String, dynamic>? _cachedMetadata;
 
   /// DB上のrowId（主キー）
   int get rowId => _rowId;
@@ -57,11 +68,11 @@ abstract class FeatureNode extends LayerTreeNode {
     return feature;
   }
 
-  /// フィーチャの重心座標（turf_dartで計算）
+  /// フィーチャの重心座標（turf_dartで計算、キャッシュあり）
   LatLng get centroid {
     if (_isDisposed || parent.isDisposed) return LatLng(0, 0);
-    final calculatedCentroid = TurfConverter.calculateCentroid(turfFeature);
-    return calculatedCentroid ?? LatLng(0, 0);
+    return _cachedCentroid ??=
+        TurfConverter.calculateCentroid(turfFeature) ?? LatLng(0, 0);
   }
 
   /// 座標データをposition型で取得（turf_dart形式）
@@ -137,21 +148,27 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
-  /// メタデータのgetter（turf_dartのpropertiesから取得）
+  /// メタデータのgetter（turf_dartのpropertiesから取得、キャッシュあり）
   Map<String, dynamic>? get metadata {
     if (_isDisposed || parent.isDisposed) return null;
+    if (_metadataCacheValid) return _cachedMetadata;
     final value = turfFeature.properties?['kmaps_metadata'];
-    if (value == null) return null;
-    if (value is Map<String, dynamic>) return value;
-    if (value is String) {
+    if (value == null) {
+      _cachedMetadata = null;
+    } else if (value is Map<String, dynamic>) {
+      _cachedMetadata = value;
+    } else if (value is String) {
       try {
-        return Map<String, dynamic>.from(json.decode(value));
+        _cachedMetadata = Map<String, dynamic>.from(json.decode(value));
       } catch (e) {
         AppLogger.debug('[WARNING] FeatureNode: Failed to parse metadata JSON: $e');
-        return null;
+        _cachedMetadata = null;
       }
+    } else {
+      _cachedMetadata = null;
     }
-    return null;
+    _metadataCacheValid = true;
+    return _cachedMetadata;
   }
 
   /// メタデータのsetter（親のMapを更新）
@@ -161,10 +178,17 @@ abstract class FeatureNode extends LayerTreeNode {
     _markDirty();
   }
 
+  void _invalidateCache() {
+    _cachedCentroid = null;
+    _metadataCacheValid = false;
+    _cachedMetadata = null;
+  }
+
   /// 変更フラグをセット
   void _markDirty() {
     AppLogger.debug('[DEBUG] FeatureNode: _markDirty呼び出し - レイヤー:$layerName, 行ID:$rowId');
     _isDirty = true;
+    _invalidateCache();
     
     if (_isDisposed) return;
     
@@ -360,12 +384,7 @@ abstract class FeatureNode extends LayerTreeNode {
       AppLogger.debug('[DEBUG] FeatureNode.dispose: fallback - removed from parent children only');
     }
 
-    // 選択状態からも除去
-    final globalConfig = GlobalConfig.instance;
-    if (globalConfig.selectedFeatures.contains(this)) {
-      globalConfig.selectedFeatures.remove(this);
-      AppLogger.debug('[DEBUG] FeatureNode.dispose: removed from selected features');
-    }
+    _onDispose?.call(this);
 
     // 子ノードはFeatureNodeにはないが、安全のためクリア
     children.clear();
@@ -638,6 +657,8 @@ class PointFeatureNode extends FeatureNode {
 
 /// LineFeatureNode: 線フィーチャ用
 class LineFeatureNode extends FeatureNode {
+  double? _cachedLength;
+
   /// rowデータから線フィーチャノードを作成
   LineFeatureNode(Map<String, dynamic> row, LayerNode parent)
     : super(row, parent, 'LineString');
@@ -645,6 +666,12 @@ class LineFeatureNode extends FeatureNode {
   /// turf_dartのFeatureから線フィーチャノードを作成
   LineFeatureNode.fromTurfFeature(super.feature, super.parent)
     : super.fromTurfFeature();
+
+  @override
+  void _invalidateCache() {
+    super._invalidateCache();
+    _cachedLength = null;
+  }
 
   /// 単一の線分（頂点リスト）
   List<LatLng> get line {
@@ -661,10 +688,11 @@ class LineFeatureNode extends FeatureNode {
     return TurfConverter.latlngsToPositions(line);
   }
 
-  /// 線の長さを計算（turf_dartで計算）
+  /// 線の長さを計算（turf_dartで計算、キャッシュあり）
   double get length {
-    final calculatedLength = TurfConverter.calculateLength(turfFeature);
-    return calculatedLength ?? 0.0;
+    if (_isDisposed || parent.isDisposed) return 0.0;
+    return _cachedLength ??=
+        TurfConverter.calculateLength(turfFeature) ?? 0.0;
   }
 
   @override
@@ -849,6 +877,8 @@ class LineFeatureNode extends FeatureNode {
 
 /// PolygonFeatureNode: 面フィーチャ用
 class PolygonFeatureNode extends FeatureNode {
+  double? _cachedArea;
+
   /// rowデータから面フィーチャノードを作成
   PolygonFeatureNode(Map<String, dynamic> row, LayerNode parent)
     : super(row, parent, 'Polygon');
@@ -856,6 +886,12 @@ class PolygonFeatureNode extends FeatureNode {
   /// turf_dartのFeatureから面フィーチャノードを作成
   PolygonFeatureNode.fromTurfFeature(super.feature, super.parent)
     : super.fromTurfFeature();
+
+  @override
+  void _invalidateCache() {
+    super._invalidateCache();
+    _cachedArea = null;
+  }
 
   /// 単一のポリゴン（外環＋穴リスト）
   List<List<LatLng>> get polygon {
@@ -876,10 +912,11 @@ class PolygonFeatureNode extends FeatureNode {
     return [];
   }
 
-  /// ポリゴンの面積を計算（turf_dartで計算）
+  /// ポリゴンの面積を計算（turf_dartで計算、キャッシュあり）
   double get area {
-    final calculatedArea = TurfConverter.calculateArea(turfFeature);
-    return calculatedArea ?? 0.0;
+    if (_isDisposed || parent.isDisposed) return 0.0;
+    return _cachedArea ??=
+        TurfConverter.calculateArea(turfFeature) ?? 0.0;
   }
 
   @override

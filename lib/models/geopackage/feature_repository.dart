@@ -1,5 +1,3 @@
-// K-MAPS: フィーチャリポジトリクラス
-// Point/Line/PolygonのCRUD操作を担当
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:latlong2/latlong.dart';
@@ -11,25 +9,146 @@ import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 
 /// フィーチャのCRUD操作を管理するリポジトリクラス
-/// 責務: Point/Line/Polygonの追加・取得・更新・削除
 class FeatureRepository {
-  /// DB接続への参照
   final GeoPackageConnection connection;
-
-  /// スキーマ管理への参照
   final GeoPackageSchema schema;
-
-  /// 空間インデックス管理への参照
   final SpatialIndexManager spatialIndex;
 
-  /// コンストラクタ
   FeatureRepository(this.connection, this.schema, this.spatialIndex);
 
   // ============================================================
-  // Point Feature CRUD
+  // エンベロープ計算（共通）
   // ============================================================
 
-  /// 辞書ベースの点フィーチャ追加
+  /// 座標リストからエンベロープ(minX, minY, maxX, maxY)を計算
+  ({double minX, double minY, double maxX, double maxY})? _calculateEnvelope(
+    List<LatLng> coordinates,
+  ) {
+    if (coordinates.isEmpty) return null;
+    double minX = coordinates.first.longitude;
+    double maxX = minX;
+    double minY = coordinates.first.latitude;
+    double maxY = minY;
+    for (final pt in coordinates) {
+      if (pt.longitude < minX) minX = pt.longitude;
+      if (pt.longitude > maxX) maxX = pt.longitude;
+      if (pt.latitude < minY) minY = pt.latitude;
+      if (pt.latitude > maxY) maxY = pt.latitude;
+    }
+    return (minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  }
+
+  /// ポリゴンの全リングからエンベロープを計算
+  ({double minX, double minY, double maxX, double maxY})?
+      _calculatePolygonEnvelope(List<List<LatLng>> rings) {
+    final allPoints = rings.expand((ring) => ring).toList();
+    return _calculateEnvelope(allPoints);
+  }
+
+  /// エンベロープをDB（空間インデックス）に反映
+  Future<void> _updateSpatialIndex(
+    String tableName,
+    int rowId,
+    ({double minX, double minY, double maxX, double maxY}) envelope,
+  ) async {
+    await spatialIndex.updateLayerEnvelope(
+      tableName,
+      envelope.minX,
+      envelope.minY,
+      envelope.maxX,
+      envelope.maxY,
+    );
+    await spatialIndex.updateRTreeIndex(
+      tableName,
+      rowId,
+      envelope.minX,
+      envelope.minY,
+      envelope.maxX,
+      envelope.maxY,
+    );
+  }
+
+  // ============================================================
+  // 属性ビルダー（共通）
+  // ============================================================
+
+  /// テーブルに存在するカラムのみを含む属性マップを構築
+  Future<Map<String, dynamic>> _buildSafeAttributes(
+    String tableName, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    final db = await connection.getDatabase();
+    final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
+    final columnNames = columns.map((row) => row['name'] as String).toSet();
+
+    final attributes = <String, dynamic>{};
+    if (columnNames.contains('name')) attributes['name'] = name;
+    if (columnNames.contains('description')) {
+      attributes['description'] = description;
+    }
+    if (columnNames.contains('kmaps_metadata') && metadata != null) {
+      attributes['kmaps_metadata'] = jsonEncode(metadata);
+    }
+    return attributes;
+  }
+
+  /// ジオメトリ＋属性のUPDATE SQLを構築・実行する共通処理
+  Future<bool> _updateFeatureGeometry(
+    String tableName,
+    int id,
+    Uint8List wkb, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final db = await connection.getDatabase();
+      final attributes = await _buildSafeAttributes(
+        tableName,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+
+      final updateColumns = <String>['geom = ?'];
+      final updateValues = <dynamic>[wkb];
+
+      for (final entry in attributes.entries) {
+        updateColumns.add('"${entry.key}" = ?');
+        updateValues.add(entry.value);
+      }
+
+      updateValues.add(id);
+      final whereClause = await schema.buildWhereClause(tableName);
+      final sql =
+          'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
+      final affectedRows = await db.rawUpdate(sql, updateValues);
+      return affectedRows > 0;
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] _updateFeatureGeometry: エラー発生 - $e',
+      );
+      return false;
+    }
+  }
+
+  // ============================================================
+  // WKBバリデーション（共通）
+  // ============================================================
+
+  void _validateAndLogWkb(Uint8List wkb, String context) {
+    if (!validateWkbData(wkb)) {
+      AppLogger.debug('[FeatureRepository] 警告: 無効なWKBデータが生成されました');
+      debugWkbData(wkb, context);
+    }
+  }
+
+  // ============================================================
+  // フィーチャ追加（WithAttributes版 - ジオメトリ型共通化）
+  // ============================================================
+
   Future<int?> addPointWithAttributes(
     String tableName,
     LatLng point,
@@ -38,133 +157,26 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final wkb = createWkbPoint(point.longitude, point.latitude);
+      _validateAndLogWkb(
+        wkb,
+        'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
+      );
 
-      // WKBデータの妥当性チェック
-      if (!validateWkbData(wkb)) {
-        AppLogger.debug('[FeatureRepository] 警告: 無効なWKBデータが生成されました');
-        debugWkbData(wkb, 'addPointWithAttributes - ${point.latitude}, ${point.longitude}');
-      }
-
-      final data = <String, dynamic>{'geom': wkb};
-      data.addAll(attributes);
-
+      final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
 
-      // 空間インデックスを更新
-      await spatialIndex.updateLayerEnvelope(
-        tableName,
-        point.longitude,
-        point.latitude,
-        point.longitude,
-        point.latitude,
-      );
-
-      await spatialIndex.updateRTreeIndex(
-        tableName,
-        rowId,
-        point.longitude,
-        point.latitude,
-        point.longitude,
-        point.latitude,
-      );
+      final env = _calculateEnvelope([point]);
+      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
 
       return rowId;
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: addPointWithAttributes failed: $e');
+      AppLogger.debug(
+        '[ERROR] FeatureRepository: addPointWithAttributes failed: $e',
+      );
       return null;
     }
   }
 
-  /// 点フィーチャを追加（属性付き）
-  Future<int?> addPoint(
-    String tableName,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) async {
-    try {
-      final db = await connection.getDatabase();
-      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columnNames = columns.map((row) => row['name'] as String).toSet();
-
-      final attributes = <String, dynamic>{};
-
-      if (columnNames.contains('name')) {
-        attributes['name'] = name;
-      }
-      if (columnNames.contains('description')) {
-        attributes['description'] = description;
-      }
-      if (columnNames.contains('kmaps_metadata') && metadata != null) {
-        attributes['kmaps_metadata'] = jsonEncode(metadata);
-      }
-
-      return await addPointWithAttributes(tableName, pt, attributes);
-    } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: addPoint failed: $e');
-      return null;
-    }
-  }
-
-  /// 点フィーチャを更新
-  Future<bool> updatePoint(
-    String tableName,
-    int id,
-    LatLng pt, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) async {
-    try {
-      final db = await connection.getDatabase();
-      final wkb = createWkbPoint(pt.longitude, pt.latitude);
-
-      if (!validateWkbData(wkb)) {
-        AppLogger.debug('[FeatureRepository] 警告: 無効なWKBデータが生成されました');
-        debugWkbData(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
-      }
-
-      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columnNames = columns.map((row) => row['name'] as String).toSet();
-
-      final updateColumns = <String>[];
-      final updateValues = <dynamic>[];
-
-      updateColumns.add('geom = ?');
-      updateValues.add(wkb);
-
-      if (columnNames.contains('name')) {
-        updateColumns.add('name = ?');
-        updateValues.add(name);
-      }
-      if (columnNames.contains('description')) {
-        updateColumns.add('description = ?');
-        updateValues.add(description);
-      }
-      if (columnNames.contains('kmaps_metadata') && metadata != null) {
-        updateColumns.add('kmaps_metadata = ?');
-        updateValues.add(jsonEncode(metadata));
-      }
-
-      updateValues.add(id);
-
-      final whereClause = await schema.buildWhereClause(tableName);
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
-      final affectedRows = await db.rawUpdate(sql, updateValues);
-
-      return affectedRows > 0;
-    } catch (e) {
-      AppLogger.debug('[FeatureRepository] updatePoint: エラー発生 - $e');
-      return false;
-    }
-  }
-
-  // ============================================================
-  // Line Feature CRUD
-  // ============================================================
-
-  /// 辞書ベースの線フィーチャ追加
   Future<int?> addLineWithAttributes(
     String tableName,
     List<LatLng> line,
@@ -174,37 +186,70 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final wkb = createWkbLineString(line);
 
-      final data = <String, dynamic>{'geom': wkb};
-      data.addAll(attributes);
-
+      final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
 
-      // エンベロープを計算して更新
-      if (line.isNotEmpty) {
-        double minX = line.first.longitude;
-        double maxX = line.first.longitude;
-        double minY = line.first.latitude;
-        double maxY = line.first.latitude;
-
-        for (final pt in line) {
-          minX = minX < pt.longitude ? minX : pt.longitude;
-          maxX = maxX > pt.longitude ? maxX : pt.longitude;
-          minY = minY < pt.latitude ? minY : pt.latitude;
-          maxY = maxY > pt.latitude ? maxY : pt.latitude;
-        }
-
-        await spatialIndex.updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
-        await spatialIndex.updateRTreeIndex(tableName, rowId, minX, minY, maxX, maxY);
-      }
+      final env = _calculateEnvelope(line);
+      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
 
       return rowId;
     } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: addLineWithAttributes failed: $e');
+      AppLogger.debug(
+        '[ERROR] FeatureRepository: addLineWithAttributes failed: $e',
+      );
       return null;
     }
   }
 
-  /// 線フィーチャを追加（属性付き）
+  Future<int?> addPolygonWithAttributes(
+    String tableName,
+    List<List<LatLng>> polygon,
+    Map<String, dynamic> attributes,
+  ) async {
+    try {
+      final db = await connection.getDatabase();
+      final wkb = createWkbPolygon(polygon);
+
+      final data = <String, dynamic>{'geom': wkb, ...attributes};
+      final rowId = await db.insert(tableName, data);
+
+      final env = _calculatePolygonEnvelope(polygon);
+      if (env != null) await _updateSpatialIndex(tableName, rowId, env);
+
+      return rowId;
+    } catch (e) {
+      AppLogger.debug(
+        '[ERROR] FeatureRepository: addPolygonWithAttributes failed: $e',
+      );
+      return null;
+    }
+  }
+
+  // ============================================================
+  // フィーチャ追加（簡易版）
+  // ============================================================
+
+  Future<int?> addPoint(
+    String tableName,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final attributes = await _buildSafeAttributes(
+        tableName,
+        name: name,
+        description: description,
+        metadata: metadata,
+      );
+      return await addPointWithAttributes(tableName, pt, attributes);
+    } catch (e) {
+      AppLogger.debug('[ERROR] FeatureRepository: addPoint failed: $e');
+      return null;
+    }
+  }
+
   Future<int?> addLine(
     String tableName,
     List<LatLng> line, {
@@ -216,109 +261,10 @@ class FeatureRepository {
       'name': name,
       'description': description,
     };
-
-    if (metadata != null) {
-      attributes['kmaps_metadata'] = jsonEncode(metadata);
-    }
-
+    if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
     return await addLineWithAttributes(tableName, line, attributes);
   }
 
-  /// 線フィーチャを更新
-  Future<bool> updateLine(
-    String tableName,
-    int id,
-    List<LatLng> line, {
-    String name = '',
-    String description = '',
-    Map<String, dynamic>? metadata,
-  }) async {
-    try {
-      final db = await connection.getDatabase();
-      final wkb = createWkbLineString(line);
-
-      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columnNames = columns.map((row) => row['name'] as String).toSet();
-
-      final updateColumns = <String>[];
-      final updateValues = <dynamic>[];
-
-      updateColumns.add('geom = ?');
-      updateValues.add(wkb);
-
-      if (columnNames.contains('name')) {
-        updateColumns.add('name = ?');
-        updateValues.add(name);
-      }
-      if (columnNames.contains('description')) {
-        updateColumns.add('description = ?');
-        updateValues.add(description);
-      }
-      if (columnNames.contains('kmaps_metadata') && metadata != null) {
-        updateColumns.add('kmaps_metadata = ?');
-        updateValues.add(jsonEncode(metadata));
-      }
-
-      updateValues.add(id);
-
-      final whereClause = await schema.buildWhereClause(tableName);
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
-      final affectedRows = await db.rawUpdate(sql, updateValues);
-
-      return affectedRows > 0;
-    } catch (e) {
-      AppLogger.debug('[FeatureRepository] updateLine: エラー発生 - $e');
-      return false;
-    }
-  }
-
-  // ============================================================
-  // Polygon Feature CRUD
-  // ============================================================
-
-  /// 辞書ベースの面フィーチャ追加
-  Future<int?> addPolygonWithAttributes(
-    String tableName,
-    List<List<LatLng>> polygon,
-    Map<String, dynamic> attributes,
-  ) async {
-    try {
-      final db = await connection.getDatabase();
-      final wkb = createWkbPolygon(polygon);
-
-      final data = <String, dynamic>{'geom': wkb};
-      data.addAll(attributes);
-
-      final rowId = await db.insert(tableName, data);
-
-      // エンベロープを計算して更新
-      if (polygon.isNotEmpty && polygon.first.isNotEmpty) {
-        double minX = polygon.first.first.longitude;
-        double maxX = polygon.first.first.longitude;
-        double minY = polygon.first.first.latitude;
-        double maxY = polygon.first.first.latitude;
-
-        for (final ring in polygon) {
-          for (final pt in ring) {
-            minX = minX < pt.longitude ? minX : pt.longitude;
-            maxX = maxX > pt.longitude ? maxX : pt.longitude;
-            minY = minY < pt.latitude ? minY : pt.latitude;
-            maxY = maxY > pt.latitude ? maxY : pt.latitude;
-          }
-        }
-
-        await spatialIndex.updateLayerEnvelope(tableName, minX, minY, maxX, maxY);
-        await spatialIndex.updateRTreeIndex(tableName, rowId, minX, minY, maxX, maxY);
-      }
-
-      return rowId;
-    } catch (e) {
-      AppLogger.debug('[ERROR] FeatureRepository: addPolygonWithAttributes failed: $e');
-      return null;
-    }
-  }
-
-  /// ポリゴンフィーチャを追加（属性付き）
   Future<int?> addPolygon(
     String tableName,
     List<List<LatLng>> rings, {
@@ -330,15 +276,53 @@ class FeatureRepository {
       'name': name,
       'description': description,
     };
-
-    if (metadata != null) {
-      attributes['kmaps_metadata'] = jsonEncode(metadata);
-    }
-
+    if (metadata != null) attributes['kmaps_metadata'] = jsonEncode(metadata);
     return await addPolygonWithAttributes(tableName, rings, attributes);
   }
 
-  /// ポリゴンフィーチャを更新
+  // ============================================================
+  // フィーチャ更新（共通メソッドに統一）
+  // ============================================================
+
+  Future<bool> updatePoint(
+    String tableName,
+    int id,
+    LatLng pt, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    final wkb = createWkbPoint(pt.longitude, pt.latitude);
+    _validateAndLogWkb(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
+    return _updateFeatureGeometry(
+      tableName,
+      id,
+      wkb,
+      name: name,
+      description: description,
+      metadata: metadata,
+    );
+  }
+
+  Future<bool> updateLine(
+    String tableName,
+    int id,
+    List<LatLng> line, {
+    String name = '',
+    String description = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    final wkb = createWkbLineString(line);
+    return _updateFeatureGeometry(
+      tableName,
+      id,
+      wkb,
+      name: name,
+      description: description,
+      metadata: metadata,
+    );
+  }
+
   Future<bool> updatePolygon(
     String tableName,
     int id,
@@ -347,65 +331,32 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    try {
-      final db = await connection.getDatabase();
-      final wkb = createWkbPolygon(rings);
-
-      final columns = await db.rawQuery('PRAGMA table_info("$tableName");');
-      final columnNames = columns.map((row) => row['name'] as String).toSet();
-
-      final updateColumns = <String>[];
-      final updateValues = <dynamic>[];
-
-      updateColumns.add('geom = ?');
-      updateValues.add(wkb);
-
-      if (columnNames.contains('name')) {
-        updateColumns.add('name = ?');
-        updateValues.add(name);
-      }
-      if (columnNames.contains('description')) {
-        updateColumns.add('description = ?');
-        updateValues.add(description);
-      }
-      if (columnNames.contains('kmaps_metadata') && metadata != null) {
-        updateColumns.add('kmaps_metadata = ?');
-        updateValues.add(jsonEncode(metadata));
-      }
-
-      updateValues.add(id);
-
-      final whereClause = await schema.buildWhereClause(tableName);
-      final sql = 'UPDATE "$tableName" SET ${updateColumns.join(', ')} WHERE $whereClause';
-      final affectedRows = await db.rawUpdate(sql, updateValues);
-
-      return affectedRows > 0;
-    } catch (e) {
-      AppLogger.debug('[FeatureRepository] updatePolygon: エラー発生 - $e');
-      return false;
-    }
+    final wkb = createWkbPolygon(rings);
+    return _updateFeatureGeometry(
+      tableName,
+      id,
+      wkb,
+      name: name,
+      description: description,
+      metadata: metadata,
+    );
   }
 
   // ============================================================
   // 共通 Feature 操作
   // ============================================================
 
-  /// 指定IDのフィーチャを削除
   Future<void> removeFeature(String tableName, int id) async {
     try {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-
       await db.delete(tableName, where: whereClause, whereArgs: [id]);
-
-      // R-Tree空間インデックスからも削除
       await spatialIndex.removeFromRTreeIndex(tableName, id);
     } catch (e) {
       AppLogger.debug('[FeatureRepository] removeFeature: エラー発生 - $e');
     }
   }
 
-  /// 単一フィーチャを取得（geom列をgeometry typeに応じて変換）
   Future<Map<String, dynamic>?> getFeature(
     String tableName,
     int rowId,
@@ -415,44 +366,22 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      // rowidを使用する場合は明示的にSELECTに含める
       final selectClause = pkColumn == 'rowid'
           ? 'SELECT rowid, * FROM "$tableName" WHERE rowid = ?'
           : 'SELECT * FROM "$tableName" WHERE "$pkColumn" = ?';
 
       final rows = await db.rawQuery(selectClause, [rowId]);
-
       if (rows.isEmpty) return null;
 
       final row = Map<String, dynamic>.from(rows.first);
-
-      // PRIMARY KEYカラムが'id'以外の場合、正規化
-      if (pkColumn != 'id') {
-        if (row.containsKey(pkColumn)) {
-          row['id'] = row[pkColumn];
-        } else {
-          AppLogger.debug('[FeatureRepository] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
-          row['id'] = 0;
-        }
-      }
+      _normalizePrimaryKey(row, pkColumn);
 
       final geom = row['geom'] as Uint8List?;
-
-      // geom列をgeometry typeに応じて変換
       if (geom != null && geomType != null) {
         _parseGeometry(row, geom, geomType, rowId);
       }
 
-      // kmaps_metadataをパース
-      final metadataStr = row['kmaps_metadata'] as String?;
-      if (metadataStr != null && metadataStr.isNotEmpty) {
-        try {
-          row['kmaps_metadata'] = jsonDecode(metadataStr) as Map<String, dynamic>;
-        } catch (e) {
-          AppLogger.debug('[FeatureRepository] getFeature: メタデータのJSONパースエラー - $e');
-        }
-      }
-
+      _parseMetadata(row);
       return row;
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getFeature: エラー発生 - $e');
@@ -460,66 +389,6 @@ class FeatureRepository {
     }
   }
 
-  /// ジオメトリデータを解析してrowに追加
-  void _parseGeometry(
-    Map<String, dynamic> row,
-    Uint8List geom,
-    GeometryType geomType,
-    int rowId,
-  ) {
-    if (geomType == GeometryType.point) {
-      // GPBinaryヘッダーをスキップして純粋なWKBデータを取得
-      Uint8List pureWkb = geom;
-      if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
-        final flags = geom[3];
-        final envelopeType = (flags >> 1) & 0x07;
-        int headerSize = 8;
-
-        switch (envelopeType) {
-          case 1:
-            headerSize += 32;
-            break;
-          case 2:
-          case 3:
-            headerSize += 48;
-            break;
-          case 4:
-            headerSize += 64;
-            break;
-        }
-
-        if (geom.length > headerSize) {
-          pureWkb = geom.sublist(headerSize);
-        }
-      }
-
-      if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
-        final lon = ByteData.sublistView(pureWkb, 5, 13).getFloat64(0, Endian.little);
-        final lat = ByteData.sublistView(pureWkb, 13, 21).getFloat64(0, Endian.little);
-
-        if (lat >= -90.0 && lat <= 90.0 &&
-            lon >= -180.0 && lon <= 180.0 &&
-            !lat.isNaN && !lon.isNaN &&
-            !lat.isInfinite && !lon.isInfinite) {
-          row['geometry'] = [LatLng(lat, lon)];
-        } else {
-          AppLogger.debug('[FeatureRepository] ⚠️ 警告: 無効なPoint座標値を検出: lat=$lat, lon=$lon (rowId=$rowId)');
-        }
-      }
-    } else if (geomType == GeometryType.linestring) {
-      final lines = parseWkbLineString(geom);
-      if (lines.isNotEmpty) {
-        row['geometry'] = lines;
-      }
-    } else if (geomType == GeometryType.polygon) {
-      final polygons = parseWkbPolygon(geom);
-      if (polygons.isNotEmpty) {
-        row['geometry'] = polygons;
-      }
-    }
-  }
-
-  /// 指定レイヤの全フィーチャを取得（rawデータ、内部形式に正規化）
   Future<List<Map<String, dynamic>>> getFeatures(String tableName) async {
     try {
       final db = await connection.getDatabase();
@@ -530,19 +399,9 @@ class FeatureRepository {
           : 'SELECT * FROM "$tableName"';
 
       final rows = await db.rawQuery(selectClause);
-
       return rows.map((row) {
         final normalizedRow = Map<String, dynamic>.from(row);
-
-        if (pkColumn != 'id') {
-          if (row.containsKey(pkColumn)) {
-            normalizedRow['id'] = row[pkColumn];
-          } else {
-            AppLogger.debug('[FeatureRepository] ⚠️ 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません！');
-            normalizedRow['id'] = 0;
-          }
-        }
-
+        _normalizePrimaryKey(normalizedRow, pkColumn);
         return normalizedRow;
       }).toList();
     } catch (e) {
@@ -551,7 +410,6 @@ class FeatureRepository {
     }
   }
 
-  /// 指定レイヤーの全フィーチャの属性データを一括取得
   Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
     String tableName, {
     List<String>? columns,
@@ -565,13 +423,13 @@ class FeatureRepository {
           ? 'ORDER BY rowid'
           : 'ORDER BY "$pkColumn"';
 
-      final result = await db.rawQuery(
+      return await db.rawQuery(
         'SELECT $columnList FROM "$tableName" $orderByClause',
       );
-
-      return result;
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] getAllFeatureAttributes エラー発生 - $e');
+      AppLogger.debug(
+        '[FeatureRepository] getAllFeatureAttributes エラー発生 - $e',
+      );
       return [];
     }
   }
@@ -580,7 +438,6 @@ class FeatureRepository {
   // 属性操作
   // ============================================================
 
-  /// 指定テーブル・rowId・カラム名から値を取得
   Future<dynamic> getFeatureAttribute(
     String tableName,
     int rowId,
@@ -589,23 +446,20 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-
       final result = await db.query(
         tableName,
         where: whereClause,
         whereArgs: [rowId],
       );
-      if (result.isNotEmpty) {
-        return result.first[attributeName];
-      }
-      return null;
+      return result.isNotEmpty ? result.first[attributeName] : null;
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] getFeatureAttribute: エラー発生 - $e');
+      AppLogger.debug(
+        '[FeatureRepository] getFeatureAttribute: エラー発生 - $e',
+      );
       return null;
     }
   }
 
-  /// 指定テーブル・rowIdの全属性値を取得
   Future<Map<String, dynamic>?> getFeatureAttributes(
     String tableName,
     int rowId,
@@ -613,23 +467,22 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-
       final result = await db.query(
         tableName,
         where: whereClause,
         whereArgs: [rowId],
       );
-      if (result.isNotEmpty) {
-        return Map<String, dynamic>.from(result.first);
-      }
-      return null;
+      return result.isNotEmpty
+          ? Map<String, dynamic>.from(result.first)
+          : null;
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] getFeatureAttributes: エラー発生 - $e');
+      AppLogger.debug(
+        '[FeatureRepository] getFeatureAttributes: エラー発生 - $e',
+      );
       return null;
     }
   }
 
-  /// 指定テーブル・rowId・カラム名の属性値を更新
   Future<bool> updateFeatureAttribute(
     String tableName,
     int rowId,
@@ -639,19 +492,19 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
-
       final rowsUpdated = await db.rawUpdate(
         'UPDATE "$tableName" SET "$attributeName" = ? WHERE $whereClause',
         [newValue, rowId],
       );
       return rowsUpdated > 0;
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] updateFeatureAttribute: エラー発生 - $e');
+      AppLogger.debug(
+        '[FeatureRepository] updateFeatureAttribute: エラー発生 - $e',
+      );
       return false;
     }
   }
 
-  /// 複数の属性値を一括更新
   Future<bool> updateFeatureAttributes(
     String tableName,
     int rowId,
@@ -660,59 +513,39 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+      final existingColumns =
+          (await schema.getColumnNames(tableName, getAll: true)).toSet();
 
-      // 実際に存在するカラム名を取得
-      final existingColumns = await schema.getColumnNames(tableName, getAll: true);
-      final existingColumnSet = existingColumns.toSet();
-
-      // SQLiteでサポートされていない型と存在しないカラムを除外
       final filteredAttributes = <String, dynamic>{};
       for (final entry in attributes.entries) {
         final key = entry.key;
         final value = entry.value;
 
-        // ジオメトリ関連フィールド、PRIMARY KEYフィールド、id（仮想カラム）は除外
-        if (key == 'geometry' ||
-            key == 'geom' ||
-            key == pkColumn ||
-            key == 'id') {
-          continue;
-        }
-
-        // 存在しないカラムは除外
-        if (!existingColumnSet.contains(key)) {
+        if (_isReservedColumn(key, pkColumn)) continue;
+        if (!existingColumns.contains(key)) {
           AppLogger.debug(
-            '[FeatureRepository] ⚠️ カラム未存在のためスキップ: $key',
+            '[FeatureRepository] カラム未存在のためスキップ: $key',
           );
           continue;
         }
-
-        if (value == null ||
-            value is String ||
-            value is num ||
-            value is bool ||
-            value is Uint8List) {
+        if (_isSupportedType(value)) {
           filteredAttributes[key] = value;
         } else {
           AppLogger.debug(
-            '[FeatureRepository] ⚠️ サポートされていない型: $key = ${value.runtimeType}',
+            '[FeatureRepository] サポートされていない型: $key = ${value.runtimeType}',
           );
         }
       }
 
-      if (filteredAttributes.isEmpty) {
-        return true;
-      }
+      if (filteredAttributes.isEmpty) return true;
 
       final columnAssignments =
           filteredAttributes.keys.map((key) => '"$key" = ?').join(', ');
       final values = [...filteredAttributes.values, rowId];
-
       final whereClause = await schema.buildWhereClause(tableName);
       final sql =
           'UPDATE "$tableName" SET $columnAssignments WHERE $whereClause';
       final rowsUpdated = await db.rawUpdate(sql, values);
-
       return rowsUpdated > 0;
     } catch (e) {
       AppLogger.debug(
@@ -726,14 +559,20 @@ class FeatureRepository {
   // バッチ操作
   // ============================================================
 
-  /// ジェネリックなバッチ追加処理
   Future<List<int>> _addGeometryBatch<T>(
     String tableName,
     List<Map<String, dynamic>> dataList,
     String geometryKey,
     Uint8List Function(T) createWkb,
   ) async {
-    final reservedColumns = {'fid', 'geom', 'id', 'rowid', 'geometry', geometryKey};
+    final reservedColumns = {
+      'fid',
+      'geom',
+      'id',
+      'rowid',
+      'geometry',
+      geometryKey,
+    };
 
     try {
       final db = await connection.getDatabase();
@@ -746,7 +585,6 @@ class FeatureRepository {
       for (final data in dataList) {
         final geometry = data[geometryKey] as T;
         final wkb = createWkb(geometry);
-
         final insertData = <String, dynamic>{'geom': wkb};
 
         data.forEach((key, value) {
@@ -771,13 +609,9 @@ class FeatureRepository {
       }
 
       final results = await batch.commit(noResult: false);
-
       for (final result in results) {
-        if (result is int) {
-          insertedIds.add(result);
-        }
+        if (result is int) insertedIds.add(result);
       }
-
       return insertedIds;
     } catch (e) {
       AppLogger.debug('[ERROR] FeatureRepository._addGeometryBatch<$T>: $e');
@@ -785,50 +619,45 @@ class FeatureRepository {
     }
   }
 
-  /// バッチ処理でポイントを高速追加
   Future<List<int>> addPointsBatch(
     String tableName,
     List<Map<String, dynamic>> pointData,
-  ) async {
-    return _addGeometryBatch<LatLng>(
-      tableName,
-      pointData,
-      'point',
-      (point) => createWkbPoint(point.longitude, point.latitude),
-    );
-  }
+  ) =>
+      _addGeometryBatch<LatLng>(
+        tableName,
+        pointData,
+        'point',
+        (point) => createWkbPoint(point.longitude, point.latitude),
+      );
 
-  /// バッチ処理でラインを高速追加
   Future<List<int>> addLinesBatch(
     String tableName,
     List<Map<String, dynamic>> lineData,
-  ) async {
-    return _addGeometryBatch<List<LatLng>>(
-      tableName,
-      lineData,
-      'line',
-      (line) => createWkbLineString(line),
-    );
-  }
+  ) =>
+      _addGeometryBatch<List<LatLng>>(
+        tableName,
+        lineData,
+        'line',
+        createWkbLineString,
+      );
 
-  /// バッチ処理でポリゴンを高速追加
   Future<List<int>> addPolygonsBatch(
     String tableName,
     List<Map<String, dynamic>> polygonData,
-  ) async {
-    return _addGeometryBatch<List<List<LatLng>>>(
-      tableName,
-      polygonData,
-      'rings',
-      (rings) => createWkbPolygon(rings),
-    );
-  }
+  ) =>
+      _addGeometryBatch<List<List<LatLng>>>(
+        tableName,
+        polygonData,
+        'rings',
+        createWkbPolygon,
+      );
 
-  /// レイヤー間でフィーチャをコピー
-  Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) async {
+  Future<int> copyFeaturesBetweenLayers(
+    String sourceTable,
+    String targetTable,
+  ) async {
     try {
       final db = await connection.getDatabase();
-
       final sourceColumns = await schema.getTableColumns(sourceTable);
       final columnsToInsert = sourceColumns
           .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
@@ -840,26 +669,25 @@ class FeatureRepository {
       }
 
       final columnList = columnsToInsert.map((c) => '"$c"').join(', ');
-
-      final sql = '''
+      await db.execute('''
         INSERT INTO "$targetTable" ($columnList)
         SELECT $columnList FROM "$sourceTable"
-      ''';
-
-      await db.execute(sql);
+      ''');
 
       final countResult = await db.rawQuery('SELECT changes() as count');
       final copiedCount = (countResult.first['count'] as int?) ?? 0;
-
-      AppLogger.debug('[FeatureRepository] フィーチャコピー完了: $sourceTable -> $targetTable ($copiedCount件)');
+      AppLogger.debug(
+        '[FeatureRepository] フィーチャコピー完了: $sourceTable -> $targetTable ($copiedCount件)',
+      );
       return copiedCount;
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] copyFeaturesBetweenLayers エラー: $e');
+      AppLogger.debug(
+        '[FeatureRepository] copyFeaturesBetweenLayers エラー: $e',
+      );
       return 0;
     }
   }
 
-  /// フィーチャを完全な属性テーブルとして追加
   Future<int?> addFeatureWithAttributes(
     String tableName,
     Uint8List geometry,
@@ -867,16 +695,114 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-
-      final data = <String, dynamic>{'geom': geometry};
-      data.addAll(attributes);
-
-      final rowId = await db.insert(tableName, data);
-      return rowId;
+      final data = <String, dynamic>{'geom': geometry, ...attributes};
+      return await db.insert(tableName, data);
     } catch (e) {
-      AppLogger.debug('[FeatureRepository] addFeatureWithAttributes エラー発生 - $e');
+      AppLogger.debug(
+        '[FeatureRepository] addFeatureWithAttributes エラー発生 - $e',
+      );
       return null;
     }
   }
-}
 
+  // ============================================================
+  // プライベートヘルパー
+  // ============================================================
+
+  void _normalizePrimaryKey(Map<String, dynamic> row, String pkColumn) {
+    if (pkColumn != 'id') {
+      if (row.containsKey(pkColumn)) {
+        row['id'] = row[pkColumn];
+      } else {
+        AppLogger.debug(
+          '[FeatureRepository] 警告: PRIMARY KEYカラム "$pkColumn" が見つかりません',
+        );
+        row['id'] = 0;
+      }
+    }
+  }
+
+  void _parseMetadata(Map<String, dynamic> row) {
+    final metadataStr = row['kmaps_metadata'] as String?;
+    if (metadataStr != null && metadataStr.isNotEmpty) {
+      try {
+        row['kmaps_metadata'] =
+            jsonDecode(metadataStr) as Map<String, dynamic>;
+      } catch (e) {
+        AppLogger.debug(
+          '[FeatureRepository] メタデータのJSONパースエラー - $e',
+        );
+      }
+    }
+  }
+
+  bool _isReservedColumn(String key, String pkColumn) =>
+      key == 'geometry' || key == 'geom' || key == pkColumn || key == 'id';
+
+  bool _isSupportedType(dynamic value) =>
+      value == null ||
+      value is String ||
+      value is num ||
+      value is bool ||
+      value is Uint8List;
+
+  void _parseGeometry(
+    Map<String, dynamic> row,
+    Uint8List geom,
+    GeometryType geomType,
+    int rowId,
+  ) {
+    if (geomType == GeometryType.point) {
+      Uint8List pureWkb = _stripGpbHeader(geom);
+      if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
+        final lon =
+            ByteData.sublistView(pureWkb, 5, 13).getFloat64(0, Endian.little);
+        final lat =
+            ByteData.sublistView(pureWkb, 13, 21).getFloat64(0, Endian.little);
+        if (_isValidCoordinate(lat, lon)) {
+          row['geometry'] = [LatLng(lat, lon)];
+        } else {
+          AppLogger.debug(
+            '[FeatureRepository] 警告: 無効なPoint座標値: lat=$lat, lon=$lon (rowId=$rowId)',
+          );
+        }
+      }
+    } else if (geomType == GeometryType.linestring) {
+      final lines = parseWkbLineString(geom);
+      if (lines.isNotEmpty) row['geometry'] = lines;
+    } else if (geomType == GeometryType.polygon) {
+      final polygons = parseWkbPolygon(geom);
+      if (polygons.isNotEmpty) row['geometry'] = polygons;
+    }
+  }
+
+  /// GPBinaryヘッダーをスキップして純粋なWKBデータを取得
+  Uint8List _stripGpbHeader(Uint8List geom) {
+    if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
+      final flags = geom[3];
+      final envelopeType = (flags >> 1) & 0x07;
+      int headerSize = 8;
+      switch (envelopeType) {
+        case 1:
+          headerSize += 32;
+        case 2:
+        case 3:
+          headerSize += 48;
+        case 4:
+          headerSize += 64;
+      }
+      if (geom.length > headerSize) return geom.sublist(headerSize);
+    }
+    return geom;
+  }
+
+  bool _isValidCoordinate(double lat, double lon) =>
+      lat >= -90.0 &&
+      lat <= 90.0 &&
+      lon >= -180.0 &&
+      lon <= 180.0 &&
+      !lat.isNaN &&
+      !lon.isNaN &&
+      !lat.isInfinite &&
+      !lon.isInfinite;
+}

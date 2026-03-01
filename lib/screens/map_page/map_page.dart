@@ -3,6 +3,7 @@
 // リファクタリング: Mixinとウィジェットに分割して疎結合化
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
@@ -20,8 +21,6 @@ import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
 import '../../core/constants.dart';
-import '../../utils/global_config.dart';
-import '../../utils/global_drawing_state.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/keyboard_handler.dart';
@@ -29,6 +28,11 @@ import '../../tools/pan_tool.dart';
 import '../../tools/pen_tool.dart';
 import '../../tools/select_tool.dart';
 import '../../tools/gps_tool.dart';
+import '../../providers/selection_providers.dart';
+import '../../providers/tool_providers.dart';
+import '../../providers/drawing_provider.dart';
+import '../../providers/service_providers.dart';
+import '../../providers/ui_state_providers.dart';
 import '../layer_style_settings_screen.dart';
 
 // Mixins
@@ -39,16 +43,16 @@ import 'mixins/index.dart';
 import 'widgets/index.dart';
 
 /// Map and edit screen (main structure)
-class KMapsHomePage extends StatefulWidget {
+class KMapsHomePage extends ConsumerStatefulWidget {
   const KMapsHomePage({super.key});
   @override
-  State<KMapsHomePage> createState() => _KMapsHomePageState();
+  ConsumerState<KMapsHomePage> createState() => _KMapsHomePageState();
 }
 
 /// Tool types
 enum ToolType { pen, eraser, gps }
 
-class _KMapsHomePageState extends State<KMapsHomePage>
+class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     with
         TickerProviderStateMixin,
         MapPageStateBase,
@@ -62,6 +66,10 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     super.initState();
     AppLogger.debug('[DEBUG] initState: KMapsHomePage start');
     initializeAllServices();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(mapControllerHolderProvider.notifier).set(mapController);
+    });
   }
 
   @override
@@ -117,7 +125,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// 属性テーブルを開く
   Future<void> _openAttributeTable([LayerNode? targetLayer]) async {
     try {
-      final layer = targetLayer ?? GlobalConfig.instance.selectedLayerNode;
+      final layer = targetLayer ?? ref.read(selectedLayerNodeProvider);
 
       if (layer == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -160,7 +168,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   void _onAttributeTableFeatureSelected(FeatureNode feature) {
     try {
       AppLogger.debug('[MAP] 属性テーブルでフィーチャ選択: ${feature.rowId}');
-      GlobalConfig.instance.selectedFeatures = [feature];
+      ref.read(selectedFeaturesProvider.notifier).set([feature]);
       triggerSetState(() {});
       mapController.move(feature.centroid, mapController.camera.zoom);
     } catch (e) {
@@ -211,7 +219,16 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   @override
   Widget build(BuildContext context) {
-    final currentTool = GlobalConfig.instance.currentTool;
+    ref.listen<int>(featureRefreshTriggerProvider, (prev, next) {
+      if (prev != null && prev != next) {
+        updateFeaturesImpl();
+      }
+    });
+
+    final folderTree = ref.watch(folderTreeProvider);
+    currentNode ??= folderTree;
+
+    final currentTool = ref.watch(currentToolProvider);
     final isPanTool = currentTool.name == 'Pan';
 
     return KeyboardShortcutWrapper(
@@ -277,12 +294,12 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             if (showAttributeTable && attributeTableLayer != null)
               _buildAttributeTablePanel(),
             // Feature detail panel
-            if (GlobalConfig.instance.selectedFeatures.length == 1)
+            if (ref.read(selectedFeaturesProvider).length == 1)
               Positioned(
                 left: 60,
                 top: 20,
                 child: FeatureDetailPanel(
-                  feature: GlobalConfig.instance.selectedFeatures.first,
+                  feature: ref.read(selectedFeaturesProvider).first,
                 ),
               ),
             // Left bottom floating buttons
@@ -292,7 +309,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (GlobalConfig.instance.currentTool.name == 'GPS')
+                  if (currentTool.name == 'GPS')
                     GpsSurveyButtons(
                       isLongPressing: isLongPressing,
                       longPressGpsCount: longPressGpsCount,
@@ -307,7 +324,26 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             ),
           ],
         ),
-        floatingActionButton: _buildFloatingActionButton(),
+        floatingActionButton: DrawingActionButtons(
+          onConfirmDrawing: onConfirmDrawing,
+          onConfirmGpsSurvey: onConfirmGpsSurvey,
+          onTriggerSetState: () => triggerSetState(() {}),
+          getGpsTool: () =>
+              ref.read(currentToolProvider) is GpsTool
+                  ? ref.read(currentToolProvider) as GpsTool
+                  : null,
+          onShowSnackBar: (message, {color}) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(message),
+                  backgroundColor: color,
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            }
+          },
+        ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
     );
@@ -333,8 +369,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       ),
       children: [
         CachedTileLayer(
-          provider: GlobalConfig.instance.baseMapService.currentProvider,
-          baseMapService: GlobalConfig.instance.baseMapService,
+          provider: ref.read(baseMapServiceProvider).currentProvider,
+          baseMapService: ref.read(baseMapServiceProvider),
         ),
         _buildPolylineLayer(),
         _buildPolygonLayer(),
@@ -347,7 +383,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// ポリラインレイヤー構築
   PolylineLayer _buildPolylineLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = GlobalDrawingState.instance;
+    final drawingState = ref.read(drawingStateProvider);
 
     return PolylineLayer(
       polylines: [
@@ -363,7 +399,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           if (f.geometry != null)
             (() {
               final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = GlobalConfig.instance.selectedFeatures
+              final isSelected = ref.read(selectedFeaturesProvider)
                   .contains(f);
               final lineColor = styleConfig.getLineColor(kmetaStyle);
               final lineWidth = styleConfig.getLineWidth(kmetaStyle);
@@ -377,7 +413,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               );
             })(),
         // GPS測量ラインプレビュー
-        if (GlobalConfig.instance.currentTool is GpsTool &&
+        if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingLine.isNotEmpty)
           Polyline(
             points: drawingState.drawingLine,
@@ -385,7 +421,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             strokeWidth: 2.0,
           ),
         // ペンツールラインプレビュー
-        if (GlobalConfig.instance.currentTool is PenTool &&
+        if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingLine.isNotEmpty)
           Polyline(
             points: drawingState.drawingLine,
@@ -393,7 +429,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             strokeWidth: 1.5,
           ),
         // GPS測量ポリゴン2点プレビュー
-        if (GlobalConfig.instance.currentTool is GpsTool &&
+        if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingPolygon.length == 2)
           Polyline(
             points: drawingState.drawingPolygon,
@@ -401,7 +437,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             strokeWidth: 2.0,
           ),
         // ペンツールポリゴン2点プレビュー
-        if (GlobalConfig.instance.currentTool is PenTool &&
+        if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingPolygon.length == 2)
           Polyline(
             points: drawingState.drawingPolygon,
@@ -416,7 +452,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// ポリゴンレイヤー構築
   PolygonLayer _buildPolygonLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = GlobalDrawingState.instance;
+    final drawingState = ref.read(drawingStateProvider);
 
     return PolygonLayer(
       polygons: [
@@ -425,7 +461,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           if (f.geometry != null)
             (() {
               final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = GlobalConfig.instance.selectedFeatures
+              final isSelected = ref.read(selectedFeaturesProvider)
                   .contains(f);
               final fillColor = styleConfig.getPolygonFillColor(kmetaStyle);
               final fillOpacity = styleConfig.getPolygonFillOpacity(kmetaStyle);
@@ -453,7 +489,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
               );
             })(),
         // GPS測量ポリゴンプレビュー
-        if (GlobalConfig.instance.currentTool is GpsTool &&
+        if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingPolygon.length >= 3)
           Polygon(
             points: closeRing(drawingState.drawingPolygon),
@@ -462,7 +498,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             borderColor: Colors.purple,
           ),
         // ペンツールポリゴンプレビュー
-        if (GlobalConfig.instance.currentTool is PenTool &&
+        if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingPolygon.length >= 3)
           Polygon(
             points: closeRing(drawingState.drawingPolygon),
@@ -471,14 +507,14 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             borderColor: Colors.orange,
           ),
         // SelectTool lassoプレビュー
-        if (GlobalConfig.instance.currentTool is SelectTool &&
-            (GlobalConfig.instance.currentTool as SelectTool)
+        if (ref.read(currentToolProvider) is SelectTool &&
+            (ref.read(currentToolProvider) as SelectTool)
                     .lassoPoints
                     .length >=
                 3)
           Polygon(
             points: closeRing(
-              (GlobalConfig.instance.currentTool as SelectTool).lassoPoints
+              (ref.read(currentToolProvider) as SelectTool).lassoPoints
                   .map((offset) => offsetToLatLng(offset))
                   .toList(),
             ),
@@ -566,7 +602,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
   /// オーバーレイマーカーレイヤー（現在位置、測量ポイント、頂点マーカー）
   MarkerLayer _buildOverlayMarkerLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = GlobalDrawingState.instance;
+    final drawingState = ref.read(drawingStateProvider);
     return MarkerLayer(
       markers: [
         if (currentLocation != null)
@@ -576,7 +612,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             height: 64,
             child: _buildLocationMarkerWithCompass(),
           ),
-        if (GlobalConfig.instance.currentTool is GpsTool) ...[
+        if (ref.read(currentToolProvider) is GpsTool) ...[
           for (int i = 0; i < drawingState.drawingLine.length; i++)
             _buildSurveyPointMarker(drawingState.drawingLine[i], i, true),
           for (int i = 0; i < drawingState.drawingPolygon.length; i++)
@@ -596,7 +632,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     for (final f in pointFeatures) {
       if (f.geometry == null) continue;
       final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-      final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+      final isSelected = ref.read(selectedFeaturesProvider).contains(f);
       final pointSize = styleConfig.getPointSize(kmetaStyle);
       final pointColor = styleConfig.getPointColor(kmetaStyle);
       final size =
@@ -685,7 +721,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     for (final photo in photoNodes.where((p) => p.hasLocation)) {
       if (visibleBounds != null && !visibleBounds.contains(photo.location!))
         continue;
-      final isPhotoSelected = GlobalConfig.instance.selectedFeatures.contains(
+      final isPhotoSelected = ref.read(selectedFeaturesProvider).contains(
         photo,
       );
       final showPhotoLabel = styleConfig.labelEnabled && photo.name.isNotEmpty;
@@ -696,10 +732,8 @@ class _KMapsHomePageState extends State<KMapsHomePage>
           height: 20,
           child: GestureDetector(
             onTap: () {
-              triggerSetState(() {
-                GlobalConfig.instance.selectedFeatures.clear();
-                GlobalConfig.instance.selectedFeatures.add(photo);
-              });
+              ref.read(selectedFeaturesProvider.notifier).set([photo]);
+              triggerSetState(() {});
             },
             child: Tooltip(
               message:
@@ -781,7 +815,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// GPS測量ポイントマーカー構築
   Marker _buildSurveyPointMarker(LatLng point, int index, bool isLine) {
-    final drawingState = GlobalConfig.instance.drawingState;
+    final drawingState = ref.read(drawingStateProvider);
     final metadataList =
         isLine ? drawingState.lineMetadata : drawingState.polygonMetadata;
 
@@ -836,7 +870,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         final pts = f.geometry as List<LatLng>;
         if (pts.isEmpty) continue;
 
-        final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+        final isSelected = ref.read(selectedFeaturesProvider).contains(f);
         final color = isSelected ? style.selectedColor : style.lineColor;
         final strokeWidth =
             isSelected
@@ -859,7 +893,7 @@ class _KMapsHomePageState extends State<KMapsHomePage>
         final rings = f.geometry as List<List<LatLng>>;
         if (rings.isEmpty) continue;
 
-        final isSelected = GlobalConfig.instance.selectedFeatures.contains(f);
+        final isSelected = ref.read(selectedFeaturesProvider).contains(f);
         final color =
             isSelected
                 ? style.selectedColor
@@ -922,44 +956,44 @@ class _KMapsHomePageState extends State<KMapsHomePage>
       child: Listener(
         onPointerMove: (event) {
           if (event.buttons == kMiddleMouseButton) {
-            GlobalConfig.instance.currentTool.onMiddleButtonMove(event, this);
+            ref.read(currentToolProvider).onMiddleButtonMove(event, this);
           } else {
-            GlobalConfig.instance.currentTool.addPointerToBuffer(
+            ref.read(currentToolProvider).addPointerToBuffer(
               event.localPosition,
             );
           }
         },
         onPointerDown: (event) {
           if (event.buttons == kMiddleMouseButton) {
-            GlobalConfig.instance.currentTool.onMiddleButtonDown(event, this);
+            ref.read(currentToolProvider).onMiddleButtonDown(event, this);
           } else {
-            GlobalConfig.instance.currentTool.addPointerToBuffer(
+            ref.read(currentToolProvider).addPointerToBuffer(
               event.localPosition,
             );
           }
         },
         onPointerUp: (event) {
           if (event.buttons == 0) {
-            GlobalConfig.instance.currentTool.onMiddleButtonUp(event, this);
+            ref.read(currentToolProvider).onMiddleButtonUp(event, this);
           }
-          GlobalConfig.instance.currentTool.clearPointerBuffer();
+          ref.read(currentToolProvider).clearPointerBuffer();
         },
         onPointerSignal: (event) {
-          GlobalConfig.instance.currentTool.onPointerSignal(event, this);
+          ref.read(currentToolProvider).onPointerSignal(event, this);
         },
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTapUp: (details) {
-            GlobalConfig.instance.currentTool.onTap(details, this);
+            ref.read(currentToolProvider).onTap(details, this);
           },
           onScaleStart: (details) {
-            GlobalConfig.instance.currentTool.onScaleStart(details, this);
+            ref.read(currentToolProvider).onScaleStart(details, this);
           },
           onScaleUpdate: (details) {
-            GlobalConfig.instance.currentTool.onScaleUpdate(details, this);
+            ref.read(currentToolProvider).onScaleUpdate(details, this);
           },
           onScaleEnd: (details) {
-            GlobalConfig.instance.currentTool.onScaleEnd(details, this);
+            ref.read(currentToolProvider).onScaleEnd(details, this);
           },
           child: Container(color: Colors.transparent),
         ),
@@ -969,13 +1003,13 @@ class _KMapsHomePageState extends State<KMapsHomePage>
 
   /// 描画プレビュー情報構築
   Widget _buildDrawingPreviewInfo() {
-    if (GlobalConfig.instance.currentTool is! PenTool) {
+    if (ref.read(currentToolProvider) is! PenTool) {
       return const SizedBox.shrink();
     }
 
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    final penTool = GlobalConfig.instance.currentTool as PenTool;
-    final drawingState = GlobalDrawingState.instance;
+    final selected = ref.read(selectedLayerNodeProvider);
+    final penTool = ref.read(currentToolProvider) as PenTool;
+    final drawingState = ref.read(drawingStateProvider);
     String? previewText;
     Offset? previewOffset;
 
@@ -1053,7 +1087,6 @@ class _KMapsHomePageState extends State<KMapsHomePage>
             currentNode = node;
           });
         },
-        setStateCallback: (fn) => triggerSetState(fn),
         onJumpTo: (latLng) {
           mapController.move(latLng, mapController.camera.zoom);
         },
@@ -1112,119 +1145,4 @@ class _KMapsHomePageState extends State<KMapsHomePage>
     );
   }
 
-  /// FloatingActionButton構築
-  Widget? _buildFloatingActionButton() {
-    final selected = GlobalConfig.instance.selectedLayerNode;
-    final currentTool = GlobalConfig.instance.currentTool;
-    final gpsTool = currentTool is GpsTool ? currentTool : null;
-    final drawingState = GlobalDrawingState.instance;
-
-    // GPS測量中
-    final isGpsSurveyLine =
-        selected is LineLayerNode &&
-        gpsTool != null &&
-        gpsTool.surveyLine.isNotEmpty;
-    final isGpsSurveyPolygon =
-        selected is PolygonLayerNode &&
-        gpsTool != null &&
-        gpsTool.surveyPolygon.isNotEmpty;
-
-    // ペンツール描画中
-    final isLineDrawing =
-        selected is LineLayerNode &&
-        currentTool is PenTool &&
-        drawingState.drawingLine.isNotEmpty;
-    final isPolygonDrawing =
-        selected is PolygonLayerNode &&
-        currentTool is PenTool &&
-        drawingState.drawingPolygon.isNotEmpty;
-
-    if (isGpsSurveyLine || isGpsSurveyPolygon) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            heroTag: 'gps_undo',
-            onPressed: () {
-              drawingState.undo(isLine: gpsTool.surveyLine.isNotEmpty);
-              triggerSetState(() {});
-            },
-            tooltip: 'GPS測量の最後のポイントを取り消し',
-            child: const Icon(Icons.undo),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton(
-            heroTag: 'gps_cancel',
-            onPressed: () async {
-              try {
-                await gpsTool.cancelSurveyWithGpsStop();
-                triggerSetState(() {});
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('GPS測量をキャンセルしました'),
-                      backgroundColor: Colors.orange,
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
-              } catch (e) {
-                AppLogger.debug('[MapPage] GPS測量キャンセルエラー: $e');
-              }
-            },
-            tooltip: 'GPS測量をキャンセル',
-            child: const Icon(Icons.clear),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton.extended(
-            heroTag: 'gps_confirm',
-            onPressed: onConfirmGpsSurvey,
-            icon: const Icon(Icons.check),
-            label: const Text('GPS測量確定'),
-          ),
-        ],
-      );
-    } else if (isLineDrawing || isPolygonDrawing) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            heroTag: 'undo',
-            onPressed: () {
-              if (isLineDrawing) {
-                drawingState.undo(isLine: true);
-              } else {
-                drawingState.undo(isLine: false);
-              }
-              triggerSetState(() {});
-            },
-            tooltip: 'Undo',
-            child: const Icon(Icons.undo),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton(
-            heroTag: 'cancel',
-            onPressed: () {
-              if (isLineDrawing) {
-                drawingState.cancel(isLine: true);
-              } else {
-                drawingState.cancel(isLine: false);
-              }
-              triggerSetState(() {});
-            },
-            tooltip: 'Cancel',
-            child: const Icon(Icons.clear),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton.extended(
-            heroTag: 'confirm',
-            onPressed: onConfirmDrawing,
-            icon: const Icon(Icons.check),
-            label: const Text('Confirm'),
-          ),
-        ],
-      );
-    }
-    return null;
-  }
 }

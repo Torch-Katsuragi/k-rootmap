@@ -2,15 +2,17 @@
 // てのひらツール（地図パン専用）
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart'; // PointerScrollEvent用
-// pointerEvents用
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
-import '../utils/global_config.dart'; // SelectToolアクセス用
+import '../providers/tool_providers.dart';
 import '../interfaces/map_state_interface.dart';
 
 /// 地図パン（移動）専用ツール
 class PanTool extends MapTool {
+  final Ref _ref;
+  PanTool(this._ref);
   @override
   String get name => 'Pan';
 
@@ -34,7 +36,7 @@ class PanTool extends MapTool {
   @override
   void onTap(TapUpDetails details, IMapState mapState) {
     // パンツールでのシングルタップは選択動作として動作
-    GlobalConfig.instance.selectTool.onTap(details, mapState);
+    _ref.read(selectToolProvider).onTap(details, mapState);
   }
 
   /// スケール開始イベント

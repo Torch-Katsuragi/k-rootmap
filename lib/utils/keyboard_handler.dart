@@ -4,16 +4,17 @@
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'global_config.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/selection_providers.dart';
+import '../providers/ui_state_providers.dart';
 
 /// キーボードイベントハンドラー
 /// グローバルなキーボードショートカットを管理
 class KeyboardHandler {
   /// テキスト入力フィールドにフォーカスがあるかチェック
   /// ダイアログ内のTextField、属性テーブル編集など
-  static bool _isTextInputFocused(BuildContext context) {
-    // GlobalConfigのフラグをチェック（属性テーブル編集用）
-    if (GlobalConfig.instance.isAttributeTableEditing) {
+  static bool _isTextInputFocused(BuildContext context, WidgetRef ref) {
+    if (ref.read(isAttributeTableEditingProvider)) {
       return true;
     }
 
@@ -64,21 +65,21 @@ class KeyboardHandler {
   static Future<void> handleDeleteKey(
     BuildContext context,
     dynamic mapState,
+    WidgetRef ref,
   ) async {
     AppLogger.debug('[KeyboardHandler] Deleteキーが押されました');
 
-    // 選択されたフィーチャがあるかチェック
-    if (GlobalConfig.instance.selectedFeatures.isEmpty) {
+    final selectedFeatures = ref.read(selectedFeaturesProvider);
+    if (selectedFeatures.isEmpty) {
       AppLogger.debug('[KeyboardHandler] 削除対象のフィーチャが選択されていません');
       return;
     }
 
-    final featureCount = GlobalConfig.instance.selectedFeatures.length;
+    final featureCount = selectedFeatures.length;
     AppLogger.debug('[KeyboardHandler] 削除対象: $featureCount個のフィーチャ');
 
     try {
-      // GlobalConfigの統一削除処理を使用（pen_toolと同じロジック）
-      await GlobalConfig.instance.disposeSelectedFeatures(mapState: mapState);
+      await ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
 
       AppLogger.debug('[KeyboardHandler] フィーチャ削除完了: $featureCount個');
 
@@ -113,6 +114,7 @@ class KeyboardHandler {
     KeyEvent event,
     BuildContext context,
     dynamic mapState,
+    WidgetRef ref,
   ) async {
     // キーが押された時のみ処理（リリースイベントは無視）
     if (event is! KeyDownEvent) {
@@ -166,7 +168,7 @@ class KeyboardHandler {
     // テキスト入力中は全てのショートカットを無視
     // CapsLock押下直後もEditableTextのフォーカスは維持されているはずなので、
     // この判定を先に行う
-    if (_isTextInputFocused(context)) {
+    if (_isTextInputFocused(context, ref)) {
       return false; // イベントを伝播させる（TextFieldで処理される）
     }
 
@@ -175,7 +177,7 @@ class KeyboardHandler {
     // Deleteキーまたはバックスペースキー
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
-      await handleDeleteKey(context, mapState);
+      await handleDeleteKey(context, mapState, ref);
       return true; // イベントを処理済みとしてマーク
     }
 
@@ -196,7 +198,7 @@ class KeyboardHandler {
 /// 
 /// HardwareKeyboardのハンドラーを直接使用して、
 /// IME関連のキーイベント不整合問題を回避
-class KeyboardShortcutWrapper extends StatefulWidget {
+class KeyboardShortcutWrapper extends ConsumerStatefulWidget {
   final Widget child;
   final dynamic mapState;
 
@@ -207,12 +209,11 @@ class KeyboardShortcutWrapper extends StatefulWidget {
   });
 
   @override
-  State<KeyboardShortcutWrapper> createState() =>
+  ConsumerState<KeyboardShortcutWrapper> createState() =>
       _KeyboardShortcutWrapperState();
 }
 
-class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
-  /// HardwareKeyboardのハンドラー
+class _KeyboardShortcutWrapperState extends ConsumerState<KeyboardShortcutWrapper> {
   bool _handleKeyEvent(KeyEvent event) {
     // IME関連の無効なキーイベントを早期にフィルタリング
     // Windows日本語入力で発生する不正なキーイベントを除外
@@ -232,7 +233,7 @@ class _KeyboardShortcutWrapperState extends State<KeyboardShortcutWrapper> {
     if (!mounted) return false;
 
     // 非同期で処理（UIをブロックしない）
-    KeyboardHandler.handleKeyEvent(event, context, widget.mapState).then((
+    KeyboardHandler.handleKeyEvent(event, context, widget.mapState, ref).then((
       handled,
     ) {
       if (handled) {

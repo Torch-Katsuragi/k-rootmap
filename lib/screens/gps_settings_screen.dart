@@ -13,13 +13,15 @@ library;
 
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/gps_manager_service.dart';
+import '../providers/service_providers.dart';
 import '../widgets/gps_info_widget.dart';
 import '../widgets/settings_widgets.dart';
 
 /// GPS設定画面
-class GpsSettingsScreen extends StatefulWidget {
+class GpsSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
 
   const GpsSettingsScreen({
@@ -28,11 +30,11 @@ class GpsSettingsScreen extends StatefulWidget {
   });
 
   @override
-  State<GpsSettingsScreen> createState() => _GpsSettingsScreenState();
+  ConsumerState<GpsSettingsScreen> createState() => _GpsSettingsScreenState();
 }
 
-class _GpsSettingsScreenState extends State<GpsSettingsScreen> {
-  final GpsManagerService _gpsManager = GpsManagerService();
+class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
+  GpsManagerService get _gpsManager => ref.read(gpsManagerServiceProvider);
   bool _isScanning = false;
   String? _errorMessage;
   Map<String, dynamic>? _currentGpsInfo;

@@ -3,16 +3,21 @@
 import 'dart:async';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart'; // PointerScrollEvent用
+import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'map_tool.dart';
 import 'pan_tool.dart';
-import '../utils/global_config.dart';
 import '../utils/global_drawing_state.dart';
+import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
+import '../providers/service_providers.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'package:latlong2/latlong.dart';
 import '../interfaces/map_state_interface.dart';
+import '../providers/tool_providers.dart';
+import '../providers/selection_providers.dart';
+import '../providers/drawing_provider.dart';
 
 /// GPS関連機能を扱うツール
 ///
@@ -28,20 +33,21 @@ import '../interfaces/map_state_interface.dart';
 /// - パンツールへのプロキシパターン実装
 /// - リアルタイムプレビュー表示
 class GpsTool extends MapTool {
+  final Ref _ref;
+  GpsTool(this._ref);
+
   @override
   String get name => 'GPS';
 
   @override
   IconData get icon => Icons.gps_fixed;
 
-  /// パンツールインスタンスへの参照（GlobalConfigから取得）
-  PanTool get _panTool => GlobalConfig.instance.panTool;
+  PanTool get _panTool => _ref.read(panToolProvider);
 
-  /// グローバル描画状態への参照
-  GlobalDrawingState get drawingState => GlobalConfig.instance.drawingState;
+  GlobalDrawingState get drawingState => _ref.read(drawingStateProvider);
 
   /// GPS管理サービスインスタンス
-  final GpsManagerService _gpsManager = GpsManagerService();
+  GpsManagerService get _gpsManager => _ref.read(gpsManagerServiceProvider);
 
   /// 長押しGPS測量用データ
   Timer? _longPressTimer;
@@ -200,7 +206,7 @@ class GpsTool extends MapTool {
       AppLogger.debug('[GpsTool] 長押し測量 optimizedGpsData: $optimizedGpsData');
 
       // 現在選択中のレイヤーに応じてデータを追加
-      final selected = GlobalConfig.instance.selectedLayerNode;
+      final selected = _ref.read(selectedLayerNodeProvider);
       if (selected is PointLayerNode) {
         // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
         final pointFeature = await PointFeatureNode.createIn(
@@ -265,9 +271,7 @@ class GpsTool extends MapTool {
             await pointFeature.setAttributeValues(attributes);
           }
 
-          // UI更新（pen_toolと同様）
-          GlobalConfig.instance.mapState?.refreshFeatures();
-          GlobalConfig.instance.mapState?.setState(() {});
+          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
           // Point測量完了後はGPS測量を停止（リソース効率化）
           await _gpsManager.stopGpsSurvey();
@@ -364,7 +368,7 @@ class GpsTool extends MapTool {
       AppLogger.debug('[GpsTool] 単発測量 optimizedGpsData: $optimizedGpsData');
 
       // 現在選択中のレイヤーに応じてデータを追加
-      final selected = GlobalConfig.instance.selectedLayerNode;
+      final selected = _ref.read(selectedLayerNodeProvider);
       if (selected is PointLayerNode) {
         // GPS測量時は即座にPointフィーチャを作成（メタデータなし、個別カラムに保存）
         final pointFeature = await PointFeatureNode.createIn(
@@ -419,9 +423,7 @@ class GpsTool extends MapTool {
             await pointFeature.setAttributeValues(attributes);
           }
 
-          // UI更新（pen_toolと同様）
-          GlobalConfig.instance.mapState?.refreshFeatures();
-          GlobalConfig.instance.mapState?.setState(() {});
+          _ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
           // Point測量完了後はGPS測量を停止（リソース効率化）
           await _gpsManager.stopGpsSurvey();
@@ -541,7 +543,7 @@ class GpsTool extends MapTool {
 
   /// 次のポイント番号を取得
   int _getNextPointNumber() {
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = _ref.read(selectedLayerNodeProvider);
     if (selected is LineLayerNode) {
       return surveyLine.length + 1;
     } else if (selected is PolygonLayerNode) {
@@ -572,24 +574,22 @@ class GpsTool extends MapTool {
   @override
   void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
-      // PanToolの統一されたマウスホイールズーム処理を使用
-      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+      _panTool.handleMouseWheelZoom(event, mapState);
     }
   }
 
-  /// 中ボタンドラッグイベント - PanToolに委譲
   @override
   void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+    _panTool.onMiddleButtonDown(event, mapState);
   }
 
   @override
   void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+    _panTool.onMiddleButtonMove(event, mapState);
   }
 
   @override
   void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
+    _panTool.onMiddleButtonUp(event, mapState);
   }
 }

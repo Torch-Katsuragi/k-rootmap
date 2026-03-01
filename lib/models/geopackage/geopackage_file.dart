@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../../utils/background_save_manager.dart';
-import '../../utils/global_config.dart';
 import '../geometry_type.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
@@ -29,6 +28,9 @@ class GeoPackageFile {
   /// グローバルフォルダ内のGeoPackageで使用
   final String? absolutePath;
 
+  /// プロジェクトルートディレクトリ（相対パスモード時に使用）
+  final String? projectRootDir;
+
   // ============================================================
   // 内部サービス（遅延初期化）
   // ============================================================
@@ -45,7 +47,7 @@ class GeoPackageFile {
   List<String> get supportedAttributes => _schema.supportedAttributes;
 
   /// コンストラクタ
-  GeoPackageFile(this.pathList, {this.absolutePath}) {
+  GeoPackageFile(this.pathList, {this.absolutePath, this.projectRootDir}) {
     _initializeServices();
   }
 
@@ -53,7 +55,7 @@ class GeoPackageFile {
   void _initializeServices() {
     if (_servicesInitialized) return;
 
-    _connection = GeoPackageConnection(pathList, absolutePath: absolutePath);
+    _connection = GeoPackageConnection(pathList, absolutePath: absolutePath, projectRootDir: projectRootDir);
     _schema = GeoPackageSchema(_connection);
     _spatial = SpatialIndexManager(_connection);
     _features = FeatureRepository(_connection, _schema, _spatial);
@@ -65,10 +67,8 @@ class GeoPackageFile {
   /// 絶対パスを取得（グローバルフォルダ対応）
   String? getAbsolutePath() {
     if (absolutePath != null) return absolutePath;
-    // 従来の相対パスモード: projectRootDir + pathList
-    final baseDir = GlobalConfig.instance.projectRootDir;
-    if (baseDir == null) return null;
-    return p.joinAll([baseDir, ...pathList]);
+    if (projectRootDir == null) return null;
+    return p.joinAll([projectRootDir!, ...pathList]);
   }
 
   // ============================================================

@@ -1,8 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../utils/global_config.dart';
+import '../providers/selection_providers.dart';
 import 'dart:async';
 
 /// グローバルな描画状態とメタデータを管理するクラス
@@ -11,6 +12,12 @@ class GlobalDrawingState {
   static final GlobalDrawingState instance = GlobalDrawingState._internal();
   factory GlobalDrawingState() => instance;
   GlobalDrawingState._internal();
+
+  Ref? _ref;
+
+  void setRef(Ref ref) {
+    _ref = ref;
+  }
 
   /// 線の描画点列（グローバル共有）
   final List<LatLng> _drawingLine = [];
@@ -604,7 +611,7 @@ class GlobalDrawingState {
     }
 
     // 現在選択されているレイヤーを取得
-    final selectedLayer = GlobalConfig.instance.selectedLayerNode;
+    final selectedLayer = _ref?.read(selectedLayerNodeProvider);
     if (selectedLayer == null) {
       AppLogger.debug('[GlobalDrawingState] 自動保存エラー: 選択されているレイヤーがありません');
       return;

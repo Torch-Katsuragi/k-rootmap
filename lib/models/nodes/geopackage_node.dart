@@ -10,7 +10,6 @@ import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import 'folder_node.dart';
 import '../../services/kmeta_service.dart';
-import '../../utils/global_config.dart';
 import '../../core/node_types.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
@@ -164,17 +163,11 @@ class GeoPackageNode extends LayerTreeNode {
 
   /// リネーム処理
   /// 戻り値: リネーム後の新しいファイル名（拡張子付き）
-  Future<String> rename(String newName) async {
+  Future<String> rename(String newName, {required String projectRootDir}) async {
     try {
-      // まずコネクションを閉じる
       await geoPackageFile.dispose();
 
-      // 現在のパスを取得
-      final baseDir = GlobalConfig.instance.projectRootDir;
-      if (baseDir == null) {
-        throw Exception('projectRootDirが未設定です');
-      }
-      final currentPath = p.joinAll([baseDir, ...geoPackageFile.pathList]);
+      final currentPath = p.joinAll([projectRootDir, ...geoPackageFile.pathList]);
       
       final file = File(currentPath);
       if (!file.existsSync()) {

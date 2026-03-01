@@ -6,16 +6,18 @@ library;
 import 'dart:io'; // Debug logging + file operations
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
-import '../../models/nodes/feature_node.dart'; // FeatureNodeをインポート
+import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
-import '../../models/nodes/global_folder_node.dart'; // グローバルフォルダ
-import '../../models/nodes/drive_folder_node.dart'; // Drive連携フォルダ
+import '../../models/nodes/global_folder_node.dart';
+import '../../models/nodes/drive_folder_node.dart';
 import '../../models/geopackage/geopackage_file.dart';
+import '../../providers/project_providers.dart';
 import '../../services/google_drive/index.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
@@ -26,10 +28,9 @@ import 'layer_drawer_import_export.dart';
 
 /// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
 /// GeoPackageノードはタップでレイヤリストをトグル展開
-class LayerDrawer extends StatefulWidget {
+class LayerDrawer extends ConsumerStatefulWidget {
   final LayerTreeNode? currentNode;
   final void Function(LayerTreeNode? newNode) onDirChanged;
-  final void Function(void Function()) setStateCallback;
 
   /// 地図ジャンプ用コールバック（中心座標に移動）
   final void Function(LatLng latLng)? onJumpTo;
@@ -37,36 +38,36 @@ class LayerDrawer extends StatefulWidget {
   /// 追記モード開始用コールバック（ツール切り替えとレイヤー選択）
   final void Function(FeatureNode feature)? onStartAppendMode;
 
-  /// LayerDrawerコンストラクタ
   const LayerDrawer({
     super.key,
     required this.currentNode,
     required this.onDirChanged,
-    required this.setStateCallback,
     this.onJumpTo,
     this.onStartAppendMode,
   });
 
   @override
-  State<LayerDrawer> createState() => _LayerDrawerState();
+  ConsumerState<LayerDrawer> createState() => _LayerDrawerState();
 }
 
-class _LayerDrawerState extends State<LayerDrawer>
-    with LayerDrawerTiles, LayerDrawerUtils, LayerDrawerImportExport {
-  /// 展開中のGeoPackageノードのファイルパスを保持
+class _LayerDrawerState extends ConsumerState<LayerDrawer>
+    with
+        LayerDrawerDriveSync,
+        LayerDrawerLayerOps,
+        FolderTileBuilder,
+        GeoPackageTileBuilder,
+        LayerTileBuilder,
+        PhotoTileBuilder,
+        LayerDrawerTiles,
+        LayerDrawerUtils,
+        LayerDrawerImportExport {
   @override
   final Set<String> expandedGpkgPaths = {};
 
-  /// ユーザーが明示的に閉じたGeoPackageノードのパスを記録
   final Set<String> _userClosedGpkgPaths = {};
 
-  /// ドラッグ中のファイル管理
   bool _isDragging = false;
   GeoPackageNode? _dragTargetGeoPackageNode;
-
-  @override
-  void Function(void Function()) get setStateCallback =>
-      widget.setStateCallback;
 
   @override
   void Function(LatLng latLng)? get onJumpTo => widget.onJumpTo;
@@ -264,7 +265,7 @@ class _LayerDrawerState extends State<LayerDrawer>
           await node.parent!.updateChildren();
         }
         
-        widget.setStateCallback(() {});
+        setState(() {});
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -323,7 +324,8 @@ class _LayerDrawerState extends State<LayerDrawer>
         final parentNode = node.parent;
         
         // リネーム実行（新しいファイル名が返される）
-        final newFileName = await node.rename(result);
+        final projectRoot = ref.read(projectRootDirProvider);
+        final newFileName = await node.rename(result, projectRootDir: projectRoot ?? '');
         
         // 親フォルダの再スキャンを実行（新しいノードが生成される）
         if (parentNode != null) {
@@ -351,7 +353,7 @@ class _LayerDrawerState extends State<LayerDrawer>
           }
         }
         
-        widget.setStateCallback(() {});
+        setState(() {});
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('GeoPackageをリネームしました: $newFileName')),
@@ -397,7 +399,6 @@ class _LayerDrawerState extends State<LayerDrawer>
     }
     Directory(path).createSync();
     
-    // グローバルフォルダ内の場合はGlobalSubFolderNodeとして作成
     if (folderNode is GlobalFolderNode) {
       folderNode.addChild(
         GlobalSubFolderNode(
@@ -421,7 +422,7 @@ class _LayerDrawerState extends State<LayerDrawer>
         FolderNode(folderName, visible: true, parent: folderNode),
       );
     }
-    widget.setStateCallback(() {});
+    setState(() {});
   }
 
   /// Drive連携フォルダを追加（URLからクローン）
@@ -496,7 +497,7 @@ class _LayerDrawerState extends State<LayerDrawer>
         // ダウンロードしたファイルを読み込んでツリーに反映
         await _reloadChildrenRecursive(driveFolderNode);
         triggerMapRefresh();
-        widget.setStateCallback(() {});
+        setState(() {});
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -651,7 +652,7 @@ class _LayerDrawerState extends State<LayerDrawer>
       }
 
       AppLogger.debug('[LayerDrawer] UI更新中...');
-      widget.setStateCallback(() {});
+      setState(() {});
       AppLogger.debug('[LayerDrawer] GeoPackage作成完了');
     }
   }

@@ -2,11 +2,13 @@
 // PlutoGridの状態管理、フィーチャ操作、属性編集を担当
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../utils/app_logger.dart';
-import '../../utils/global_config.dart';
+import '../../providers/selection_providers.dart';
+import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
 
 /// 属性テーブルの表示設定
@@ -35,6 +37,7 @@ class AttributeTableSettings {
 /// 状態管理とPlutoGridとの連携を担当
 class AttributeTableController extends ChangeNotifier {
   final LayerNode layer;
+  final WidgetRef _ref;
   
   // 状態
   PlutoGridStateManager? _stateManager;
@@ -55,7 +58,7 @@ class AttributeTableController extends ChangeNotifier {
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer.runtimeType.toString().contains('PointLayerNode');
 
-  AttributeTableController(this.layer);
+  AttributeTableController(this.layer, this._ref);
 
   /// 初期化
   Future<void> initialize() async {
@@ -112,14 +115,15 @@ class AttributeTableController extends ChangeNotifier {
 
   /// 選択されたフィーチャを削除
   Future<void> deleteSelectedFeatures() async {
-    if (GlobalConfig.instance.selectedFeatures.isEmpty) {
+    final currentSelection = _ref.read(selectedFeaturesProvider);
+    if (currentSelection.isEmpty) {
       AppLogger.debug('[AttributeTableController] 削除対象なし');
       return;
     }
 
-    final featureCount = GlobalConfig.instance.selectedFeatures.length;
+    final featureCount = currentSelection.length;
     final selectedFeaturesToDelete = List.from(
-      GlobalConfig.instance.selectedFeatures.whereType<FeatureNode>(),
+      currentSelection.whereType<FeatureNode>(),
     );
 
     AppLogger.debug('[AttributeTableController] 削除開始: $featureCount個');
@@ -147,10 +151,7 @@ class AttributeTableController extends ChangeNotifier {
       _features.remove(feature);
     }
 
-    // GlobalConfigの統一削除処理
-    await GlobalConfig.instance.disposeSelectedFeatures(
-      mapState: GlobalConfig.instance.mapState,
-    );
+    await _ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
 
     // 再読み込み
     await initialize();
@@ -188,14 +189,13 @@ class AttributeTableController extends ChangeNotifier {
 
     final feature = _features[rowIndex];
 
-    // 既に選択されている場合はスキップ
-    if (GlobalConfig.instance.selectedFeatures.length == 1 &&
-        GlobalConfig.instance.selectedFeatures.first == feature) {
+    final currentSelection = _ref.read(selectedFeaturesProvider);
+    if (currentSelection.length == 1 &&
+        currentSelection.first == feature) {
       return;
     }
 
-    GlobalConfig.instance.selectedFeatures.clear();
-    GlobalConfig.instance.selectedFeatures.add(feature);
+    _ref.read(selectedFeaturesProvider.notifier).set([feature]);
     AppLogger.debug('[AttributeTableController] フィーチャ選択: rowId=${feature.rowId}');
   }
 
@@ -349,14 +349,14 @@ class AttributeTableController extends ChangeNotifier {
 
   void _onStateChanged() {
     final isEditing = _stateManager?.isEditing ?? false;
-    if (GlobalConfig.instance.isAttributeTableEditing != isEditing) {
-      GlobalConfig.instance.isAttributeTableEditing = isEditing;
+    if (_ref.read(isAttributeTableEditingProvider) != isEditing) {
+      _ref.read(isAttributeTableEditingProvider.notifier).set(isEditing);
     }
   }
 
   @override
   void dispose() {
-    GlobalConfig.instance.isAttributeTableEditing = false;
+    _ref.read(isAttributeTableEditingProvider.notifier).set(false);
     _stateManager?.removeListener(_onStateChanged);
     super.dispose();
   }

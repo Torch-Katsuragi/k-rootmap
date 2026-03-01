@@ -15,23 +15,24 @@ import '../models/gps_track.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/ui_state_providers.dart';
 import '../services/gps_history_recorder.dart';
 import '../utils/app_logger.dart';
-import '../utils/global_config.dart';
 import 'feature_editor/shared/line_preview_painter.dart';
 import 'feature_editor/shared/simplification_controls.dart';
 
 /// GPS軌跡抽出ダイアログ
-class TrackExtractionDialog extends StatefulWidget {
+class TrackExtractionDialog extends ConsumerStatefulWidget {
   final GpsHistoryRecorder recorder;
 
   const TrackExtractionDialog({super.key, required this.recorder});
 
   @override
-  State<TrackExtractionDialog> createState() => _TrackExtractionDialogState();
+  ConsumerState<TrackExtractionDialog> createState() => _TrackExtractionDialogState();
 }
 
-class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
+class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
   // 日付選択
   List<String> _availableDates = [];
   String? _selectedDate;
@@ -238,7 +239,7 @@ class _TrackExtractionDialogState extends State<TrackExtractionDialog> {
 
   /// ラインレイヤ選択ダイアログ
   Future<LineLayerNode?> _selectLineLayer() async {
-    final rootNode = GlobalConfig.instance.folderTree;
+    final rootNode = ref.read(folderTreeProvider);
     if (rootNode == null) return null;
 
     // ラインレイヤを検索

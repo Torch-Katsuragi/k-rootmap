@@ -5,11 +5,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../models/nodes/feature_node.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../feature_edit_action.dart';
 import '../shared/simplification_controls.dart';
 
@@ -33,7 +34,7 @@ class SimplifyAction extends FeatureEditAction {
       _SimplifyControls(feature: feature, previewLines: previewLines);
 }
 
-class _SimplifyControls extends StatefulWidget {
+class _SimplifyControls extends ConsumerStatefulWidget {
   final FeatureNode feature;
   final ValueNotifier<PreviewLines> previewLines;
 
@@ -43,10 +44,10 @@ class _SimplifyControls extends StatefulWidget {
   });
 
   @override
-  State<_SimplifyControls> createState() => _SimplifyControlsState();
+  ConsumerState<_SimplifyControls> createState() => _SimplifyControlsState();
 }
 
-class _SimplifyControlsState extends State<_SimplifyControls> {
+class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
   List<LatLng> _originalLine = [];
   List<LatLng> _simplified = [];
   bool _isApplying = false;
@@ -101,11 +102,7 @@ class _SimplifyControlsState extends State<_SimplifyControls> {
 
       AppLogger.debug('[SimplifyAction] 適用完了: ${widget.feature.name}');
 
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null) {
-        mapState.refreshFeatures();
-        mapState.setState(() {});
-      }
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

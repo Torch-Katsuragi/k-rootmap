@@ -88,7 +88,30 @@
   - [x] 既存の「追跡開始/停止」フローを完全廃止
   - [x] GpsTrackingOverlay（回転光エフェクト）を廃止、実際の軌跡表示に置換
   - [x] GPS追跡ボタンを軌跡抽出ボタンに変更（全プラットフォーム対応）
-- [ ] ServiceLocatorパターンの導入
+- [x] Riverpod状態管理基盤の導入（ServiceLocator代替）（2026/02/20）
+  - [x] flutter_riverpod導入、ProviderScope設定
+  - [x] GlobalConfigをプロバイダーブリッジ化（内部的にRiverpodに委譲）
+  - [x] 8つのプロバイダーファイル作成（project, selection, tool, ui_state, gps, drawing, service, app_container）
+- [x] Riverpod正規化リファクタリング（2026/02/20）
+  - [x] flutter_riverpod v3.0.3 + riverpod_generator v3.0.3 + riverpod_annotation v3.0.3導入
+  - [x] 全プロバイダーを@riverpod コード生成に移行（StateProvider → Notifier）
+  - [x] GlobalConfig（Godオブジェクト）完全削除（38ファイル190箇所の依存を解消）
+  - [x] setStateCallbackパターン除去（LayerDrawer系9ファイル）
+  - [x] 主要ウィジェットConsumerWidget/ConsumerStatefulWidget化（MapPage, HomeScreen, MapToolbar, FAB, LayerDrawer等）
+  - [x] ツールへのRef注入（PenTool, SelectTool, GpsTool, PanTool）
+  - [x] mapState/folderTreeをMapPageStateBaseのstaticフィールドに移行
+  - [x] selectedFeaturesをSelectedFeaturesプロバイダーに完全移行
+- [x] Riverpod完全正規化（2026/02/20-25）
+  - [x] appContainer（グローバルProviderContainer）をlib/から完全除去
+  - [x] MapPageStateBaseのstaticフィールド除去 → 専用プロバイダ化（folderTree, mapControllerHolder, featureRefreshTrigger）
+  - [x] IMapStateインターフェース依存の縮小（refreshFeatures/setState/mapController → プロバイダ経由）
+  - [x] BaseMapService/GpsManagerServiceのChangeNotifierProvider → @riverpod移行
+  - [x] PathResolverからのRef直接依存除去（コールバック注入方式へ）
+  - [x] GeoPackageFile/GeoPackageConnectionのappContainer依存除去（projectRootDir注入）
+  - [x] FeatureNodeのappContainer依存除去（onDisposeコールバック方式へ）
+  - [x] GlobalDrawingState.instance直接アクセス → drawingStateProvider経由に統一
+  - [x] GpsManagerService()直接インスタンス化 → gpsManagerServiceProvider経由に統一
+  - [x] GpsSettingsScreenのConsumerStatefulWidget化
 - [ ] 非同期競合状態防止の改善（Completer使用）
 - [x] フィーチャキャッシュの差分更新対応
 - [x] LayerNodeサブクラスの個別ファイル分離（部分的完了：PathResolver、NodePresenter、ExifParser、LayerMigrationService分離済み）
@@ -164,12 +187,16 @@
 
 ### パフォーマンス改善
 
-- [ ] 大量フィーチャのロード・通常動作の軽量化リファクタリング
-  - ロード時の処理最適化（遅延読み込み、バッチ処理等）
-  - 地図描画時のパフォーマンス改善（ビューポートカリングの強化等）
+- [x] 大量フィーチャのロード・通常動作の軽量化リファクタリング（2026/02/20）
+  - [x] FeatureNodeの遅延初期化・キャッシュ改善（centroid, metadata, length, area）
+  - [x] FeatureRepositoryのDRY化（updatePoint/Line/Polygon統一、エンベロープ計算共通化）
+  - [x] constコンストラクタ追加による再構築最小化
+- [x] 巨大ファイル分割（2026/02/20）
+  - [x] feature_converter.dart（2,070行）→ 7ファイル（Strategy pattern）
+  - [x] layer_drawer_tiles.dart（2,073行）→ 7ファイル（機能別mixin）
+  - [x] sync_engine.dart（1,895行）→ 5ファイル（handler/resolver分割）
+  - [x] metadata_parser.dart（1,645行）→ 7ファイル（facade + 専門パーサー）
+  - [x] map_page.dart FAB抽出 → DrawingActionButtons widget
 
-- [ ] トラッキング保存形式の変更検討
-  - 現行: 日付ごとにレイヤを分けつつpointを逐次追加
-  - 提案: 特定lineレイヤに日付ごとにフィーチャを分けつつ、lineをちょっとずつ伸長
-    - 従来方式からlineに変換したときと同じようにsubtableも追加
-  - 目的: クラスタリング対象のポイントフィーチャ大量発生を抑制
+- [x] トラッキング保存形式の変更（2026/02/20完了）
+  - lineレイヤ方式に変更済み

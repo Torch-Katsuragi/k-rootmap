@@ -1,24 +1,19 @@
 // 左下フローティングアクションボタンウィジェット
 import 'package:flutter/material.dart';
-import '../utils/global_config.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/tool_providers.dart';
+import '../providers/ui_state_providers.dart';
 import '../tools/pen_tool.dart';
 
 /// 左下に表示される白い円形のフローティングボタン
-/// 押下状態はGlobalConfigで管理
-class LeftBottomFab extends StatefulWidget {
+class LeftBottomFab extends ConsumerWidget {
   const LeftBottomFab({super.key});
-  
-  @override
-  State<LeftBottomFab> createState() => _LeftBottomFabState();
-}
 
-class _LeftBottomFabState extends State<LeftBottomFab> {
   @override
-  Widget build(BuildContext context) {
-    final isActive = GlobalConfig.instance.isFabActive;
-    final currentTool = GlobalConfig.instance.currentTool;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isActive = ref.watch(isFabActiveProvider);
+    final currentTool = ref.watch(currentToolProvider);
     
-    // 現在のツールに応じてアイコンを変更
     Widget centerIcon;
     switch (currentTool.runtimeType) {
       case PenTool:
@@ -39,9 +34,7 @@ class _LeftBottomFabState extends State<LeftBottomFab> {
     
     return GestureDetector(
       onTap: () {
-        setState(() {
-          GlobalConfig.instance.isFabActive = !isActive;
-        });
+        ref.read(isFabActiveProvider.notifier).set(!isActive);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -67,4 +60,3 @@ class _LeftBottomFabState extends State<LeftBottomFab> {
     );
   }
 }
-

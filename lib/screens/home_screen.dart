@@ -3,22 +3,24 @@
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import '../utils/global_config.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
+import '../providers/project_providers.dart';
+import '../providers/ui_state_providers.dart';
 import 'map_page/map_page.dart';
 
 /// ホーム画面（最小構成）
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   String? _projectDir;
   bool _permissionsGranted = false;
   bool _isCheckingPermissions = false; // 権限チェック中フラグ
@@ -217,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final globalPath = p.join(appDir.path, 'k_maps_global');
       
       // グローバルフォルダパスを保存
-      GlobalConfig.instance.globalFolderPath = globalPath;
+      ref.read(globalFolderPathProvider.notifier).set(globalPath);
       AppLogger.debug('[HomeScreen] グローバルフォルダパス: $globalPath');
 
       // グローバルフォルダノードを作成
@@ -225,11 +227,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'Global',
         globalPath: globalPath,
         visible: true,
-        parent: GlobalConfig.instance.folderTree,
+        parent: ref.read(folderTreeProvider),
       );
 
-      // ルートノードの先頭に追加
-      final rootNode = GlobalConfig.instance.folderTree;
+      final rootNode = ref.read(folderTreeProvider);
       if (rootNode != null) {
         // 既存のグローバルフォルダがあれば削除
         rootNode.children.removeWhere((child) => child is GlobalFolderNode);
@@ -267,14 +268,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
       // グローバル初期化
       AppLogger.debug('[HomeScreen] GlobalConfigを初期化中...');
-      GlobalConfig.instance.projectRootDir = dir;
-      GlobalConfig.instance.folderTree = FolderNode('rootNode', visible: true);
+      ref.read(projectRootDirProvider.notifier).set(dir);
+      final rootNode = FolderNode('rootNode', visible: true);
+      ref.read(folderTreeProvider.notifier).set(rootNode);
 
-      // グローバルフォルダの初期化
       await _initializeGlobalFolder();
 
       AppLogger.debug(
-        '[HomeScreen] GlobalConfig初期化完了: ${GlobalConfig.instance.folderTree?.toMap()}',
+        '[HomeScreen] 初期化完了: ${ref.read(folderTreeProvider)?.toMap()}',
       );
 
       // フォルダ選択後すぐ地図編集画面へ遷移

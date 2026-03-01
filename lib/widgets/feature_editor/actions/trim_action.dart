@@ -5,11 +5,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../models/nodes/feature_node.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../feature_edit_action.dart';
 
 class TrimAction extends FeatureEditAction {
@@ -34,7 +35,7 @@ class TrimAction extends FeatureEditAction {
       );
 }
 
-class _TrimControls extends StatefulWidget {
+class _TrimControls extends ConsumerStatefulWidget {
   final LineFeatureNode feature;
   final ValueNotifier<PreviewLines> previewLines;
 
@@ -44,10 +45,10 @@ class _TrimControls extends StatefulWidget {
   });
 
   @override
-  State<_TrimControls> createState() => _TrimControlsState();
+  ConsumerState<_TrimControls> createState() => _TrimControlsState();
 }
 
-class _TrimControlsState extends State<_TrimControls> {
+class _TrimControlsState extends ConsumerState<_TrimControls> {
   late List<LatLng> _fullLine;
   late RangeValues _range;
   List<LatLng> _trimmedLine = [];
@@ -90,11 +91,7 @@ class _TrimControlsState extends State<_TrimControls> {
 
       AppLogger.debug('[TrimAction] 適用完了: ${widget.feature.name}');
 
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null) {
-        mapState.refreshFeatures();
-        mapState.setState(() {});
-      }
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

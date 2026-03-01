@@ -8,16 +8,17 @@
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../services/import_export_service.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/geopackage_node.dart';
-import '../utils/global_config.dart';
+import '../providers/ui_state_providers.dart';
 
 /// Import/Export機能を提供するダイアログ
-class ImportExportDialog extends StatefulWidget {
+class ImportExportDialog extends ConsumerStatefulWidget {
   /// 現在選択されているレイヤー（インポート先の特定に使用）
   final LayerTreeNode? currentLayer;
 
@@ -36,10 +37,10 @@ class ImportExportDialog extends StatefulWidget {
   }
 
   @override
-  State<ImportExportDialog> createState() => _ImportExportDialogState();
+  ConsumerState<ImportExportDialog> createState() => _ImportExportDialogState();
 }
 
-class _ImportExportDialogState extends State<ImportExportDialog> {
+class _ImportExportDialogState extends ConsumerState<ImportExportDialog> {
   final ImportExportService _importExportService = ImportExportService();
   bool _isProcessing = false;
   String? _statusMessage;
@@ -592,14 +593,8 @@ class _ImportExportDialogState extends State<ImportExportDialog> {
   /// マップページのフィーチャ更新をトリガー
   void _triggerMapRefresh() {
     try {
-      // GlobalConfigを通じてマップページの更新をトリガー（型安全）
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null && mapState.mounted) {
-        mapState.refreshFeatures();
-        AppLogger.debug('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
-      } else {
-        AppLogger.debug('[ImportExportDialog] マップページが見つからないか、マウントされていません');
-      }
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      AppLogger.debug('[ImportExportDialog] マップフィーチャ更新をトリガーしました');
     } catch (e) {
       AppLogger.debug('[ImportExportDialog] マップ更新エラー: $e');
     }

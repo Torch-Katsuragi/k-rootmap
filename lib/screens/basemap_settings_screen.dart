@@ -3,13 +3,14 @@
 library;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/basemap_provider.dart';
 import '../services/basemap_service.dart';
-import '../utils/global_config.dart';
 import '../widgets/settings_widgets.dart';
+import '../providers/ui_state_providers.dart';
 
-class BaseMapSettingsScreen extends StatefulWidget {
+class BaseMapSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
 
   const BaseMapSettingsScreen({
@@ -18,10 +19,10 @@ class BaseMapSettingsScreen extends StatefulWidget {
   });
 
   @override
-  State<BaseMapSettingsScreen> createState() => _BaseMapSettingsScreenState();
+  ConsumerState<BaseMapSettingsScreen> createState() => _BaseMapSettingsScreenState();
 }
 
-class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
+class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   final BaseMapService _baseMapService = BaseMapService();
   Map<String, int> _cacheStats = {};
   double _cacheSizeMB = 0.0;
@@ -268,12 +269,10 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
     // 現在の地図中心座標を取得
     LatLng center;
     try {
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null) {
-        // dynamic型を通じてアクセス
-        center = mapState.mapController.camera.center;
+      final mapController = ref.read(mapControllerHolderProvider);
+      if (mapController != null) {
+        center = mapController.camera.center;
       } else {
-        // フォールバック: 東京駅
         center = const LatLng(35.681236, 139.767125);
       }
     } catch (e) {
@@ -286,9 +285,9 @@ class _BaseMapSettingsScreenState extends State<BaseMapSettingsScreen> {
     // 初期ズーム範囲: 現在のズームレベル前後
     double currentZoom = 15.0;
     try {
-      final mapState = GlobalConfig.instance.mapState;
-      if (mapState != null) {
-        currentZoom = mapState.mapController.camera.zoom;
+      final mapController = ref.read(mapControllerHolderProvider);
+      if (mapController != null) {
+        currentZoom = mapController.camera.zoom;
       }
     } catch (_) {}
 

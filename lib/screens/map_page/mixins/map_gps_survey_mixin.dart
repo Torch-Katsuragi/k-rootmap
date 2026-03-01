@@ -2,15 +2,17 @@
 // GPS測量（単一点記録、長押し測量）関連の機能を提供
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
-import '../../../utils/global_drawing_state.dart';
 import '../../../tools/gps_tool.dart';
+import '../../../providers/selection_providers.dart';
+import '../../../providers/tool_providers.dart';
+import '../../../providers/drawing_provider.dart';
 import '../map_page_state_base.dart';
 
 /// GPS測量Mixin
 /// 単一点GPS測量と長押し測量機能を提供
-mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
+mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   
   // =============================================
   // GPS測量（単一点記録）
@@ -19,13 +21,13 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// GPS測量（現在位置を記録）
   Future<void> recordGpsPosition() async {
     try {
-      final currentTool = GlobalConfig.instance.currentTool;
+      final currentTool = ref.read(currentToolProvider);
       if (currentTool is! GpsTool) {
         AppLogger.debug('[MapGpsSurveyMixin] GPS測量: 現在のツールがGpsToolではありません');
         return;
       }
       
-      final selected = GlobalConfig.instance.selectedLayerNode;
+      final selected = ref.read(selectedLayerNodeProvider);
       if (selected == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -67,9 +69,10 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
         triggerSetState(() {}); // プレビュー更新
         
         if (mounted) {
+          final drawState = ref.read(drawingStateProvider);
           final totalPoints =
-              GlobalConfig.instance.drawingState.drawingLine.length +
-              GlobalConfig.instance.drawingState.drawingPolygon.length;
+              drawState.drawingLine.length +
+              drawState.drawingPolygon.length;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('GPS位置を記録しました ($totalPointsポイント目)'),
@@ -106,7 +109,7 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// GPS長押し測量開始
   Future<void> startLongPressGpsSurvey() async {
     try {
-      final currentTool = GlobalConfig.instance.currentTool;
+      final currentTool = ref.read(currentToolProvider);
       if (currentTool is! GpsTool) {
         AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量: 現在のツールがGpsToolではありません');
         return;
@@ -165,7 +168,7 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// GPS長押し測量停止と平均化処理
   Future<void> stopLongPressGpsSurvey() async {
     try {
-      final currentTool = GlobalConfig.instance.currentTool;
+      final currentTool = ref.read(currentToolProvider);
       if (currentTool is! GpsTool) {
         AppLogger.debug('[MapGpsSurveyMixin] GPS長押し測量停止: 現在のツールがGpsToolではありません');
         return;
@@ -222,10 +225,10 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// GPS測量確定処理
   Future<void> onConfirmGpsSurvey() async {
     try {
-      final currentTool = GlobalConfig.instance.currentTool;
+      final currentTool = ref.read(currentToolProvider);
       if (currentTool is! GpsTool) return;
       
-      final selected = GlobalConfig.instance.selectedLayerNode;
+      final selected = ref.read(selectedLayerNodeProvider);
       if (selected == null) return;
       
       // 属性入力ダイアログを表示
@@ -252,7 +255,7 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'GPS測量データ（${GlobalConfig.instance.drawingState.drawingLine.length + GlobalConfig.instance.drawingState.drawingPolygon.length}ポイント）が自動的に記録されます',
+                  'GPS測量データ（${ref.read(drawingStateProvider).drawingLine.length + ref.read(drawingStateProvider).drawingPolygon.length}ポイント）が自動的に記録されます',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -277,7 +280,7 @@ mixin MapGpsSurveyMixin<T extends StatefulWidget> on MapPageStateBase<T> {
       if (result == null) return;
       
       // GlobalDrawingStateの統一確定処理を使用
-      final drawingState = GlobalDrawingState.instance;
+      final drawingState = ref.read(drawingStateProvider);
       
       // GPS測量データを追加メタデータとして準備
       final surveyGpsData = drawingState.isLineDrawing

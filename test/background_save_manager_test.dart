@@ -2,10 +2,12 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:k_maps/models/geopackage_file.dart';
+import 'package:k_maps/models/geopackage/geopackage_file.dart';
 import 'package:k_maps/models/geometry_type.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:k_maps/providers/app_container.dart';
+import 'package:k_maps/providers/project_providers.dart';
 import 'package:k_maps/utils/background_save_manager.dart';
-import 'package:k_maps/utils/global_config.dart';
 
 void main() {
   group('BackgroundSaveManager Tests', () {
@@ -16,8 +18,9 @@ void main() {
     setUpAll(() async {
       // テスト用の一時ディレクトリを作成
       tempDir = await Directory.systemTemp.createTemp('k_maps_test');
-      // GlobalConfigにテストディレクトリを設定
-      GlobalConfig.instance.projectRootDir = tempDir.path;
+      // プロバイダーコンテナを初期化
+      appContainer = ProviderContainer();
+      appContainer.read(projectRootDirProvider.notifier).set(tempDir.path);
 
       saveManager = BackgroundSaveManager.instance;
     });

@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import '../models/kmeta.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../utils/app_logger.dart';
-import '../utils/global_config.dart';
 
 /// フォルダメタデータサービス
 /// 継承チェーンを解決し、マージ済みメタデータを提供
@@ -62,37 +61,34 @@ class KMetaService {
   }
 
   /// フォルダのマージ済みメタデータを取得（継承チェーン解決済み）
-  Future<KMeta> getMergedMeta(String folderPath) async {
-    // キャッシュ確認
+  Future<KMeta> getMergedMeta(String folderPath, {String? projectRootDir}) async {
     if (_mergedCache.containsKey(folderPath)) {
       return _mergedCache[folderPath]!;
     }
 
-    // 継承チェーンを解決
-    final mergedMeta = await _resolveInheritanceChain(folderPath);
+    final mergedMeta = await _resolveInheritanceChain(folderPath, projectRootDir: projectRootDir);
     _mergedCache[folderPath] = mergedMeta;
     return mergedMeta;
   }
 
   /// LayerTreeNodeからマージ済みメタデータを取得
-  Future<KMeta> getMergedMetaForNode(LayerTreeNode node) async {
+  Future<KMeta> getMergedMetaForNode(LayerTreeNode node, {String? projectRootDir}) async {
     final folderPath = node.getAbsoluteFilePath();
     if (folderPath == null) {
       return KMeta.empty;
     }
-    return getMergedMeta(folderPath);
+    return getMergedMeta(folderPath, projectRootDir: projectRootDir);
   }
 
   /// 継承チェーンを解決してマージ
-  Future<KMeta> _resolveInheritanceChain(String folderPath) async {
-    final projectRoot = GlobalConfig.instance.projectRootDir;
-    if (projectRoot == null) {
+  Future<KMeta> _resolveInheritanceChain(String folderPath, {String? projectRootDir}) async {
+    if (projectRootDir == null) {
       return await getRawMeta(folderPath) ?? KMeta.empty;
     }
 
     // 正規化されたパス
     final normalizedPath = p.normalize(folderPath);
-    final normalizedRoot = p.normalize(projectRoot);
+    final normalizedRoot = p.normalize(projectRootDir);
 
     // ルートからこのフォルダまでのパスを構築
     final ancestorPaths = <String>[];

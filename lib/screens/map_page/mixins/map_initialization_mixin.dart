@@ -2,12 +2,14 @@
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
+import '../../../providers/project_providers.dart';
+import '../../../providers/service_providers.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
@@ -18,7 +20,7 @@ import '../../layer_style_settings_screen.dart';
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
-mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
+mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   // =============================================
   // 初期化処理
   // =============================================
@@ -27,13 +29,10 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   Future<void> initializeAllServices() async {
     AppLogger.debug('[DEBUG] initializeAllServices: start');
 
-    // ルートノード設定（既に存在する場合は再作成しない）
-    // home_screen.dartでグローバルフォルダ付きで作成済みの場合を考慮
-    if (GlobalConfig.instance.folderTree == null) {
-      GlobalConfig.instance.folderTree = FolderNode("rootNode", visible: true);
+    if (ref.read(folderTreeProvider) == null) {
+      ref.read(folderTreeProvider.notifier).set(FolderNode("rootNode", visible: true));
     }
-    currentNode = GlobalConfig.instance.folderTree;
-    GlobalConfig.instance.mapState = this;
+    currentNode = ref.read(folderTreeProvider);
 
     // レイヤ描画設定を読み込み＆変更リスナー登録
     LayerStyleConfig().load();
@@ -60,7 +59,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// プロジェクトツリーの初期化（非同期）
   Future<void> initializeProjectTree() async {
     AppLogger.debug('[DEBUG] initializeProjectTree: start');
-    final rootNode = GlobalConfig.instance.folderTree;
+    final rootNode = ref.read(folderTreeProvider);
     if (rootNode != null) {
       await updateNodeRecursively(rootNode);
       // フィーチャデータを更新（サブクラスで実装）
@@ -168,10 +167,9 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   Future<void> initializeBaseMapService() async {
     try {
       AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
-      await GlobalConfig.instance.baseMapService.initialize();
+      await ref.read(baseMapServiceProvider).initialize();
 
-      // 背景地図サービスの変更を監視
-      GlobalConfig.instance.baseMapService.addListener(onBaseMapServiceUpdate);
+      ref.read(baseMapServiceProvider).addListener(onBaseMapServiceUpdate);
 
       AppLogger.debug('[DEBUG] BaseMapService: 初期化完了');
     } catch (e) {
@@ -263,7 +261,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化開始');
 
     try {
-      final globalPath = GlobalConfig.instance.globalFolderPath;
+      final globalPath = ref.read(globalFolderPathProvider);
       if (globalPath == null) {
         AppLogger.debug('[DEBUG] GPS: グローバルフォルダパスが未設定のためスキップ');
         return;
@@ -315,7 +313,7 @@ mixin MapInitializationMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   /// 全サービスの破棄処理
   void disposeAllServices() {
     gpsManager.removeListener(onGpsManagerUpdate);
-    GlobalConfig.instance.baseMapService.removeListener(onBaseMapServiceUpdate);
+    ref.read(baseMapServiceProvider).removeListener(onBaseMapServiceUpdate);
     LayerStyleConfig().removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
 

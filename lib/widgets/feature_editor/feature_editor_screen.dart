@@ -6,15 +6,16 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/nodes/feature_node.dart';
+import '../../providers/service_providers.dart';
 import '../../services/basemap_service.dart';
-import '../../utils/global_config.dart';
 import '../../widgets/cached_tile_layer.dart';
 import 'feature_edit_action.dart';
 
-class FeatureEditorScreen extends StatefulWidget {
+class FeatureEditorScreen extends ConsumerStatefulWidget {
   final FeatureNode feature;
   final List<FeatureEditAction> actions;
 
@@ -25,10 +26,10 @@ class FeatureEditorScreen extends StatefulWidget {
   });
 
   @override
-  State<FeatureEditorScreen> createState() => _FeatureEditorScreenState();
+  ConsumerState<FeatureEditorScreen> createState() => _FeatureEditorScreenState();
 }
 
-class _FeatureEditorScreenState extends State<FeatureEditorScreen> {
+class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   late final List<FeatureEditAction> _applicable;
   late final ValueNotifier<PreviewLines> _previewLines;
   late final MapController _mapController;
@@ -112,7 +113,7 @@ class _FeatureEditorScreenState extends State<FeatureEditorScreen> {
       );
     }
 
-    final baseMapService = GlobalConfig.instance.baseMapService;
+    final baseMapService = ref.read(baseMapServiceProvider);
 
     return Scaffold(
       appBar: AppBar(

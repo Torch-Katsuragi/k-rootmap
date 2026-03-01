@@ -1,21 +1,21 @@
 // フィーチャ詳細パネルウィジェット
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
-import '../utils/global_config.dart';
+import '../providers/project_providers.dart';
 import '../widgets/photo_viewer.dart';
 import '../widgets/feature_editor/feature_editor_screen.dart';
 import '../widgets/feature_editor/actions/simplify_action.dart';
 import '../widgets/feature_editor/actions/trim_action.dart';
 
-/// フィーチャ詳細パネル
-class FeatureDetailPanel extends StatelessWidget {
+class FeatureDetailPanel extends ConsumerWidget {
   final dynamic feature;
   const FeatureDetailPanel({super.key, required this.feature});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (feature == null) return const SizedBox.shrink();
 
     // ImageNode用の詳細パネル
@@ -23,7 +23,7 @@ class FeatureDetailPanel extends StatelessWidget {
       final photo = feature as ImageNode;
 
       // プロジェクトルートからの相対パスを計算
-      final projectRoot = GlobalConfig.instance.projectRootDir;
+      final projectRoot = ref.read(projectRootDirProvider);
       String displayPath = photo.filePath;
       if (projectRoot != null && photo.filePath.startsWith(projectRoot)) {
         displayPath = photo.filePath.substring(projectRoot.length);
@@ -68,9 +68,9 @@ class FeatureDetailPanel extends StatelessWidget {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.broken_image, color: Colors.grey, size: 24),
+                              const Icon(Icons.broken_image, color: Colors.grey, size: 24),
                               const SizedBox(height: 4),
-                              Text(
+                              const Text(
                                 '画像エラー',
                                 style: TextStyle(color: Colors.grey, fontSize: 10),
                               ),

@@ -2,6 +2,7 @@
 // 全てのMixinが共通でアクセスする状態変数を定義
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -11,15 +12,17 @@ import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/gps_position_record.dart';
 import '../../services/gps_manager_service.dart';
+import '../../providers/service_providers.dart';
 import '../../services/internal_gps_location_store.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../interfaces/map_state_interface.dart';
 
 /// MapPageの状態変数を定義する基底mixin
 /// 各機能別Mixinはこのmixinを継承（on）して状態にアクセス
-mixin MapPageStateBase<T extends StatefulWidget>
-    on State<T>, TickerProviderStateMixin<T>
+mixin MapPageStateBase<T extends ConsumerStatefulWidget>
+    on ConsumerState<T>, TickerProviderStateMixin<T>
     implements IMapState {
+
   // =============================================
   // 地図基本状態
   // =============================================
@@ -77,7 +80,7 @@ mixin MapPageStateBase<T extends StatefulWidget>
   // =============================================
 
   /// 統合GPS管理サービス
-  final GpsManagerService gpsManager = GpsManagerService();
+  GpsManagerService get gpsManager => ref.read(gpsManagerServiceProvider);
 
   /// 内蔵GPS位置情報ストア
   final InternalGpsLocationStore locationStore = InternalGpsLocationStore();

@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/app_logger.dart';
-import '../../utils/global_config.dart';
 
 /// GeoPackage DB接続を管理するクラス
 /// 責務: DB接続の初期化、クローズ、構造検証
@@ -17,6 +16,9 @@ class GeoPackageConnection {
   /// グローバルフォルダ内のGeoPackageで使用
   final String? absolutePath;
 
+  /// プロジェクトルートディレクトリ（相対パスモード時に使用）
+  final String? projectRootDir;
+
   /// データベース接続インスタンス
   Database? _database;
 
@@ -27,7 +29,7 @@ class GeoPackageConnection {
   bool get isInitialized => _isInitialized;
 
   /// コンストラクタ
-  GeoPackageConnection(this.pathList, {this.absolutePath});
+  GeoPackageConnection(this.pathList, {this.absolutePath, this.projectRootDir});
 
   /// データベース接続取得（初期化を含む）
   Future<Database> getDatabase() async {
@@ -49,12 +51,11 @@ class GeoPackageConnection {
     if (absolutePath != null) {
       absPath = absolutePath!;
     } else {
-      final baseDir = GlobalConfig.instance.projectRootDir;
-      if (baseDir == null) {
+      if (projectRootDir == null) {
         AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
         return;
       }
-      absPath = p.joinAll([baseDir, ...pathList]);
+      absPath = p.joinAll([projectRootDir!, ...pathList]);
     }
 
     final file = File(absPath);
@@ -271,12 +272,11 @@ class GeoPackageConnection {
       if (absolutePath != null) {
         absPath = absolutePath!;
       } else {
-        final baseDir = GlobalConfig.instance.projectRootDir;
-        if (baseDir == null) {
+        if (projectRootDir == null) {
           AppLogger.debug('[GeoPackageConnection] deleteFile: projectRootDirが未設定');
           return false;
         }
-        absPath = p.joinAll([baseDir, ...pathList]);
+        absPath = p.joinAll([projectRootDir!, ...pathList]);
       }
       final file = File(absPath);
 

@@ -1,16 +1,18 @@
 // K-MAPS: 描画確定Mixin
 // ペンツールでの描画確定と追記モード関連の機能を提供
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';
-import '../../../utils/global_config.dart';
-import '../../../utils/global_drawing_state.dart';
+import '../../../providers/drawing_provider.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
+import '../../../providers/selection_providers.dart';
+import '../../../providers/tool_providers.dart';
 import '../map_page_state_base.dart';
 
 /// 描画確定Mixin
 /// ペンツールでの描画確定と追記モード機能を提供
-mixin MapDrawingMixin<T extends StatefulWidget> on MapPageStateBase<T> {
+mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
   
   // =============================================
   // 描画確定処理
@@ -18,10 +20,10 @@ mixin MapDrawingMixin<T extends StatefulWidget> on MapPageStateBase<T> {
   
   /// ライン/ポリゴン確定処理
   Future<void> onConfirmDrawing() async {
-    final selected = GlobalConfig.instance.selectedLayerNode;
+    final selected = ref.read(selectedLayerNodeProvider);
     if (selected == null) return;
     
-    final drawingState = GlobalDrawingState.instance;
+    final drawingState = ref.read(drawingStateProvider);
     
     // 描画データがあるかチェック
     if (!drawingState.isDrawing) {
@@ -84,9 +86,7 @@ mixin MapDrawingMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     AppLogger.debug('[MAP] 追記モード開始: ${feature.name} (${feature.runtimeType})');
     
     // 1. ツールをPenToolに切り替え
-    triggerSetState(() {
-      GlobalConfig.instance.currentTool = GlobalConfig.instance.penTool;
-    });
+    ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
     
     // 2. 選択レイヤーを該当フィーチャのレイヤーに設定
     LayerNode? targetLayer;
@@ -97,9 +97,7 @@ mixin MapDrawingMixin<T extends StatefulWidget> on MapPageStateBase<T> {
     }
     
     if (targetLayer != null) {
-      triggerSetState(() {
-        GlobalConfig.instance.selectedLayerNode = targetLayer;
-      });
+      ref.read(selectedLayerNodeProvider.notifier).select(targetLayer);
       AppLogger.debug('[MAP] 選択レイヤーを設定: ${targetLayer.name}');
     }
     

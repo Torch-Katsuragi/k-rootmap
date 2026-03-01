@@ -1,11 +1,13 @@
 // GPS追跡関連のダイアログウィジェット
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/feature_node.dart';
-import '../utils/global_config.dart';
+import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
+import '../providers/service_providers.dart';
 
 /// GPS追跡停止時の処理選択ダイアログ
 class TrackingStopDialog extends StatefulWidget {
@@ -172,16 +174,16 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
 }
 
 /// PointLayerNode選択ダイアログ（GPS追跡用）
-class SelectPointLayerDialog extends StatefulWidget {
+class SelectPointLayerDialog extends ConsumerStatefulWidget {
   final List<PointLayerNode> pointLayers;
 
   const SelectPointLayerDialog({super.key, required this.pointLayers});
 
   @override
-  State<SelectPointLayerDialog> createState() => _SelectPointLayerDialogState();
+  ConsumerState<SelectPointLayerDialog> createState() => _SelectPointLayerDialogState();
 }
 
-class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
+class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog> {
   PointLayerNode? _selectedLayer; // null = 新しいレイヤを作成
   int _intervalSeconds = 10; // 保存間隔（秒）
   int _minDistanceCm = 0; // 最小移動距離（cm）
@@ -189,7 +191,7 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
   final _intervalController = TextEditingController(text: '10');
   final _distanceController = TextEditingController(text: '0');
   final _newLayerNameController = TextEditingController(text: 'gps_track');
-  final GpsManagerService _gpsManager = GpsManagerService();
+  GpsManagerService get _gpsManager => ref.read(gpsManagerServiceProvider);
 
   @override
   void initState() {
@@ -352,7 +354,7 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                       : _newLayerNameController.text.trim();
 
               // GeoPackageNodeを検索（プロジェクトルートから最初のGeoPackageを使用）
-              final rootNode = GlobalConfig.instance.folderTree;
+              final rootNode = ref.read(folderTreeProvider);
               if (rootNode == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -445,11 +447,11 @@ class _SelectPointLayerDialogState extends State<SelectPointLayerDialog> {
                   _useExternalGnss = value ?? false;
                 });
               },
-              title: Row(
+              title: const Row(
                 children: [
                   Icon(Icons.bluetooth_connected, color: Colors.green),
-                  const SizedBox(width: 8),
-                  const Text('外部GNSS機器を使用'),
+                  SizedBox(width: 8),
+                  Text('外部GNSS機器を使用'),
                 ],
               ),
               subtitle: Text(

@@ -65,7 +65,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
                   tooltip: '一つ上の階層に戻る',
                   onPressed: onBack,
                   padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(),
+                  constraints: const BoxConstraints(),
                 ),
               ),
             ),

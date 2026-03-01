@@ -2,18 +2,23 @@
 // オブジェクト選択ツール
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart'; // PointerScrollEvent用
+import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'map_tool.dart';
 import 'package:latlong2/latlong.dart';
-import '../utils/global_config.dart';
 import '../utils/feature_calc_utils.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'dart:math' as math;
 import '../interfaces/map_state_interface.dart';
+import '../providers/tool_providers.dart';
+import '../providers/selection_providers.dart';
+import '../providers/ui_state_providers.dart';
 
 /// オブジェクト選択ツール
 class SelectTool extends MapTool {
+  final Ref _ref;
+  SelectTool(this._ref);
   @override
   String get name => 'Select';
 
@@ -24,8 +29,7 @@ class SelectTool extends MapTool {
   List<Offset> _lassoPoints = [];
   List<Offset> get lassoPoints => _lassoPoints;
 
-  /// ズーム率から選択判定用range(m)を計算
-  double _calcSelectRange(IMapState mapState) {
+  static double _calcSelectRange(IMapState mapState) {
     try {
       final mapController = mapState.mapController;
       final zoom = mapController.camera.zoom;
@@ -43,11 +47,12 @@ class SelectTool extends MapTool {
   static Future<void> selectFeatureAtLatLng({
     required LatLng tapLatLng,
     required IMapState mapState,
+    required Ref ref,
     double? range,
   }) async {
     AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: selecting at $tapLatLng');
 
-    final layer = GlobalConfig.instance.selectedLayerNode;
+    final layer = ref.read(selectedLayerNodeProvider);
     if (layer == null) {
       AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: no layer selected');
       return;
@@ -90,14 +95,14 @@ class SelectTool extends MapTool {
 
     if (features.isEmpty) {
       AppLogger.debug('[DEBUG] SelectTool.selectFeatureAtLatLng: no features found');
-      GlobalConfig.instance.selectedFeatures = [];
-      mapState.setState(() {});
+      ref.read(selectedFeaturesProvider.notifier).set([]);
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
       return;
     }
 
     // ズーム率からrange(m)を計算（未指定時は通常の範囲）
     final double selectRange =
-        range ?? SelectTool()._calcSelectRange(mapState) * 3;
+        range ?? SelectTool._calcSelectRange(mapState) * 3;
     AppLogger.debug(
       '[DEBUG] SelectTool.selectFeatureAtLatLng: search range = ${selectRange}m',
     );
@@ -113,16 +118,16 @@ class SelectTool extends MapTool {
       AppLogger.debug(
         '[DEBUG] SelectTool.selectFeatureAtLatLng: no feature found in range',
       );
-      GlobalConfig.instance.selectedFeatures = [];
-      mapState.setState(() {});
+      ref.read(selectedFeaturesProvider.notifier).set([]);
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
       return;
     }
 
     AppLogger.debug(
       '[DEBUG] SelectTool.selectFeatureAtLatLng: selected feature ${result.key.name}',
     );
-    GlobalConfig.instance.selectedFeatures = [result.key];
-    mapState.setState(() {});
+    ref.read(selectedFeaturesProvider.notifier).set([result.key]);
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
   }
 
   /// タップイベント
@@ -135,7 +140,7 @@ class SelectTool extends MapTool {
       return;
     }
     // staticメソッドで共通化
-    await selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState);
+    await selectFeatureAtLatLng(tapLatLng: tapLatLng, mapState: mapState, ref: _ref);
   }
 
   /// スケール開始イベント
@@ -143,10 +148,10 @@ class SelectTool extends MapTool {
   @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
     _pointerCount = details.pointerCount;
     if (_pointerCount == 2) {
-      GlobalConfig.instance.panTool.onScaleStart(details, mapState);
+      _ref.read(panToolProvider).onScaleStart(details, mapState);
       return;
     }
     if (_pointerCount == 1) {
@@ -160,9 +165,9 @@ class SelectTool extends MapTool {
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
-      GlobalConfig.instance.panTool.onScaleUpdate(details, mapState);
+      _ref.read(panToolProvider).onScaleUpdate(details, mapState);
       return;
     }
     if (_pointerCount == 1) {
@@ -176,9 +181,9 @@ class SelectTool extends MapTool {
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) async {
     // 中ボタンドラッグ中は何もしない（意図しない選択を防ぐ）
-    if (GlobalConfig.instance.panTool.isMiddleButtonDragging) return;
+    if (_ref.read(panToolProvider).isMiddleButtonDragging) return;
     if (_pointerCount == 2) {
-      GlobalConfig.instance.panTool.onScaleEnd(details, mapState);
+      _ref.read(panToolProvider).onScaleEnd(details, mapState);
       _pointerCount = 0;
       return;
     }
@@ -193,7 +198,7 @@ class SelectTool extends MapTool {
       if (lassoPolygonLatLng.first != lassoPolygonLatLng.last) {
         lassoPolygonLatLng.add(lassoPolygonLatLng.first);
       }
-      final layer = GlobalConfig.instance.selectedLayerNode;
+      final layer = _ref.read(selectedLayerNodeProvider);
       if (layer != null) {
         // 最適化: LayerNodeのchildrenから直接FeatureNodeを取得
         final layerFeatures = layer.children.whereType<FeatureNode>().toList();
@@ -248,7 +253,7 @@ class SelectTool extends MapTool {
               }
               return false;
             }).toList();
-        GlobalConfig.instance.selectedFeatures = selected;
+        _ref.read(selectedFeaturesProvider.notifier).set(selected);
       }
       _lassoPoints.clear();
       mapState.setState(() {});
@@ -261,24 +266,22 @@ class SelectTool extends MapTool {
   @override
   void onPointerSignal(PointerEvent event, IMapState mapState) {
     if (event is PointerScrollEvent) {
-      // PanToolの統一されたマウスホイールズーム処理を使用
-      GlobalConfig.instance.panTool.handleMouseWheelZoom(event, mapState);
+      _ref.read(panToolProvider).handleMouseWheelZoom(event, mapState);
     }
   }
 
-  /// 中ボタンドラッグイベント - PanToolに委譲
   @override
   void onMiddleButtonDown(PointerDownEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonDown(event, mapState);
+    _ref.read(panToolProvider).onMiddleButtonDown(event, mapState);
   }
 
   @override
   void onMiddleButtonMove(PointerMoveEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonMove(event, mapState);
+    _ref.read(panToolProvider).onMiddleButtonMove(event, mapState);
   }
 
   @override
   void onMiddleButtonUp(PointerUpEvent event, IMapState mapState) {
-    GlobalConfig.instance.panTool.onMiddleButtonUp(event, mapState);
+    _ref.read(panToolProvider).onMiddleButtonUp(event, mapState);
   }
 }

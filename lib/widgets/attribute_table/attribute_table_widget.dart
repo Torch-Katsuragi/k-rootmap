@@ -2,6 +2,7 @@
 // PlutoGridを使用した属性テーブル表示・編集
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pluto_grid/pluto_grid.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -11,7 +12,7 @@ import 'attribute_table_toolbar.dart';
 import 'attribute_table_dialogs.dart';
 
 /// 動的属性テーブルウィジェット（リファクタリング版）
-class AttributeTableWidget extends StatefulWidget {
+class AttributeTableWidget extends ConsumerStatefulWidget {
   final LayerNode layer;
   final Function(FeatureNode feature)? onFeatureSelected;
   final Function(FeatureNode feature)? onFeatureDeleted;
@@ -26,17 +27,17 @@ class AttributeTableWidget extends StatefulWidget {
   });
 
   @override
-  State<AttributeTableWidget> createState() => _AttributeTableWidgetState();
+  ConsumerState<AttributeTableWidget> createState() => _AttributeTableWidgetState();
 }
 
-class _AttributeTableWidgetState extends State<AttributeTableWidget> {
+class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   late AttributeTableController _controller;
   Key _plutoGridKey = UniqueKey();
 
   @override
   void initState() {
     super.initState();
-    _controller = AttributeTableController(widget.layer);
+    _controller = AttributeTableController(widget.layer, ref);
     _controller.addListener(_onControllerChanged);
     _controller.initialize();
   }
@@ -47,7 +48,7 @@ class _AttributeTableWidgetState extends State<AttributeTableWidget> {
     if (oldWidget.layer != widget.layer) {
       _controller.removeListener(_onControllerChanged);
       _controller.dispose();
-      _controller = AttributeTableController(widget.layer);
+      _controller = AttributeTableController(widget.layer, ref);
       _controller.addListener(_onControllerChanged);
       _controller.initialize();
     }

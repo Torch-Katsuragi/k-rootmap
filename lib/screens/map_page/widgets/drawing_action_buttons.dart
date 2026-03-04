@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../utils/global_drawing_state.dart';
-import '../../../providers/drawing_provider.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../tools/pen_tool.dart';
 import '../../../tools/gps_tool.dart';
@@ -29,7 +28,7 @@ class DrawingActionButtons extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedLayerNodeProvider);
     final currentTool = ref.watch(currentToolProvider);
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
     final gpsTool = currentTool is GpsTool ? currentTool : null;
 
     final isGpsSurveyLine =

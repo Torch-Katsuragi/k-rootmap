@@ -597,35 +597,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       }
 
       AppLogger.debug('[LayerDrawer] GeoPackageNodeを作成中...');
-      final parentNode = widget.currentNode as FolderNode;
       
-      // グローバルフォルダ内の場合は絶対パスモードでGeoPackageを作成
-      final bool isGlobalFolder = parentNode.isInsideGlobalFolder;
-      final GeoPackageFile gpkgFile;
-      final GeoPackageNode newNode;
-      
-      if (isGlobalFolder) {
-        // グローバルフォルダ内：絶対パスモード
-        gpkgFile = GeoPackageFile([fileName], absolutePath: path);
-        newNode = GlobalGeoPackageNode(
-          gpkgFile,
-          absolutePath: path,
-          visible: true,
-          parent: folderNode,
-        );
-        AppLogger.debug('[LayerDrawer] GlobalGeoPackageFile作成: absolutePath=$path');
-      } else {
-        // 通常フォルダ：相対パスモード
-        final parentPath = parentNode.getAbsolutePathSegments();
-        final fileNameList = [fileName];
-        gpkgFile = GeoPackageFile([...parentPath, ...fileNameList]);
-        newNode = GeoPackageNode(
-          gpkgFile,
-          visible: true,
-          parent: folderNode,
-        );
-        AppLogger.debug('[LayerDrawer] GeoPackageFile作成: pathList=${gpkgFile.pathList}');
-      }
+      final gpkgFile = GeoPackageFile([fileName], absolutePath: path);
+      final newNode = GeoPackageNode(
+        gpkgFile,
+        visible: true,
+        parent: folderNode,
+      );
+      AppLogger.debug('[LayerDrawer] GeoPackageFile作成: absolutePath=$path');
 
       folderNode.addChild(newNode);
 

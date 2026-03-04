@@ -16,7 +16,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/gps_manager_service.dart';
-import '../providers/service_providers.dart';
 import '../widgets/gps_info_widget.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -34,7 +33,7 @@ class GpsSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
-  GpsManagerService get _gpsManager => ref.read(gpsManagerServiceProvider);
+  final GpsManagerService _gpsManager = GpsManagerService();
   bool _isScanning = false;
   String? _errorMessage;
   Map<String, dynamic>? _currentGpsInfo;

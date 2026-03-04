@@ -16,8 +16,6 @@ import '../interfaces/map_state_interface.dart';
 import '../providers/tool_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
-import '../providers/drawing_provider.dart';
-
 /// ペンツール（レイヤ描画）
 class PenTool extends MapTool {
   final Ref _ref;
@@ -27,7 +25,7 @@ class PenTool extends MapTool {
   PanTool get panTool => _ref.read(panToolProvider);
 
   /// グローバル描画状態への参照
-  GlobalDrawingState get drawingState => _ref.read(drawingStateProvider);
+  GlobalDrawingState get drawingState => GlobalDrawingState.instance;
 
   @override
   String get name => 'Pen';

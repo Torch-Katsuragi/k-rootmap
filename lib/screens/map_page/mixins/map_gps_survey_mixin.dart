@@ -7,7 +7,7 @@ import '../../../utils/app_logger.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
-import '../../../providers/drawing_provider.dart';
+import '../../../utils/global_drawing_state.dart';
 import '../map_page_state_base.dart';
 
 /// GPS測量Mixin
@@ -69,7 +69,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         triggerSetState(() {}); // プレビュー更新
         
         if (mounted) {
-          final drawState = ref.read(drawingStateProvider);
+          final drawState = GlobalDrawingState.instance;
           final totalPoints =
               drawState.drawingLine.length +
               drawState.drawingPolygon.length;
@@ -255,7 +255,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'GPS測量データ（${ref.read(drawingStateProvider).drawingLine.length + ref.read(drawingStateProvider).drawingPolygon.length}ポイント）が自動的に記録されます',
+                  'GPS測量データ（${GlobalDrawingState.instance.drawingLine.length + GlobalDrawingState.instance.drawingPolygon.length}ポイント）が自動的に記録されます',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -280,7 +280,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       if (result == null) return;
       
       // GlobalDrawingStateの統一確定処理を使用
-      final drawingState = ref.read(drawingStateProvider);
+      final drawingState = GlobalDrawingState.instance;
       
       // GPS測量データを追加メタデータとして準備
       final surveyGpsData = drawingState.isLineDrawing

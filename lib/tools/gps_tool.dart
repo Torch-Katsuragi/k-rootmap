@@ -10,15 +10,12 @@ import 'pan_tool.dart';
 import '../utils/global_drawing_state.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
-import '../providers/service_providers.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import 'package:latlong2/latlong.dart';
 import '../interfaces/map_state_interface.dart';
 import '../providers/tool_providers.dart';
 import '../providers/selection_providers.dart';
-import '../providers/drawing_provider.dart';
-
 /// GPS関連機能を扱うツール
 ///
 /// GPS測量機能を提供し、現在位置を記録してフィーチャを作成します:
@@ -44,10 +41,10 @@ class GpsTool extends MapTool {
 
   PanTool get _panTool => _ref.read(panToolProvider);
 
-  GlobalDrawingState get drawingState => _ref.read(drawingStateProvider);
+  GlobalDrawingState get drawingState => GlobalDrawingState.instance;
 
   /// GPS管理サービスインスタンス
-  GpsManagerService get _gpsManager => _ref.read(gpsManagerServiceProvider);
+  final GpsManagerService _gpsManager = GpsManagerService();
 
   /// 長押しGPS測量用データ
   Timer? _longPressTimer;

@@ -10,6 +10,7 @@ import 'core/path_resolver.dart';
 import 'providers/project_providers.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
+import 'providers/drawing_provider.dart';
 import 'models/nodes/feature_node.dart';
 import 'services/internal_gps_location_store.dart';
 import 'utils/background_save_manager.dart';
@@ -78,6 +79,9 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
   }
 
   Future<void> _initializeServices() async {
+    // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
+    ref.read(drawingStateProvider);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await ref.read(gpsManagerServiceProvider).initialize();

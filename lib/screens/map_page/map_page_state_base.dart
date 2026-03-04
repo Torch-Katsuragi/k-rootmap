@@ -12,7 +12,7 @@ import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/gps_position_record.dart';
 import '../../services/gps_manager_service.dart';
-import '../../providers/service_providers.dart';
+import '../../services/basemap_service.dart';
 import '../../services/internal_gps_location_store.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../interfaces/map_state_interface.dart';
@@ -80,7 +80,10 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // =============================================
 
   /// 統合GPS管理サービス
-  GpsManagerService get gpsManager => ref.read(gpsManagerServiceProvider);
+  final GpsManagerService gpsManager = GpsManagerService();
+
+  /// 背景地図サービス
+  final BaseMapService baseMapService = BaseMapService();
 
   /// 内蔵GPS位置情報ストア
   final InternalGpsLocationStore locationStore = InternalGpsLocationStore();

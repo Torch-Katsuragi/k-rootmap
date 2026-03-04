@@ -30,8 +30,7 @@ import '../../tools/select_tool.dart';
 import '../../tools/gps_tool.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
-import '../../providers/drawing_provider.dart';
-import '../../providers/service_providers.dart';
+import '../../utils/global_drawing_state.dart';
 import '../../providers/ui_state_providers.dart';
 import '../layer_style_settings_screen.dart';
 
@@ -369,8 +368,8 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       ),
       children: [
         CachedTileLayer(
-          provider: ref.read(baseMapServiceProvider).currentProvider,
-          baseMapService: ref.read(baseMapServiceProvider),
+          provider: baseMapService.currentProvider,
+          baseMapService: baseMapService,
         ),
         _buildPolylineLayer(),
         _buildPolygonLayer(),
@@ -383,7 +382,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// ポリラインレイヤー構築
   PolylineLayer _buildPolylineLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
 
     return PolylineLayer(
       polylines: [
@@ -452,7 +451,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// ポリゴンレイヤー構築
   PolygonLayer _buildPolygonLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
 
     return PolygonLayer(
       polygons: [
@@ -602,7 +601,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// オーバーレイマーカーレイヤー（現在位置、測量ポイント、頂点マーカー）
   MarkerLayer _buildOverlayMarkerLayer() {
     final styleConfig = LayerStyleConfig();
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
     return MarkerLayer(
       markers: [
         if (currentLocation != null)
@@ -815,7 +814,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
   /// GPS測量ポイントマーカー構築
   Marker _buildSurveyPointMarker(LatLng point, int index, bool isLine) {
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
     final metadataList =
         isLine ? drawingState.lineMetadata : drawingState.polygonMetadata;
 
@@ -1009,7 +1008,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
     final selected = ref.read(selectedLayerNodeProvider);
     final penTool = ref.read(currentToolProvider) as PenTool;
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
     String? previewText;
     Offset? previewOffset;
 

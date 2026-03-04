@@ -121,7 +121,10 @@ class GlobalPathResolver extends PathResolver {
     final root = rootPath;
     if (root == null) return null;
     if (segments.isEmpty) return root;
-    return p.joinAll([root, ...segments]);
+    // 先頭セグメントはGlobalFolderNodeの表示名なのでスキップ
+    final adjusted = segments.sublist(1);
+    if (adjusted.isEmpty) return root;
+    return p.joinAll([root, ...adjusted]);
   }
   
   @override

@@ -7,8 +7,6 @@ import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_manager_service.dart';
-import '../providers/service_providers.dart';
-
 /// GPS追跡停止時の処理選択ダイアログ
 class TrackingStopDialog extends StatefulWidget {
   final PointLayerNode pointLayer;
@@ -191,7 +189,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
   final _intervalController = TextEditingController(text: '10');
   final _distanceController = TextEditingController(text: '0');
   final _newLayerNameController = TextEditingController(text: 'gps_track');
-  GpsManagerService get _gpsManager => ref.read(gpsManagerServiceProvider);
+  final GpsManagerService _gpsManager = GpsManagerService();
 
   @override
   void initState() {

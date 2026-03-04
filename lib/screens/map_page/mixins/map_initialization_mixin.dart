@@ -8,7 +8,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../utils/app_logger.dart';
 import '../../../providers/project_providers.dart';
-import '../../../providers/service_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/folder_node.dart';
@@ -167,9 +166,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
   Future<void> initializeBaseMapService() async {
     try {
       AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
-      await ref.read(baseMapServiceProvider).initialize();
+      await baseMapService.initialize();
 
-      ref.read(baseMapServiceProvider).addListener(onBaseMapServiceUpdate);
+      baseMapService.addListener(onBaseMapServiceUpdate);
 
       AppLogger.debug('[DEBUG] BaseMapService: 初期化完了');
     } catch (e) {
@@ -313,7 +312,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
   /// 全サービスの破棄処理
   void disposeAllServices() {
     gpsManager.removeListener(onGpsManagerUpdate);
-    ref.read(baseMapServiceProvider).removeListener(onBaseMapServiceUpdate);
+    baseMapService.removeListener(onBaseMapServiceUpdate);
     LayerStyleConfig().removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
 

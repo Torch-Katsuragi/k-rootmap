@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';
-import '../../../providers/drawing_provider.dart';
+import '../../../utils/global_drawing_state.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../providers/selection_providers.dart';
@@ -23,7 +23,7 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
     final selected = ref.read(selectedLayerNodeProvider);
     if (selected == null) return;
     
-    final drawingState = ref.read(drawingStateProvider);
+    final drawingState = GlobalDrawingState.instance;
     
     // 描画データがあるかチェック
     if (!drawingState.isDrawing) {

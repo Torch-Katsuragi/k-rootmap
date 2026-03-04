@@ -150,16 +150,16 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
   }
 
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
+  /// 兄弟ノードは並列処理（異なる.gpkgは別DB接続なので安全）
   Future<void> updateNodeRecursively(LayerTreeNode node) async {
-    // まず明示的に初期化を実行
     await node.ensureInitialized();
 
-    // 子ノードも再帰的に更新
-    for (final child in node.children) {
-      if (child is FolderNode || child is GeoPackageNode) {
-        await updateNodeRecursively(child);
-      }
-    }
+    // 兄弟ノードをFuture.waitで並列初期化
+    final childFutures = node.children
+        .where((c) => c is FolderNode || c is GeoPackageNode)
+        .map((c) => updateNodeRecursively(c));
+
+    await Future.wait(childFutures);
   }
 
   /// 背景地図サービス初期化

@@ -1,5 +1,5 @@
-import 'dart:typed_data';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
@@ -7,6 +7,50 @@ import '../geometry_type.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
+
+/// compute()用パラメータ
+class _GeometryParseParams {
+  final List<Map<String, dynamic>> rows;
+  final GeometryType geomType;
+  _GeometryParseParams(this.rows, this.geomType);
+}
+
+/// WKBパース＋メタデータパースを別Isolateで実行するトップレベル関数
+List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
+  _GeometryParseParams params,
+) {
+  for (final row in params.rows) {
+    final geom = row['geom'] as Uint8List?;
+
+    if (geom != null) {
+      switch (params.geomType) {
+        case GeometryType.point:
+          final point = parseWkbPoint(geom);
+          if (point != null) {
+            row['geometry'] = [point];
+          }
+        case GeometryType.linestring:
+          final lines = parseWkbLineString(geom);
+          if (lines.isNotEmpty) row['geometry'] = lines;
+        case GeometryType.polygon:
+          final polygons = parseWkbPolygon(geom);
+          if (polygons.isNotEmpty) row['geometry'] = polygons;
+      }
+    }
+
+    final metadataStr = row['kmaps_metadata'] as String?;
+    if (metadataStr != null && metadataStr.isNotEmpty) {
+      try {
+        row['kmaps_metadata'] =
+            jsonDecode(metadataStr) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+  }
+  return params.rows;
+}
+
+/// Isolate化する閾値（これ以上のフィーチャ数でcompute()を使用）
+const _kIsolateThreshold = 500;
 
 /// フィーチャのCRUD操作を管理するリポジトリクラス
 class FeatureRepository {
@@ -406,6 +450,64 @@ class FeatureRepository {
       }).toList();
     } catch (e) {
       AppLogger.debug('[FeatureRepository] getFeatures: エラー発生 - $e');
+      return [];
+    }
+  }
+
+  /// 全フィーチャをジオメトリパース済みで一括取得（N+1クエリ解消版）
+  /// getFeatures + getFeature のN+1パターンを1クエリに統合
+  /// フィーチャ数が閾値を超える場合、WKBパースを別Isolateで実行
+  Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
+    String tableName,
+    GeometryType? geomType,
+  ) async {
+    try {
+      final db = await connection.getDatabase();
+      final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+
+      final selectClause = pkColumn == 'rowid'
+          ? 'SELECT rowid, * FROM "$tableName"'
+          : 'SELECT * FROM "$tableName"';
+
+      final rows = await db.rawQuery(selectClause);
+
+      // PK正規化（Isolateに渡す前にMutable Mapに変換）
+      final mutableRows = <Map<String, dynamic>>[];
+      for (final row in rows) {
+        final normalizedRow = Map<String, dynamic>.from(row);
+        _normalizePrimaryKey(normalizedRow, pkColumn);
+        if (normalizedRow['id'] == null) continue;
+        mutableRows.add(normalizedRow);
+      }
+
+      if (geomType == null) return mutableRows;
+
+      // 閾値以上なら別Isolateでジオメトリ＋メタデータパース
+      if (mutableRows.length >= _kIsolateThreshold) {
+        AppLogger.debug(
+          '[FeatureRepository] Isolateパース: $tableName (${mutableRows.length}件)',
+        );
+        return await compute(
+          _parseGeometryBatchInIsolate,
+          _GeometryParseParams(mutableRows, geomType),
+        );
+      }
+
+      // 閾値未満はメインスレッドでパース
+      for (final row in mutableRows) {
+        final geom = row['geom'] as Uint8List?;
+        final rowId = row['id'] as int? ?? 0;
+        if (geom != null) {
+          _parseGeometry(row, geom, geomType, rowId);
+        }
+        _parseMetadata(row);
+      }
+
+      return mutableRows;
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] getFeaturesWithGeometry: エラー発生 - $e',
+      );
       return [];
     }
   }

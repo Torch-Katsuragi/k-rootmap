@@ -371,6 +371,14 @@ class GeoPackageFile {
   Future<List<Map<String, dynamic>>> getFeatures(String tableName) =>
       _features.getFeatures(tableName);
 
+  /// 全フィーチャをジオメトリパース済みで一括取得（高速版）
+  Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
+    String tableName,
+  ) async {
+    final geomType = await _layers.getGeometryType(tableName);
+    return _features.getFeaturesWithGeometry(tableName, geomType);
+  }
+
   /// 指定レイヤーの全フィーチャの属性データを一括取得
   Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
     String tableName, {

@@ -919,17 +919,12 @@ class PointLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    // 1クエリで全フィーチャをジオメトリパース済みで取得
+    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
     final features = <FeatureNode>[];
 
-    for (final rawRow in rawFeatures) {
-      final rowId = rawRow['id'] as int?;
-      if (rowId == null) continue;
-
-      // getFeatureを使用してgeometry変換済みのrowデータを取得
-      final row = await geoPackageFile.getFeature(layerName, rowId);
-      if (row == null || row['geometry'] == null) continue;
-
+    for (final row in rows) {
+      if (row['geometry'] == null) continue;
       final featureNode = PointFeatureNode(row, this);
       features.add(featureNode);
     }
@@ -968,17 +963,11 @@ class LineLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
     final features = <FeatureNode>[];
 
-    for (final rawRow in rawFeatures) {
-      final rowId = rawRow['id'] as int?;
-      if (rowId == null) continue;
-
-      // getFeatureを使用してgeometry変換済みのrowデータを取得
-      final row = await geoPackageFile.getFeature(layerName, rowId);
-      if (row == null || row['geometry'] == null) continue;
-
+    for (final row in rows) {
+      if (row['geometry'] == null) continue;
       final featureNode = LineFeatureNode(row, this);
       features.add(featureNode);
     }
@@ -1017,17 +1006,11 @@ class PolygonLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rawFeatures = await geoPackageFile.getFeatures(layerName);
+    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
     final features = <FeatureNode>[];
 
-    for (final rawRow in rawFeatures) {
-      final rowId = rawRow['id'] as int?;
-      if (rowId == null) continue;
-
-      // getFeatureを使用してgeometry変換済みのrowデータを取得
-      final row = await geoPackageFile.getFeature(layerName, rowId);
-      if (row == null || row['geometry'] == null) continue;
-
+    for (final row in rows) {
+      if (row['geometry'] == null) continue;
       final featureNode = PolygonFeatureNode(row, this);
       features.add(featureNode);
     }

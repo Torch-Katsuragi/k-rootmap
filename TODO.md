@@ -200,3 +200,9 @@
 
 - [x] トラッキング保存形式の変更（2026/02/20完了）
   - lineレイヤ方式に変更済み
+
+- [x] GeoPackageロード高速化（2026/03/04）
+  - [x] N+1クエリ解消: getFeaturesWithGeometry()で1クエリに統合（getFeatures+N回getFeature → 1回）
+  - [x] ツリー構築の並列化: updateNodeRecursively()をFuture.waitで兄弟ノード並列初期化
+  - [x] レイヤ読み込みの並列化: updateFeaturesImpl()でKMetaスタイル・DB読み込みを並列実行
+  - [x] WKBパースのIsolate化: 500フィーチャ以上でcompute()による別Isolate実行

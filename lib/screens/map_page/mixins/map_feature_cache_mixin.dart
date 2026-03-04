@@ -18,7 +18,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
   // =============================================
   
   /// フィーチャデータを非同期で更新（キャッシュに保存）
-  /// LayerNodeが管理するFeatureNodeを直接参照し、DBアクセスを最小限に抑制
+  /// KMetaスタイル読み込みとDB読み込みを並列実行し、最後にフィーチャを分類
   Future<void> updateFeaturesImpl() async {
     AppLogger.debug('[DEBUG] updateFeatures: start');
     final folderTree = ref.read(folderTreeProvider);
@@ -30,12 +30,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       '[DEBUG] updateFeatures: found ${visibleLayers.length} visible layers',
     );
     
-    final newPointFeatures = <PointFeatureNode>[];
-    final newLineFeatures = <LineFeatureNode>[];
-    final newPolygonFeatures = <PolygonFeatureNode>[];
     final newPhotoNodes = <ImageNode>[];
-    
-    // ImageNodeを収集（FolderNode配下を再帰的に検索）
     if (folderTree != null) {
       collectImageNodesRecursive(folderTree, newPhotoNodes);
     }
@@ -43,78 +38,50 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
       '[DEBUG] updateFeatures: collected ${newPhotoNodes.length} photo nodes',
     );
     
-    for (final node in visibleLayers) {
-      // LayerNode以外はスキップ
-      if (node is! LayerNode) continue;
-      final layer = node;
-      
-      AppLogger.debug(
-        '[DEBUG] updateFeatures: processing layer ${layer.name} (${layer.runtimeType})',
-      );
-      
-      // KMetaスタイルを事前読み込み（描画時に同期アクセスするため）
-      if (!layer.isKmetaStyleLoaded) {
-        await layer.getKmetaStyle();
-      }
-      
-      // LayerNodeのchildrenから直接FeatureNodeを取得（dispose済みを除外）
-      final layerFeatures = layer.children
+    // LayerNodeのみ抽出
+    final layers = visibleLayers.whereType<LayerNode>().toList();
+
+    // KMetaスタイルの事前読み込みを並列実行
+    await Future.wait(
+      layers
+          .where((l) => !l.isKmetaStyleLoaded)
+          .map((l) => l.getKmetaStyle()),
+    );
+
+    // 初回読み込みが必要なレイヤのDB読み込みを並列実行
+    final layersNeedingLoad = layers.where((l) {
+      final features = l.children
           .whereType<FeatureNode>()
           .where((f) => !f.isDisposed)
           .toList();
-      
+      return features.isEmpty;
+    }).toList();
+
+    if (layersNeedingLoad.isNotEmpty) {
+      AppLogger.debug(
+        '[DEBUG] updateFeatures: loading ${layersNeedingLoad.length} layers from DB in parallel',
+      );
+      await Future.wait(
+        layersNeedingLoad.map((l) => l.updateChildren()),
+      );
+    }
+
+    // 全レイヤからフィーチャを分類・収集
+    final newPointFeatures = <PointFeatureNode>[];
+    final newLineFeatures = <LineFeatureNode>[];
+    final newPolygonFeatures = <PolygonFeatureNode>[];
+
+    for (final layer in layers) {
+      final activeFeatures = layer.children
+          .whereType<FeatureNode>()
+          .where((f) => !f.isDisposed);
+
       if (layer is PointLayerNode) {
-        final layerPointFeatures =
-            layerFeatures.whereType<PointFeatureNode>().toList();
-        AppLogger.debug(
-          '[DEBUG] updateFeatures: found ${layerPointFeatures.length} point features in ${layer.name}',
-        );
-        newPointFeatures.addAll(layerPointFeatures);
-        
-        // childrenが空の場合のみDBから読み込み（初回読み込み時）
-        if (layerFeatures.isEmpty) {
-          await layer.updateChildren();
-          final dbPointFeatures =
-              layer.features.whereType<PointFeatureNode>().toList();
-          AppLogger.debug(
-            '[DEBUG] updateFeatures: loaded ${dbPointFeatures.length} point features from DB for ${layer.name}',
-          );
-          newPointFeatures.addAll(dbPointFeatures);
-        }
+        newPointFeatures.addAll(activeFeatures.whereType<PointFeatureNode>());
       } else if (layer is LineLayerNode) {
-        final layerLineFeatures =
-            layerFeatures.whereType<LineFeatureNode>().toList();
-        AppLogger.debug(
-          '[DEBUG] updateFeatures: found ${layerLineFeatures.length} line features in ${layer.name}',
-        );
-        newLineFeatures.addAll(layerLineFeatures);
-        
-        if (layerFeatures.isEmpty) {
-          await layer.updateChildren();
-          final dbLineFeatures =
-              layer.features.whereType<LineFeatureNode>().toList();
-          AppLogger.debug(
-            '[DEBUG] updateFeatures: loaded ${dbLineFeatures.length} line features from DB for ${layer.name}',
-          );
-          newLineFeatures.addAll(dbLineFeatures);
-        }
+        newLineFeatures.addAll(activeFeatures.whereType<LineFeatureNode>());
       } else if (layer is PolygonLayerNode) {
-        final layerPolygonFeatures =
-            layerFeatures.whereType<PolygonFeatureNode>().toList();
-        AppLogger.debug(
-          '[DEBUG] updateFeatures: found ${layerPolygonFeatures.length} polygon features in ${layer.name}',
-        );
-        newPolygonFeatures.addAll(layerPolygonFeatures);
-        
-        if (layerFeatures.isEmpty) {
-          await layer.updateChildren();
-          final dbPolygonFeatures =
-              layer.features.whereType<PolygonFeatureNode>().toList();
-          AppLogger.debug(
-            '[DEBUG] updateFeatures: loaded ${dbPolygonFeatures.length} polygon features from DB for ${layer.name}',
-          );
-          newPolygonFeatures.addAll(dbPolygonFeatures);
-        }
+        newPolygonFeatures.addAll(activeFeatures.whereType<PolygonFeatureNode>());
       }
     }
     

@@ -1,384 +1,297 @@
 /// レイヤ描画設定画面
 ///
-/// 点・線・ポリゴンの描画スタイル（サイズ、太さ、色など）を設定。
-/// SharedPreferencesに保存し、マップ表示に反映。
-/// 個別レイヤーモード: KMetaに保存
+/// 点・線・ポリゴンの描画スタイルを宣言的に定義。
+/// SettingsStoreでSharedPreferences/KMeta両対応の永続化を行い、
+/// DataDrivenSettingsScreenでUI自動生成。
 library;
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flex_color_picker/flex_color_picker.dart';
+import '../core/settings_schema.dart';
 import '../widgets/settings_widgets.dart';
 import '../utils/app_logger.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/layer_node.dart';
 import '../services/kmeta_service.dart';
 
-/// レイヤ描画設定のデフォルト値
-class LayerStyleDefaults {
-  // 点（ポイント）
-  static const double pointSize = 12.0;
-  static const int pointColor = 0xFFF44336; // Red（現在位置との差別化）
+// ============================================================
+// 設定定義
+// ============================================================
 
-  // 線（ライン）
-  static const double lineWidth = 3.0;
-  static const int lineColor = 0xFF4CAF50; // Green
-  static const bool lineVertexPointsEnabled = false;
-  static const double lineVertexPointSizeFactor = 2.0; // 頂点点サイズ = lineWidth × f
+// --- Point ---
+final pointSizeDef = DoubleDef(
+  key: 'layer_style_point_size',
+  title: 'Size',
+  defaultValue: 12.0,
+  min: 4,
+  max: 30,
+  divisions: 26,
+  formatter: (v) => '${v.toInt()} px',
+  kmetaGetter: (k) => k.pointSize,
+);
+final pointColorDef = ColorDef(
+  key: 'layer_style_point_color',
+  title: 'Color',
+  defaultArgb: 0xFFF44336,
+  kmetaGetter: (k) => k.pointColor,
+);
 
-  // ポリゴン
-  static const double polygonBorderWidth = 2.0;
-  static const int polygonBorderColor = 0xFFFF9800; // Orange
-  static const int polygonFillColor = 0xFFFF9800; // Orange
-  static const double polygonFillOpacity = 0.3;
-  static const double polygonBorderOpacity = 1.0;
-  static const bool polygonVertexPointsEnabled = false;
-  static const double polygonVertexPointSizeFactor =
-      2.0; // 頂点点サイズ = borderWidth × f
+// --- Line ---
+final lineWidthDef = DoubleDef(
+  key: 'layer_style_line_width',
+  title: 'Width',
+  defaultValue: 3.0,
+  min: 1,
+  max: 10,
+  divisions: 9,
+  formatter: (v) => '${v.toInt()} px',
+  kmetaGetter: (k) => k.lineWidth,
+);
+final lineColorDef = ColorDef(
+  key: 'layer_style_line_color',
+  title: 'Color',
+  defaultArgb: 0xFF4CAF50,
+  kmetaGetter: (k) => k.lineColor,
+);
+final lineVertexPointsEnabledDef = SwitchDef(
+  key: 'layer_style_line_vertex_points_enabled',
+  title: 'Draw Vertex Points',
+  description: 'Overlay points at each vertex (color follows line)',
+  defaultValue: false,
+  icon: Icons.scatter_plot_outlined,
+);
+final lineVertexPointSizeFactorDef = DoubleDef(
+  key: 'layer_style_line_vertex_point_size_factor',
+  title: 'Vertex Point Size Factor',
+  defaultValue: 2.0,
+  min: 0.5,
+  max: 6.0,
+  divisions: 55,
+  formatter: (v) => '${v.toStringAsFixed(1)}x',
+);
 
-  // クラスタリング
-  static const bool clusteringEnabled = true;
-  static const int clusteringRadius = 60;
-  static const int clusteringDisableZoom = 18;
+// --- Polygon ---
+final polygonBorderWidthDef = DoubleDef(
+  key: 'layer_style_polygon_border_width',
+  title: 'Border Width',
+  defaultValue: 2.0,
+  min: 0,
+  max: 8,
+  divisions: 16,
+  formatter: (v) => '${v.toStringAsFixed(1)} px',
+  kmetaGetter: (k) => k.polygonBorderWidth,
+);
+final polygonBorderColorDef = ColorDef(
+  key: 'layer_style_polygon_border_color',
+  title: 'Border Color',
+  defaultArgb: 0xFFFF9800,
+  kmetaGetter: (k) => k.polygonBorderColor,
+);
+final polygonFillColorDef = ColorDef(
+  key: 'layer_style_polygon_fill_color',
+  title: 'Fill Color',
+  defaultArgb: 0xFFFF9800,
+  kmetaGetter: (k) => k.polygonFillColor,
+);
+final polygonFillOpacityDef = DoubleDef(
+  key: 'layer_style_polygon_fill_opacity',
+  title: 'Fill Opacity',
+  defaultValue: 0.3,
+  min: 0.0,
+  max: 1.0,
+  divisions: 10,
+  formatter: (v) => '${(v * 100).toInt()}%',
+  kmetaGetter: (k) => k.polygonFillOpacity,
+);
+final polygonBorderOpacityDef = DoubleDef(
+  key: 'layer_style_polygon_border_opacity',
+  title: 'Border Opacity',
+  defaultValue: 1.0,
+  min: 0.0,
+  max: 1.0,
+  divisions: 10,
+  formatter: (v) => '${(v * 100).toInt()}%',
+  kmetaGetter: (k) => k.polygonBorderOpacity,
+);
+final polygonVertexPointsEnabledDef = SwitchDef(
+  key: 'layer_style_polygon_vertex_points_enabled',
+  title: 'Draw Vertex Points',
+  description: 'Overlay points at each vertex (color follows border)',
+  defaultValue: false,
+  icon: Icons.scatter_plot_outlined,
+);
+final polygonVertexPointSizeFactorDef = DoubleDef(
+  key: 'layer_style_polygon_vertex_point_size_factor',
+  title: 'Vertex Point Size Factor',
+  defaultValue: 2.0,
+  min: 0.5,
+  max: 6.0,
+  divisions: 55,
+  formatter: (v) => '${v.toStringAsFixed(1)}x',
+);
 
-  // ラベル
-  static const bool labelEnabled = true;
-  static const String labelProperty = 'name';
-  static const double labelFontSize = 12.0;
-  static const int labelColor = 0xFF000000; // Black
-  static const int labelHaloColor = 0xFFFFFFFF; // White
-  static const double labelOpacity = 1.0;
+// --- Label ---
+final labelEnabledDef = SwitchDef(
+  key: 'layer_style_label_enabled',
+  title: 'Show Label',
+  description: 'Display property value next to point markers',
+  defaultValue: true,
+  icon: Icons.text_fields,
+  kmetaGetter: (k) => k.labelEnabled,
+);
+final labelPropertyDef = StringDef(
+  key: 'layer_style_label_property',
+  title: 'Property',
+  defaultValue: 'name',
+  kmetaGetter: (k) => k.labelProperty,
+);
+final labelFontSizeDef = DoubleDef(
+  key: 'layer_style_label_font_size',
+  title: 'Font Size',
+  defaultValue: 12.0,
+  min: 8,
+  max: 24,
+  divisions: 16,
+  formatter: (v) => '${v.toInt()} px',
+  kmetaGetter: (k) => k.labelFontSize,
+);
+final labelColorDef = ColorDef(
+  key: 'layer_style_label_color',
+  title: 'Text Color',
+  defaultArgb: 0xFF000000,
+  kmetaGetter: (k) => k.labelColor,
+);
+final labelHaloColorDef = ColorDef(
+  key: 'layer_style_label_halo_color',
+  title: 'Halo Color',
+  defaultArgb: 0xFFFFFFFF,
+  kmetaGetter: (k) => k.labelHaloColor,
+);
+final labelOpacityDef = DoubleDef(
+  key: 'layer_style_label_opacity',
+  title: 'Opacity',
+  defaultValue: 1.0,
+  min: 0.0,
+  max: 1.0,
+  divisions: 10,
+  formatter: (v) => '${(v * 100).toInt()}%',
+  kmetaGetter: (k) => k.labelOpacity,
+);
 
-  // 選択時のハイライト
-  static const int selectedColor = 0xFFE91E63; // Pink
-  static const double selectedMultiplier = 1.5;
-}
+// --- Clustering (グローバル専用) ---
+final clusteringEnabledDef = SwitchDef(
+  key: 'layer_style_clustering_enabled',
+  title: 'Enable Clustering',
+  description: 'Nearby markers are grouped into clusters',
+  defaultValue: true,
+  icon: Icons.workspaces_outlined,
+);
+final clusteringRadiusDef = IntDef(
+  key: 'layer_style_clustering_radius',
+  title: 'Cluster Radius',
+  defaultValue: 60,
+  min: 20,
+  max: 150,
+  formatter: (v) => '$v px',
+);
+final clusteringDisableZoomDef = IntDef(
+  key: 'layer_style_clustering_disable_zoom',
+  title: 'Disable at Zoom',
+  defaultValue: 18,
+  min: 14,
+  max: 20,
+  formatter: (v) => 'Zoom $v',
+);
 
-/// レイヤ描画設定を管理するシングルトン（ChangeNotifier）
-class LayerStyleConfig extends ChangeNotifier {
-  static final LayerStyleConfig _instance = LayerStyleConfig._internal();
-  factory LayerStyleConfig() => _instance;
-  LayerStyleConfig._internal();
+// --- Selection (グローバル専用) ---
+final selectedColorDef = ColorDef(
+  key: 'layer_style_selected_color',
+  title: 'Color',
+  defaultArgb: 0xFFE91E63,
+);
+final selectedMultiplierDef = DoubleDef(
+  key: 'layer_style_selected_multiplier',
+  title: 'Size Multiplier',
+  defaultValue: 1.5,
+  min: 1.0,
+  max: 3.0,
+  divisions: 20,
+  formatter: (v) => '${v.toStringAsFixed(1)}x',
+);
 
-  // 点の設定
-  double pointSize = LayerStyleDefaults.pointSize;
-  Color pointColor = Color(LayerStyleDefaults.pointColor);
+// ============================================================
+// ストア（グローバルシングルトン）
+// ============================================================
 
-  // 線の設定
-  double lineWidth = LayerStyleDefaults.lineWidth;
-  Color lineColor = Color(LayerStyleDefaults.lineColor);
-  bool lineVertexPointsEnabled = LayerStyleDefaults.lineVertexPointsEnabled;
-  double lineVertexPointSizeFactor =
-      LayerStyleDefaults.lineVertexPointSizeFactor;
+final layerStyleSettings = SettingsStore([
+  SettingSectionDef(
+    title: 'Point Style',
+    icon: Icons.place,
+    items: [pointSizeDef, pointColorDef],
+  ),
+  SettingSectionDef(
+    title: 'Label Style',
+    icon: Icons.label_outline,
+    collapsible: true,
+    initiallyExpanded: false,
+    items: [
+      labelEnabledDef,
+      labelPropertyDef,
+      labelFontSizeDef,
+      labelColorDef,
+      labelHaloColorDef,
+      labelOpacityDef,
+    ],
+  ),
+  SettingSectionDef(
+    title: 'Line Style',
+    icon: Icons.show_chart,
+    items: [
+      lineWidthDef,
+      lineColorDef,
+      lineVertexPointsEnabledDef,
+      lineVertexPointSizeFactorDef,
+    ],
+  ),
+  SettingSectionDef(
+    title: 'Polygon Style',
+    icon: Icons.crop_square,
+    items: [
+      polygonBorderWidthDef,
+      polygonBorderColorDef,
+      polygonBorderOpacityDef,
+      polygonFillColorDef,
+      polygonFillOpacityDef,
+      polygonVertexPointsEnabledDef,
+      polygonVertexPointSizeFactorDef,
+    ],
+  ),
+  SettingSectionDef(
+    title: 'Marker Clustering',
+    icon: Icons.workspaces_outlined,
+    iconColor: Colors.blue,
+    collapsible: true,
+    initiallyExpanded: false,
+    globalOnly: true,
+    items: [clusteringEnabledDef, clusteringRadiusDef, clusteringDisableZoomDef],
+  ),
+  SettingSectionDef(
+    title: 'Selection Highlight',
+    icon: Icons.highlight_alt,
+    collapsible: true,
+    initiallyExpanded: false,
+    globalOnly: true,
+    items: [selectedColorDef, selectedMultiplierDef],
+  ),
+]);
 
-  // ポリゴンの設定
-  double polygonBorderWidth = LayerStyleDefaults.polygonBorderWidth;
-  Color polygonBorderColor = Color(LayerStyleDefaults.polygonBorderColor);
-  Color polygonFillColor = Color(LayerStyleDefaults.polygonFillColor);
-  double polygonFillOpacity = LayerStyleDefaults.polygonFillOpacity;
-  double polygonBorderOpacity = LayerStyleDefaults.polygonBorderOpacity;
-  bool polygonVertexPointsEnabled =
-      LayerStyleDefaults.polygonVertexPointsEnabled;
-  double polygonVertexPointSizeFactor =
-      LayerStyleDefaults.polygonVertexPointSizeFactor;
+// ============================================================
+// 画面
+// ============================================================
 
-  // ラベル
-  bool labelEnabled = LayerStyleDefaults.labelEnabled;
-  String labelProperty = LayerStyleDefaults.labelProperty;
-  double labelFontSize = LayerStyleDefaults.labelFontSize;
-  Color labelColor = Color(LayerStyleDefaults.labelColor);
-  Color labelHaloColor = Color(LayerStyleDefaults.labelHaloColor);
-  double labelOpacity = LayerStyleDefaults.labelOpacity;
-
-  // クラスタリング
-  bool clusteringEnabled = LayerStyleDefaults.clusteringEnabled;
-  int clusteringRadius = LayerStyleDefaults.clusteringRadius;
-  int clusteringDisableZoom = LayerStyleDefaults.clusteringDisableZoom;
-
-  // 選択時
-  Color selectedColor = Color(LayerStyleDefaults.selectedColor);
-  double selectedMultiplier = LayerStyleDefaults.selectedMultiplier;
-
-  // ========== KMeta連携メソッド ==========
-
-  /// KMetaLayerStyleをマージしたポイントサイズを取得
-  double getPointSize(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.pointSize ?? pointSize;
-  }
-
-  /// KMetaLayerStyleをマージしたポイントカラーを取得
-  Color getPointColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.pointColor ?? pointColor;
-  }
-
-  /// KMetaLayerStyleをマージしたラインの太さを取得
-  double getLineWidth(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.lineWidth ?? lineWidth;
-  }
-
-  /// KMetaLayerStyleをマージしたラインカラーを取得
-  Color getLineColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.lineColor ?? lineColor;
-  }
-
-  /// KMetaLayerStyleをマージしたポリゴン境界線の太さを取得
-  double getPolygonBorderWidth(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.polygonBorderWidth ?? polygonBorderWidth;
-  }
-
-  /// KMetaLayerStyleをマージしたポリゴン境界線カラーを取得
-  Color getPolygonBorderColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.polygonBorderColor ?? polygonBorderColor;
-  }
-
-  /// KMetaLayerStyleをマージしたポリゴン塗りつぶしカラーを取得
-  Color getPolygonFillColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.polygonFillColor ?? polygonFillColor;
-  }
-
-  /// KMetaLayerStyleをマージしたポリゴン塗りつぶし透過度を取得
-  double getPolygonFillOpacity(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.polygonFillOpacity ?? polygonFillOpacity;
-  }
-
-  /// KMetaLayerStyleをマージしたポリゴン境界線透過度を取得
-  double getPolygonBorderOpacity(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.polygonBorderOpacity ?? polygonBorderOpacity;
-  }
-
-  bool getLabelEnabled(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelEnabled ?? labelEnabled;
-  }
-
-  String getLabelProperty(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelProperty ?? labelProperty;
-  }
-
-  double getLabelFontSize(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelFontSize ?? labelFontSize;
-  }
-
-  Color getLabelColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelColor ?? labelColor;
-  }
-
-  Color getLabelHaloColor(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelHaloColor ?? labelHaloColor;
-  }
-
-  double getLabelOpacity(KMetaLayerStyle? kmetaStyle) {
-    return kmetaStyle?.labelOpacity ?? labelOpacity;
-  }
-
-  /// SharedPreferencesから設定を読み込み
-  Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    pointSize =
-        prefs.getDouble('layer_style_point_size') ??
-        LayerStyleDefaults.pointSize;
-    pointColor = Color(
-      prefs.getInt('layer_style_point_color') ?? LayerStyleDefaults.pointColor,
-    );
-
-    lineWidth =
-        prefs.getDouble('layer_style_line_width') ??
-        LayerStyleDefaults.lineWidth;
-    lineColor = Color(
-      prefs.getInt('layer_style_line_color') ?? LayerStyleDefaults.lineColor,
-    );
-    lineVertexPointsEnabled =
-        prefs.getBool('layer_style_line_vertex_points_enabled') ??
-        LayerStyleDefaults.lineVertexPointsEnabled;
-    lineVertexPointSizeFactor =
-        prefs.getDouble('layer_style_line_vertex_point_size_factor') ??
-        LayerStyleDefaults.lineVertexPointSizeFactor;
-
-    polygonBorderWidth =
-        prefs.getDouble('layer_style_polygon_border_width') ??
-        LayerStyleDefaults.polygonBorderWidth;
-    polygonBorderColor = Color(
-      prefs.getInt('layer_style_polygon_border_color') ??
-          LayerStyleDefaults.polygonBorderColor,
-    );
-    polygonFillColor = Color(
-      prefs.getInt('layer_style_polygon_fill_color') ??
-          LayerStyleDefaults.polygonFillColor,
-    );
-    polygonFillOpacity =
-        prefs.getDouble('layer_style_polygon_fill_opacity') ??
-        LayerStyleDefaults.polygonFillOpacity;
-    polygonBorderOpacity =
-        prefs.getDouble('layer_style_polygon_border_opacity') ??
-        LayerStyleDefaults.polygonBorderOpacity;
-    polygonVertexPointsEnabled =
-        prefs.getBool('layer_style_polygon_vertex_points_enabled') ??
-        LayerStyleDefaults.polygonVertexPointsEnabled;
-    polygonVertexPointSizeFactor =
-        prefs.getDouble('layer_style_polygon_vertex_point_size_factor') ??
-        LayerStyleDefaults.polygonVertexPointSizeFactor;
-
-    labelEnabled =
-        prefs.getBool('layer_style_label_enabled') ??
-        LayerStyleDefaults.labelEnabled;
-    labelProperty =
-        prefs.getString('layer_style_label_property') ??
-        LayerStyleDefaults.labelProperty;
-    labelFontSize =
-        prefs.getDouble('layer_style_label_font_size') ??
-        LayerStyleDefaults.labelFontSize;
-    labelColor = Color(
-      prefs.getInt('layer_style_label_color') ?? LayerStyleDefaults.labelColor,
-    );
-    labelHaloColor = Color(
-      prefs.getInt('layer_style_label_halo_color') ??
-          LayerStyleDefaults.labelHaloColor,
-    );
-    labelOpacity =
-        prefs.getDouble('layer_style_label_opacity') ??
-        LayerStyleDefaults.labelOpacity;
-
-    clusteringEnabled =
-        prefs.getBool('layer_style_clustering_enabled') ??
-        LayerStyleDefaults.clusteringEnabled;
-    clusteringRadius =
-        prefs.getInt('layer_style_clustering_radius') ??
-        LayerStyleDefaults.clusteringRadius;
-    clusteringDisableZoom =
-        prefs.getInt('layer_style_clustering_disable_zoom') ??
-        LayerStyleDefaults.clusteringDisableZoom;
-
-    selectedColor = Color(
-      prefs.getInt('layer_style_selected_color') ??
-          LayerStyleDefaults.selectedColor,
-    );
-    selectedMultiplier =
-        prefs.getDouble('layer_style_selected_multiplier') ??
-        LayerStyleDefaults.selectedMultiplier;
-  }
-
-  /// SharedPreferencesに設定を保存
-  Future<void> save() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setDouble('layer_style_point_size', pointSize);
-    await prefs.setInt('layer_style_point_color', pointColor.toARGB32());
-
-    await prefs.setDouble('layer_style_line_width', lineWidth);
-    await prefs.setInt('layer_style_line_color', lineColor.toARGB32());
-    await prefs.setBool(
-      'layer_style_line_vertex_points_enabled',
-      lineVertexPointsEnabled,
-    );
-    await prefs.setDouble(
-      'layer_style_line_vertex_point_size_factor',
-      lineVertexPointSizeFactor,
-    );
-
-    await prefs.setDouble(
-      'layer_style_polygon_border_width',
-      polygonBorderWidth,
-    );
-    await prefs.setInt(
-      'layer_style_polygon_border_color',
-      polygonBorderColor.toARGB32(),
-    );
-    await prefs.setInt(
-      'layer_style_polygon_fill_color',
-      polygonFillColor.toARGB32(),
-    );
-    await prefs.setDouble(
-      'layer_style_polygon_fill_opacity',
-      polygonFillOpacity,
-    );
-    await prefs.setDouble(
-      'layer_style_polygon_border_opacity',
-      polygonBorderOpacity,
-    );
-    await prefs.setBool(
-      'layer_style_polygon_vertex_points_enabled',
-      polygonVertexPointsEnabled,
-    );
-    await prefs.setDouble(
-      'layer_style_polygon_vertex_point_size_factor',
-      polygonVertexPointSizeFactor,
-    );
-
-    await prefs.setBool('layer_style_label_enabled', labelEnabled);
-    await prefs.setString('layer_style_label_property', labelProperty);
-    await prefs.setDouble('layer_style_label_font_size', labelFontSize);
-    await prefs.setInt('layer_style_label_color', labelColor.toARGB32());
-    await prefs.setInt(
-      'layer_style_label_halo_color',
-      labelHaloColor.toARGB32(),
-    );
-    await prefs.setDouble('layer_style_label_opacity', labelOpacity);
-
-    await prefs.setBool('layer_style_clustering_enabled', clusteringEnabled);
-    await prefs.setInt('layer_style_clustering_radius', clusteringRadius);
-    await prefs.setInt(
-      'layer_style_clustering_disable_zoom',
-      clusteringDisableZoom,
-    );
-
-    await prefs.setInt('layer_style_selected_color', selectedColor.toARGB32());
-    await prefs.setDouble(
-      'layer_style_selected_multiplier',
-      selectedMultiplier,
-    );
-
-    // リスナーに変更を通知（マップ再描画用）
-    notifyListeners();
-  }
-
-  /// デフォルト値にリセット
-  Future<void> reset() async {
-    pointSize = LayerStyleDefaults.pointSize;
-    pointColor = Color(LayerStyleDefaults.pointColor);
-
-    lineWidth = LayerStyleDefaults.lineWidth;
-    lineColor = Color(LayerStyleDefaults.lineColor);
-    lineVertexPointsEnabled = LayerStyleDefaults.lineVertexPointsEnabled;
-    lineVertexPointSizeFactor = LayerStyleDefaults.lineVertexPointSizeFactor;
-
-    polygonBorderWidth = LayerStyleDefaults.polygonBorderWidth;
-    polygonBorderColor = Color(LayerStyleDefaults.polygonBorderColor);
-    polygonFillColor = Color(LayerStyleDefaults.polygonFillColor);
-    polygonFillOpacity = LayerStyleDefaults.polygonFillOpacity;
-    polygonBorderOpacity = LayerStyleDefaults.polygonBorderOpacity;
-    polygonVertexPointsEnabled = LayerStyleDefaults.polygonVertexPointsEnabled;
-    polygonVertexPointSizeFactor =
-        LayerStyleDefaults.polygonVertexPointSizeFactor;
-
-    labelEnabled = LayerStyleDefaults.labelEnabled;
-    labelProperty = LayerStyleDefaults.labelProperty;
-    labelFontSize = LayerStyleDefaults.labelFontSize;
-    labelColor = Color(LayerStyleDefaults.labelColor);
-    labelHaloColor = Color(LayerStyleDefaults.labelHaloColor);
-    labelOpacity = LayerStyleDefaults.labelOpacity;
-
-    clusteringEnabled = LayerStyleDefaults.clusteringEnabled;
-    clusteringRadius = LayerStyleDefaults.clusteringRadius;
-    clusteringDisableZoom = LayerStyleDefaults.clusteringDisableZoom;
-
-    selectedColor = Color(LayerStyleDefaults.selectedColor);
-    selectedMultiplier = LayerStyleDefaults.selectedMultiplier;
-
-    await save();
-  }
-}
-
-/// レイヤ描画設定画面
-///
-/// グローバルモード: SharedPreferencesに保存（全レイヤー共通）
-/// 個別レイヤーモード: KMetaに保存（レイヤー固有のスタイル）
 class LayerStyleSettingsScreen extends StatefulWidget {
   final bool isEmbedded;
-
-  /// 個別レイヤーモード用: 対象のLayerNode
   final LayerNode? targetLayer;
-
-  /// 個別レイヤーモード用: フォルダパス（KMeta保存先）
   final String? folderPath;
 
   const LayerStyleSettingsScreen({
@@ -388,7 +301,6 @@ class LayerStyleSettingsScreen extends StatefulWidget {
     this.folderPath,
   });
 
-  /// 個別レイヤーモードかどうか
   bool get isLayerMode => targetLayer != null && folderPath != null;
 
   @override
@@ -397,405 +309,148 @@ class LayerStyleSettingsScreen extends StatefulWidget {
 }
 
 class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
-  final LayerStyleConfig _globalConfig = LayerStyleConfig();
-  bool _isLoading = true;
-
-  // 個別レイヤーモード用のローカルスタイル
-  double _pointSize = LayerStyleDefaults.pointSize;
-  Color _pointColor = Color(LayerStyleDefaults.pointColor);
-  double _lineWidth = LayerStyleDefaults.lineWidth;
-  Color _lineColor = Color(LayerStyleDefaults.lineColor);
-  double _polygonBorderWidth = LayerStyleDefaults.polygonBorderWidth;
-  Color _polygonBorderColor = Color(LayerStyleDefaults.polygonBorderColor);
-  Color _polygonFillColor = Color(LayerStyleDefaults.polygonFillColor);
-  double _polygonFillOpacity = LayerStyleDefaults.polygonFillOpacity;
-  double _polygonBorderOpacity = LayerStyleDefaults.polygonBorderOpacity;
-  bool _labelEnabled = LayerStyleDefaults.labelEnabled;
-  String _labelProperty = LayerStyleDefaults.labelProperty;
-  double _labelFontSize = LayerStyleDefaults.labelFontSize;
-  Color _labelColor = Color(LayerStyleDefaults.labelColor);
-  Color _labelHaloColor = Color(LayerStyleDefaults.labelHaloColor);
-  double _labelOpacity = LayerStyleDefaults.labelOpacity;
-
-  /// グローバルモードかどうか
   bool get _isGlobalMode => !widget.isLayerMode;
 
-  /// 現在のポイントサイズ
-  double get _currentPointSize =>
-      _isGlobalMode ? _globalConfig.pointSize : _pointSize;
-  set _currentPointSize(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.pointSize = v;
-    } else {
-      _pointSize = v;
-    }
+  String get _title =>
+      _isGlobalMode ? 'レイヤ描画' : 'Style: ${widget.targetLayer!.layerName}';
+
+  /// レイヤータイプに応じてセクションをフィルタ
+  bool _sectionFilter(SettingSectionDef section) {
+    if (_isGlobalMode) return true;
+    final layer = widget.targetLayer;
+    return switch (section.title) {
+      'Point Style' || 'Label Style' => layer is PointLayerNode,
+      'Line Style' => layer is LineLayerNode,
+      'Polygon Style' => layer is PolygonLayerNode,
+      _ => false,
+    };
   }
 
-  /// 現在のポイントカラー
-  Color get _currentPointColor =>
-      _isGlobalMode ? _globalConfig.pointColor : _pointColor;
-  set _currentPointColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.pointColor = v;
-    } else {
-      _pointColor = v;
-    }
-  }
-
-  /// 現在のラインの太さ
-  double get _currentLineWidth =>
-      _isGlobalMode ? _globalConfig.lineWidth : _lineWidth;
-  set _currentLineWidth(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.lineWidth = v;
-    } else {
-      _lineWidth = v;
-    }
-  }
-
-  /// 現在のラインカラー
-  Color get _currentLineColor =>
-      _isGlobalMode ? _globalConfig.lineColor : _lineColor;
-  set _currentLineColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.lineColor = v;
-    } else {
-      _lineColor = v;
-    }
-  }
-
-  /// 現在のポリゴン境界線の太さ
-  double get _currentPolygonBorderWidth =>
-      _isGlobalMode ? _globalConfig.polygonBorderWidth : _polygonBorderWidth;
-  set _currentPolygonBorderWidth(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.polygonBorderWidth = v;
-    } else {
-      _polygonBorderWidth = v;
-    }
-  }
-
-  /// 現在のポリゴン境界線カラー
-  Color get _currentPolygonBorderColor =>
-      _isGlobalMode ? _globalConfig.polygonBorderColor : _polygonBorderColor;
-  set _currentPolygonBorderColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.polygonBorderColor = v;
-    } else {
-      _polygonBorderColor = v;
-    }
-  }
-
-  /// 現在のポリゴン塗りつぶしカラー
-  Color get _currentPolygonFillColor =>
-      _isGlobalMode ? _globalConfig.polygonFillColor : _polygonFillColor;
-  set _currentPolygonFillColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.polygonFillColor = v;
-    } else {
-      _polygonFillColor = v;
-    }
-  }
-
-  /// 現在のポリゴン塗りつぶし透過度
-  double get _currentPolygonFillOpacity =>
-      _isGlobalMode ? _globalConfig.polygonFillOpacity : _polygonFillOpacity;
-  set _currentPolygonFillOpacity(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.polygonFillOpacity = v;
-    } else {
-      _polygonFillOpacity = v;
-    }
-  }
-
-  /// 現在のポリゴン境界線透過度
-  double get _currentPolygonBorderOpacity =>
-      _isGlobalMode
-          ? _globalConfig.polygonBorderOpacity
-          : _polygonBorderOpacity;
-  set _currentPolygonBorderOpacity(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.polygonBorderOpacity = v;
-    } else {
-      _polygonBorderOpacity = v;
-    }
-  }
-
-  bool get _currentLabelEnabled =>
-      _isGlobalMode ? _globalConfig.labelEnabled : _labelEnabled;
-  set _currentLabelEnabled(bool v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelEnabled = v;
-    } else {
-      _labelEnabled = v;
-    }
-  }
-
-  String get _currentLabelProperty =>
-      _isGlobalMode ? _globalConfig.labelProperty : _labelProperty;
-  set _currentLabelProperty(String v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelProperty = v;
-    } else {
-      _labelProperty = v;
-    }
-  }
-
-  double get _currentLabelFontSize =>
-      _isGlobalMode ? _globalConfig.labelFontSize : _labelFontSize;
-  set _currentLabelFontSize(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelFontSize = v;
-    } else {
-      _labelFontSize = v;
-    }
-  }
-
-  Color get _currentLabelColor =>
-      _isGlobalMode ? _globalConfig.labelColor : _labelColor;
-  set _currentLabelColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelColor = v;
-    } else {
-      _labelColor = v;
-    }
-  }
-
-  Color get _currentLabelHaloColor =>
-      _isGlobalMode ? _globalConfig.labelHaloColor : _labelHaloColor;
-  set _currentLabelHaloColor(Color v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelHaloColor = v;
-    } else {
-      _labelHaloColor = v;
-    }
-  }
-
-  double get _currentLabelOpacity =>
-      _isGlobalMode ? _globalConfig.labelOpacity : _labelOpacity;
-  set _currentLabelOpacity(double v) {
-    if (_isGlobalMode) {
-      _globalConfig.labelOpacity = v;
-    } else {
-      _labelOpacity = v;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    if (_isGlobalMode) {
-      // グローバルモード: SharedPreferencesから読み込み
-      await _globalConfig.load();
-    } else {
-      // 個別レイヤーモード: KMetaから読み込み
+  /// KMeta初期化（個別レイヤーモード）
+  Future<void> _onInit() async {
+    if (widget.isLayerMode) {
       final meta = await KMetaService.instance.getMergedMeta(
         widget.folderPath!,
       );
       final layerStyle = meta.getLayerStyle(widget.targetLayer!.layerKey);
-      if (layerStyle != null) {
-        _pointSize = layerStyle.pointSize ?? _globalConfig.pointSize;
-        _pointColor = layerStyle.pointColor ?? _globalConfig.pointColor;
-        _lineWidth = layerStyle.lineWidth ?? _globalConfig.lineWidth;
-        _lineColor = layerStyle.lineColor ?? _globalConfig.lineColor;
-        _polygonBorderWidth =
-            layerStyle.polygonBorderWidth ?? _globalConfig.polygonBorderWidth;
-        _polygonBorderColor =
-            layerStyle.polygonBorderColor ?? _globalConfig.polygonBorderColor;
-        _polygonFillColor =
-            layerStyle.polygonFillColor ?? _globalConfig.polygonFillColor;
-        _polygonFillOpacity =
-            layerStyle.polygonFillOpacity ?? _globalConfig.polygonFillOpacity;
-        _polygonBorderOpacity =
-            layerStyle.polygonBorderOpacity ??
-            _globalConfig.polygonBorderOpacity;
-        _labelEnabled = layerStyle.labelEnabled ?? _globalConfig.labelEnabled;
-        _labelProperty =
-            layerStyle.labelProperty ?? _globalConfig.labelProperty;
-        _labelFontSize =
-            layerStyle.labelFontSize ?? _globalConfig.labelFontSize;
-        _labelColor = layerStyle.labelColor ?? _globalConfig.labelColor;
-        _labelHaloColor =
-            layerStyle.labelHaloColor ?? _globalConfig.labelHaloColor;
-        _labelOpacity = layerStyle.labelOpacity ?? _globalConfig.labelOpacity;
-      } else {
-        _pointSize = _globalConfig.pointSize;
-        _pointColor = _globalConfig.pointColor;
-        _lineWidth = _globalConfig.lineWidth;
-        _lineColor = _globalConfig.lineColor;
-        _polygonBorderWidth = _globalConfig.polygonBorderWidth;
-        _polygonBorderColor = _globalConfig.polygonBorderColor;
-        _polygonFillColor = _globalConfig.polygonFillColor;
-        _polygonFillOpacity = _globalConfig.polygonFillOpacity;
-        _polygonBorderOpacity = _globalConfig.polygonBorderOpacity;
-        _labelEnabled = _globalConfig.labelEnabled;
-        _labelProperty = _globalConfig.labelProperty;
-        _labelFontSize = _globalConfig.labelFontSize;
-        _labelColor = _globalConfig.labelColor;
-        _labelHaloColor = _globalConfig.labelHaloColor;
-        _labelOpacity = _globalConfig.labelOpacity;
-      }
-    }
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _saveSettings() async {
-    if (_isGlobalMode) {
-      // グローバルモード: SharedPreferencesに保存
-      await _globalConfig.save();
-      AppLogger.debug('[LayerStyle] グローバル設定を保存しました');
+      layerStyleSettings.loadOverlay(layerStyle);
     } else {
-      // 個別レイヤーモード: KMetaに保存
-      final style = KMetaLayerStyle(
-        pointSize: _pointSize,
-        pointColor: _pointColor,
-        lineWidth: _lineWidth,
-        lineColor: _lineColor,
-        polygonBorderWidth: _polygonBorderWidth,
-        polygonBorderColor: _polygonBorderColor,
-        polygonFillColor: _polygonFillColor,
-        polygonFillOpacity: _polygonFillOpacity,
-        polygonBorderOpacity: _polygonBorderOpacity,
-        labelEnabled: _labelEnabled,
-        labelProperty: _labelProperty,
-        labelFontSize: _labelFontSize,
-        labelColor: _labelColor,
-        labelHaloColor: _labelHaloColor,
-        labelOpacity: _labelOpacity,
-      );
-      await KMetaService.instance.setLayerStyle(
-        widget.folderPath!,
-        widget.targetLayer!.layerKey,
-        style,
-      );
-      // FolderNodeとLayerNodeのキャッシュをクリア（新しいスタイルを読み込むため）
-      widget.targetLayer!.folderNode?.invalidateMetaCache();
-      widget.targetLayer!.invalidateKmetaStyleCache();
-      AppLogger.debug(
-        '[LayerStyle] レイヤー固有設定を保存: ${widget.targetLayer!.layerKey}',
-      );
+      layerStyleSettings.clearOverlay();
     }
   }
 
+  /// 値変更時のKMeta自動保存
+  void _onValueChanged() {
+    if (!widget.isLayerMode) return;
+    _saveToKMeta();
+  }
+
+  /// overlay値をKMetaに保存
+  Future<void> _saveToKMeta() async {
+    final style = KMetaLayerStyle(
+      pointSize: layerStyleSettings.getDouble(pointSizeDef),
+      pointColor: layerStyleSettings.getColor(pointColorDef),
+      lineWidth: layerStyleSettings.getDouble(lineWidthDef),
+      lineColor: layerStyleSettings.getColor(lineColorDef),
+      polygonBorderWidth: layerStyleSettings.getDouble(polygonBorderWidthDef),
+      polygonBorderColor: layerStyleSettings.getColor(polygonBorderColorDef),
+      polygonFillColor: layerStyleSettings.getColor(polygonFillColorDef),
+      polygonFillOpacity: layerStyleSettings.getDouble(polygonFillOpacityDef),
+      polygonBorderOpacity: layerStyleSettings.getDouble(
+        polygonBorderOpacityDef,
+      ),
+      labelEnabled: layerStyleSettings.getBool(labelEnabledDef),
+      labelProperty: layerStyleSettings.getString(labelPropertyDef),
+      labelFontSize: layerStyleSettings.getDouble(labelFontSizeDef),
+      labelColor: layerStyleSettings.getColor(labelColorDef),
+      labelHaloColor: layerStyleSettings.getColor(labelHaloColorDef),
+      labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
+    );
+    await KMetaService.instance.setLayerStyle(
+      widget.folderPath!,
+      widget.targetLayer!.layerKey,
+      style,
+    );
+    widget.targetLayer!.folderNode?.invalidateMetaCache();
+    widget.targetLayer!.invalidateKmetaStyleCache();
+    AppLogger.debug(
+      '[LayerStyle] レイヤー固有設定を保存: ${widget.targetLayer!.layerKey}',
+    );
+  }
+
+  /// リセット処理
   Future<void> _resetSettings() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('設定をリセット'),
-            content: Text(
-              _isGlobalMode
-                  ? 'すべての描画設定をデフォルト値に戻しますか？'
-                  : 'このレイヤーの設定をグローバル設定に戻しますか？',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('キャンセル'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('リセット'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('設定をリセット'),
+        content: Text(
+          _isGlobalMode
+              ? 'すべての描画設定をデフォルト値に戻しますか？'
+              : 'このレイヤーの設定をグローバル設定に戻しますか？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('リセット'),
+          ),
+        ],
+      ),
     );
+    if (confirm != true) return;
 
-    if (confirm == true) {
-      if (_isGlobalMode) {
-        await _globalConfig.reset();
-      } else {
-        // 個別レイヤー設定を削除（グローバル設定にフォールバック）
-        final rawMeta =
-            await KMetaService.instance.getRawMeta(widget.folderPath!) ??
-            KMeta.empty;
-        final updatedLayers = Map<String, KMetaLayerStyle>.from(
-          rawMeta.styles.layers,
-        );
-        updatedLayers.remove(widget.targetLayer!.layerKey);
-        final updatedStyles = KMetaStyles(
-          defaultStyle: rawMeta.styles.defaultStyle,
-          layers: updatedLayers,
-        );
-        final updatedMeta = rawMeta.copyWith(styles: updatedStyles);
-        await KMetaService.instance.saveMeta(widget.folderPath!, updatedMeta);
-        widget.targetLayer!.invalidateKmetaStyleCache();
-        _pointSize = _globalConfig.pointSize;
-        _pointColor = _globalConfig.pointColor;
-        _lineWidth = _globalConfig.lineWidth;
-        _lineColor = _globalConfig.lineColor;
-        _polygonBorderWidth = _globalConfig.polygonBorderWidth;
-        _polygonBorderColor = _globalConfig.polygonBorderColor;
-        _polygonFillColor = _globalConfig.polygonFillColor;
-        _polygonFillOpacity = _globalConfig.polygonFillOpacity;
-        _polygonBorderOpacity = _globalConfig.polygonBorderOpacity;
-        _labelEnabled = _globalConfig.labelEnabled;
-        _labelProperty = _globalConfig.labelProperty;
-        _labelFontSize = _globalConfig.labelFontSize;
-        _labelColor = _globalConfig.labelColor;
-        _labelHaloColor = _globalConfig.labelHaloColor;
-        _labelOpacity = _globalConfig.labelOpacity;
-      }
-      setState(() {});
-      AppLogger.debug('[LayerStyle] 設定をリセットしました');
+    if (_isGlobalMode) {
+      await layerStyleSettings.resetAll();
+    } else {
+      // KMetaからレイヤー固有スタイルを削除
+      final rawMeta =
+          await KMetaService.instance.getRawMeta(widget.folderPath!) ??
+          KMeta.empty;
+      final updatedLayers = Map<String, KMetaLayerStyle>.from(
+        rawMeta.styles.layers,
+      );
+      updatedLayers.remove(widget.targetLayer!.layerKey);
+      final updatedStyles = KMetaStyles(
+        defaultStyle: rawMeta.styles.defaultStyle,
+        layers: updatedLayers,
+      );
+      await KMetaService.instance.saveMeta(
+        widget.folderPath!,
+        rawMeta.copyWith(styles: updatedStyles),
+      );
+      widget.targetLayer!.invalidateKmetaStyleCache();
+      // overlayをグローバル値にリセット
+      layerStyleSettings.loadOverlay(null);
     }
+    AppLogger.debug('[LayerStyle] 設定をリセットしました');
+  }
+
+  @override
+  void dispose() {
+    if (widget.isLayerMode) layerStyleSettings.clearOverlay();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        _isGlobalMode ? 'レイヤ描画' : 'Style: ${widget.targetLayer!.layerName}';
-
-    return SettingsScaffold(
-      title: title,
+    return DataDrivenSettingsScreen(
+      title: _title,
+      store: layerStyleSettings,
       isEmbedded: widget.isEmbedded,
-      isLoading: _isLoading,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          tooltip: 'リセット',
-          onPressed: _resetSettings,
-        ),
-      ],
-      body: SettingsBody(sections: _buildSections()),
+      onInit: _onInit,
+      onReset: _resetSettings,
+      onValueChanged: _onValueChanged,
+      sectionFilter: _sectionFilter,
+      customSections: (store) => [_buildPreviewSection(store)],
     );
   }
 
-  /// ジオメトリタイプに応じたセクションリストを構築
-  List<Widget> _buildSections() {
-    if (_isGlobalMode) {
-      return [
-        _buildPreviewSection(),
-        _buildClusteringSection(),
-        _buildPointSection(),
-        _buildLabelSection(),
-        _buildLineSection(),
-        _buildPolygonSection(),
-        _buildSelectionSection(),
-      ];
-    }
-
-    final layer = widget.targetLayer!;
-    final sections = <Widget>[_buildPreviewSection()];
-
-    if (layer is PointLayerNode) {
-      sections.add(_buildPointSection());
-      sections.add(_buildLabelSection());
-    } else if (layer is LineLayerNode) {
-      sections.add(_buildLineSection());
-    } else if (layer is PolygonLayerNode) {
-      sections.add(_buildPolygonSection());
-    }
-
-    return sections;
-  }
-
   /// プレビューセクション
-  Widget _buildPreviewSection() {
+  Widget _buildPreviewSection(SettingsStore store) {
     return SettingsSection(
       title: 'Preview',
       icon: Icons.preview,
@@ -807,15 +462,15 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
           height: 100,
           child: CustomPaint(
             painter: _StylePreviewPainter(
-              pointColor: _currentPointColor,
-              pointSize: _currentPointSize,
-              lineColor: _currentLineColor,
-              lineWidth: _currentLineWidth,
-              polygonBorderColor: _currentPolygonBorderColor,
-              polygonBorderWidth: _currentPolygonBorderWidth,
-              polygonFillColor: _currentPolygonFillColor,
-              polygonFillOpacity: _currentPolygonFillOpacity,
-              polygonBorderOpacity: _currentPolygonBorderOpacity,
+              pointColor: store.getColor(pointColorDef),
+              pointSize: store.getDouble(pointSizeDef),
+              lineColor: store.getColor(lineColorDef),
+              lineWidth: store.getDouble(lineWidthDef),
+              polygonBorderColor: store.getColor(polygonBorderColorDef),
+              polygonBorderWidth: store.getDouble(polygonBorderWidthDef),
+              polygonFillColor: store.getColor(polygonFillColorDef),
+              polygonFillOpacity: store.getDouble(polygonFillOpacityDef),
+              polygonBorderOpacity: store.getDouble(polygonBorderOpacityDef),
             ),
             size: const Size(double.infinity, 100),
           ),
@@ -823,483 +478,12 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       ],
     );
   }
-
-  /// 点の設定セクション
-  Widget _buildPointSection() {
-    return SettingsSection(
-      title: 'Point Style',
-      icon: Icons.place,
-      iconColor: _currentPointColor,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        // サイズ
-        _buildSliderTile(
-          title: 'Size',
-          value: _currentPointSize,
-          min: 4,
-          max: 30,
-          divisions: 26,
-          label: '${_currentPointSize.toInt()} px',
-          onChanged: (v) {
-            setState(() => _currentPointSize = v);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // 色
-        _buildColorTile(
-          title: 'Color',
-          color: _currentPointColor,
-          onColorChanged: (c) {
-            setState(() => _currentPointColor = c);
-            _saveSettings();
-          },
-        ),
-      ],
-    );
-  }
-
-  /// 線の設定セクション
-  Widget _buildLineSection() {
-    return SettingsSection(
-      title: 'Line Style',
-      icon: Icons.show_chart,
-      iconColor: _currentLineColor,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        // 太さ
-        _buildSliderTile(
-          title: 'Width',
-          value: _currentLineWidth,
-          min: 1,
-          max: 10,
-          divisions: 9,
-          label: '${_currentLineWidth.toInt()} px',
-          onChanged: (v) {
-            setState(() => _currentLineWidth = v);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // 色
-        _buildColorTile(
-          title: 'Color',
-          color: _currentLineColor,
-          onColorChanged: (c) {
-            setState(() => _currentLineColor = c);
-            _saveSettings();
-          },
-        ),
-        // 頂点点描画（グローバルモードのみ）
-        if (_isGlobalMode) ...[
-          const Divider(),
-          SettingsSwitchTile(
-            leadingIcon: Icons.scatter_plot_outlined,
-            title: 'Draw Vertex Points',
-            subtitle: 'Overlay points at each vertex (color follows line)',
-            value: _globalConfig.lineVertexPointsEnabled,
-            onChanged: (v) {
-              setState(() => _globalConfig.lineVertexPointsEnabled = v);
-              _saveSettings();
-            },
-          ),
-          if (_globalConfig.lineVertexPointsEnabled) ...[
-            _buildSliderTile(
-              title: 'Vertex Point Size Factor',
-              value: _globalConfig.lineVertexPointSizeFactor,
-              min: 0.5,
-              max: 6.0,
-              divisions: 55,
-              label:
-                  '${_globalConfig.lineVertexPointSizeFactor.toStringAsFixed(1)}x',
-              onChanged: (v) {
-                setState(() => _globalConfig.lineVertexPointSizeFactor = v);
-                _saveSettings();
-              },
-            ),
-          ],
-        ],
-      ],
-    );
-  }
-
-  /// ポリゴンの設定セクション
-  Widget _buildPolygonSection() {
-    return SettingsSection(
-      title: 'Polygon Style',
-      icon: Icons.hexagon_outlined,
-      iconColor: _currentPolygonBorderColor,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        // 境界線の太さ
-        _buildSliderTile(
-          title: 'Border Width',
-          value: _currentPolygonBorderWidth,
-          min: 1,
-          max: 8,
-          divisions: 7,
-          label: '${_currentPolygonBorderWidth.toInt()} px',
-          onChanged: (v) {
-            setState(() => _currentPolygonBorderWidth = v);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // 境界線の色
-        _buildColorTile(
-          title: 'Border Color',
-          color: _currentPolygonBorderColor,
-          onColorChanged: (c) {
-            setState(() => _currentPolygonBorderColor = c);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // 塗りつぶし色
-        _buildColorTile(
-          title: 'Fill Color',
-          color: _currentPolygonFillColor,
-          onColorChanged: (c) {
-            setState(() => _currentPolygonFillColor = c);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // 塗りつぶし透明度
-        _buildSliderTile(
-          title: 'Fill Opacity',
-          value: _currentPolygonFillOpacity,
-          min: 0.0,
-          max: 1.0,
-          divisions: 10,
-          label: '${(_currentPolygonFillOpacity * 100).toInt()}%',
-          onChanged: (v) {
-            setState(() => _currentPolygonFillOpacity = v);
-            _saveSettings();
-          },
-        ),
-        // 頂点点描画（グローバルモードのみ）
-        if (_isGlobalMode) ...[
-          const Divider(),
-          SettingsSwitchTile(
-            leadingIcon: Icons.scatter_plot_outlined,
-            title: 'Draw Vertex Points',
-            subtitle: 'Overlay points at each vertex (color follows border)',
-            value: _globalConfig.polygonVertexPointsEnabled,
-            onChanged: (v) {
-              setState(() => _globalConfig.polygonVertexPointsEnabled = v);
-              _saveSettings();
-            },
-          ),
-          if (_globalConfig.polygonVertexPointsEnabled) ...[
-            _buildSliderTile(
-              title: 'Vertex Point Size Factor',
-              value: _globalConfig.polygonVertexPointSizeFactor,
-              min: 0.5,
-              max: 6.0,
-              divisions: 55,
-              label:
-                  '${_globalConfig.polygonVertexPointSizeFactor.toStringAsFixed(1)}x',
-              onChanged: (v) {
-                setState(() => _globalConfig.polygonVertexPointSizeFactor = v);
-                _saveSettings();
-              },
-            ),
-          ],
-        ],
-      ],
-    );
-  }
-
-  /// ラベルの設定セクション
-  Widget _buildLabelSection() {
-    return SettingsSection(
-      title: 'Label Style',
-      icon: Icons.label_outline,
-      iconColor: _currentLabelColor,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        SettingsSwitchTile(
-          leadingIcon: Icons.text_fields,
-          title: 'Show Label',
-          subtitle: 'Display property value next to point markers',
-          value: _currentLabelEnabled,
-          onChanged: (v) {
-            setState(() => _currentLabelEnabled = v);
-            _saveSettings();
-          },
-        ),
-        if (_currentLabelEnabled) ...[
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.vpn_key_outlined),
-            title: const Text('Property'),
-            trailing: SizedBox(
-              width: 140,
-              child: TextField(
-                controller: TextEditingController(text: _currentLabelProperty),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (v) {
-                  final trimmed = v.trim();
-                  if (trimmed.isNotEmpty) {
-                    setState(() => _currentLabelProperty = trimmed);
-                    _saveSettings();
-                  }
-                },
-              ),
-            ),
-          ),
-          const Divider(),
-          _buildSliderTile(
-            title: 'Font Size',
-            value: _currentLabelFontSize,
-            min: 8,
-            max: 24,
-            divisions: 16,
-            label: '${_currentLabelFontSize.toInt()} px',
-            onChanged: (v) {
-              setState(() => _currentLabelFontSize = v);
-              _saveSettings();
-            },
-          ),
-          const Divider(),
-          _buildColorTile(
-            title: 'Text Color',
-            color: _currentLabelColor,
-            onColorChanged: (c) {
-              setState(() => _currentLabelColor = c);
-              _saveSettings();
-            },
-          ),
-          const Divider(),
-          _buildColorTile(
-            title: 'Halo Color',
-            color: _currentLabelHaloColor,
-            onColorChanged: (c) {
-              setState(() => _currentLabelHaloColor = c);
-              _saveSettings();
-            },
-          ),
-          const Divider(),
-          _buildSliderTile(
-            title: 'Opacity',
-            value: _currentLabelOpacity,
-            min: 0.0,
-            max: 1.0,
-            divisions: 10,
-            label: '${(_currentLabelOpacity * 100).toInt()}%',
-            onChanged: (v) {
-              setState(() => _currentLabelOpacity = v);
-              _saveSettings();
-            },
-          ),
-        ],
-      ],
-    );
-  }
-
-  /// クラスタリングの設定セクション（グローバルモード専用）
-  Widget _buildClusteringSection() {
-    return SettingsSection(
-      title: 'Marker Clustering',
-      icon: Icons.workspaces_outlined,
-      iconColor: Colors.blue,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        SettingsSwitchTile(
-          leadingIcon: Icons.workspaces_outlined,
-          title: 'Enable Clustering',
-          subtitle: 'Nearby markers are grouped into clusters',
-          value: _globalConfig.clusteringEnabled,
-          onChanged: (v) {
-            setState(() => _globalConfig.clusteringEnabled = v);
-            _saveSettings();
-          },
-        ),
-        if (_globalConfig.clusteringEnabled) ...[
-          const Divider(),
-          _buildSliderTile(
-            title: 'Cluster Radius',
-            value: _globalConfig.clusteringRadius.toDouble(),
-            min: 20,
-            max: 150,
-            divisions: 13,
-            label: '${_globalConfig.clusteringRadius} px',
-            onChanged: (v) {
-              setState(() => _globalConfig.clusteringRadius = v.round());
-              _saveSettings();
-            },
-          ),
-          const Divider(),
-          _buildSliderTile(
-            title: 'Disable at Zoom',
-            value: _globalConfig.clusteringDisableZoom.toDouble(),
-            min: 14,
-            max: 20,
-            divisions: 6,
-            label: 'Zoom ${_globalConfig.clusteringDisableZoom}',
-            onChanged: (v) {
-              setState(() => _globalConfig.clusteringDisableZoom = v.round());
-              _saveSettings();
-            },
-          ),
-        ],
-      ],
-    );
-  }
-
-  /// 選択時の設定セクション（グローバルモード専用）
-  Widget _buildSelectionSection() {
-    return SettingsSection(
-      title: 'Selection Highlight',
-      icon: Icons.highlight_alt,
-      iconColor: _globalConfig.selectedColor,
-      collapsible: true,
-      initiallyExpanded: false,
-      children: [
-        // 選択色
-        _buildColorTile(
-          title: 'Color',
-          color: _globalConfig.selectedColor,
-          onColorChanged: (c) {
-            setState(() => _globalConfig.selectedColor = c);
-            _saveSettings();
-          },
-        ),
-        const Divider(),
-        // サイズ倍率
-        _buildSliderTile(
-          title: 'Size Multiplier',
-          value: _globalConfig.selectedMultiplier,
-          min: 1.0,
-          max: 3.0,
-          divisions: 20,
-          label: '${_globalConfig.selectedMultiplier.toStringAsFixed(1)}x',
-          onChanged: (v) {
-            setState(() => _globalConfig.selectedMultiplier = v);
-            _saveSettings();
-          },
-        ),
-      ],
-    );
-  }
-
-  /// スライダー付きタイル
-  Widget _buildSliderTile({
-    required String title,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String label,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-
-  /// 色選択タイル
-  Widget _buildColorTile({
-    required String title,
-    required Color color,
-    required ValueChanged<Color> onColorChanged,
-  }) {
-    return ListTile(
-      title: Text(title),
-      trailing: GestureDetector(
-        onTap: () => _showColorPicker(color, onColorChanged),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade400),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 色選択ダイアログ (パレット + カラーホイール)
-  Future<void> _showColorPicker(
-    Color currentColor,
-    ValueChanged<Color> onColorChanged,
-  ) async {
-    Color pickedColor = currentColor;
-
-    final result = await showColorPickerDialog(
-      context,
-      pickedColor,
-      title: const Text('色を選択', style: TextStyle(fontWeight: FontWeight.bold)),
-      width: 44, // 色アイテムの幅 (15-150)
-      height: 44, // 色アイテムの高さ (15-150)
-      spacing: 6,
-
-      runSpacing: 6,
-      borderRadius: 8,
-      wheelDiameter: 220,
-      wheelWidth: 24,
-      enableOpacity: false,
-      showColorCode: true,
-      colorCodeHasColor: true,
-      pickersEnabled: const <ColorPickerType, bool>{
-        ColorPickerType.both: false,
-        ColorPickerType.primary: true, // マテリアルカラー パレット
-        ColorPickerType.accent: false,
-        ColorPickerType.bw: false,
-        ColorPickerType.custom: false,
-        ColorPickerType.wheel: true, // HSV カラーホイール
-      },
-      actionButtons: const ColorPickerActionButtons(
-        okButton: true,
-        closeButton: true,
-        dialogActionButtons: true,
-        dialogOkButtonType: ColorPickerActionButtonType.elevated,
-        dialogOkButtonLabel: 'OK',
-        dialogCancelButtonLabel: 'キャンセル',
-      ),
-    );
-
-    if (result != currentColor) {
-      onColorChanged(result);
-    }
-  }
 }
 
-/// スタイルプレビュー用のCustomPainter
+// ============================================================
+// スタイルプレビューPainter
+// ============================================================
+
 class _StylePreviewPainter extends CustomPainter {
   final Color pointColor;
   final double pointSize;
@@ -1325,38 +509,15 @@ class _StylePreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final pointPaint =
-        Paint()
-          ..color = pointColor
-          ..style = PaintingStyle.fill;
-
-    final linePaint =
-        Paint()
-          ..color = lineColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth
-          ..strokeCap = StrokeCap.round;
-
-    final polygonFillPaint =
-        Paint()
-          ..color = polygonFillColor.withValues(alpha: polygonFillOpacity)
-          ..style = PaintingStyle.fill;
-
-    final polygonBorderPaint =
-        Paint()
-          ..color = polygonBorderColor.withValues(alpha: polygonBorderOpacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = polygonBorderWidth;
-
     // ポリゴン（六角形）
     final polygonPath = Path();
     final cx = size.width * 0.75;
     final cy = size.height * 0.5;
-    final r = 35.0;
+    const r = 35.0;
     for (int i = 0; i < 6; i++) {
-      final angle = (i * 60 - 90) * 3.14159 / 180;
-      final x = cx + r * _cos(angle);
-      final y = cy + r * _sin(angle);
+      final angle = (i * 60 - 90) * math.pi / 180;
+      final x = cx + r * math.cos(angle);
+      final y = cy + r * math.sin(angle);
       if (i == 0) {
         polygonPath.moveTo(x, y);
       } else {
@@ -1364,60 +525,48 @@ class _StylePreviewPainter extends CustomPainter {
       }
     }
     polygonPath.close();
-    canvas.drawPath(polygonPath, polygonFillPaint);
-    canvas.drawPath(polygonPath, polygonBorderPaint);
+    canvas.drawPath(
+      polygonPath,
+      Paint()
+        ..color = polygonFillColor.withValues(alpha: polygonFillOpacity)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      polygonPath,
+      Paint()
+        ..color = polygonBorderColor.withValues(alpha: polygonBorderOpacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = polygonBorderWidth,
+    );
 
     // ライン
-    final linePath =
-        Path()
-          ..moveTo(size.width * 0.35, size.height * 0.7)
-          ..quadraticBezierTo(
-            size.width * 0.5,
-            size.height * 0.2,
-            size.width * 0.65,
-            size.height * 0.5,
-          );
-    canvas.drawPath(linePath, linePaint);
+    final linePath = Path()
+      ..moveTo(size.width * 0.35, size.height * 0.7)
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        size.height * 0.2,
+        size.width * 0.65,
+        size.height * 0.5,
+      );
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = lineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lineWidth
+        ..strokeCap = StrokeCap.round,
+    );
 
     // ポイント
     canvas.drawCircle(
       Offset(size.width * 0.15, size.height * 0.5),
       pointSize / 2,
-      pointPaint,
+      Paint()
+        ..color = pointColor
+        ..style = PaintingStyle.fill,
     );
   }
 
-  double _cos(double radians) => radians.cos();
-  double _sin(double radians) => radians.sin();
-
   @override
   bool shouldRepaint(covariant _StylePreviewPainter oldDelegate) => true;
-}
-
-// dart:math の cos/sin を使用するための拡張
-extension on double {
-  double cos() => _cosValue(this);
-  double sin() => _sinValue(this);
-}
-
-double _cosValue(double x) {
-  // Taylor series approximation
-  double result = 1.0;
-  double term = 1.0;
-  for (int i = 1; i <= 10; i++) {
-    term *= -x * x / ((2 * i - 1) * (2 * i));
-    result += term;
-  }
-  return result;
-}
-
-double _sinValue(double x) {
-  // Taylor series approximation
-  double result = x;
-  double term = x;
-  for (int i = 1; i <= 10; i++) {
-    term *= -x * x / ((2 * i) * (2 * i + 1));
-    result += term;
-  }
-  return result;
 }

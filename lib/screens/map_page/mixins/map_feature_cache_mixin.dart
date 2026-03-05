@@ -96,6 +96,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
         polygonFeatures = newPolygonFeatures;
         photoNodes = newPhotoNodes;
       });
+      invalidateLayerCache();
       AppLogger.debug('[DEBUG] updateFeatures: state updated successfully');
     } else {
       AppLogger.debug('[DEBUG] updateFeatures: widget not mounted, skipping state update');
@@ -149,6 +150,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     lineFeatures.clear();
     polygonFeatures.clear();
     photoNodes.clear();
+    invalidateLayerCache();
     
     // 2. 【重要】LayerNodeのchildrenはクリアしない（メモリ上のインスタンスを維持）
     

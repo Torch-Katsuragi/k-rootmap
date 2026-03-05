@@ -8,6 +8,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/folder_node.dart';
+import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
@@ -21,6 +22,7 @@ import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
 import '../../core/constants.dart';
+import '../../core/settings_schema.dart' show SettingsStore;
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/keyboard_handler.dart';
@@ -32,7 +34,39 @@ import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../utils/global_drawing_state.dart';
 import '../../providers/ui_state_providers.dart';
-import '../layer_style_settings_screen.dart';
+import '../layer_style_settings_screen.dart'
+    show
+        layerStyleSettings,
+        pointSizeDef,
+        pointColorDef,
+        lineWidthDef,
+        lineColorDef,
+        lineVertexPointsEnabledDef,
+        lineVertexPointSizeFactorDef,
+        polygonBorderWidthDef,
+        polygonBorderColorDef,
+        polygonFillColorDef,
+        polygonFillOpacityDef,
+        polygonBorderOpacityDef,
+        polygonVertexPointsEnabledDef,
+        polygonVertexPointSizeFactorDef,
+        labelEnabledDef,
+        labelPropertyDef,
+        labelFontSizeDef,
+        labelColorDef,
+        labelHaloColorDef,
+        labelOpacityDef,
+        clusteringEnabledDef,
+        clusteringRadiusDef,
+        clusteringDisableZoomDef,
+        selectedColorDef,
+        selectedMultiplierDef;
+import '../performance_settings_screen.dart'
+    show
+        performanceSettings,
+        lineSimplification,
+        polygonSimplification,
+        polygonAltRendering;
 
 // Mixins
 import 'map_page_state_base.dart';
@@ -98,6 +132,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   @override
   void onLayerStyleChanged() {
     if (mounted) {
+      invalidateLayerCache();
       triggerSetState(() {});
     }
   }
@@ -224,6 +259,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       }
     });
 
+    // 選択状態を監視（変更時に自動rebuild → キャッシュ再構築）
+    final selectedFeatures = ref.watch(selectedFeaturesProvider);
+
     final folderTree = ref.watch(folderTreeProvider);
     currentNode ??= folderTree;
 
@@ -293,12 +331,12 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             if (showAttributeTable && attributeTableLayer != null)
               _buildAttributeTablePanel(),
             // Feature detail panel
-            if (ref.read(selectedFeaturesProvider).length == 1)
+            if (selectedFeatures.length == 1)
               Positioned(
                 left: 60,
                 top: 20,
                 child: FeatureDetailPanel(
-                  feature: ref.read(selectedFeaturesProvider).first,
+                  feature: selectedFeatures.first,
                 ),
               ),
             // Left bottom floating buttons
@@ -350,6 +388,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
   /// FlutterMap構築
   Widget _buildFlutterMap(bool isPanTool) {
+    _rebuildLayerCacheIfNeeded();
+    final selectedSet = ref.read(selectedFeaturesProvider).toSet();
+
     return FlutterMap(
       mapController: mapController,
       options: MapOptions(
@@ -364,7 +405,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                       InteractiveFlag.scrollWheelZoom),
         ),
         keepAlive: true,
-        onPositionChanged: (_, __) => scheduleMarkerRefresh(),
       ),
       children: [
         CachedTileLayer(
@@ -374,44 +414,107 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         _buildPolylineLayer(),
         _buildPolygonLayer(),
         _buildClusteredMarkerLayer(),
-        _buildOverlayMarkerLayer(),
+        _buildOverlayMarkerLayer(selectedSet),
       ],
     );
   }
 
-  /// ポリラインレイヤー構築
+  /// キャッシュが無効な場合のみフィーチャ由来のレンダリングオブジェクトを再構築
+  void _rebuildLayerCacheIfNeeded() {
+    final currentSelection = ref.read(selectedFeaturesProvider);
+    final selectionChanged =
+        !identical(lastCacheSelection, currentSelection);
+
+    if (!layerCacheDirty && !selectionChanged) return;
+    layerCacheDirty = false;
+    lastCacheSelection = currentSelection;
+
+    final selectedSet = currentSelection.toSet();
+    final style = layerStyleSettings;
+
+    cachedPolylines = _buildFeaturePolylines(style, selectedSet);
+    cachedPolygons = _buildFeaturePolygons(style, selectedSet);
+    cachedMarkers = [
+      ..._buildPointFeatureMarkers(style, selectedSet),
+      ..._buildImageNodeMarkers(style, selectedSet),
+    ];
+  }
+
+  /// フィーチャ由来のPolylineリストを構築（キャッシュ用）
+  List<Polyline> _buildFeaturePolylines(
+    SettingsStore style,
+    Set<LayerTreeNode> selectedSet,
+  ) {
+    final selColor = style.getColor(selectedColorDef);
+    final selMult = style.getDouble(selectedMultiplierDef);
+    return [
+      for (final f in lineFeatures)
+        if (f.geometry != null)
+          (() {
+            final km = (f.parent as LayerNode?)?.cachedKmetaStyle;
+            final isSelected = selectedSet.contains(f);
+            final lc = style.resolveColor(lineColorDef, km);
+            final lw = style.resolveDouble(lineWidthDef, km);
+            return Polyline(
+              points: f.geometry as List<LatLng>,
+              color: isSelected ? selColor : lc,
+              strokeWidth: isSelected ? lw * selMult : lw,
+            );
+          })(),
+    ];
+  }
+
+  /// フィーチャ由来のPolygonリストを構築（キャッシュ用）
+  List<Polygon> _buildFeaturePolygons(
+    SettingsStore style,
+    Set<LayerTreeNode> selectedSet,
+  ) {
+    final selColor = style.getColor(selectedColorDef);
+    final selMult = style.getDouble(selectedMultiplierDef);
+    return [
+      for (final f in polygonFeatures)
+        if (f.geometry != null)
+          (() {
+            final km = (f.parent as LayerNode?)?.cachedKmetaStyle;
+            final isSelected = selectedSet.contains(f);
+            final fc = style.resolveColor(polygonFillColorDef, km);
+            final fo = style.resolveDouble(polygonFillOpacityDef, km);
+            final bc = style.resolveColor(polygonBorderColorDef, km);
+            final bo = style.resolveDouble(polygonBorderOpacityDef, km);
+            final bw = style.resolveDouble(polygonBorderWidthDef, km);
+            return Polygon(
+              points: (f.geometry as List<List<LatLng>>).first,
+              holePointsList:
+                  (f.geometry as List<List<LatLng>>).skip(1).toList(),
+              color:
+                  isSelected
+                      ? selColor.withValues(alpha: 0.5)
+                      : fc.withValues(alpha: fo),
+              borderStrokeWidth: isSelected ? bw * selMult : bw,
+              borderColor:
+                  isSelected ? selColor : bc.withValues(alpha: bo),
+            );
+          })(),
+    ];
+  }
+
+  /// ポリラインレイヤー構築（フィーチャ部分はキャッシュ利用）
   PolylineLayer _buildPolylineLayer() {
-    final styleConfig = LayerStyleConfig();
     final drawingState = GlobalDrawingState.instance;
 
     return PolylineLayer(
+      simplificationTolerance: performanceSettings.getDouble(lineSimplification),
       polylines: [
-        // 本日のGPS軌跡（常時表示）
+        // GPS軌跡（動的）
         if (gpsHistoryRecorder.todayPoints.length >= 2)
           Polyline(
             points: gpsHistoryRecorder.todayPoints,
             color: MapColors.trackingRoute,
             strokeWidth: 3.0,
           ),
-        // 既存のラインフィーチャ
-        for (final f in lineFeatures)
-          if (f.geometry != null)
-            (() {
-              final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = ref.read(selectedFeaturesProvider)
-                  .contains(f);
-              final lineColor = styleConfig.getLineColor(kmetaStyle);
-              final lineWidth = styleConfig.getLineWidth(kmetaStyle);
-              return Polyline(
-                points: f.geometry as List<LatLng>,
-                color: isSelected ? styleConfig.selectedColor : lineColor,
-                strokeWidth:
-                    isSelected
-                        ? lineWidth * styleConfig.selectedMultiplier
-                        : lineWidth,
-              );
-            })(),
-        // GPS測量ラインプレビュー
+        // キャッシュ済みフィーチャPolyline
+        ...cachedPolylines,
+        // GPS測量ラインプレビュー（動的）
         if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingLine.isNotEmpty)
           Polyline(
@@ -419,7 +522,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             color: Colors.purple,
             strokeWidth: 2.0,
           ),
-        // ペンツールラインプレビュー
         if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingLine.isNotEmpty)
           Polyline(
@@ -427,7 +529,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             color: Colors.orange,
             strokeWidth: 1.5,
           ),
-        // GPS測量ポリゴン2点プレビュー
         if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingPolygon.length == 2)
           Polyline(
@@ -435,7 +536,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             color: Colors.purple,
             strokeWidth: 2.0,
           ),
-        // ペンツールポリゴン2点プレビュー
         if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingPolygon.length == 2)
           Polyline(
@@ -443,51 +543,21 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             color: Colors.orange,
             strokeWidth: 1.5,
           ),
-        // (旧 GPS追跡軌跡プレビューは本日軌跡ポリラインに統合済み)
       ],
     );
   }
 
-  /// ポリゴンレイヤー構築
+  /// ポリゴンレイヤー構築（フィーチャ部分はキャッシュ利用）
   PolygonLayer _buildPolygonLayer() {
-    final styleConfig = LayerStyleConfig();
     final drawingState = GlobalDrawingState.instance;
 
     return PolygonLayer(
+      simplificationTolerance: performanceSettings.getDouble(polygonSimplification),
+      useAltRendering: performanceSettings.getBool(polygonAltRendering),
       polygons: [
-        // 既存のポリゴンフィーチャ
-        for (final f in polygonFeatures)
-          if (f.geometry != null)
-            (() {
-              final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-              final isSelected = ref.read(selectedFeaturesProvider)
-                  .contains(f);
-              final fillColor = styleConfig.getPolygonFillColor(kmetaStyle);
-              final fillOpacity = styleConfig.getPolygonFillOpacity(kmetaStyle);
-              final borderColor = styleConfig.getPolygonBorderColor(kmetaStyle);
-              final borderOpacity = styleConfig.getPolygonBorderOpacity(
-                kmetaStyle,
-              );
-              final borderWidth = styleConfig.getPolygonBorderWidth(kmetaStyle);
-              return Polygon(
-                points: (f.geometry as List<List<LatLng>>).first,
-                holePointsList:
-                    (f.geometry as List<List<LatLng>>).skip(1).toList(),
-                color:
-                    isSelected
-                        ? styleConfig.selectedColor.withValues(alpha: 0.5)
-                        : fillColor.withValues(alpha: fillOpacity),
-                borderStrokeWidth:
-                    isSelected
-                        ? borderWidth * styleConfig.selectedMultiplier
-                        : borderWidth,
-                borderColor:
-                    isSelected
-                        ? styleConfig.selectedColor
-                        : borderColor.withValues(alpha: borderOpacity),
-              );
-            })(),
-        // GPS測量ポリゴンプレビュー
+        // キャッシュ済みフィーチャPolygon
+        ...cachedPolygons,
+        // GPS測量ポリゴンプレビュー（動的）
         if (ref.read(currentToolProvider) is GpsTool &&
             drawingState.drawingPolygon.length >= 3)
           Polygon(
@@ -496,7 +566,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             borderStrokeWidth: 2.0,
             borderColor: Colors.purple,
           ),
-        // ペンツールポリゴンプレビュー
         if (ref.read(currentToolProvider) is PenTool &&
             drawingState.drawingPolygon.length >= 3)
           Polygon(
@@ -505,7 +574,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             borderStrokeWidth: 1.5,
             borderColor: Colors.orange,
           ),
-        // SelectTool lassoプレビュー
         if (ref.read(currentToolProvider) is SelectTool &&
             (ref.read(currentToolProvider) as SelectTool)
                     .lassoPoints
@@ -525,42 +593,20 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     );
   }
 
-  /// ビューポートを拡張して返す（カリング用）
-  LatLngBounds? _getExpandedVisibleBounds(double factor) {
-    try {
-      final bounds = mapController.camera.visibleBounds;
-      final latSpan = bounds.north - bounds.south;
-      final lngSpan = bounds.east - bounds.west;
-      if (latSpan <= 0 || lngSpan <= 0) return null;
-      return LatLngBounds(
-        LatLng(bounds.south - latSpan * factor, bounds.west - lngSpan * factor),
-        LatLng(bounds.north + latSpan * factor, bounds.east + lngSpan * factor),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// マーカーレイヤー構築（クラスタリング設定に応じて切り替え）
+  /// マーカーレイヤー構築（キャッシュ済みマーカーを利用）
   Widget _buildClusteredMarkerLayer() {
-    final styleConfig = LayerStyleConfig();
-    final visibleBounds = _getExpandedVisibleBounds(0.5);
-    final markers = <Marker>[
-      ..._buildPointFeatureMarkers(styleConfig, visibleBounds),
-      ..._buildImageNodeMarkers(styleConfig, visibleBounds),
-    ];
-    if (markers.isEmpty) return const SizedBox.shrink();
+    if (cachedMarkers.isEmpty) return const SizedBox.shrink();
 
-    if (!styleConfig.clusteringEnabled) {
-      return MarkerLayer(markers: markers);
+    if (!layerStyleSettings.getBool(clusteringEnabledDef)) {
+      return MarkerLayer(markers: cachedMarkers);
     }
 
     return MarkerClusterLayerWidget(
       options: MarkerClusterLayerOptions(
-        maxClusterRadius: styleConfig.clusteringRadius,
-        disableClusteringAtZoom: styleConfig.clusteringDisableZoom,
+        maxClusterRadius: layerStyleSettings.getInt(clusteringRadiusDef),
+        disableClusteringAtZoom: layerStyleSettings.getInt(clusteringDisableZoomDef),
         size: const Size(40, 40),
-        markers: markers,
+        markers: cachedMarkers,
         builder: (context, clusterMarkers) {
           final count = clusterMarkers.length;
           final bgColor =
@@ -599,8 +645,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   }
 
   /// オーバーレイマーカーレイヤー（現在位置、測量ポイント、頂点マーカー）
-  MarkerLayer _buildOverlayMarkerLayer() {
-    final styleConfig = LayerStyleConfig();
+  MarkerLayer _buildOverlayMarkerLayer(Set<LayerTreeNode> selectedSet) {
     final drawingState = GlobalDrawingState.instance;
     return MarkerLayer(
       markers: [
@@ -617,32 +662,31 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           for (int i = 0; i < drawingState.drawingPolygon.length; i++)
             _buildSurveyPointMarker(drawingState.drawingPolygon[i], i, false),
         ],
-        ..._buildVertexMarkers(styleConfig),
+        ..._buildVertexMarkers(layerStyleSettings, selectedSet),
       ],
     );
   }
 
-  /// ポイント地物マーカーリストを構築
+  /// ポイント地物マーカーリストを構築（キャッシュ用・カリングなし）
   List<Marker> _buildPointFeatureMarkers(
-    LayerStyleConfig styleConfig,
-    LatLngBounds? visibleBounds,
+    SettingsStore style,
+    Set<LayerTreeNode> selectedSet,
   ) {
+    final selColor = style.getColor(selectedColorDef);
+    final selMult = style.getDouble(selectedMultiplierDef);
     final markers = <Marker>[];
     for (final f in pointFeatures) {
       if (f.geometry == null) continue;
-      final kmetaStyle = (f.parent as LayerNode?)?.cachedKmetaStyle;
-      final isSelected = ref.read(selectedFeaturesProvider).contains(f);
-      final pointSize = styleConfig.getPointSize(kmetaStyle);
-      final pointColor = styleConfig.getPointColor(kmetaStyle);
-      final size =
-          isSelected ? pointSize * styleConfig.selectedMultiplier : pointSize;
-      final labelEnabled = styleConfig.getLabelEnabled(kmetaStyle);
-      final labelProp = styleConfig.getLabelProperty(kmetaStyle);
-      final labelValue = f.turfFeature.properties?[labelProp]?.toString();
-      final showLabel =
-          labelEnabled && labelValue != null && labelValue.isNotEmpty;
+      final km = (f.parent as LayerNode?)?.cachedKmetaStyle;
+      final isSelected = selectedSet.contains(f);
+      final ps = style.resolveDouble(pointSizeDef, km);
+      final pc = style.resolveColor(pointColorDef, km);
+      final size = isSelected ? ps * selMult : ps;
+      final lblOn = style.resolveBool(labelEnabledDef, km);
+      final lblProp = style.resolveString(labelPropertyDef, km);
+      final lblVal = f.turfFeature.properties?[lblProp]?.toString();
+      final showLabel = lblOn && lblVal != null && lblVal.isNotEmpty;
       for (final pt in f.geometry as List<LatLng>) {
-        if (visibleBounds != null && !visibleBounds.contains(pt)) continue;
         markers.add(
           Marker(
             point: pt,
@@ -658,8 +702,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                     width: size,
                     height: size,
                     decoration: BoxDecoration(
-                      color:
-                          isSelected ? styleConfig.selectedColor : pointColor,
+                      color: isSelected ? selColor : pc,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Colors.white,
@@ -682,19 +725,20 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Opacity(
-                          opacity: styleConfig.getLabelOpacity(kmetaStyle),
+                          opacity: style.resolveDouble(labelOpacityDef, km),
                           child: Text(
-                            labelValue,
+                            lblVal,
                             softWrap: false,
                             overflow: TextOverflow.visible,
                             style: TextStyle(
-                              fontSize: styleConfig.getLabelFontSize(
-                                kmetaStyle,
+                              fontSize: style.resolveDouble(
+                                labelFontSizeDef,
+                                km,
                               ),
-                              color: styleConfig.getLabelColor(kmetaStyle),
+                              color: style.resolveColor(labelColorDef, km),
                               fontWeight: FontWeight.w500,
                               shadows: _buildHaloShadows(
-                                styleConfig.getLabelHaloColor(kmetaStyle),
+                                style.resolveColor(labelHaloColorDef, km),
                               ),
                             ),
                           ),
@@ -711,19 +755,16 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     return markers;
   }
 
-  /// ImageNodeマーカーリストを構築
+  /// ImageNodeマーカーリストを構築（キャッシュ用・カリングなし）
   List<Marker> _buildImageNodeMarkers(
-    LayerStyleConfig styleConfig,
-    LatLngBounds? visibleBounds,
+    SettingsStore style,
+    Set<LayerTreeNode> selectedSet,
   ) {
+    final lblOn = style.getBool(labelEnabledDef);
     final markers = <Marker>[];
     for (final photo in photoNodes.where((p) => p.hasLocation)) {
-      if (visibleBounds != null && !visibleBounds.contains(photo.location!))
-        continue;
-      final isPhotoSelected = ref.read(selectedFeaturesProvider).contains(
-        photo,
-      );
-      final showPhotoLabel = styleConfig.labelEnabled && photo.name.isNotEmpty;
+      final isPhotoSelected = selectedSet.contains(photo);
+      final showPhotoLabel = lblOn && photo.name.isNotEmpty;
       markers.add(
         Marker(
           point: photo.location!,
@@ -772,17 +813,17 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Opacity(
-                          opacity: styleConfig.labelOpacity,
+                          opacity: style.getDouble(labelOpacityDef),
                           child: Text(
                             photo.name,
                             softWrap: false,
                             overflow: TextOverflow.visible,
                             style: TextStyle(
-                              fontSize: styleConfig.labelFontSize,
-                              color: styleConfig.labelColor,
+                              fontSize: style.getDouble(labelFontSizeDef),
+                              color: style.getColor(labelColorDef),
                               fontWeight: FontWeight.w500,
                               shadows: _buildHaloShadows(
-                                styleConfig.labelHaloColor,
+                                style.getColor(labelHaloColorDef),
                               ),
                             ),
                           ),
@@ -860,25 +901,27 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   }
 
   /// 頂点マーカー構築
-  List<Marker> _buildVertexMarkers(LayerStyleConfig style) {
+  List<Marker> _buildVertexMarkers(
+    SettingsStore style,
+    Set<LayerTreeNode> selectedSet,
+  ) {
+    final selColor = style.getColor(selectedColorDef);
+    final selMult = style.getDouble(selectedMultiplierDef);
     final markers = <Marker>[];
 
-    if (style.lineVertexPointsEnabled) {
+    if (style.getBool(lineVertexPointsEnabledDef)) {
+      final lc = style.getColor(lineColorDef);
+      final lw = style.getDouble(lineWidthDef);
+      final lvf = style.getDouble(lineVertexPointSizeFactorDef);
       for (final f in lineFeatures) {
         if (f.geometry == null) continue;
         final pts = f.geometry as List<LatLng>;
         if (pts.isEmpty) continue;
 
-        final isSelected = ref.read(selectedFeaturesProvider).contains(f);
-        final color = isSelected ? style.selectedColor : style.lineColor;
-        final strokeWidth =
-            isSelected
-                ? style.lineWidth * style.selectedMultiplier
-                : style.lineWidth;
-        final size = (strokeWidth * style.lineVertexPointSizeFactor).clamp(
-          4.0,
-          48.0,
-        );
+        final isSelected = selectedSet.contains(f);
+        final color = isSelected ? selColor : lc;
+        final sw = isSelected ? lw * selMult : lw;
+        final size = (sw * lvf).clamp(4.0, 48.0);
 
         for (final pt in pts) {
           markers.add(_buildVertexMarker(pt, size, color));
@@ -886,27 +929,21 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       }
     }
 
-    if (style.polygonVertexPointsEnabled) {
+    if (style.getBool(polygonVertexPointsEnabledDef)) {
+      final pbc = style.getColor(polygonBorderColorDef);
+      final pbo = style.getDouble(polygonBorderOpacityDef);
+      final pbw = style.getDouble(polygonBorderWidthDef);
+      final pvf = style.getDouble(polygonVertexPointSizeFactorDef);
       for (final f in polygonFeatures) {
         if (f.geometry == null) continue;
         final rings = f.geometry as List<List<LatLng>>;
         if (rings.isEmpty) continue;
 
-        final isSelected = ref.read(selectedFeaturesProvider).contains(f);
+        final isSelected = selectedSet.contains(f);
         final color =
-            isSelected
-                ? style.selectedColor
-                : style.polygonBorderColor.withValues(
-                  alpha: style.polygonBorderOpacity,
-                );
-        final strokeWidth =
-            isSelected
-                ? style.polygonBorderWidth * style.selectedMultiplier
-                : style.polygonBorderWidth;
-        final size = (strokeWidth * style.polygonVertexPointSizeFactor).clamp(
-          4.0,
-          48.0,
-        );
+            isSelected ? selColor : pbc.withValues(alpha: pbo);
+        final sw = isSelected ? pbw * selMult : pbw;
+        final size = (sw * pvf).clamp(4.0, 48.0);
 
         for (final ring in rings) {
           if (ring.isEmpty) continue;

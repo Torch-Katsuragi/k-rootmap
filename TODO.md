@@ -206,3 +206,19 @@
   - [x] ツリー構築の並列化: updateNodeRecursively()をFuture.waitで兄弟ノード並列初期化
   - [x] レイヤ読み込みの並列化: updateFeaturesImpl()でKMetaスタイル・DB読み込みを並列実行
   - [x] WKBパースのIsolate化: 500フィーチャ以上でcompute()による別Isolate実行
+
+- [x] 地図操作パフォーマンス改善（2026/03/04）
+  - [x] レンダリングキャッシュ: Polyline/Polygon/Markerをキャッシュし、データ変更時のみ再構築
+  - [x] scheduleMarkerRefresh廃止: パン/ズーム時のsetState完全除去（300msデバウンスタイマー削除）
+  - [x] ビューポートカリング廃止: Point/ImageNodeの手動カリングを削除、FlutterMap/Clusterに委譲
+  - [x] selectedFeaturesのSet化: contains()をO(N)→O(1)に最適化
+  - [x] flutter_map描画最適化: simplificationTolerance 0.3→1.0（Douglas-Peucker簡略化強化）
+  - [x] PolygonLayer useAltRendering有効化: 三角形分割による高速Canvas描画
+  - [x] パフォーマンス設定画面: simplificationTolerance/useAltRenderingをUI設定化
+
+- [x] 宣言的設定フレームワーク導入（2026/03/04）
+  - [x] SettingDef sealed class + SettingsStore: SharedPreferences/KMeta二層ストア（lib/core/settings_schema.dart）
+  - [x] DataDrivenSettingsScreen: SettingDefからUI自動生成（Slider/Switch/ColorPicker/TextField）
+  - [x] performance_settings_screen.dart 宣言的書き換え（265行→85行）
+  - [x] layer_style_settings_screen.dart 宣言的書き換え（1424行→440行、LayerStyleConfig/LayerStyleDefaults廃止）
+  - [x] map_page.dart: LayerStyleConfig参照 → SettingsStore.resolve*()に移行

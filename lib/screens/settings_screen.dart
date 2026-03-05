@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
+import 'performance_settings_screen.dart';
 import '../widgets/settings_widgets.dart';
 
 /// 設定カテゴリー定義
@@ -11,6 +12,7 @@ enum SettingsCategory {
   basemap,
   gps,
   layerStyle,
+  performance,
   feedback,
   appInfo,
 }
@@ -24,6 +26,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPS・測位';
       case SettingsCategory.layerStyle:
         return 'レイヤ描画';
+      case SettingsCategory.performance:
+        return 'パフォーマンス';
       case SettingsCategory.feedback:
         return 'フィードバック';
       case SettingsCategory.appInfo:
@@ -39,6 +43,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return Icons.gps_fixed;
       case SettingsCategory.layerStyle:
         return Icons.palette;
+      case SettingsCategory.performance:
+        return Icons.speed;
       case SettingsCategory.feedback:
         return Icons.feedback;
       case SettingsCategory.appInfo:
@@ -54,6 +60,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPSソース選択、外部GNSS接続';
       case SettingsCategory.layerStyle:
         return '点・線・ポリゴンの描画スタイル';
+      case SettingsCategory.performance:
+        return '描画の簡略化、レンダリング方式';
       case SettingsCategory.feedback:
         return '要望・バグ報告をお送りください';
       case SettingsCategory.appInfo:
@@ -222,6 +230,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return GpsSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.layerStyle:
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.performance:
+        return PerformanceSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.feedback:
         return FeedbackScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.appInfo:

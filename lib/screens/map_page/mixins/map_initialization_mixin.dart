@@ -15,7 +15,8 @@ import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../services/google_drive/index.dart';
 import '../map_page_state_base.dart';
-import '../../layer_style_settings_screen.dart';
+import '../../layer_style_settings_screen.dart' show layerStyleSettings;
+import '../../performance_settings_screen.dart' show performanceSettings;
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
@@ -33,9 +34,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
     }
     currentNode = ref.read(folderTreeProvider);
 
-    // レイヤ描画設定を読み込み＆変更リスナー登録
-    LayerStyleConfig().load();
-    LayerStyleConfig().addListener(onLayerStyleChanged);
+    // 設定ストアを読み込み＆変更リスナー登録
+    await layerStyleSettings.load();
+    layerStyleSettings.addListener(onLayerStyleChanged);
+    await performanceSettings.load();
+    performanceSettings.addListener(onLayerStyleChanged);
 
     // プロジェクトツリー初期化
     await initializeProjectTree();
@@ -313,7 +316,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
   void disposeAllServices() {
     gpsManager.removeListener(onGpsManagerUpdate);
     baseMapService.removeListener(onBaseMapServiceUpdate);
-    LayerStyleConfig().removeListener(onLayerStyleChanged);
+    layerStyleSettings.removeListener(onLayerStyleChanged);
+    performanceSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
 
     // GPS取得を停止（測量モードでない場合のみ）
@@ -325,7 +329,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
     compassSubscription?.cancel();
     gpsWaitTimer?.cancel();
     longPressCountUpdateTimer?.cancel();
-    markerRefreshTimer?.cancel();
   }
 
   // =============================================

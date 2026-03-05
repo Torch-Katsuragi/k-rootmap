@@ -5,6 +5,8 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
+import '../core/settings_schema.dart';
 
 /// 設定セクション（カード形式）
 ///
@@ -503,6 +505,327 @@ class SettingsBody extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ============================================================
+// DataDrivenSettingsScreen
+// ============================================================
+
+/// SettingsStoreの定義からUIを自動生成する設定画面
+class DataDrivenSettingsScreen extends StatefulWidget {
+  final String title;
+  final SettingsStore store;
+  final bool isEmbedded;
+
+  /// 自動生成セクションの前に挿入するカスタムウィジェット
+  final List<Widget> Function(SettingsStore store)? customSections;
+
+  /// リセット処理のカスタマイズ（nullならstore.resetAll()を使用）
+  final Future<void> Function()? onReset;
+
+  /// store.load()後の追加初期化処理（KMetaオーバーレイ読み込み等）
+  final Future<void> Function()? onInit;
+
+  /// 値変更時のコールバック（KMeta自動保存等）
+  final VoidCallback? onValueChanged;
+
+  /// セクションフィルタ（表示するセクションを制御）
+  final bool Function(SettingSectionDef)? sectionFilter;
+
+  const DataDrivenSettingsScreen({
+    super.key,
+    required this.title,
+    required this.store,
+    this.isEmbedded = false,
+    this.customSections,
+    this.onReset,
+    this.onInit,
+    this.onValueChanged,
+    this.sectionFilter,
+  });
+
+  @override
+  State<DataDrivenSettingsScreen> createState() =>
+      _DataDrivenSettingsScreenState();
+}
+
+class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
+  bool _isLoading = true;
+
+  SettingsStore get _store => widget.store;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await _store.load();
+    if (widget.onInit != null) await widget.onInit!();
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScaffold(
+      title: widget.title,
+      isEmbedded: widget.isEmbedded,
+      isLoading: _isLoading,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.restore),
+          tooltip: 'デフォルトに戻す',
+          onPressed: () async {
+            if (widget.onReset != null) {
+              await widget.onReset!();
+            } else {
+              await _store.resetAll();
+            }
+            setState(() {});
+          },
+        ),
+      ],
+      body: SettingsBody(
+        sections: [
+          if (widget.customSections != null)
+            ...widget.customSections!(_store),
+          ..._buildSections(),
+        ],
+      ),
+    );
+  }
+
+  void _notifyChange() {
+    widget.onValueChanged?.call();
+  }
+
+  List<Widget> _buildSections() {
+    return _store.sections
+        .where((s) => !s.globalOnly || !_store.hasOverlay)
+        .where((s) => widget.sectionFilter?.call(s) ?? true)
+        .map(_buildSection)
+        .toList();
+  }
+
+  Widget _buildSection(SettingSectionDef section) {
+    return SettingsSection(
+      title: section.title,
+      icon: section.icon,
+      iconColor: section.iconColor,
+      collapsible: section.collapsible,
+      initiallyExpanded: section.initiallyExpanded,
+      children: [
+        if (section.description != null) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              section.description!,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[600],
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        for (int i = 0; i < section.items.length; i++) ...[
+          if (i > 0) const Divider(),
+          _buildSettingTile(section.items[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSettingTile(SettingDef def) => switch (def) {
+    DoubleDef d => _buildDoubleTile(d),
+    SwitchDef s => _buildSwitchTile(s),
+    ColorDef c => _buildColorTile(c),
+    IntDef i => _buildIntTile(i),
+    StringDef s => _buildStringTile(s),
+  };
+
+  Widget _buildDoubleTile(DoubleDef def) {
+    final value = _store.getDouble(def);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(def.title),
+              Text(
+                def.formatValue(value),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        if (def.description != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              def.description!,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+        Slider(
+          value: value,
+          min: def.min,
+          max: def.max,
+          divisions: def.divisions,
+          onChanged: (v) {
+            _store.setDouble(def, double.parse(v.toStringAsFixed(2)));
+            _notifyChange();
+            setState(() {});
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSwitchTile(SwitchDef def) {
+    return SettingsSwitchTile(
+      leadingIcon: def.icon,
+      title: def.title,
+      subtitle: def.description,
+      value: _store.getBool(def),
+      onChanged: (v) {
+        _store.setBool(def, v);
+        _notifyChange();
+        setState(() {});
+      },
+    );
+  }
+
+  Widget _buildColorTile(ColorDef def) {
+    final color = _store.getColor(def);
+    return ListTile(
+      title: Text(def.title),
+      subtitle: def.description != null ? Text(def.description!) : null,
+      trailing: GestureDetector(
+        onTap: () => _showColorPicker(def, color),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade400),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIntTile(IntDef def) {
+    final value = _store.getInt(def);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(def.title),
+              Text(
+                def.formatValue(value),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        if (def.description != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              def.description!,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+        Slider(
+          value: value.toDouble(),
+          min: def.min.toDouble(),
+          max: def.max.toDouble(),
+          divisions: def.divisions,
+          onChanged: (v) {
+            _store.setInt(def, v.round());
+            _notifyChange();
+            setState(() {});
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStringTile(StringDef def) {
+    return ListTile(
+      title: Text(def.title),
+      subtitle: def.description != null ? Text(def.description!) : null,
+      trailing: SizedBox(
+        width: 140,
+        child: TextField(
+          controller: TextEditingController(text: _store.getString(def)),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (v) {
+            final trimmed = v.trim();
+            if (trimmed.isNotEmpty) {
+              _store.setString(def, trimmed);
+              _notifyChange();
+              setState(() {});
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showColorPicker(ColorDef def, Color currentColor) async {
+    final result = await showColorPickerDialog(
+      context,
+      currentColor,
+      title: const Text('色を選択', style: TextStyle(fontWeight: FontWeight.bold)),
+      width: 44,
+      height: 44,
+      spacing: 6,
+      runSpacing: 6,
+      borderRadius: 8,
+      wheelDiameter: 220,
+      wheelWidth: 24,
+      enableOpacity: false,
+      showColorCode: true,
+      colorCodeHasColor: true,
+      pickersEnabled: const <ColorPickerType, bool>{
+        ColorPickerType.both: false,
+        ColorPickerType.primary: true,
+        ColorPickerType.accent: false,
+        ColorPickerType.bw: false,
+        ColorPickerType.custom: false,
+        ColorPickerType.wheel: true,
+      },
+      actionButtons: const ColorPickerActionButtons(
+        okButton: true,
+        closeButton: true,
+        dialogActionButtons: true,
+        dialogOkButtonType: ColorPickerActionButtonType.elevated,
+        dialogOkButtonLabel: 'OK',
+        dialogCancelButtonLabel: 'キャンセル',
+      ),
+    );
+    if (result != currentColor) {
+      _store.setColor(def, result);
+      _notifyChange();
+      setState(() {});
+    }
   }
 }
 

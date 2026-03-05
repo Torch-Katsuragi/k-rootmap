@@ -143,18 +143,27 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   List<ImageNode> photoNodes = [];
 
   // =============================================
-  // マーカーリフレッシュ（ビューポートカリング用）
+  // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
   // =============================================
 
-  /// マーカーリフレッシュ用デバウンスタイマー
-  Timer? markerRefreshTimer;
+  /// フィーチャ由来のPolylineキャッシュ
+  List<Polyline> cachedPolylines = [];
 
-  /// マップ移動時にデバウンス付きでマーカーを再構築
-  void scheduleMarkerRefresh() {
-    markerRefreshTimer?.cancel();
-    markerRefreshTimer = Timer(const Duration(milliseconds: 300), () {
-      triggerSetState(() {});
-    });
+  /// フィーチャ由来のPolygonキャッシュ
+  List<Polygon> cachedPolygons = [];
+
+  /// Point/ImageNodeのMarkerキャッシュ
+  List<Marker> cachedMarkers = [];
+
+  /// キャッシュ再構築フラグ
+  bool layerCacheDirty = true;
+
+  /// 前回キャッシュ構築時の選択状態（identity比較用）
+  List<LayerTreeNode>? lastCacheSelection;
+
+  /// レンダリングキャッシュを無効化（次回build時に再構築）
+  void invalidateLayerCache() {
+    layerCacheDirty = true;
   }
 
   // =============================================

@@ -29,6 +29,9 @@ class ImageNode extends LayerTreeNode {
   /// 画像ファイルの詳細情報
   final ImageMetadata metadata;
 
+  /// 撮影方向（真北基準、0-360度）。EXIFのGPSImgDirectionから取得
+  final double? direction;
+
   /// 位置情報を持っているか
   bool get hasLocation => location != null;
 
@@ -38,6 +41,7 @@ class ImageNode extends LayerTreeNode {
     this.location,
     this.metadata, {
     this.takenAt,
+    this.direction,
     bool visible = true,
     LayerTreeNode? parent,
     bool isPhoto = true,
@@ -68,6 +72,7 @@ class ImageNode extends LayerTreeNode {
       MapEntry('longitude', location!.longitude.toStringAsFixed(6)),
     ] else
       const MapEntry('location', '位置情報なし'),
+    if (direction != null) MapEntry('direction', '${direction!.toStringAsFixed(1)}°'),
     if (takenAt != null) MapEntry('taken_at', takenAt!.toLocal().toString()),
     MapEntry('file_size', _formatFileSize(metadata.fileSize)),
     if (metadata.width != null && metadata.height != null)
@@ -129,6 +134,7 @@ class ImageNode extends LayerTreeNode {
           exifData?.location,
           exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync()),
           takenAt: exifData?.takenAt,
+          direction: exifData?.direction,
           visible: true,
           parent: parent,
         );

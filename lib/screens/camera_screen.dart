@@ -273,6 +273,7 @@ class _CameraScreenState extends State<CameraScreen> {
             camera: null,
           ),
           takenAt: now,
+          direction: position.heading > 0 ? position.heading : null,
           visible: true,
           parent: widget.targetFolder,
           isPhoto: true,
@@ -337,6 +338,14 @@ class _CameraScreenState extends State<CameraScreen> {
         await exif.writeAttributes({
           'GPSAltitude': position.altitude.abs(),
           'GPSAltitudeRef': position.altitude >= 0 ? 0 : 1,
+        });
+      }
+
+      // 撮影方向（heading > 0 で有効な値とみなす）
+      if (position.heading > 0) {
+        await exif.writeAttributes({
+          'GPSImgDirection': position.heading,
+          'GPSImgDirectionRef': 'T',
         });
       }
       

@@ -13,7 +13,10 @@ class ExifImageData {
   final DateTime? takenAt;
   final ImageMetadata metadata;
 
-  ExifImageData({required this.location, this.takenAt, required this.metadata});
+  /// 撮影方向（真北基準、0-360度）。EXIFのGPSImgDirectionから取得
+  final double? direction;
+
+  ExifImageData({required this.location, this.takenAt, required this.metadata, this.direction});
 }
 
 /// 画像ファイルのメタデータ
@@ -62,6 +65,7 @@ class ExifParser {
         ),
         takenAt: exifResult['datetime'] as DateTime?,
         metadata: metadata,
+        direction: exifResult['direction'] as double?,
       );
     } catch (e) {
       AppLogger.debug('[ERROR] ExifParser.extractFromFile: $e');
@@ -267,6 +271,7 @@ class ExifParser {
       int offset = gpsIfdStart + 2;
       String? latRef, lngRef;
       List<double>? latDms, lngDms;
+      double? imgDirection;
 
       for (int i = 0; i < entryCount; i++) {
         if (offset + 12 > bytes.length) break;
@@ -334,6 +339,19 @@ class ExifParser {
               );
             }
             break;
+          case 0x11: // GPSImgDirection（撮影方向、RATIONAL型）
+            if (type == 5 && count == 1) {
+              final dirValues = _parseRationalArray(
+                bytes,
+                tiffStart + valueOffset,
+                1,
+                isLittleEndian,
+              );
+              if (dirValues != null && dirValues.isNotEmpty) {
+                imgDirection = dirValues[0];
+              }
+            }
+            break;
         }
 
         offset += 12;
@@ -347,9 +365,14 @@ class ExifParser {
         final lng = dmsToDecimal(lngDms) * (lngRef == 'W' ? -1 : 1);
 
         AppLogger.debug(
-          '[DEBUG] ExifParser._parseGpsIFD: GPS coordinates found: $lat, $lng',
+          '[DEBUG] ExifParser._parseGpsIFD: GPS found: $lat, $lng'
+          '${imgDirection != null ? ', dir: ${imgDirection.toStringAsFixed(1)}°' : ''}',
         );
-        return {'lat': lat, 'lng': lng};
+        return {
+          'lat': lat,
+          'lng': lng,
+          if (imgDirection != null) 'direction': imgDirection,
+        };
       }
 
       return null;

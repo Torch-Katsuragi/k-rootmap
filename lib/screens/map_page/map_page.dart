@@ -17,6 +17,7 @@ import '../../widgets/resizable_side_panel.dart';
 import '../../widgets/dynamic_attribute_table_widget.dart';
 import '../../widgets/cached_tile_layer.dart';
 import '../../widgets/compass_fan_painter.dart';
+import '../../widgets/photo_direction_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map_toolbar.dart';
@@ -765,11 +766,16 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     for (final photo in photoNodes.where((p) => p.hasLocation)) {
       final isPhotoSelected = selectedSet.contains(photo);
       final showPhotoLabel = lblOn && photo.name.isNotEmpty;
+      final hasDir = photo.direction != null;
+      final markerColor = isPhotoSelected ? Colors.orange : Colors.purple;
+      // 方向インジケーター分だけマーカーサイズを拡大
+      final markerSize = hasDir ? 30.0 : 20.0;
+
       markers.add(
         Marker(
           point: photo.location!,
-          width: 20,
-          height: 20,
+          width: markerSize,
+          height: markerSize,
           child: GestureDetector(
             onTap: () {
               ref.read(selectedFeaturesProvider.notifier).set([photo]);
@@ -777,18 +783,36 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             },
             child: Tooltip(
               message:
-                  '${photo.name}\n撮影位置: ${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}',
+                  '${photo.name}\n撮影位置: ${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}'
+                  '${hasDir ? '\n撮影方向: ${photo.direction!.toStringAsFixed(0)}°' : ''}',
               child: Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
                 children: [
+                  // 撮影方向インジケーター（円の外にくちばし状のポインター）
+                  if (hasDir)
+                    Transform.rotate(
+                      angle: (photo.direction! * pi / 180) - (pi / 2),
+                      child: SizedBox(
+                        width: markerSize,
+                        height: markerSize,
+                        child: CustomPaint(
+                          painter: PhotoDirectionPainter(
+                            color: markerColor,
+                            circleRadius: 10.0,
+                          ),
+                        ),
+                      ),
+                    ),
                   Container(
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
                       color:
                           isPhotoSelected ? Colors.yellow[100] : Colors.white,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: isPhotoSelected ? Colors.orange : Colors.purple,
+                        color: markerColor,
                         width: 1,
                       ),
                       boxShadow: const [
@@ -801,7 +825,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                     ),
                     child: Icon(
                       Icons.photo_camera,
-                      color: isPhotoSelected ? Colors.orange : Colors.purple,
+                      color: markerColor,
                       size: isPhotoSelected ? 14 : 12,
                     ),
                   ),

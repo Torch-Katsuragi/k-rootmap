@@ -422,6 +422,7 @@ class GlobalImageNode extends ImageNode {
     super.location,
     super.metadata, {
     super.takenAt,
+    super.direction,
     super.visible,
     super.parent,
   });
@@ -445,6 +446,7 @@ class GlobalImageNode extends ImageNode {
         exifData?.location,
         exifData?.metadata ?? ImageMetadata(fileSize: file.lengthSync()),
         takenAt: exifData?.takenAt,
+        direction: exifData?.direction,
         visible: true,
         parent: parent,
       );

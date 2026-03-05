@@ -20,7 +20,8 @@ import '../../performance_settings_screen.dart' show performanceSettings;
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
-mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
+mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
+    on MapPageStateBase<T> {
   // =============================================
   // 初期化処理
   // =============================================
@@ -30,7 +31,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget> on MapPageStateBa
     AppLogger.debug('[DEBUG] initializeAllServices: start');
 
     if (ref.read(folderTreeProvider) == null) {
-      ref.read(folderTreeProvider.notifier).set(FolderNode("rootNode", visible: true));
+      ref
+          .read(folderTreeProvider.notifier)
+          .set(FolderNode("rootNode", visible: true));
     }
     currentNode = ref.read(folderTreeProvider);
 

@@ -168,25 +168,27 @@ class FolderNode extends LayerTreeNode {
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
     final dir = Directory(absPath);
-    
-    // ディレクトリを取得して名前順にソート
-    final directories = dir
-        .listSync()
-        .whereType<Directory>()
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
-    
-    for (var entity in directories) {
+
+    // Windows でのUI停止を避けるため、同期走査は使わない
+    final directories = <Directory>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is Directory) {
+        directories.add(entity);
+      }
+    }
+    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+
+    for (final entity in directories) {
       final folderPath = entity.path;
       final folderName = p.basename(folderPath);
-      
+
       // .kmeta.jsonをチェックしてDrive連携情報があるか確認
       final driveNode = await tryCreateDriveFolderNode(
         folderPath,
         folderName,
         parent,
       );
-      
+
       if (driveNode != null) {
         nodes.add(driveNode);
       } else {

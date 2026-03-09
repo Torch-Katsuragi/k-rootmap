@@ -222,3 +222,66 @@
   - [x] performance_settings_screen.dart 宣言的書き換え（265行→85行）
   - [x] layer_style_settings_screen.dart 宣言的書き換え（1424行→440行、LayerStyleConfig/LayerStyleDefaults廃止）
   - [x] map_page.dart: LayerStyleConfig参照 → SettingsStore.resolve*()に移行
+
+## MapLibre移行（2026/03/05〜）
+
+### 完了
+
+- [x] maplibreパッケージのPoC（Android向けPoC画面作成済み）
+- [x] FlutterMap → MapLibreMap ウィジェット置換
+  - [x] KMapController/KMapCameraラッパー作成（lib/core/k_map_controller.dart）
+  - [x] geo_converter.dart作成（LatLng↔Geographic変換ユーティリティ）
+  - [x] map_page.dart: FlutterMap→MapLibreMap、レイヤ構成全面書き換え
+  - [x] map_page_state_base.dart: キャッシュ型をmaplibre Feature型に変更
+  - [x] map_state_interface.dart: MapController→KMapControllerに差替え
+  - [x] ui_state_providers.dart: MapControllerHolder→KMapController対応
+  - [x] feature_editor_screen.dart: MapLibreMap化
+  - [x] layer_tile_builder.dart: fitCoordinates()対応
+- [x] レイヤ移植（Polygon/Polyline/Marker → maplibre PolygonLayer/PolylineLayer/MarkerLayer/WidgetLayer）
+- [x] MapTool系の移行（IMapState経由のKMapController差替え、ツール側変更不要）
+- [x] タイルキャッシュ基盤の移行（2026/03/05）
+  - [x] TileServerクラス作成（dart:io HttpServer、BaseMapService.getTile()をlocalhost経由で配信）
+  - [x] map_page.dart / feature_editor_screen.dart: RasterSourceをlocalhost URLに変更
+  - [x] ベースマップ切替対応（replaceBasemapSource: ソース削除→再追加）
+  - [x] CachedTileLayer削除（flutter_map専用のため不要に）
+  - GeoPackageキャッシュ・オフラインモード・親タイルフォールバック・一括DLは全て保持
+
+- [x] フィーチャ描画パフォーマンス修正（OOM/カクつき解消）（2026/03/05）
+  - [x] MapSourceManagerクラス作成（StyleController直接管理、layersプロパティからの脱却）
+  - [x] ポリゴン/ライン/ポイント/GPS軌跡をGeoJsonSource+StyleLayerで描画（FillStyleLayer/LineStyleLayer/CircleStyleLayer）
+  - [x] データ変更時のみupdateGeoJsonSource呼び出し（前回データとの比較でスキップ）
+  - [x] 大量フィーチャのGeoJSONシリアライズをIsolate化（500件以上で自動適用）
+  - [x] GPS待機タイマーをGpsInfoBar内部に移動（毎秒のMapPage全体rebuild除去）
+  - [x] コンパス方角をValueNotifier化（秒10回以上のMapPage全体rebuild除去）
+  - [x] 未使用import/show整理、deprecated API修正
+  - [x] ポリゴン輪郭線を専用LineStyleLayerで描画（fill-outline-color 1px制限の回避）
+  - [x] ImageNode描画をWidgetLayerに復帰（カメラアイコン+撮影方向くちばし+タップ選択）
+
+- [x] ポイントクラスタリング実装（2026/03/06）
+  - [x] superclusterパッケージ導入（Dart側クラスタリング）
+  - [x] MapSourceManagerにクラスタソース/レイヤ追加（kClusters + CircleStyleLayer + SymbolStyleLayer）
+  - [x] ズーム変更時にクラスタ/個別ポイントを自動再分配
+  - [x] 段階的な色・サイズ変化（step expression: 10/50/200ポイントで段階変化）
+  - [x] 既存クラスタリング設定（有効/無効、半径、最大ズーム）をMapSourceManagerに接続
+  - [x] flutter_map_marker_clusterパッケージ削除（デッド依存解消）
+
+- [x] ImageNode描画をSymbolStyleLayerに移行（GPU描画化）（2026/03/06）
+  - [x] MapIconGenerator作成（Canvas+PictureRecorderで4枚のアイコンPNG生成: 方向あり/なし × 通常/選択）
+  - [x] MapSourceManagerにImageNodeソース/レイヤ/クラスタ追加（kImages/kImagesSel/kImageClusters）
+  - [x] SymbolStyleLayerでicon-image/icon-rotate/text-field使用（case/coalesce式で方向有無を自動切替）
+  - [x] ImageNode専用superclusterクラスタリング（Point系と独立）
+  - [x] WidgetLayerの_buildPhotoMarkers削除、GeoJSON化でsyncFeatureSourcesに統合
+  - [x] タップ選択をlatlong2距離検索に置換（ズーム連動閾値）
+
+- [x] Windows版パフォーマンス最適化（2026/03/09）
+  - [x] デバッグログ除去（map_page.dart, map_state.dart）
+  - [x] build()内の_syncFeatureSources()除去（毎フレーム呼び出し→データ変更トリガーのみに）
+  - [x] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
+  - [x] updateLayerStylesの差分更新化（remove/add 32回→setPaintProperty 17回、Error -2147024809解消）
+  - [x] StyleController.setPaintProperty追加（WebView/Web/Android/iOS全プラットフォーム）
+
+### 未完了
+
+- [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）
+- [ ] 国土地理院DEMタイル → Terrain-RGB変換の実装・検証
+- [ ] Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）

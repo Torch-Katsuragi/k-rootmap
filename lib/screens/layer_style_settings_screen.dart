@@ -22,8 +22,8 @@ import '../services/kmeta_service.dart';
 final pointSizeDef = DoubleDef(
   key: 'layer_style_point_size',
   title: 'Size',
-  defaultValue: 12.0,
-  min: 4,
+  defaultValue: 3.0,
+  min: 1,
   max: 30,
   divisions: 26,
   formatter: (v) => '${v.toInt()} px',
@@ -189,8 +189,8 @@ final clusteringEnabledDef = SwitchDef(
 final clusteringRadiusDef = IntDef(
   key: 'layer_style_clustering_radius',
   title: 'Cluster Radius',
-  defaultValue: 60,
-  min: 20,
+  defaultValue: 25,
+  min: 10,
   max: 150,
   formatter: (v) => '$v px',
 );

@@ -3,9 +3,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_compass/flutter_compass.dart';
+import 'package:geobase/geobase.dart' as geo;
+import 'package:maplibre/maplibre.dart' as ml;
+import '../../core/k_map_controller.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -13,6 +15,8 @@ import '../../models/nodes/image_node.dart';
 import '../../models/gps_position_record.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/basemap_service.dart';
+import '../../services/tile_server.dart';
+import '../../services/map_source_manager.dart';
 import '../../services/internal_gps_location_store.dart';
 import '../../services/gps_history_recorder.dart';
 import '../../interfaces/map_state_interface.dart';
@@ -39,18 +43,18 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
 
-  /// 地図コントローラー
-  final MapController mapControllerInstance = MapController();
+  /// 地図コントローラー（flutter_map互換ラッパー）
+  final KMapController mapControllerInstance = KMapController();
 
   @override
-  MapController get mapController => mapControllerInstance;
+  KMapController get mapController => mapControllerInstance;
 
   // =============================================
   // コンパス関連
   // =============================================
 
-  /// 現在のデバイス方角（度数）
-  double? currentHeading;
+  /// 現在のデバイス方角（ValueNotifier化で局所再描画）
+  final ValueNotifier<double?> headingNotifier = ValueNotifier<double?>(null);
 
   /// コンパスイベントサブスクリプション
   StreamSubscription<CompassEvent>? compassSubscription;
@@ -85,6 +89,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 背景地図サービス
   final BaseMapService baseMapService = BaseMapService();
 
+  /// ローカルタイルサーバー
+  late final TileServer tileServer = TileServer(baseMapService);
+
+  /// GeoJSONソース直接管理（layersプロパティ経由のOOM回避）
+  final MapSourceManager sourceManager = MapSourceManager();
+
   /// 内蔵GPS位置情報ストア
   final InternalGpsLocationStore locationStore = InternalGpsLocationStore();
 
@@ -93,12 +103,6 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   /// 現在のGPS情報
   Map<String, dynamic>? currentGpsInfo;
-
-  /// GPS取得待機秒数
-  int gpsWaitSeconds = 0;
-
-  /// GPS待機タイマー
-  Timer? gpsWaitTimer;
 
   // =============================================
   // GPS測量関連
@@ -144,16 +148,27 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   // =============================================
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）
+  // maplibreのFeature型を使用
   // =============================================
 
-  /// フィーチャ由来のPolylineキャッシュ
-  List<Polyline> cachedPolylines = [];
+  /// フィーチャ由来のPolyline（通常 / 選択済み）
+  List<geo.Feature<geo.LineString>> cachedPolylines = [];
+  List<geo.Feature<geo.LineString>> cachedSelectedPolylines = [];
 
-  /// フィーチャ由来のPolygonキャッシュ
-  List<Polygon> cachedPolygons = [];
+  /// フィーチャ由来のPolygon（通常 / 選択済み）
+  List<geo.Feature<geo.Polygon>> cachedPolygons = [];
+  List<geo.Feature<geo.Polygon>> cachedSelectedPolygons = [];
 
-  /// Point/ImageNodeのMarkerキャッシュ
-  List<Marker> cachedMarkers = [];
+  /// Point/ImageNodeのマーカー（通常 / 選択済み）
+  List<geo.Feature<geo.Point>> cachedMarkers = [];
+  List<geo.Feature<geo.Point>> cachedSelectedMarkers = [];
+
+  /// ImageNode（通常 / 選択済み）— SymbolStyleLayer用
+  List<geo.Feature<geo.Point>> cachedImageFeatures = [];
+  List<geo.Feature<geo.Point>> cachedSelectedImageFeatures = [];
+
+  /// オーバーレイ用Widgetマーカー（現在位置、測量ポイント等）
+  List<ml.Marker> cachedOverlayMarkers = [];
 
   /// キャッシュ再構築フラグ
   bool layerCacheDirty = true;
@@ -173,8 +188,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   @override
   LatLng offsetToLatLng(Offset offset) {
     try {
-      final camera = mapControllerInstance.camera;
-      return camera.offsetToCrs(offset);
+      return mapControllerInstance.toLngLat(offset);
     } catch (e) {
       return mapControllerInstance.camera.center;
     }
@@ -183,8 +197,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   @override
   Offset latLngToOffset(LatLng latlng) {
     try {
-      final camera = mapControllerInstance.camera;
-      return camera.latLngToScreenOffset(latlng);
+      return mapControllerInstance.toScreenLocation(latlng);
     } catch (e) {
       final size = MediaQuery.of(context).size;
       return Offset(size.width / 2, size.height / 2);

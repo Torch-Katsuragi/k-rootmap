@@ -1,11 +1,11 @@
 // K-MAPS: 初期化処理Mixin
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/platform_capabilities.dart';
 import '../../../utils/app_logger.dart';
 import '../../../providers/project_providers.dart';
 import '../../../providers/ui_state_providers.dart';
@@ -15,8 +15,8 @@ import '../../../models/nodes/geopackage_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../services/google_drive/index.dart';
 import '../map_page_state_base.dart';
+import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
-import '../../performance_settings_screen.dart' show performanceSettings;
 
 /// 初期化処理Mixin
 /// プロジェクトツリー、GPS、背景地図、コンパスの初期化を担当
@@ -37,11 +37,12 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
     currentNode = ref.read(folderTreeProvider);
 
+    // 背景地図サービス初期化（TileServer起動を最優先）
+    await initializeBaseMapService();
+
     // 設定ストアを読み込み＆変更リスナー登録
     await layerStyleSettings.load();
     layerStyleSettings.addListener(onLayerStyleChanged);
-    await performanceSettings.load();
-    performanceSettings.addListener(onLayerStyleChanged);
 
     // プロジェクトツリー初期化
     await initializeProjectTree();
@@ -51,9 +52,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
     // GPS履歴レコーダー初期化
     await initializeGpsHistoryRecorder();
-
-    // 背景地図サービス初期化
-    await initializeBaseMapService();
 
     // コンパス機能の初期化
     await initializeCompass();
@@ -82,7 +80,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// PC版では実行しない（Google Drive Desktop使用を想定）
   Future<void> _checkDriveFoldersSyncStatus(LayerTreeNode rootNode) async {
     // PC版ではDrive連携機能を無効化
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    if (!PlatformCapabilities.supportsDriveSyncStatusCheck) {
       AppLogger.debug('[DEBUG] PC版のためDrive同期状態チェックをスキップ');
       return;
     }
@@ -168,15 +166,22 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     await Future.wait(childFutures);
   }
 
-  /// 背景地図サービス初期化
+  /// 背景地図サービス初期化（タイルサーバーも起動）
   Future<void> initializeBaseMapService() async {
     try {
       AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
       await baseMapService.initialize();
+      await tileServer.start();
 
       baseMapService.addListener(onBaseMapServiceUpdate);
 
-      AppLogger.debug('[DEBUG] BaseMapService: 初期化完了');
+      // スタイルが既に読み込まれていたらベースマップを再設定
+      if (mapControllerInstance.style != null) {
+        AppLogger.debug('[DEBUG] BaseMapService: スタイル読み込み済み→ベースマップ再設定');
+        onBaseMapServiceUpdate();
+      }
+
+      AppLogger.debug('[DEBUG] BaseMapService: 初期化完了 (TileServer port=${tileServer.port})');
     } catch (e) {
       AppLogger.debug('[ERROR] BaseMapService: 初期化エラー: $e');
     }
@@ -184,9 +189,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// コンパス機能初期化
   Future<void> initializeCompass() async {
+    if (!PlatformCapabilities.supportsCompass) {
+      AppLogger.debug('[DEBUG] Compass: デスクトップ環境のためスキップ');
+      return;
+    }
+
     try {
       AppLogger.debug('[DEBUG] Compass: 初期化開始');
-
       // コンパスストリームが利用可能かチェック
       final compassStream = FlutterCompass.events;
       if (compassStream == null) {
@@ -194,12 +203,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         return;
       }
 
-      // コンパスストリームの監視を開始
+      // コンパスストリームの監視（ValueNotifier経由、setStateなし）
       compassSubscription = compassStream.listen((event) {
         if (mounted && event.heading != null) {
-          triggerSetState(() {
-            currentHeading = event.heading;
-          });
+          headingNotifier.value = event.heading;
         }
       });
 
@@ -247,14 +254,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         },
       );
 
-      // GPS待機タイマー開始
-      gpsWaitSeconds = 0;
-      gpsWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        triggerSetState(() {
-          gpsWaitSeconds++;
-        });
-      });
-
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化完了');
     } catch (e) {
       AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
@@ -290,10 +289,12 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
   }
 
-  /// GPS履歴更新コールバック（軌跡ポリライン更新用）
+  /// GPS履歴更新コールバック（MapSourceManager経由でGPS軌跡ソースのみ更新）
   void _onGpsHistoryUpdate() {
-    if (mounted) {
-      triggerSetState(() {});
+    if (mounted && sourceManager.isInitialized) {
+      sourceManager.updateGpsTrack(
+        gpsHistoryRecorder.todayPoints.toGeographics(),
+      );
     }
   }
 
@@ -317,10 +318,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// 全サービスの破棄処理
   void disposeAllServices() {
+    tileServer.stop();
     gpsManager.removeListener(onGpsManagerUpdate);
     baseMapService.removeListener(onBaseMapServiceUpdate);
     layerStyleSettings.removeListener(onLayerStyleChanged);
-    performanceSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
 
     // GPS取得を停止（測量モードでない場合のみ）
@@ -330,7 +331,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
     positionSubscription?.cancel();
     compassSubscription?.cancel();
-    gpsWaitTimer?.cancel();
+    headingNotifier.dispose();
     longPressCountUpdateTimer?.cancel();
   }
 

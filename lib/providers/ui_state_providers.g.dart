@@ -173,7 +173,7 @@ abstract class _$FeatureRefreshTrigger extends $Notifier<int> {
 const mapControllerHolderProvider = MapControllerHolderProvider._();
 
 final class MapControllerHolderProvider
-    extends $NotifierProvider<MapControllerHolder, MapController?> {
+    extends $NotifierProvider<MapControllerHolder, KMapController?> {
   const MapControllerHolderProvider._()
     : super(
         from: null,
@@ -193,29 +193,29 @@ final class MapControllerHolderProvider
   MapControllerHolder create() => MapControllerHolder();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(MapController? value) {
+  Override overrideWithValue(KMapController? value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<MapController?>(value),
+      providerOverride: $SyncValueProvider<KMapController?>(value),
     );
   }
 }
 
 String _$mapControllerHolderHash() =>
-    r'19df51b3fa744c04b368d213faf5d9779d36a348';
+    r'a17d93d431c266d8e072158b4f5e30d9a8f5b173';
 
-abstract class _$MapControllerHolder extends $Notifier<MapController?> {
-  MapController? build();
+abstract class _$MapControllerHolder extends $Notifier<KMapController?> {
+  KMapController? build();
   @$mustCallSuper
   @override
   void runBuild() {
     final created = build();
-    final ref = this.ref as $Ref<MapController?, MapController?>;
+    final ref = this.ref as $Ref<KMapController?, KMapController?>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<MapController?, MapController?>,
-              MapController?,
+              AnyNotifier<KMapController?, KMapController?>,
+              KMapController?,
               Object?,
               Object?
             >;

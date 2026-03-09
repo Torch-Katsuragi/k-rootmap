@@ -1,18 +1,21 @@
 /// 全画面フィーチャ編集スクリーン
 ///
-/// FlutterMap を背景に、下部パネルで編集コントロールを表示。
+/// MapLibreMap を背景に、下部パネルで編集コントロールを表示。
 /// カメラツールと同じ Navigator.push パターンで遷移する。
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:maplibre/maplibre.dart' as ml;
+import 'package:geobase/geobase.dart' as geo;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 
+import '../../core/k_map_controller.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../providers/service_providers.dart';
 import '../../services/basemap_service.dart';
-import '../../widgets/cached_tile_layer.dart';
+import '../../services/tile_server.dart';
+import '../../utils/geo_converter.dart';
+import '../map/k_map_widget.dart';
 import 'feature_edit_action.dart';
 
 class FeatureEditorScreen extends ConsumerStatefulWidget {
@@ -32,7 +35,7 @@ class FeatureEditorScreen extends ConsumerStatefulWidget {
 class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   late final List<FeatureEditAction> _applicable;
   late final ValueNotifier<PreviewLines> _previewLines;
-  late final MapController _mapController;
+  final KMapController _mapController = KMapController();
   bool _mapReady = false;
   bool _initialFitDone = false;
 
@@ -42,7 +45,6 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
     _applicable =
         widget.actions.where((a) => a.canApplyTo(widget.feature)).toList();
     _previewLines = ValueNotifier(PreviewLines.empty);
-    _mapController = MapController();
     _previewLines.addListener(_onPreviewChanged);
   }
 
@@ -50,7 +52,6 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   void dispose() {
     _previewLines.removeListener(_onPreviewChanged);
     _previewLines.dispose();
-    _mapController.dispose();
     super.dispose();
   }
 
@@ -65,32 +66,20 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   }
 
   void _tryInitialFit() {
-    if (_initialFitDone || !_mapReady) return;
-    final bounds = _calcBounds();
-    if (bounds == null) return;
-    _initialFitDone = true;
-    // 全子ウィジェットのセットアップ完了後に実行
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _mapController.fitCamera(
-        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
-      );
-    });
-  }
-
-  LatLngBounds? _calcBounds() {
-    final lines = _previewLines.value;
+    final controller = _mapController.raw;
+    if (_initialFitDone || !_mapReady || controller == null) return;
     final allPoints = [
-      ...lines.backgroundLine,
-      ...lines.foregroundLine,
+      ..._previewLines.value.backgroundLine,
+      ..._previewLines.value.foregroundLine,
     ];
-    if (allPoints.isEmpty) return null;
+    if (allPoints.isEmpty) return;
+    _initialFitDone = true;
 
+    // バウンディングボックスを計算
     double minLat = allPoints.first.latitude;
     double maxLat = allPoints.first.latitude;
     double minLng = allPoints.first.longitude;
     double maxLng = allPoints.first.longitude;
-
     for (final p in allPoints) {
       if (p.latitude < minLat) minLat = p.latitude;
       if (p.latitude > maxLat) maxLat = p.latitude;
@@ -98,10 +87,18 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
 
-    return LatLngBounds(
-      LatLng(minLat, minLng),
-      LatLng(maxLat, maxLng),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || controller != _mapController.raw) return;
+      controller.fitBounds(
+        bounds: ml.LngLatBounds(
+          longitudeWest: minLng,
+          longitudeEast: maxLng,
+          latitudeSouth: minLat,
+          latitudeNorth: maxLat,
+        ),
+        padding: const EdgeInsets.all(40),
+      );
+    });
   }
 
   @override
@@ -114,6 +111,7 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
     }
 
     final baseMapService = ref.read(baseMapServiceProvider);
+    final tileServerInstance = ref.read(tileServerProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -130,7 +128,7 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
         children: [
           // 上: FlutterMap
           Expanded(
-            child: _buildMap(baseMapService),
+            child: _buildMap(baseMapService, tileServerInstance),
           ),
 
           // 下: コントロールパネル
@@ -145,35 +143,57 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
     );
   }
 
-  Widget _buildMap(BaseMapService baseMapService) {
+  Widget _buildMap(BaseMapService baseMapService, TileServer ts) {
     final lines = _previewLines.value;
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(onMapReady: _onMapReady),
-      children: [
-        CachedTileLayer(
-          provider: baseMapService.currentProvider,
-          baseMapService: baseMapService,
-        ),
+    final provider = baseMapService.currentProvider;
+    final tileUrl = ts.isRunning
+        ? ts.urlTemplate(provider.id)
+        : provider.urlTemplate;
+    return KMapWidget(
+      options: const ml.MapOptions(
+        initZoom: 14,
+        initCenter: geo.Geographic(lon: 139.7671, lat: 35.6812),
+      ),
+      onMapCreated: (controller) {
+        _mapController.attach(controller.raw!);
+      },
+      onStyleLoaded: (_, style) async {
+        final src = ml.RasterSource(
+          id: 'editor-basemap',
+          tiles: [tileUrl],
+          maxZoom: provider.maxZoom.toDouble(),
+          tileSize: 256,
+        );
+        await style.addSource(src);
+        await style.addLayer(
+          const ml.RasterStyleLayer(id: 'editor-basemap-layer', sourceId: 'editor-basemap'),
+        );
+        _onMapReady();
+      },
+      layers: [
         if (lines.backgroundLine.length >= 2)
-          PolylineLayer(
+          ml.PolylineLayer(
             polylines: [
-              Polyline(
-                points: lines.backgroundLine,
-                color: Colors.grey.shade400,
-                strokeWidth: 3,
+              geo.Feature(
+                geometry: geo.LineString.from(
+                  lines.backgroundLine.toGeographics(),
+                ),
               ),
             ],
+            color: Colors.grey.shade400,
+            width: 3,
           ),
         if (lines.foregroundLine.length >= 2)
-          PolylineLayer(
+          ml.PolylineLayer(
             polylines: [
-              Polyline(
-                points: lines.foregroundLine,
-                color: Colors.blue.shade700,
-                strokeWidth: 4,
+              geo.Feature(
+                geometry: geo.LineString.from(
+                  lines.foregroundLine.toGeographics(),
+                ),
               ),
             ],
+            color: Colors.blue.shade700,
+            width: 4,
           ),
       ],
     );

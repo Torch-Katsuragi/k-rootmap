@@ -50,6 +50,47 @@ final class BaseMapServiceProvider
 
 String _$baseMapServiceHash() => r'0641143a42e82b976ad00f08e256fbff40a6afa0';
 
+@ProviderFor(tileServer)
+const tileServerProvider = TileServerProvider._();
+
+final class TileServerProvider
+    extends $FunctionalProvider<TileServer, TileServer, TileServer>
+    with $Provider<TileServer> {
+  const TileServerProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tileServerProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tileServerHash();
+
+  @$internal
+  @override
+  $ProviderElement<TileServer> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  TileServer create(Ref ref) {
+    return tileServer(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(TileServer value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<TileServer>(value),
+    );
+  }
+}
+
+String _$tileServerHash() => r'1ee1693916fd4791ca72d18eefde6bffe05ff13c';
+
 @ProviderFor(gpsManagerService)
 const gpsManagerServiceProvider = GpsManagerServiceProvider._();
 

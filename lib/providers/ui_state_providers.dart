@@ -1,6 +1,6 @@
-import 'package:flutter_map/flutter_map.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/nodes/layer_tree_node.dart';
+import '../core/k_map_controller.dart';
 
 part 'ui_state_providers.g.dart';
 
@@ -31,9 +31,9 @@ class FeatureRefreshTrigger extends _$FeatureRefreshTrigger {
 @Riverpod(keepAlive: true)
 class MapControllerHolder extends _$MapControllerHolder {
   @override
-  MapController? build() => null;
+  KMapController? build() => null;
 
-  void set(MapController controller) => state = controller;
+  void set(KMapController controller) => state = controller;
 }
 
 @Riverpod(keepAlive: true)

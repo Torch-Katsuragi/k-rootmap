@@ -61,8 +61,8 @@ class GlobalFolderNode extends FolderNode {
   Future<void> updateChildren() async {
     // ディレクトリが存在しなければ作成
     final dir = Directory(globalPath);
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
       AppLogger.debug('[GlobalFolderNode] Created global folder: $globalPath');
     }
 
@@ -121,15 +121,17 @@ class GlobalFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadGlobalSubFolders() async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(globalPath);
-    if (!dir.existsSync()) return nodes;
+    if (!await dir.exists()) return nodes;
 
-    final directories = dir
-        .listSync()
-        .whereType<Directory>()
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = <Directory>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is Directory) {
+        directories.add(entity);
+      }
+    }
+    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in directories) {
+    for (final entity in directories) {
       final name = p.basename(entity.path);
       // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
@@ -156,16 +158,17 @@ class GlobalFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadGeoPackageNodes() async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(globalPath);
-    if (!dir.existsSync()) return nodes;
+    if (!await dir.exists()) return nodes;
 
-    final gpkgFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.gpkg'))
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final gpkgFiles = <File>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File && entity.path.endsWith('.gpkg')) {
+        gpkgFiles.add(entity);
+      }
+    }
+    gpkgFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in gpkgFiles) {
+    for (final entity in gpkgFiles) {
       final fileName = p.basename(entity.path);
       // 絶対パスモードでGeoPackageFileを作成
       final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
@@ -181,20 +184,20 @@ class GlobalFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadImageNodes() async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(globalPath);
-    if (!dir.existsSync()) return nodes;
+    if (!await dir.exists()) return nodes;
 
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) {
-          final ext = p.extension(f.path).toLowerCase();
-          return supportedExtensions.contains(ext);
-        })
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final imageFiles = <File>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final ext = p.extension(entity.path).toLowerCase();
+      if (supportedExtensions.contains(ext)) {
+        imageFiles.add(entity);
+      }
+    }
+    imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in imageFiles) {
+    for (final entity in imageFiles) {
       final node = await GlobalImageNode.fromPath(entity.path, parent: this);
       if (node != null) {
         nodes.add(node);
@@ -256,7 +259,7 @@ class GlobalSubFolderNode extends FolderNode {
     if (absPath == null) return;
 
     final dir = Directory(absPath);
-    if (!dir.existsSync()) return;
+    if (!await dir.exists()) return;
 
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
@@ -302,14 +305,17 @@ class GlobalSubFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadSubFolders(String absPath) async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(absPath);
+    if (!await dir.exists()) return nodes;
 
-    final directories = dir
-        .listSync()
-        .whereType<Directory>()
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = <Directory>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is Directory) {
+        directories.add(entity);
+      }
+    }
+    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in directories) {
+    for (final entity in directories) {
       final name = p.basename(entity.path);
       // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
@@ -335,15 +341,17 @@ class GlobalSubFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadGeoPackageNodes(String absPath) async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(absPath);
+    if (!await dir.exists()) return nodes;
 
-    final gpkgFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.gpkg'))
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final gpkgFiles = <File>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File && entity.path.endsWith('.gpkg')) {
+        gpkgFiles.add(entity);
+      }
+    }
+    gpkgFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in gpkgFiles) {
+    for (final entity in gpkgFiles) {
       final fileName = p.basename(entity.path);
       // 絶対パスモードでGeoPackageFileを作成
       final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
@@ -357,19 +365,20 @@ class GlobalSubFolderNode extends FolderNode {
   Future<List<LayerTreeNode>> _loadImageNodes(String absPath) async {
     final nodes = <LayerTreeNode>[];
     final dir = Directory(absPath);
+    if (!await dir.exists()) return nodes;
 
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) {
-          final ext = p.extension(f.path).toLowerCase();
-          return supportedExtensions.contains(ext);
-        })
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final imageFiles = <File>[];
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final ext = p.extension(entity.path).toLowerCase();
+      if (supportedExtensions.contains(ext)) {
+        imageFiles.add(entity);
+      }
+    }
+    imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    for (var entity in imageFiles) {
+    for (final entity in imageFiles) {
       final node = await GlobalImageNode.fromPath(entity.path, parent: this);
       if (node != null) {
         nodes.add(node);

@@ -22,11 +22,14 @@ class PanTool extends MapTool {
   // マウスホイールズームの最大倍率設定
   static const double maxZoom = 25.0;
 
-  // ピンチ・回転用状態
-  Offset? _lastFocalPoint;
+  // ピンチ・回転用状態（フォーカルポイントアンカリング方式）
+  LatLng? _focalLatLng;
+  Offset? _viewCenter;
   double? _startZoom, _startRotation;
+  double? _worldSizeAtStart; // 開始時のMercatorワールドサイズ（画面ピクセル単位）
 
   // 中ボタンドラッグ用状態
+  Offset? _lastFocalPoint;
   bool _isMiddleButtonDragging = false;
 
   /// 中ボタンドラッグ状態の取得（他のツールから参照可能）
@@ -42,66 +45,75 @@ class PanTool extends MapTool {
   /// スケール開始イベント
   @override
   void onScaleStart(ScaleStartDetails details, IMapState mapState) {
-    // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
 
-    _lastFocalPoint = details.localFocalPoint;
-    _startZoom = mapState.mapController.camera.zoom;
-    _startRotation = mapState.mapController.camera.rotation;
+    final camera = mapState.mapController.camera;
+    _startZoom = camera.zoom;
+    _startRotation = camera.rotation;
+    _focalLatLng = mapState.offsetToLatLng(details.localFocalPoint);
+    _viewCenter = mapState.latLngToOffset(camera.center);
+    _worldSizeAtStart = _measureWorldSize(mapState, camera.center, _viewCenter!);
   }
 
-  /// スケール更新イベント
+  /// スケール更新イベント（フォーカルポイントアンカリング方式）
   @override
   void onScaleUpdate(ScaleUpdateDetails details, IMapState mapState) {
-    // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
+    if (_focalLatLng == null || _viewCenter == null) return;
 
-    if (_lastFocalPoint == null) return;
-    final delta = details.localFocalPoint - _lastFocalPoint!;
-    _lastFocalPoint = details.localFocalPoint;
-    final mapController = mapState.mapController;
-    final center = mapController.camera.center;
-    final zoom = _startZoom! + log(details.scale) / ln2;
-    // mapcontrollerはdegreeであるが、details.rotationはラジアンなので変換する必要がある
-    final rotation = _startRotation! + details.rotation * 180 / pi;
+    final newZoom = _startZoom! + log(details.scale) / ln2;
+    final newRotation = _startRotation! - details.rotation * 180 / pi;
 
-    // Flutter Map v8の正しい座標変換を使用
-    final centerPx = mapState.latLngToOffset(center);
-    final newCenterPx = centerPx - delta;
-    final newCenter = mapState.offsetToLatLng(newCenterPx);
+    // ズーム変化に応じてワールドサイズをスケール
+    final worldSize = _worldSizeAtStart! * pow(2.0, newZoom - _startZoom!);
 
-    mapController.moveAndRotate(newCenter, zoom, rotation);
+    final newCenter = _anchoredCenter(
+      _focalLatLng!,
+      details.localFocalPoint,
+      _viewCenter!,
+      worldSize,
+      newRotation,
+    );
+
+    mapState.mapController.moveAndRotate(newCenter, newZoom, newRotation);
   }
 
   /// スケール終了イベント
   @override
   void onScaleEnd(ScaleEndDetails details, IMapState mapState) {
-    // 中ボタンドラッグ中は通常のスケール処理をスキップ
     if (_isMiddleButtonDragging) return;
 
-    _lastFocalPoint = null;
+    _focalLatLng = null;
+    _viewCenter = null;
     _startZoom = null;
     _startRotation = null;
+    _worldSizeAtStart = null;
   }
 
   /// マウスホイールズーム処理（他のツールからも呼び出し可能）
   void handleMouseWheelZoom(PointerScrollEvent event, IMapState mapState) {
-    // スクロール量を基にズーム量を計算
-    const double zoomSpeed = 0.01; // ズーム感度調整（より細かいズーム操作）
+    const double zoomSpeed = 0.01;
     final double zoomDelta = -event.scrollDelta.dy * zoomSpeed;
 
     final mapController = mapState.mapController;
-    final double currentZoom = mapController.camera.zoom;
-    final double newZoom = (currentZoom + zoomDelta).clamp(1.0, maxZoom);
+    final camera = mapController.camera;
+    final double newZoom = (camera.zoom + zoomDelta).clamp(1.0, maxZoom);
 
-    if (newZoom != currentZoom) {
-      // マウス位置を中心にズーム
-      final LatLng cursorLatLng = mapState.offsetToLatLng(event.localPosition);
-      mapController.moveAndRotate(
+    if (newZoom != camera.zoom) {
+      final cursorLatLng = mapState.offsetToLatLng(event.localPosition);
+      final viewCenter = mapState.latLngToOffset(camera.center);
+      final currentWorldSize = _measureWorldSize(mapState, camera.center, viewCenter);
+      // ズーム変化に応じてスケール
+      final worldSize = currentWorldSize * pow(2.0, newZoom - camera.zoom);
+
+      final newCenter = _anchoredCenter(
         cursorLatLng,
-        newZoom,
-        mapController.camera.rotation,
+        event.localPosition,
+        viewCenter,
+        worldSize,
+        camera.rotation,
       );
+      mapController.moveAndRotate(newCenter, newZoom, camera.rotation);
     }
   }
 
@@ -151,4 +163,64 @@ class PanTool extends MapTool {
     _isMiddleButtonDragging = false;
     _lastFocalPoint = null;
   }
+
+  // --------------------------------------------------
+  // フォーカルポイントアンカリング計算
+  // --------------------------------------------------
+
+  /// マップの座標変換から現在ズームでの実効ワールドサイズ（画面px単位）を算出
+  static double _measureWorldSize(
+    IMapState mapState, LatLng center, Offset centerScreen,
+  ) {
+    const testDeg = 0.01;
+    final testLl = LatLng(center.latitude, center.longitude + testDeg);
+    final testScreen = mapState.latLngToOffset(testLl);
+    // 経度方向のピクセル距離（回転の影響を受けても distance で正確）
+    final pxPerDeg = (testScreen - centerScreen).distance / testDeg;
+    return pxPerDeg * 360;
+  }
+
+  /// anchorLatLng が anchorScreen に留まるようなカメラ中心を算出
+  static LatLng _anchoredCenter(
+    LatLng anchorLatLng,
+    Offset anchorScreen,
+    Offset viewCenter,
+    double worldSize,
+    double bearingDeg,
+  ) {
+    final anchorMerc = _toMercator(anchorLatLng, worldSize);
+
+    // 画面中心から指位置へのスクリーンオフセット → Mercator座標系に逆回転
+    final screenOffset = anchorScreen - viewCenter;
+    final bRad = bearingDeg * pi / 180;
+    final cosB = cos(bRad);
+    final sinB = sin(bRad);
+    final mercOffsetX = screenOffset.dx * cosB - screenOffset.dy * sinB;
+    final mercOffsetY = screenOffset.dx * sinB + screenOffset.dy * cosB;
+
+    final centerMerc = Offset(
+      anchorMerc.dx - mercOffsetX,
+      anchorMerc.dy - mercOffsetY,
+    );
+    return _fromMercator(centerMerc, worldSize);
+  }
+
+  /// LatLng → Web Mercator ピクセル座標
+  static Offset _toMercator(LatLng ll, double worldSize) {
+    final x = (ll.longitude + 180) / 360 * worldSize;
+    final latRad = ll.latitude * pi / 180;
+    final y =
+        (1 - log(tan(latRad) + 1 / cos(latRad)) / pi) / 2 * worldSize;
+    return Offset(x, y);
+  }
+
+  /// Web Mercator ピクセル座標 → LatLng
+  static LatLng _fromMercator(Offset merc, double worldSize) {
+    final lng = merc.dx / worldSize * 360 - 180;
+    final n = pi - 2 * pi * merc.dy / worldSize;
+    final lat = 180 / pi * atan(_sinh(n));
+    return LatLng(lat, lng);
+  }
+
+  static double _sinh(double x) => (exp(x) - exp(-x)) / 2;
 }

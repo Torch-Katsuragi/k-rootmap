@@ -1,5 +1,7 @@
 // K-MAPS: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
+import 'dart:io';
+
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,6 +14,7 @@ import '../models/nodes/global_folder_node.dart';
 import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
 import 'map_page/map_page.dart';
+import 'maplibre_poc_screen.dart';
 
 /// ホーム画面（最小構成）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -25,6 +28,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   bool _permissionsGranted = false;
   bool _isCheckingPermissions = false; // 権限チェック中フラグ
   bool _navigatedToMapPage = false; // マップ画面に遷移済みフラグ
+  bool _isOpeningProject = false; // プロジェクト開始中フラグ
+  String _openingProjectStatus = '';
 
   @override
   void initState() {
@@ -53,6 +58,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   /// ストレージ権限の確認・リクエスト
   Future<void> _checkPermissions() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      if (mounted) {
+        setState(() {
+          _permissionsGranted = true;
+        });
+      }
+      return;
+    }
+
     // 既に権限チェック中の場合はスキップ
     if (_isCheckingPermissions) {
       AppLogger.debug('[HomeScreen] 権限チェックが既に実行中のため、スキップします');
@@ -263,20 +277,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {
+      if (!mounted) return;
       setState(() {
         _projectDir = dir;
+        _isOpeningProject = true;
+        _openingProjectStatus = 'プロジェクトを初期化しています...';
       });
-      // グローバル初期化
-      AppLogger.debug('[HomeScreen] GlobalConfigを初期化中...');
+      AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
       ref.read(projectRootDirProvider.notifier).set(dir);
+      AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
       final rootNode = FolderNode('rootNode', visible: true);
       ref.read(folderTreeProvider.notifier).set(rootNode);
+      AppLogger.debug('[HomeScreen] rootNode 設定完了');
 
+      setState(() {
+        _openingProjectStatus = '共有フォルダを準備しています...';
+      });
       await _initializeGlobalFolder();
-
-      AppLogger.debug(
-        '[HomeScreen] 初期化完了: ${ref.read(folderTreeProvider)?.toMap()}',
-      );
+      AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
 
       // フォルダ選択後すぐ地図編集画面へ遷移
       if (mounted) {
@@ -287,8 +305,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           context,
           MaterialPageRoute(builder: (_) => const KMapsHomePage()),
         ).then((_) {
-          // マップ画面から戻ってきた場合はフラグをリセット
-          _navigatedToMapPage = false;
+          if (!mounted) return;
+          setState(() {
+            _navigatedToMapPage = false;
+            _isOpeningProject = false;
+            _openingProjectStatus = '';
+          });
         });
       }
     }
@@ -300,6 +322,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       appBar: AppBar(
         title: const Text('K-MAPS'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // MapLibre PoC（技術検証用）
+          IconButton(
+            icon: const Icon(Icons.terrain),
+            tooltip: 'MapLibre PoC',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MapLibrePocScreen()),
+            ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -351,14 +384,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
-                      onPressed: _permissionsGranted ? _pickProjectDir : null,
+                      onPressed:
+                          (_permissionsGranted && !_isOpeningProject)
+                              ? _pickProjectDir
+                              : null,
                       icon: Icon(
-                        _permissionsGranted ? Icons.folder : Icons.warning,
+                        _isOpeningProject
+                            ? Icons.hourglass_top
+                            : (_permissionsGranted ? Icons.folder : Icons.warning),
                       ),
-                      label: Text(_permissionsGranted ? 'フォルダを選択' : '権限が必要です'),
+                      label: Text(
+                        _isOpeningProject
+                            ? '起動中...'
+                            : (_permissionsGranted ? 'フォルダを選択' : '権限が必要です'),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                            _permissionsGranted ? Colors.blue : Colors.grey,
+                            (_permissionsGranted && !_isOpeningProject)
+                                ? Colors.blue
+                                : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 32,
@@ -367,6 +411,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         textStyle: const TextStyle(fontSize: 16),
                       ),
                     ),
+                    if (_isOpeningProject) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _openingProjectStatus,
+                        style: const TextStyle(color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(),
+                    ],
                     if (!_permissionsGranted) ...[
                       const SizedBox(height: 16),
                       TextButton.icon(

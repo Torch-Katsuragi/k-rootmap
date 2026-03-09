@@ -144,7 +144,7 @@ class BaseMapService extends ChangeNotifier {
 
       // 設定の読み込み
       await _loadSettings();
-      
+
       // ネットワーク状態の監視開始
       _initConnectivity();
     } catch (e) {

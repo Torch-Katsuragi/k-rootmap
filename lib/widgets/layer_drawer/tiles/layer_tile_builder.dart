@@ -4,7 +4,6 @@ library;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_map/flutter_map.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -44,11 +43,9 @@ mixin LayerTileBuilder on ConsumerState<LayerDrawer> {
         if (coords.isEmpty) return;
         final mapController = ref.read(mapControllerHolderProvider);
         if (mapController == null) return;
-        mapController.fitCamera(
-          CameraFit.coordinates(
-            coordinates: coords,
-            padding: const EdgeInsets.all(50),
-          ),
+        mapController.fitCoordinates(
+          coords,
+          padding: const EdgeInsets.all(50),
         );
       },
       child: ListTile(

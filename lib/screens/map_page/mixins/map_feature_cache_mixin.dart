@@ -154,11 +154,9 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     
     // 2. 【重要】LayerNodeのchildrenはクリアしない（メモリ上のインスタンスを維持）
     
-    // 3. フィーチャデータを再読み込み
+    // 3. フィーチャデータを再読み込み（updateFeaturesImpl内でsyncFeatureSourcesが呼ばれる）
     updateFeaturesImpl().then((_) {
-      // 4. UI全体を更新
       if (mounted) {
-        triggerSetState(() {});
         AppLogger.debug('[MAP] マップUI更新完了');
       }
     }).catchError((error) {

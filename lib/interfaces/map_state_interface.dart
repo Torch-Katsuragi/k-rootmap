@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map/flutter_map.dart';
+import '../core/k_map_controller.dart';
 
 /// 地図状態の抽象インターフェース
 /// 
@@ -32,11 +32,9 @@ abstract class IMapState {
   /// ポリゴンのリングを閉じる（始点と終点を一致させる）
   List<LatLng> closeRing(List<LatLng> points);
 
-  /// FlutterMapのMapController
-  MapController get mapController;
+  /// 地図コントローラー（flutter_map互換ラッパー）
+  KMapController get mapController;
 
   /// StateがWidgetツリーにマウントされているか
   bool get mounted;
 }
-
-

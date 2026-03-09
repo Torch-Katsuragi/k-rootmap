@@ -167,6 +167,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   List<geo.Feature<geo.Point>> cachedImageFeatures = [];
   List<geo.Feature<geo.Point>> cachedSelectedImageFeatures = [];
 
+  /// 頂点マーカー（CircleStyleLayer用、GPU描画）
+  List<geo.Feature<geo.Point>> cachedLineVertices = [];
+  List<geo.Feature<geo.Point>> cachedLineVerticesSel = [];
+  List<geo.Feature<geo.Point>> cachedPolyVertices = [];
+  List<geo.Feature<geo.Point>> cachedPolyVerticesSel = [];
+
   /// オーバーレイ用Widgetマーカー（現在位置、測量ポイント等）
   List<ml.Marker> cachedOverlayMarkers = [];
 

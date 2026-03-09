@@ -274,11 +274,12 @@
   - [x] タップ選択をlatlong2距離検索に置換（ズーム連動閾値）
 
 - [x] Windows版パフォーマンス最適化（2026/03/09）
-  - [x] デバッグログ除去（map_page.dart, map_state.dart）
-  - [x] build()内の_syncFeatureSources()除去（毎フレーム呼び出し→データ変更トリガーのみに）
-  - [x] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
-  - [x] updateLayerStylesの差分更新化（remove/add 32回→setPaintProperty 17回、Error -2147024809解消）
-  - [x] StyleController.setPaintProperty追加（WebView/Web/Android/iOS全プラットフォーム）
+  - [x] 頂点マーカーのGPU描画化（WidgetLayer→CircleStyleLayer、パン・ズーム時のWidget再生成を排除）
+  - [x] didUpdateWidget内のlayers変更チェック追加（不要なGeoJSON再処理をスキップ）
+  - [x] updateLayerStylesの一括更新化（remove/add 60+回→batchSetPaintProperties 1回、E_INVALIDARGエラー解消）
+  - [x] moveCamera/animateCameraにmapReady前ガード追加（Null check例外防止）
+  - [ ] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
+    - 注: バンドル版pmtiles.jsがNode.js用ビルドでブラウザ非互換のため保留
 
 ### 未完了
 

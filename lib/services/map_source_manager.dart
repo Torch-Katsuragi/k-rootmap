@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:maplibre/maplibre.dart' as ml;
+import 'package:maplibre_webview/src/style_controller.dart' as webview_style;
 import 'package:supercluster/supercluster.dart';
 import '../core/constants.dart';
 import '../utils/app_logger.dart';
@@ -35,6 +36,10 @@ class MapSourceManager {
   static const kImages = 'k-images';
   static const kImagesSel = 'k-images-sel';
   static const kImageClusters = 'k-image-clusters';
+  static const kLineVertices = 'k-line-vertices';
+  static const kLineVerticesSel = 'k-line-vertices-sel';
+  static const kPolyVertices = 'k-poly-vertices';
+  static const kPolyVerticesSel = 'k-poly-vertices-sel';
 
   // レイヤID定数
   static const kPolygonsFill = 'k-polygons-fill';
@@ -43,6 +48,10 @@ class MapSourceManager {
   static const kPolygonsSelOutline = 'k-polygons-sel-outline';
   static const kLinesLine = 'k-lines-line';
   static const kLinesSelLine = 'k-lines-sel-line';
+  static const kPolyVerticesCircle = 'k-poly-vertices-circle';
+  static const kPolyVerticesSelCircle = 'k-poly-vertices-sel-circle';
+  static const kLineVerticesCircle = 'k-line-vertices-circle';
+  static const kLineVerticesSelCircle = 'k-line-vertices-sel-circle';
   static const kPointsCircle = 'k-points-circle';
   static const kPointsSelCircle = 'k-points-sel-circle';
   static const kClusterCircle = 'k-cluster-circle';
@@ -69,6 +78,8 @@ class MapSourceManager {
   static const _allSourceIds = [
     kPolygons, kPolygonsSel,
     kLines, kLinesSel,
+    kLineVertices, kLineVerticesSel,
+    kPolyVertices, kPolyVerticesSel,
     kPoints, kPointsSel,
     kClusters,
     kGpsTrack,
@@ -76,11 +87,13 @@ class MapSourceManager {
     kImageClusters,
   ];
 
-  // 描画順: polygon → line → gpsTrack → clusters → points → imageClusters → images
+  // 描画順: polygon → line → gpsTrack → vertices → clusters → points → imageClusters → images
   static const _allLayerIds = [
     kPolygonsFill, kPolygonsOutline,
     kPolygonsSelFill, kPolygonsSelOutline,
     kLinesLine, kLinesSelLine, kGpsTrackLine,
+    kPolyVerticesCircle, kPolyVerticesSelCircle,
+    kLineVerticesCircle, kLineVerticesSelCircle,
     kClusterCircle, kClusterCount,
     kPointsCircle, kPointsSelCircle,
     kImageClusterCircle, kImageClusterCount, kImageClusterName,
@@ -431,6 +444,50 @@ class MapSourceManager {
         'line-width': 3.0,
       },
     ));
+    // ポリゴン頂点（通常）
+    await style.addLayer(ml.CircleStyleLayer(
+      id: kPolyVerticesCircle,
+      sourceId: kPolyVertices,
+      paint: {
+        'circle-radius': 4.0,
+        'circle-color': '#388E3C',
+        'circle-stroke-width': 1.0,
+        'circle-stroke-color': '#FFFFFF',
+      },
+    ));
+    // ポリゴン頂点（選択）
+    await style.addLayer(ml.CircleStyleLayer(
+      id: kPolyVerticesSelCircle,
+      sourceId: kPolyVerticesSel,
+      paint: {
+        'circle-radius': 5.0,
+        'circle-color': '#FF0000',
+        'circle-stroke-width': 1.0,
+        'circle-stroke-color': '#FFFFFF',
+      },
+    ));
+    // ライン頂点（通常）
+    await style.addLayer(ml.CircleStyleLayer(
+      id: kLineVerticesCircle,
+      sourceId: kLineVertices,
+      paint: {
+        'circle-radius': 4.0,
+        'circle-color': '#2196F3',
+        'circle-stroke-width': 1.0,
+        'circle-stroke-color': '#FFFFFF',
+      },
+    ));
+    // ライン頂点（選択）
+    await style.addLayer(ml.CircleStyleLayer(
+      id: kLineVerticesSelCircle,
+      sourceId: kLineVerticesSel,
+      paint: {
+        'circle-radius': 5.0,
+        'circle-color': '#FF0000',
+        'circle-stroke-width': 1.0,
+        'circle-stroke-color': '#FFFFFF',
+      },
+    ));
     // クラスタ円（ポイント数に応じてサイズを段階的に変化、色はポイント設定に準拠）
     await style.addLayer(ml.CircleStyleLayer(
       id: kClusterCircle,
@@ -658,12 +715,17 @@ class MapSourceManager {
     required double polygonFillOpacity,
     required Color polygonOutlineColor,
     required double polygonOutlineOpacity,
+    required double polygonBorderWidth,
     required Color lineColor,
     required double lineWidth,
     required Color pointColor,
     required double pointSize,
     required Color selectedColor,
     required double selectedMultiplier,
+    required bool lineVertexEnabled,
+    required double lineVertexSizeFactor,
+    required bool polygonVertexEnabled,
+    required double polygonVertexSizeFactor,
   }) async {
     if (!_initialized || _style == null) return;
     final s = _style!;
@@ -674,117 +736,52 @@ class MapSourceManager {
     final lineHex = _colorToHex(lineColor);
     final pointHex = _colorToHex(pointColor);
 
-    // 描画順を維持するため逆順で除去、正順で再追加
-    for (final id in _allLayerIds.reversed) {
-      try { await s.removeLayer(id); } catch (_) {}
+    // 頂点半径の計算
+    final polyVR = polygonVertexEnabled
+        ? (polygonBorderWidth * polygonVertexSizeFactor / 2).clamp(2.0, 24.0)
+        : 0.0;
+    final polyVSelR = polygonVertexEnabled
+        ? (polygonBorderWidth * selectedMultiplier * polygonVertexSizeFactor / 2).clamp(2.0, 24.0)
+        : 0.0;
+    final lineVR = lineVertexEnabled
+        ? (lineWidth * lineVertexSizeFactor / 2).clamp(2.0, 24.0)
+        : 0.0;
+    final lineVSelR = lineVertexEnabled
+        ? (lineWidth * selectedMultiplier * lineVertexSizeFactor / 2).clamp(2.0, 24.0)
+        : 0.0;
+
+    final clusterRadius = <Object>['step', ['get', 'point_count'], 7.0, 10, 9.0, 50, 11.0, 200, 14.0];
+
+    // ペイントプロパティを1回のJS呼び出しで一括更新（60+回→1回）
+    final updates = <String, Map<String, Object>>{
+      kPolygonsFill: {'fill-color': fillHex, 'fill-opacity': polygonFillOpacity},
+      kPolygonsOutline: {'line-color': outlineHex, 'line-opacity': polygonOutlineOpacity, 'line-width': 2.0},
+      kPolygonsSelFill: {'fill-color': selHex, 'fill-opacity': 0.5},
+      kPolygonsSelOutline: {'line-color': selHex, 'line-width': 3.0},
+      kLinesLine: {'line-color': lineHex, 'line-width': lineWidth},
+      kLinesSelLine: {'line-color': selHex, 'line-width': lineWidth * selectedMultiplier},
+      kGpsTrackLine: {'line-color': _colorToHex(MapColors.trackingRoute), 'line-width': 3.0},
+      kPolyVerticesCircle: {'circle-radius': polyVR, 'circle-color': _colorToHex(polygonOutlineColor), 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
+      kPolyVerticesSelCircle: {'circle-radius': polyVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
+      kLineVerticesCircle: {'circle-radius': lineVR, 'circle-color': lineHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
+      kLineVerticesSelCircle: {'circle-radius': lineVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
+      kClusterCircle: {'circle-color': pointHex, 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
+      kPointsCircle: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
+      kPointsSelCircle: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'},
+      kImageClusterCircle: {'circle-color': '#9C27B0', 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
+    };
+
+    if (s is webview_style.StyleControllerWebView) {
+      await s.batchSetPaintProperties(updates);
+    } else {
+      for (final entry in updates.entries) {
+        for (final prop in entry.value.entries) {
+          await s.setPaintProperty(entry.key, prop.key, prop.value);
+        }
+      }
     }
 
-    // ポリゴン塗りつぶし（通常）
-    await s.addLayer(ml.FillStyleLayer(
-      id: kPolygonsFill, sourceId: kPolygons,
-      paint: {'fill-color': fillHex, 'fill-opacity': polygonFillOpacity},
-    ));
-    await s.addLayer(ml.LineStyleLayer(
-      id: kPolygonsOutline, sourceId: kPolygons,
-      paint: {'line-color': outlineHex, 'line-opacity': polygonOutlineOpacity, 'line-width': 2.0},
-    ));
-    // ポリゴン（選択）
-    await s.addLayer(ml.FillStyleLayer(
-      id: kPolygonsSelFill, sourceId: kPolygonsSel,
-      paint: {'fill-color': selHex, 'fill-opacity': 0.5},
-    ));
-    await s.addLayer(ml.LineStyleLayer(
-      id: kPolygonsSelOutline, sourceId: kPolygonsSel,
-      paint: {'line-color': selHex, 'line-width': 3.0},
-    ));
-    // ライン（通常・選択）
-    await s.addLayer(ml.LineStyleLayer(
-      id: kLinesLine, sourceId: kLines,
-      paint: {'line-color': lineHex, 'line-width': lineWidth},
-    ));
-    await s.addLayer(ml.LineStyleLayer(
-      id: kLinesSelLine, sourceId: kLinesSel,
-      paint: {'line-color': selHex, 'line-width': lineWidth * selectedMultiplier},
-    ));
-    // GPS軌跡
-    await s.addLayer(ml.LineStyleLayer(
-      id: kGpsTrackLine, sourceId: kGpsTrack,
-      paint: {'line-color': _colorToHex(MapColors.trackingRoute), 'line-width': 3.0},
-    ));
-    // クラスタ円
-    await s.addLayer(ml.CircleStyleLayer(
-      id: kClusterCircle, sourceId: kClusters,
-      paint: {
-        'circle-color': pointHex,
-        'circle-radius': <Object>['step', ['get', 'point_count'], 7.0, 10, 9.0, 50, 11.0, 200, 14.0],
-        'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF',
-      },
-    ));
-    // クラスタ数テキスト
-    await s.addLayer(ml.SymbolStyleLayer(
-      id: kClusterCount, sourceId: kClusters,
-      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
-      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5},
-    ));
-    // ポイント（通常・選択）
-    await s.addLayer(ml.CircleStyleLayer(
-      id: kPointsCircle, sourceId: kPoints,
-      paint: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
-    ));
-    await s.addLayer(ml.CircleStyleLayer(
-      id: kPointsSelCircle, sourceId: kPointsSel,
-      paint: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'},
-    ));
-    // ImageNodeクラスタ円
-    await s.addLayer(ml.CircleStyleLayer(
-      id: kImageClusterCircle, sourceId: kImageClusters,
-      paint: {
-        'circle-color': '#9C27B0',
-        'circle-radius': <Object>['step', ['get', 'point_count'], 7.0, 10, 9.0, 50, 11.0, 200, 14.0],
-        'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF',
-      },
-    ));
-    // ImageNodeクラスタ数テキスト
-    await s.addLayer(ml.SymbolStyleLayer(
-      id: kImageClusterCount, sourceId: kImageClusters,
-      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
-      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5},
-    ));
-    // ImageNodeクラスタ最新ファイル名
-    await s.addLayer(ml.SymbolStyleLayer(
-      id: kImageClusterName, sourceId: kImageClusters,
-      layout: {
-        'text-field': <Object>['get', 'name'], 'text-size': 10.0,
-        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0,
-      },
-      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5},
-    ));
-    // ImageNode（通常）
-    await s.addLayer(ml.SymbolStyleLayer(
-      id: kImagesSymbol, sourceId: kImages,
-      layout: {
-        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
-        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
-        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.5,
-        'text-field': <Object>['get', 'name'], 'text-size': 10.0,
-        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
-      },
-      paint: {'text-color': '#9C27B0', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5},
-    ));
-    // ImageNode（選択）
-    await s.addLayer(ml.SymbolStyleLayer(
-      id: kImagesSelSymbol, sourceId: kImagesSel,
-      layout: {
-        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
-        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
-        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.8,
-        'text-field': <Object>['get', 'name'], 'text-size': 11.0,
-        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
-      },
-      paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5},
-    ));
-
-    AppLogger.debug('[MapSourceManager] layer styles updated (remove/add)');
+    AppLogger.debug('[MapSourceManager] layer styles updated (batch)');
   }
 
   /// 全ソースをクリア

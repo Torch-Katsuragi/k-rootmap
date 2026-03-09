@@ -25,7 +25,6 @@ import '../../widgets/left_bottom_fab.dart';
 import '../../widgets/map/k_map_widget.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
-import '../../core/settings_schema.dart' show SettingsStore;
 import '../../utils/app_logger.dart';
 import '../../utils/feature_calc_utils.dart';
 import '../../utils/keyboard_handler.dart';
@@ -685,6 +684,42 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       }
     }
 
+    // ライン頂点データ生成（CircleStyleLayerでGPU描画）
+    cachedLineVertices = [];
+    cachedLineVerticesSel = [];
+    if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
+      for (final f in lineFeatures) {
+        if (f.geometry == null) continue;
+        final pts = (f.geometry as List<LatLng>).toGeographics();
+        final list = selectedSet.contains(f)
+            ? cachedLineVerticesSel : cachedLineVertices;
+        for (final pt in pts) {
+          list.add(geo.Feature(geometry: geo.Point(pt)));
+        }
+      }
+    }
+
+    // ポリゴン頂点データ生成
+    cachedPolyVertices = [];
+    cachedPolyVerticesSel = [];
+    if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
+      for (final f in polygonFeatures) {
+        if (f.geometry == null) continue;
+        final rings = f.geometry as List<List<LatLng>>;
+        final list = selectedSet.contains(f)
+            ? cachedPolyVerticesSel : cachedPolyVertices;
+        for (final ring in rings) {
+          if (ring.isEmpty) continue;
+          final pts = List<LatLng>.from(ring);
+          // 閉じたリングの末尾重複を除外
+          if (pts.length >= 2 && pts.first == pts.last) pts.removeLast();
+          for (final pt in pts.toGeographics()) {
+            list.add(geo.Feature(geometry: geo.Point(pt)));
+          }
+        }
+      }
+    }
+
     // MapSourceManager経由でGeoJSONソースを更新（変更時のみ送信）
     _pushFeaturesToSources();
   }
@@ -704,6 +739,10 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     sourceManager.updateFeatures(MapSourceManager.kPointsSel, cachedSelectedMarkers);
     sourceManager.updateFeatures(MapSourceManager.kImages, cachedImageFeatures);
     sourceManager.updateFeatures(MapSourceManager.kImagesSel, cachedSelectedImageFeatures);
+    sourceManager.updateFeatures(MapSourceManager.kLineVertices, cachedLineVertices);
+    sourceManager.updateFeatures(MapSourceManager.kLineVerticesSel, cachedLineVerticesSel);
+    sourceManager.updateFeatures(MapSourceManager.kPolyVertices, cachedPolyVertices);
+    sourceManager.updateFeatures(MapSourceManager.kPolyVerticesSel, cachedPolyVerticesSel);
     // クラスタリング: 現在のズームでクラスタ表示を更新
     _refreshPointClusters();
   }
@@ -765,22 +804,26 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       polygonFillOpacity: style.getDouble(polygonFillOpacityDef),
       polygonOutlineColor: style.getColor(polygonBorderColorDef),
       polygonOutlineOpacity: style.getDouble(polygonBorderOpacityDef),
+      polygonBorderWidth: style.getDouble(polygonBorderWidthDef),
       lineColor: style.getColor(lineColorDef),
       lineWidth: style.getDouble(lineWidthDef),
       pointColor: style.getColor(pointColorDef),
       pointSize: style.getDouble(pointSizeDef),
       selectedColor: style.getColor(selectedColorDef),
       selectedMultiplier: style.getDouble(selectedMultiplierDef),
+      lineVertexEnabled: style.getBool(lineVertexPointsEnabledDef),
+      lineVertexSizeFactor: style.getDouble(lineVertexPointSizeFactorDef),
+      polygonVertexEnabled: style.getBool(polygonVertexPointsEnabledDef),
+      polygonVertexSizeFactor: style.getDouble(polygonVertexPointSizeFactorDef),
     );
   }
 
-  /// オーバーレイWidgetマーカーを構築（現在位置、測量ポイント、頂点マーカー）
+  /// オーバーレイWidgetマーカーを構築（現在位置、測量ポイント等の少数マーカーのみ）
+  /// 頂点マーカーはCircleStyleLayerでGPU描画（_syncFeatureSources経由）
   List<ml.Marker> _buildOverlayWidgetMarkers(Set<LayerTreeNode> selectedSet) {
     final drawingState = GlobalDrawingState.instance;
     final currentTool = ref.read(currentToolProvider);
     return [
-      // 頂点マーカー
-      ..._buildVertexMarkers(layerStyleSettings, selectedSet),
       // ペンツール: 線/ポリゴン描画中の1点目インジケータ
       if (currentTool is PenTool && drawingState.drawingLine.length == 1)
         _buildFirstPointIndicator(drawingState.drawingLine.first),
@@ -853,91 +896,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
               fontWeight: FontWeight.bold,
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  /// 頂点マーカー構築（maplibre Marker型）
-  List<ml.Marker> _buildVertexMarkers(
-    SettingsStore style,
-    Set<LayerTreeNode> selectedSet,
-  ) {
-    final selColor = style.getColor(selectedColorDef);
-    final selMult = style.getDouble(selectedMultiplierDef);
-    final markers = <ml.Marker>[];
-
-    if (style.getBool(lineVertexPointsEnabledDef)) {
-      final lc = style.getColor(lineColorDef);
-      final lw = style.getDouble(lineWidthDef);
-      final lvf = style.getDouble(lineVertexPointSizeFactorDef);
-      for (final f in lineFeatures) {
-        if (f.geometry == null) continue;
-        final pts = f.geometry as List<LatLng>;
-        if (pts.isEmpty) continue;
-
-        final isSelected = selectedSet.contains(f);
-        final color = isSelected ? selColor : lc;
-        final sw = isSelected ? lw * selMult : lw;
-        final size = (sw * lvf).clamp(4.0, 48.0);
-
-        for (final pt in pts) {
-          markers.add(_buildVertexMarker(pt, size, color));
-        }
-      }
-    }
-
-    if (style.getBool(polygonVertexPointsEnabledDef)) {
-      final pbc = style.getColor(polygonBorderColorDef);
-      final pbo = style.getDouble(polygonBorderOpacityDef);
-      final pbw = style.getDouble(polygonBorderWidthDef);
-      final pvf = style.getDouble(polygonVertexPointSizeFactorDef);
-      for (final f in polygonFeatures) {
-        if (f.geometry == null) continue;
-        final rings = f.geometry as List<List<LatLng>>;
-        if (rings.isEmpty) continue;
-
-        final isSelected = selectedSet.contains(f);
-        final color =
-            isSelected ? selColor : pbc.withValues(alpha: pbo);
-        final sw = isSelected ? pbw * selMult : pbw;
-        final size = (sw * pvf).clamp(4.0, 48.0);
-
-        for (final ring in rings) {
-          if (ring.isEmpty) continue;
-          final pts = List<LatLng>.from(ring);
-          if (pts.length >= 2 && pts.first == pts.last) {
-            pts.removeLast();
-          }
-          for (final pt in pts) {
-            markers.add(_buildVertexMarker(pt, size, color));
-          }
-        }
-      }
-    }
-
-    return markers;
-  }
-
-  /// 単一頂点マーカー構築（maplibre Marker型）
-  ml.Marker _buildVertexMarker(LatLng point, double size, Color color) {
-    return ml.Marker(
-      point: point.toGeographic(),
-      size: Size.square(size + 4),
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: size > 10 ? 1.5 : 1.0),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 1,
-              offset: Offset(0, 0.5),
-            ),
-          ],
         ),
       ),
     );

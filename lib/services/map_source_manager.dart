@@ -772,16 +772,111 @@ class MapSourceManager {
     };
 
     if (s is webview_style.StyleControllerWebView) {
+      // WebView（Windows）: 1回のJS呼び出しで全プロパティ一括更新
       await s.batchSetPaintProperties(updates);
     } else {
-      for (final entry in updates.entries) {
-        for (final prop in entry.value.entries) {
-          await s.setPaintProperty(entry.key, prop.key, prop.value);
-        }
-      }
+      // Android/iOS ネイティブ: setPaintProperty未実装のため remove/add で更新
+      await _removeAndReaddLayers(
+        s,
+        fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
+        lineHex: lineHex, pointHex: pointHex,
+        polygonFillOpacity: polygonFillOpacity,
+        polygonOutlineOpacity: polygonOutlineOpacity,
+        polygonBorderWidth: polygonBorderWidth,
+        lineWidth: lineWidth, pointSize: pointSize,
+        selectedMultiplier: selectedMultiplier,
+        polygonOutlineColor: polygonOutlineColor,
+        polyVR: polyVR, polyVSelR: polyVSelR,
+        lineVR: lineVR, lineVSelR: lineVSelR,
+        clusterRadius: clusterRadius,
+      );
     }
 
-    AppLogger.debug('[MapSourceManager] layer styles updated (batch)');
+    AppLogger.debug('[MapSourceManager] layer styles updated');
+  }
+
+  /// Android/iOS向け: 全レイヤーを削除→再追加でスタイル更新
+  Future<void> _removeAndReaddLayers(
+    ml.StyleController s, {
+    required String fillHex,
+    required String outlineHex,
+    required String selHex,
+    required String lineHex,
+    required String pointHex,
+    required double polygonFillOpacity,
+    required double polygonOutlineOpacity,
+    required double polygonBorderWidth,
+    required double lineWidth,
+    required double pointSize,
+    required double selectedMultiplier,
+    required Color polygonOutlineColor,
+    required double polyVR,
+    required double polyVSelR,
+    required double lineVR,
+    required double lineVSelR,
+    required List<Object> clusterRadius,
+  }) async {
+    for (final id in _allLayerIds.reversed) {
+      try { await s.removeLayer(id); } catch (_) {}
+    }
+
+    await s.addLayer(ml.FillStyleLayer(id: kPolygonsFill, sourceId: kPolygons,
+      paint: {'fill-color': fillHex, 'fill-opacity': polygonFillOpacity}));
+    await s.addLayer(ml.LineStyleLayer(id: kPolygonsOutline, sourceId: kPolygons,
+      paint: {'line-color': outlineHex, 'line-opacity': polygonOutlineOpacity, 'line-width': polygonBorderWidth}));
+    await s.addLayer(ml.FillStyleLayer(id: kPolygonsSelFill, sourceId: kPolygonsSel,
+      paint: {'fill-color': selHex, 'fill-opacity': 0.5}));
+    await s.addLayer(ml.LineStyleLayer(id: kPolygonsSelOutline, sourceId: kPolygonsSel,
+      paint: {'line-color': selHex, 'line-width': 3.0}));
+    await s.addLayer(ml.LineStyleLayer(id: kLinesLine, sourceId: kLines,
+      paint: {'line-color': lineHex, 'line-width': lineWidth}));
+    await s.addLayer(ml.LineStyleLayer(id: kLinesSelLine, sourceId: kLinesSel,
+      paint: {'line-color': selHex, 'line-width': lineWidth * selectedMultiplier}));
+    await s.addLayer(ml.LineStyleLayer(id: kGpsTrackLine, sourceId: kGpsTrack,
+      paint: {'line-color': _colorToHex(MapColors.trackingRoute), 'line-width': 3.0}));
+    await s.addLayer(ml.CircleStyleLayer(id: kPolyVerticesCircle, sourceId: kPolyVertices,
+      paint: {'circle-radius': polyVR, 'circle-color': _colorToHex(polygonOutlineColor), 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kPolyVerticesSelCircle, sourceId: kPolyVerticesSel,
+      paint: {'circle-radius': polyVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kLineVerticesCircle, sourceId: kLineVertices,
+      paint: {'circle-radius': lineVR, 'circle-color': lineHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kLineVerticesSelCircle, sourceId: kLineVerticesSel,
+      paint: {'circle-radius': lineVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kClusterCircle, sourceId: kClusters,
+      paint: {'circle-color': pointHex, 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.SymbolStyleLayer(id: kClusterCount, sourceId: kClusters,
+      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
+      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+    await s.addLayer(ml.CircleStyleLayer(id: kPointsCircle, sourceId: kPoints,
+      paint: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kPointsSelCircle, sourceId: kPointsSel,
+      paint: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.CircleStyleLayer(id: kImageClusterCircle, sourceId: kImageClusters,
+      paint: {'circle-color': '#9C27B0', 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
+    await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterCount, sourceId: kImageClusters,
+      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
+      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+    await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterName, sourceId: kImageClusters,
+      layout: {'text-field': <Object>['get', 'name'], 'text-size': 10.0, 'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0},
+      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+    await s.addLayer(ml.SymbolStyleLayer(id: kImagesSymbol, sourceId: kImages,
+      layout: {
+        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
+        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
+        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.5,
+        'text-field': <Object>['get', 'name'], 'text-size': 10.0,
+        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
+      },
+      paint: {'text-color': '#9C27B0', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+    await s.addLayer(ml.SymbolStyleLayer(id: kImagesSelSymbol, sourceId: kImagesSel,
+      layout: {
+        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
+        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
+        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.8,
+        'text-field': <Object>['get', 'name'], 'text-size': 11.0,
+        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
+      },
+      paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
   }
 
   /// 全ソースをクリア

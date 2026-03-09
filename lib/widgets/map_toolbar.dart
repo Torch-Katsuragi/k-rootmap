@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io' show Platform;
 import '../models/nodes/folder_node.dart';
 import '../providers/tool_providers.dart';
-import '../screens/camera_screen.dart';
+import '../providers/ui_state_providers.dart';
+import '../screens/gallery_import_screen.dart';
 
-/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン, カメラ）
+/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン, 写真インポート）
 class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
   final FolderNode? currentFolder;
@@ -78,31 +79,27 @@ class MapToolbar extends ConsumerWidget {
                 onToolChanged();
               },
             ),
-            // カメラボタン（モバイルのみ表示）
+            // 写真インポートボタン（モバイルのみ表示）
             if (isMobilePlatform) ...[
               const SizedBox(height: 8),
               _ToolButton(
-                icon: Icons.camera_alt,
-                tooltip: '写真撮影',
+                icon: Icons.photo_library,
+                tooltip: 'Import Photos',
                 isSelected: false,
                 onPressed: currentFolder != null
                     ? () async {
-                        final result = await Navigator.push<bool>(
+                        final imported = await GalleryImporter.pickAndImport(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => CameraScreen(
-                              targetFolder: currentFolder!,
-                            ),
-                          ),
+                          currentFolder!,
                         );
-                        
-                        if (result == true) {
+                        if (imported) {
                           await currentFolder!.updateChildren();
+                          ref.read(featureRefreshTriggerProvider.notifier).trigger();
                         }
                       }
                     : () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('写真を保存するフォルダを選択してください')),
+                          const SnackBar(content: Text('Select a folder to import photos into')),
                         );
                       },
               ),

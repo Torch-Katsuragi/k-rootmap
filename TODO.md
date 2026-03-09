@@ -92,6 +92,12 @@
   - [x] flutter_riverpod導入、ProviderScope設定
   - [x] GlobalConfigをプロバイダーブリッジ化（内部的にRiverpodに委譲）
   - [x] 8つのプロバイダーファイル作成（project, selection, tool, ui_state, gps, drawing, service, app_container）
+- [x] LayerDrawerリファクタリング（2026/03/09）
+  - [x] タイルmixin→独立ConsumerWidget変換（FolderTile, GeoPackageTile, LayerTile, PhotoTile, NodeVisibilityIcon）
+  - [x] ビジネスロジックをLayerDrawerService層に抽出
+  - [x] expandedGpkgPaths/userClosedGpkgPathsをRiverpod Provider化（ExpandedGeoPackagesProvider）
+  - [x] 確認ダイアログ+操作+SnackBarの共通ヘルパー作成（RenameDialog, confirmAndExecute）
+  - [x] デッドコード除去（layer_drawer_extensions.dart削除）+ 過剰デバッグログ整理
 - [x] Riverpod正規化リファクタリング（2026/02/20）
   - [x] flutter_riverpod v3.0.3 + riverpod_generator v3.0.3 + riverpod_annotation v3.0.3導入
   - [x] 全プロバイダーを@riverpod コード生成に移行（StateProvider → Notifier）

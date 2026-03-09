@@ -275,3 +275,57 @@ abstract class _$FolderTree extends $Notifier<LayerTreeNode?> {
     element.handleValue(ref, created);
   }
 }
+
+@ProviderFor(ExpandedGeoPackages)
+const expandedGeoPackagesProvider = ExpandedGeoPackagesProvider._();
+
+final class ExpandedGeoPackagesProvider
+    extends $NotifierProvider<ExpandedGeoPackages, GpkgExpansionState> {
+  const ExpandedGeoPackagesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'expandedGeoPackagesProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$expandedGeoPackagesHash();
+
+  @$internal
+  @override
+  ExpandedGeoPackages create() => ExpandedGeoPackages();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(GpkgExpansionState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<GpkgExpansionState>(value),
+    );
+  }
+}
+
+String _$expandedGeoPackagesHash() =>
+    r'01cd0cdd4923128ecd3b20ac0e1b46e1765afb67';
+
+abstract class _$ExpandedGeoPackages extends $Notifier<GpkgExpansionState> {
+  GpkgExpansionState build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final created = build();
+    final ref = this.ref as $Ref<GpkgExpansionState, GpkgExpansionState>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<GpkgExpansionState, GpkgExpansionState>,
+              GpkgExpansionState,
+              Object?,
+              Object?
+            >;
+    element.handleValue(ref, created);
+  }
+}

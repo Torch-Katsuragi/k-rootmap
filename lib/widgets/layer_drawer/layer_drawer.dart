@@ -3,7 +3,6 @@
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
-import 'dart:io'; // Debug logging + file operations
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,28 +13,24 @@ import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
-import '../../models/nodes/global_folder_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
-import '../../models/geopackage/geopackage_file.dart';
 import '../../providers/project_providers.dart';
-import '../../services/google_drive/index.dart';
+import '../../providers/ui_state_providers.dart';
+import '../../services/layer_drawer_service.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
+import 'common_dialogs.dart';
 import 'layer_drawer_title_bar.dart';
-import 'layer_drawer_tiles.dart';
-import 'layer_drawer_utils.dart';
-import 'layer_drawer_import_export.dart';
+import 'layer_drawer_drive_sync.dart';
+import 'tiles/folder_tile.dart';
+import 'tiles/geopackage_tile.dart';
+import 'tiles/photo_tile.dart';
 
-/// レイヤ構造Drawer（最小構成＋レイヤ追加・削除）
-/// GeoPackageノードはタップでレイヤリストをトグル展開
+/// レイヤ構造Drawer
 class LayerDrawer extends ConsumerStatefulWidget {
   final LayerTreeNode? currentNode;
   final void Function(LayerTreeNode? newNode) onDirChanged;
-
-  /// 地図ジャンプ用コールバック（中心座標に移動）
   final void Function(LatLng latLng)? onJumpTo;
-
-  /// 追記モード開始用コールバック（ツール切り替えとレイヤー選択）
   final void Function(FeatureNode feature)? onStartAppendMode;
 
   const LayerDrawer({
@@ -51,113 +46,83 @@ class LayerDrawer extends ConsumerStatefulWidget {
 }
 
 class _LayerDrawerState extends ConsumerState<LayerDrawer>
-    with
-        LayerDrawerDriveSync,
-        LayerDrawerLayerOps,
-        FolderTileBuilder,
-        GeoPackageTileBuilder,
-        LayerTileBuilder,
-        PhotoTileBuilder,
-        LayerDrawerTiles,
-        LayerDrawerUtils,
-        LayerDrawerImportExport {
-  @override
-  final Set<String> expandedGpkgPaths = {};
-
-  final Set<String> _userClosedGpkgPaths = {};
-
+    with LayerDrawerDriveSync {
   bool _isDragging = false;
-  GeoPackageNode? _dragTargetGeoPackageNode;
+  GeoPackageNode? _dragTarget;
 
   @override
-  void Function(LatLng latLng)? get onJumpTo => widget.onJumpTo;
+  void triggerMapRefresh() =>
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
-  @override
-  void Function(FeatureNode feature)? get onStartAppendMode =>
-      widget.onStartAppendMode;
-
-  @override
-  bool get isDragging => _isDragging;
-
-  @override
-  set isDragging(bool value) {
-    setState(() {
-      _isDragging = value;
-    });
-  }
-
-  @override
-  GeoPackageNode? get dragTargetGeoPackageNode => _dragTargetGeoPackageNode;
-
-  @override
-  set dragTargetGeoPackageNode(GeoPackageNode? node) {
-    setState(() {
-      _dragTargetGeoPackageNode = node;
-    });
-  }
-
-  @override
-  Set<String> get userClosedGpkgPaths => _userClosedGpkgPaths;
-
-  @override
-  LayerTreeNode? get currentNode => widget.currentNode;
+  // --- ライフサイクル ---
 
   @override
   void initState() {
     super.initState();
-    // デフォルトで全gpkgノードを展開状態に
-    expandAllGeoPackageNodes(widget.currentNode, expandedGpkgPaths);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncExpansionState(reset: false);
+    });
   }
 
   @override
   void didUpdateWidget(LayerDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // currentNodeが変更された場合のみ自動展開（新しいディレクトリに移動した場合）
     if (oldWidget.currentNode != widget.currentNode) {
-      _userClosedGpkgPaths.clear(); // 新しいディレクトリでは閉じた履歴をリセット
-      expandAllGeoPackageNodes(widget.currentNode, expandedGpkgPaths);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncExpansionState(reset: true);
+      });
     }
   }
 
+  void _syncExpansionState({required bool reset}) {
+    final paths = _collectGpkgPaths(widget.currentNode);
+    final notifier = ref.read(expandedGeoPackagesProvider.notifier);
+    if (reset) {
+      notifier.resetAndExpandAll(paths);
+    } else {
+      notifier.expandAll(paths);
+    }
+  }
+
+  static List<String> _collectGpkgPaths(LayerTreeNode? node) {
+    if (node == null) return [];
+    return [
+      for (final child in node.children)
+        if (child is GeoPackageNode)
+          if (child.geoPackageFile.getAbsolutePath() case final String p) p,
+    ];
+  }
+
+  // --- Build ---
+
   @override
   Widget build(BuildContext context) {
+    ref.watch(featureRefreshTriggerProvider);
+
     if (widget.currentNode == null) {
       return const Center(child: Text('ディレクトリが見つかりません'));
     }
 
-    // 新しいGeoPackageノードが追加されていれば自動展開（ユーザーが閉じたものは除く）
-    expandNewGeoPackageNodesOnly(
-      widget.currentNode,
-      expandedGpkgPaths,
-      _userClosedGpkgPaths,
-    );
-
     return Container(
-      decoration:
-          _isDragging
-              ? BoxDecoration(
-                border: Border.all(color: Colors.blue, width: 2),
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.blue.withValues(alpha: 0.1),
-              )
-              : null,
+      decoration: _isDragging
+          ? BoxDecoration(
+              border: Border.all(color: Colors.blue, width: 2),
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.blue.withValues(alpha: 0.1),
+            )
+          : null,
       child: Column(
         children: [
           LayerDrawerTitleBar(
             title: widget.currentNode!.name,
             currentNode: widget.currentNode!,
             onAddFolder:
-                widget.currentNode is FolderNode
-                    ? () => _addFolder(context)
-                    : null,
+                widget.currentNode is FolderNode ? () => _addFolder(context) : null,
             onAddGeoPackage:
-                widget.currentNode is FolderNode
-                    ? () => _addGeoPackage(context)
-                    : null,
-            onBack:
-                widget.currentNode!.parent != null
-                    ? () => widget.onDirChanged(widget.currentNode!.parent)
-                    : null,
+                widget.currentNode is FolderNode ? () => _addGeoPackage(context) : null,
+            onBack: widget.currentNode!.parent != null
+                ? () => widget.onDirChanged(widget.currentNode!.parent)
+                : null,
           ),
           if (_isDragging)
             Container(
@@ -173,41 +138,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                   SizedBox(width: 8),
                   Text(
                     'Drop file on GeoPackage to import as layer',
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
             ),
           Expanded(
             child: ListView(
-              children: [
-                ...widget.currentNode!.children.map((node) {
-                  if (node is FolderNode) {
-                    return buildFolderTile(
-                      context,
-                      node,
-                      () => widget.onDirChanged(node),
-                    );
-                  } else if (node is ImageNode) {
-                    return buildPhotoTile(
-                      context,
-                      node,
-                      onRename: () => _renamePhoto(context, node),
-                    );
-                  } else if (node is GeoPackageNode) {
-                    return buildGeoPackageTile(
-                      context,
-                      node,
-                      onRename: () => _renameGeoPackage(context, node),
-                    );
-                  }
-                  // LayerNodeはここで描画しない
-                  return const SizedBox.shrink();
-                }),
-              ],
+              children: widget.currentNode!.children.map(_buildNodeTile).toList(),
             ),
           ),
         ],
@@ -215,425 +153,196 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     );
   }
 
-  /// 写真のリネーム処理
+  Widget _buildNodeTile(LayerTreeNode node) {
+    if (node is FolderNode) {
+      return FolderTile(
+        node: node,
+        onTap: () => widget.onDirChanged(node),
+        onSyncMerge: node is DriveFolderNode ? openSyncMergeDialog : null,
+        onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
+        onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
+        onDeleteDrive: node is DriveFolderNode ? deleteDriveFolder : null,
+      );
+    }
+    if (node is ImageNode) {
+      return PhotoTile(
+        node: node,
+        onRename: () => _renamePhoto(context, node),
+        onJumpTo: widget.onJumpTo,
+      );
+    }
+    if (node is GeoPackageNode) {
+      return GeoPackageTile(
+        node: node,
+        isDropTarget: _isDragging && _dragTarget == node,
+        onRename: () => _renameGeoPackage(context, node),
+        onDragTargetChanged: (t) => setState(() => _dragTarget = t),
+        onDragActiveChanged: (a) => setState(() {
+          _isDragging = a;
+          if (!a) _dragTarget = null;
+        }),
+        currentDir: widget.currentNode,
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  // --- UI アクション ---
+
   Future<void> _renamePhoto(BuildContext context, ImageNode node) async {
-    AppLogger.debug('[DEBUG] _renamePhoto: 開始 - ${node.name}');
-    String input = p.basenameWithoutExtension(node.name);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('写真のリネーム'),
-          content: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(labelText: '新しいファイル名'),
-            controller: TextEditingController(text: input),
-            onChanged: (v) => input = v,
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) {
-                Navigator.pop(context, value.trim());
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('キャンセル'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, input),
-              child: const Text('変更'),
-            ),
-          ],
-        );
-      },
+    final currentName = p.basenameWithoutExtension(node.name);
+    final result = await RenameDialog.show(
+      context,
+      title: '写真のリネーム',
+      currentName: currentName,
+      label: '新しいファイル名',
     );
-
-    AppLogger.debug('[DEBUG] _renamePhoto: ダイアログ結果 = $result');
-
-    if (result != null && result.isNotEmpty && result != p.basenameWithoutExtension(node.name)) {
-      try {
-        final newName = result;
-        AppLogger.debug('[DEBUG] _renamePhoto: rename呼び出し - $newName');
-        await node.rename(newName);
-        AppLogger.debug('[DEBUG] _renamePhoto: rename完了');
-        
-        // 親フォルダの再スキャンを確実に行うために
-        // node.rename() 内で parent.updateChildren() が呼ばれているが
-        // ここでも明示的に呼び、UI更新コールバックを実行する
-        if (node.parent != null) {
-          await node.parent!.updateChildren();
-        }
-        
-        setState(() {});
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('写真をリネームしました: $newName')),
-          );
-        }
-      } catch (e) {
-        AppLogger.debug('[ERROR] _renamePhoto: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('リネームに失敗しました: $e')),
-          );
-        }
+    if (result == null || result.isEmpty || result == currentName) return;
+    try {
+      await LayerDrawerService.renamePhoto(node, result);
+      triggerMapRefresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('写真をリネームしました: $result')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('リネームに失敗しました: $e')));
       }
     }
   }
 
-  /// GeoPackageのリネーム処理
   Future<void> _renameGeoPackage(BuildContext context, GeoPackageNode node) async {
-    String input = p.basenameWithoutExtension(node.name);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('GeoPackageのリネーム'),
-          content: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(labelText: '新しいファイル名'),
-            controller: TextEditingController(text: input),
-            onChanged: (v) => input = v,
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) {
-                Navigator.pop(context, value.trim());
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('キャンセル'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, input),
-              child: const Text('変更'),
-            ),
-          ],
-        );
-      },
+    final currentName = p.basenameWithoutExtension(node.name);
+    final result = await RenameDialog.show(
+      context,
+      title: 'GeoPackageのリネーム',
+      currentName: currentName,
+      label: '新しいファイル名',
     );
+    if (result == null || result.isEmpty || result == currentName) return;
+    try {
+      final oldPath = node.geoPackageFile.getAbsolutePath();
+      final wasExpanded = ref.read(expandedGeoPackagesProvider).isExpanded(oldPath);
 
-    if (result != null && result.isNotEmpty && result != p.basenameWithoutExtension(node.name)) {
-      try {
-        // リネーム前のパスと展開状態を保持
-        final oldPath = node.geoPackageFile.getAbsolutePath();
-        final wasExpanded = oldPath != null && expandedGpkgPaths.contains(oldPath);
-        final parentNode = node.parent;
-        
-        // リネーム実行（新しいファイル名が返される）
-        final projectRoot = ref.read(projectRootDirProvider);
-        final newFileName = await node.rename(result, projectRootDir: projectRoot ?? '');
-        
-        // 親フォルダの再スキャンを実行（新しいノードが生成される）
-        if (parentNode != null) {
-          await parentNode.updateChildren();
-        }
-        
-        // 展開状態を新しいパスに引き継ぐ
-        if (oldPath != null && wasExpanded) {
-          expandedGpkgPaths.remove(oldPath);
-          final parentPath = p.dirname(oldPath);
-          final newPath = p.join(parentPath, newFileName);
-          expandedGpkgPaths.add(newPath);
-          
-          // 新しいノードを探してレイヤー情報をロード
-          if (parentNode != null) {
-            for (final child in parentNode.children) {
-              if (child is GeoPackageNode) {
-                final childPath = child.geoPackageFile.getAbsolutePath();
-                if (childPath == newPath) {
-                  await child.updateChildren();
-                  break;
-                }
-              }
+      final projectRoot = ref.read(projectRootDirProvider);
+      final newFileName = await LayerDrawerService.renameGeoPackage(
+        node, result, projectRootDir: projectRoot ?? '',
+      );
+
+      if (oldPath != null && wasExpanded) {
+        final newPath = p.join(p.dirname(oldPath), newFileName);
+        ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);
+        if (node.parent != null) {
+          for (final child in node.parent!.children) {
+            if (child is GeoPackageNode && child.geoPackageFile.getAbsolutePath() == newPath) {
+              await child.updateChildren();
+              break;
             }
           }
         }
-        
-        setState(() {});
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('GeoPackageをリネームしました: $newFileName')),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('リネームに失敗しました: $e')),
-          );
-        }
+      }
+
+      triggerMapRefresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GeoPackageをリネームしました: $newFileName')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('リネームに失敗しました: $e')));
       }
     }
   }
 
-  /// フォルダ追加処理
   Future<void> _addFolder(BuildContext context) async {
-    // フォルダ種類選択ダイアログを表示
     final typeResult = await AddFolderTypeDialog.show(context);
     if (typeResult == null) return;
-
     if (typeResult.type == AddFolderType.local) {
-      // 通常フォルダの作成
-      await _createLocalFolder(context, typeResult.folderName!);
+      try {
+        LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
+        triggerMapRefresh();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
     } else {
-      // Drive連携フォルダの追加
       await _addDriveFolder(context);
     }
   }
 
-  /// 通常のローカルフォルダを作成
-  Future<void> _createLocalFolder(BuildContext context, String folderName) async {
-    final folderNode = widget.currentNode as FolderNode;
-    final dir = folderNode.getAbsoluteFilePath();
-    final path = p.join(dir ?? '', folderName);
-    if (Directory(path).existsSync()) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('同名のフォルダが既に存在します')));
-      }
-      return;
-    }
-    Directory(path).createSync();
-    
-    if (folderNode is GlobalFolderNode) {
-      folderNode.addChild(
-        GlobalSubFolderNode(
-          folderName,
-          basePath: folderNode.globalPath,
-          visible: true,
-          parent: folderNode,
-        ),
-      );
-    } else if (folderNode is GlobalSubFolderNode) {
-      folderNode.addChild(
-        GlobalSubFolderNode(
-          folderName,
-          basePath: folderNode.basePath,
-          visible: true,
-          parent: folderNode,
-        ),
-      );
-    } else {
-      folderNode.addChild(
-        FolderNode(folderName, visible: true, parent: folderNode),
-      );
-    }
-    setState(() {});
-  }
-
-  /// Drive連携フォルダを追加（URLからクローン）
   Future<void> _addDriveFolder(BuildContext context) async {
-    // URL入力ダイアログを表示
     final urlResult = await DriveUrlInputDialog.show(context);
     if (urlResult == null) return;
 
-    final folderNode = widget.currentNode as FolderNode;
-    final parentDir = folderNode.getAbsoluteFilePath();
-    if (parentDir == null) return;
-
-    final localPath = p.join(parentDir, urlResult.folderName);
-
-    // 同名フォルダが既に存在する場合
-    if (Directory(localPath).existsSync()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('同名のフォルダが既に存在します')),
-        );
-      }
-      return;
-    }
-
-    // ローディング表示
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 12),
-              Text('${urlResult.folderName} をクローン中...'),
-            ],
-          ),
+          content: Row(children: [
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 12),
+            Text('${urlResult.folderName} をクローン中...'),
+          ]),
           duration: const Duration(seconds: 30),
         ),
       );
     }
 
     try {
-      // Driveからクローン
-      final syncEngine = SyncEngine();
-      final success = await syncEngine.cloneFromDrive(
-        driveId: urlResult.folderId,
-        localPath: localPath,
+      final node = await LayerDrawerService.cloneDriveFolder(
+        parent: widget.currentNode as FolderNode,
+        folderId: urlResult.folderId,
         folderName: urlResult.folderName,
-        driveUrl: urlResult.url,
+        url: urlResult.url,
         isReadOnly: urlResult.isReadOnly,
       );
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      }
-
-      if (success) {
-        // DriveFolderNodeを追加
-        final driveFolderNode = DriveFolderNode(
-          urlResult.folderName,
-          driveId: urlResult.folderId,
-          driveUrl: urlResult.url,
-          isReadOnly: urlResult.isReadOnly,
-          visible: true,
-          parent: folderNode,
-        );
-        folderNode.addChild(driveFolderNode);
-
-        // ダウンロードしたファイルを読み込んでツリーに反映
-        await _reloadChildrenRecursive(driveFolderNode);
+      if (node != null) {
         triggerMapRefresh();
-        setState(() {});
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${urlResult.folderName} をクローンしました'),
-              backgroundColor: Colors.green,
-            ),
+            SnackBar(content: Text('${urlResult.folderName} をクローンしました'), backgroundColor: Colors.green),
           );
         }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('クローンに失敗しました'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('クローンに失敗しました'), backgroundColor: Colors.red),
+        );
       }
     } catch (e) {
       AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  /// 子ノードを再帰的に読み込み
-  Future<void> _reloadChildrenRecursive(LayerTreeNode node) async {
-    await node.updateChildren();
-    for (final child in node.children) {
-      if (child is FolderNode) {
-        await _reloadChildrenRecursive(child);
-      } else if (child is GeoPackageNode) {
-        await child.updateChildren();
-      }
-    }
-  }
-
-  /// GeoPackage追加処理
   Future<void> _addGeoPackage(BuildContext context) async {
-    String input = '';
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('新規GeoPackageファイル'),
-          content: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'ファイル名（.gpkg）'),
-            onChanged: (v) => input = v,
-            onSubmitted: (value) {
-              // Enterキーが押された場合、ファイル名が空でなければ作成処理を実行
-              if (value.trim().isNotEmpty) {
-                Navigator.pop(context, value.trim());
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('キャンセル'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, input),
-              child: const Text('作成'),
-            ),
-          ],
-        );
-      },
+    final result = await RenameDialog.show(
+      context,
+      title: '新規GeoPackageファイル',
+      currentName: '',
+      label: 'ファイル名（.gpkg）',
+      submitLabel: '作成',
     );
-    if (result != null && result.isNotEmpty) {
-      AppLogger.debug('[LayerDrawer] GeoPackage作成開始: $result');
+    if (result == null || result.isEmpty) return;
 
-      final folderNode = widget.currentNode as FolderNode;
-      final dir = folderNode.getAbsoluteFilePath();
-      final fileName = result.endsWith('.gpkg') ? result : '$result.gpkg';
-      final path = p.join(dir ?? '', fileName);
-
-      AppLogger.debug('[LayerDrawer] 作成予定パス: $path');
-      AppLogger.debug('[LayerDrawer] 親ディレクトリ: $dir');
-
-      if (File(path).existsSync()) {
-        AppLogger.debug('[LayerDrawer] 同名ファイルが既に存在します');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('同名のGeoPackageファイルが既に存在します')),
-          );
-        }
-        return;
-      }
-
-      AppLogger.debug('[LayerDrawer] GeoPackageNodeを作成中...');
-      
-      final gpkgFile = GeoPackageFile([fileName], absolutePath: path);
-      final newNode = GeoPackageNode(
-        gpkgFile,
-        visible: true,
-        parent: folderNode,
-      );
-      AppLogger.debug('[LayerDrawer] GeoPackageFile作成: absolutePath=$path');
-
-      folderNode.addChild(newNode);
-
-      // 空のGeoPackageファイルを即座に作成
-      AppLogger.debug('[LayerDrawer] 空のGeoPackageファイル作成中...');
-      final createSuccess = await gpkgFile.createEmptyDatabase();
-      if (!createSuccess) {
-        AppLogger.debug('[LayerDrawer] 空のGeoPackageファイル作成失敗');
+    try {
+      final newNode = await LayerDrawerService.createGeoPackage(widget.currentNode as FolderNode, result);
+      if (newNode == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
           );
         }
-        // 作成失敗時はノードを削除
-        folderNode.removeChild(newNode);
         return;
       }
-
-      // 新規作成されたGeoPackageを自動展開
-      final newAbsPath = gpkgFile.getAbsolutePath();
-      AppLogger.debug('[LayerDrawer] 新規GeoPackage絶対パス: $newAbsPath');
-      if (newAbsPath != null) {
-        expandedGpkgPaths.add(newAbsPath);
-      }
-
-      AppLogger.debug('[LayerDrawer] UI更新中...');
-      setState(() {});
-      AppLogger.debug('[LayerDrawer] GeoPackage作成完了');
+      final absPath = newNode.geoPackageFile.getAbsolutePath();
+      if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
+      triggerMapRefresh();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 }
-

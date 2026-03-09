@@ -2,7 +2,6 @@
 library;
 
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -54,7 +53,6 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
         currentTableData = newTableData;
       });
     } catch (e) {
-      AppLogger.debug('[MetadataTable] 座標系変更エラー: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -94,8 +92,6 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
           '${safeGpkgName}_${safeLayerName}_${safeFeatureName}_metadata_table.tsv';
       final tsvPath = p.join(projectRoot, tsvFileName);
 
-      AppLogger.debug('[MetadataTable] TSVエクスポート開始: $tsvPath');
-
       // TSVファイルを作成
       final tsvFile = File(tsvPath);
       final sink = tsvFile.openWrite();
@@ -114,8 +110,6 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
 
       await sink.close();
 
-      AppLogger.debug('[MetadataTable] TSVエクスポート完了: $tsvPath');
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -124,10 +118,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
           ),
         );
       }
-    } catch (e, stackTrace) {
-      AppLogger.debug('[MetadataTable] TSVエクスポートエラー: $e');
-      AppLogger.debug('[MetadataTable] スタックトレース: $stackTrace');
-
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,

@@ -1,9 +1,9 @@
 /// K-MAPS: 同期マージダイアログ
 /// ファイル単位でローカル/クラウドを選択できるマージUI
+library;
 
 import 'package:flutter/material.dart';
 import '../../services/google_drive/sync_engine.dart';
-import '../../utils/app_logger.dart';
 
 /// 同期モード
 enum SyncMode {
@@ -325,35 +325,17 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
 
   void _onSync() {
     final decisions = <MergeDecision>[];
-    AppLogger.debug('[SyncMergeDialog] _onSync: ${widget.entries.length}件のエントリを処理');
-    
     for (final entry in widget.entries) {
       final choice = _choices[entry.relativePath];
-      if (choice == null) {
-        AppLogger.debug('  ${entry.relativePath}: choiceがnull、スキップ');
-        continue;
-      }
+      if (choice == null) continue;
 
       final hasLocalChange = entry.localChange != MergeChangeType.none;
       final hasRemoteChange = entry.remoteChange != MergeChangeType.none;
 
-      AppLogger.debug('  ${entry.relativePath}:');
-      AppLogger.debug('    choice=$choice, localChange=${entry.localChange}, remoteChange=${entry.remoteChange}');
-      AppLogger.debug('    driveFileId=${entry.driveFileId}');
-      AppLogger.debug('    hasLocalChange=$hasLocalChange, hasRemoteChange=$hasRemoteChange');
-
-      // 何かしら変更があるエントリのみ追加
-      // - ローカル選択時: ローカル変更を反映 or リモート変更を無視（復元）
-      // - リモート選択時: リモート変更を反映 or ローカル変更を無視（復元）
       if (hasLocalChange || hasRemoteChange) {
         decisions.add(MergeDecision(entry: entry, choice: choice));
-        AppLogger.debug('    → decisionに追加');
-      } else {
-        AppLogger.debug('    → 変更なし、スキップ');
       }
     }
-    
-    AppLogger.debug('[SyncMergeDialog] 最終decisions: ${decisions.length}件');
     Navigator.of(context).pop(decisions);
   }
 }

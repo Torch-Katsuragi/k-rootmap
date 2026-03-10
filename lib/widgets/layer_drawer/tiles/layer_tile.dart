@@ -17,6 +17,7 @@ import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../presentation/node_presenter.dart';
 import '../common_dialogs.dart';
+import 'drag_feedback_card.dart';
 
 /// レイヤノード用 ListTile（選択・可視切り替え・ドラッグ対応）
 class LayerTile extends ConsumerWidget {
@@ -25,7 +26,7 @@ class LayerTile extends ConsumerWidget {
   /// ジオメトリ変換時にターゲットレイヤーを検索するための親ディレクトリ
   final LayerTreeNode? currentDir;
 
-  final ValueChanged<bool>? onDragActiveChanged;
+  final ValueChanged<LayerTreeNode?>? onDragActiveChanged;
 
   const LayerTile({
     super.key,
@@ -65,7 +66,7 @@ class LayerTile extends ConsumerWidget {
     return LongPressDraggable<LayerNode>(
       data: node,
       dragAnchorStrategy: (_, __, ___) => const Offset(0, 0),
-      feedback: _buildDragFeedback(),
+      feedback: DragFeedbackCard(node: node),
       childWhenDragging: Container(
         decoration: BoxDecoration(
           color: Colors.grey.withValues(alpha: 0.5),
@@ -73,8 +74,9 @@ class LayerTile extends ConsumerWidget {
         ),
         child: Opacity(opacity: 0.5, child: tileContent),
       ),
-      onDragStarted: () => onDragActiveChanged?.call(true),
-      onDragEnd: (_) => onDragActiveChanged?.call(false),
+      onDragStarted: () => onDragActiveChanged?.call(node),
+      onDraggableCanceled: (_, __) => onDragActiveChanged?.call(null),
+      onDragEnd: (_) => onDragActiveChanged?.call(null),
       child: tileContent,
     );
   }
@@ -110,45 +112,6 @@ class LayerTile extends ConsumerWidget {
               child: Container(width: 32, height: 4, color: Colors.grey),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDragFeedback() {
-    return Material(
-      elevation: 8.0,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 280,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NodePresenter.buildIcon(node),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  node.name,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Icon(Icons.drag_indicator, color: Colors.grey),
-            ],
-          ),
-        ),
       ),
     );
   }

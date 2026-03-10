@@ -12,6 +12,7 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/import_export_service.dart';
 import '../common_dialogs.dart';
+import 'drag_feedback_card.dart';
 import 'layer_tile.dart';
 import 'node_visibility_icon.dart';
 
@@ -21,7 +22,7 @@ class GeoPackageTile extends ConsumerWidget {
   final bool isDropTarget;
   final VoidCallback? onRename;
   final void Function(GeoPackageNode?) onDragTargetChanged;
-  final ValueChanged<bool> onDragActiveChanged;
+  final ValueChanged<LayerTreeNode?> onDragActiveChanged;
   final LayerTreeNode? currentDir;
 
   const GeoPackageTile({
@@ -41,54 +42,65 @@ class GeoPackageTile extends ConsumerWidget {
     final absPath = node.geoPackageFile.getAbsolutePath();
     final isExpanded = expansionState.isExpanded(absPath);
 
+    final headerTile = ListTile(
+      leading: NodeVisibilityIcon(node: node),
+      title: Row(
+        children: [
+          Expanded(child: Text(node.name)),
+          if (isDropTarget)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
+              child: const Text(
+                'DROP LAYER HERE',
+                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+            ),
+        ],
+      ),
+      onTap: () {
+        if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
+      },
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'rename') {
+                onRename?.call();
+              } else if (value == 'delete') {
+                await _handleDelete(context, ref);
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'rename', child: Text('名前の変更')),
+              PopupMenuItem(value: 'delete', child: Text('削除')),
+            ],
+          ),
+        ],
+      ),
+    );
+
     final content = Column(
       children: [
-        ListTile(
-          leading: NodeVisibilityIcon(node: node),
-          title: Row(
-            children: [
-              Expanded(child: Text(node.name)),
-              if (isDropTarget)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
-                  child: const Text(
-                    'DROP LAYER HERE',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-            ],
-          ),
-          onTap: () {
-            if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).toggle(absPath);
-          },
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'rename') {
-                    onRename?.call();
-                  } else if (value == 'delete') {
-                    await _handleDelete(context, ref);
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'rename', child: Text('名前の変更')),
-                  PopupMenuItem(value: 'delete', child: Text('削除')),
-                ],
-              ),
-            ],
-          ),
+        LongPressDraggable<GeoPackageNode>(
+          data: node,
+          dragAnchorStrategy: (_, __, ___) => const Offset(0, 0),
+          feedback: DragFeedbackCard(node: node),
+          childWhenDragging: Opacity(opacity: 0.4, child: headerTile),
+          onDragStarted: () => onDragActiveChanged(node),
+          onDraggableCanceled: (_, __) => onDragActiveChanged(null),
+          onDragEnd: (_) => onDragActiveChanged(null),
+          child: headerTile,
         ),
         if (isExpanded) ...[
           ...node.children.map(
             (layerNode) => LayerTile(
               node: layerNode as LayerNode,
               currentDir: currentDir,
-              onDragActiveChanged: (active) {
-                onDragActiveChanged(active);
-                if (!active) onDragTargetChanged(null);
+              onDragActiveChanged: (dragNode) {
+                onDragActiveChanged(dragNode);
+                if (dragNode == null) onDragTargetChanged(null);
               },
             ),
           ),
@@ -107,12 +119,12 @@ class GeoPackageTile extends ConsumerWidget {
     final layerDragTarget = DragTarget<LayerNode>(
       onAcceptWithDetails: (details) async {
         await _handleLayerDrop(context, ref, details.data, node);
-        onDragActiveChanged(false);
+        onDragActiveChanged(null);
         onDragTargetChanged(null);
       },
       onWillAcceptWithDetails: (details) => details.data.geoPackageNode != node,
-      onMove: (_) {
-        onDragActiveChanged(true);
+      onMove: (details) {
+        onDragActiveChanged(details.data);
         onDragTargetChanged(node);
       },
       onLeave: (_) => onDragTargetChanged(null),
@@ -130,21 +142,14 @@ class GeoPackageTile extends ConsumerWidget {
       },
     );
 
-    // ファイル D&D ターゲット（外側）
+    // ファイル D&D ターゲット（外側・デスクトップからのドロップ用）
     return DropTarget(
-      onDragEntered: (_) {
-        onDragActiveChanged(true);
-        onDragTargetChanged(node);
-      },
-      onDragExited: (_) {
-        onDragTargetChanged(null);
-        onDragActiveChanged(false);
-      },
+      onDragEntered: (_) => onDragTargetChanged(node),
+      onDragExited: (_) => onDragTargetChanged(null),
       onDragDone: (details) async {
         for (final file in details.files) {
           await _handleFileDrop(file.path, ref);
         }
-        onDragActiveChanged(false);
         onDragTargetChanged(null);
       },
       child: layerDragTarget,

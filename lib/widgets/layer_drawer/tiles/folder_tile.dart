@@ -1,12 +1,14 @@
 /// K-MAPS: フォルダタイルウィジェット
 library;
 
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
+import '../../../providers/ui_state_providers.dart';
 import '../../../presentation/node_presenter.dart';
+import '../common_dialogs.dart';
 import '../sync_merge_dialog.dart';
 import 'node_visibility_icon.dart';
 
@@ -15,6 +17,7 @@ import 'node_visibility_icon.dart';
 class FolderTile extends ConsumerWidget {
   final FolderNode node;
   final VoidCallback onTap;
+  final VoidCallback? onRename;
   final Future<void> Function(BuildContext, DriveFolderNode, {required SyncMode mode})? onSyncMerge;
   final Future<void> Function(DriveFolderNode)? onRefreshSync;
   final Future<void> Function(BuildContext, DriveFolderNode)? onUnlinkDrive;
@@ -24,6 +27,7 @@ class FolderTile extends ConsumerWidget {
     super.key,
     required this.node,
     required this.onTap,
+    this.onRename,
     this.onSyncMerge,
     this.onRefreshSync,
     this.onUnlinkDrive,
@@ -65,6 +69,43 @@ class FolderTile extends ConsumerWidget {
       leading: NodeVisibilityIcon(node: node),
       title: Text(node.name),
       onTap: onTap,
+      trailing: _buildFolderMenu(context, ref),
+    );
+  }
+
+  Widget _buildFolderMenu(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      onSelected: (value) async {
+        switch (value) {
+          case 'rename':
+            onRename?.call();
+          case 'delete':
+            await _handleDelete(context, ref);
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'rename', child: Text('Rename')),
+        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
+    );
+  }
+
+  Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
+    final absPath = node.getAbsoluteFilePath();
+    await confirmAndExecute(
+      context,
+      title: 'Delete Folder',
+      content: Text('Delete "${node.name}" and all its contents?'),
+      confirmLabel: 'Delete',
+      successMessage: '${node.name} deleted',
+      execute: () async {
+        if (absPath != null) {
+          final dir = Directory(absPath);
+          if (dir.existsSync()) dir.deleteSync(recursive: true);
+        }
+        await node.dispose();
+        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      },
     );
   }
 

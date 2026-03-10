@@ -3,6 +3,7 @@
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
+import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../../models/nodes/image_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../screens/gallery_import_screen.dart';
 import '../../services/layer_drawer_service.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
@@ -116,10 +118,13 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           LayerDrawerTitleBar(
             title: widget.currentNode!.name,
             currentNode: widget.currentNode!,
-            onAddFolder:
-                widget.currentNode is FolderNode ? () => _addFolder(context) : null,
-            onAddGeoPackage:
-                widget.currentNode is FolderNode ? () => _addGeoPackage(context) : null,
+            onAdd: widget.currentNode is FolderNode
+                ? (action) => switch (action) {
+                      AddAction.folder => _addFolder(context),
+                      AddAction.geoPackage => _addGeoPackage(context),
+                      AddAction.photo => _addPhoto(context),
+                    }
+                : null,
             onBack: widget.currentNode!.parent != null
                 ? () => widget.onDirChanged(widget.currentNode!.parent)
                 : null,
@@ -158,6 +163,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       return FolderTile(
         node: node,
         onTap: () => widget.onDirChanged(node),
+        onRename: node is! DriveFolderNode ? () => _renameFolder(context, node) : null,
         onSyncMerge: node is DriveFolderNode ? openSyncMergeDialog : null,
         onRefreshSync: node is DriveFolderNode ? refreshSyncStatus : null,
         onUnlinkDrive: node is DriveFolderNode ? unlinkDriveFolder : null,
@@ -188,6 +194,29 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   }
 
   // --- UI アクション ---
+
+  Future<void> _renameFolder(BuildContext context, FolderNode node) async {
+    final result = await RenameDialog.show(
+      context,
+      title: 'Rename Folder',
+      currentName: node.name,
+      label: 'New name',
+    );
+    if (result == null || result.isEmpty || result == node.name) return;
+    try {
+      final absPath = node.getAbsoluteFilePath();
+      if (absPath != null) {
+        final newPath = p.join(p.dirname(absPath), result);
+        await Directory(absPath).rename(newPath);
+      }
+      node.name = result;
+      triggerMapRefresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rename failed: $e')));
+      }
+    }
+  }
 
   Future<void> _renamePhoto(BuildContext context, ImageNode node) async {
     final currentName = p.basenameWithoutExtension(node.name);
@@ -343,6 +372,15 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       triggerMapRefresh();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _addPhoto(BuildContext context) async {
+    final folder = widget.currentNode as FolderNode;
+    final imported = await GalleryImporter.pickAndImport(context, folder);
+    if (imported) {
+      await folder.updateChildren();
+      triggerMapRefresh();
     }
   }
 }

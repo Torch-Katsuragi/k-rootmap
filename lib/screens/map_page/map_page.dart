@@ -10,8 +10,9 @@ import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import '../../models/nodes/image_node.dart';
 import '../../services/map_source_manager.dart';
+import 'package:path/path.dart' as p;
 import '../../utils/geo_converter.dart';
-import '../../models/nodes/folder_node.dart';
+import '../../providers/project_providers.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -281,7 +282,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       mapState: this,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('K-MAPS GIS'),
+          title: Text(p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS')),
           actions: buildMapAppBarActions(
             context: context,
             showAttributeTable: showAttributeTable,
@@ -319,8 +320,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             // 左側ツールバー
             MapToolbar(
               onToolChanged: () => triggerSetState(() {}),
-              currentFolder:
-                  currentNode is FolderNode ? currentNode as FolderNode : null,
             ),
             // 地図本体
             Positioned.fill(

@@ -5,68 +5,44 @@ import 'package:flutter/material.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 
-/// 青いタイトルパネル（currentNodeの名前を表示＋右側に追加ボタン）
+enum AddAction { folder, geoPackage, photo }
+
+/// 濃グレーのタイトルパネル（currentNodeの名前を表示＋右側に統合追加ボタン）
 class LayerDrawerTitleBar extends StatelessWidget {
   final String title;
   final LayerTreeNode currentNode;
-  final void Function()? onAddFolder;
-  final void Function()? onAddGeoPackage;
+  final void Function(AddAction action)? onAdd;
   final void Function()? onBack;
 
   const LayerDrawerTitleBar({
     super.key,
     required this.title,
     required this.currentNode,
-    this.onAddFolder,
-    this.onAddGeoPackage,
+    this.onAdd,
     this.onBack,
   });
-
-  /// アイコン右上に緑の+を合成するWidget（再利用可）
-  static Widget buildAddIconOverlay(IconData baseIcon, Color baseColor) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Icon(baseIcon, color: baseColor, size: 28),
-        Positioned(
-          right: -2,
-          top: -2,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.add_circle, color: Colors.green, size: 16),
-          ),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      color: Colors.blue,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      color: const Color(0xFF424242),
       child: Row(
         children: [
           if (onBack != null)
             Padding(
-              padding: const EdgeInsets.only(right: 8, left: 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  tooltip: '一つ上の階層に戻る',
-                  onPressed: onBack,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 20,
                 ),
+                tooltip: '一つ上の階層に戻る',
+                onPressed: onBack,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ),
           Expanded(
@@ -74,24 +50,52 @@ class LayerDrawerTitleBar extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          if (currentNode is FolderNode) ...[
-            IconButton(
-              tooltip: 'サブフォルダ追加',
-              icon: buildAddIconOverlay(Icons.folder, Colors.amber),
-              onPressed: onAddFolder,
+          if (currentNode is FolderNode && onAdd != null)
+            PopupMenuButton<AddAction>(
+              tooltip: 'Add',
+              onSelected: onAdd,
+              offset: const Offset(0, 40),
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.add, color: Colors.black, size: 22),
+              ),
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: AddAction.folder,
+                  child: Row(children: [
+                    Icon(Icons.folder, color: Colors.amber),
+                    SizedBox(width: 12),
+                    Text('Folder'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: AddAction.geoPackage,
+                  child: Row(children: [
+                    Icon(Icons.storage, color: Color(0xFF90A4AE)),
+                    SizedBox(width: 12),
+                    Text('GeoPackage'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: AddAction.photo,
+                  child: Row(children: [
+                    Icon(Icons.photo_library, color: Colors.blue),
+                    SizedBox(width: 12),
+                    Text('Photos'),
+                  ]),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            IconButton(
-              tooltip: 'GeoPackage追加',
-              icon: buildAddIconOverlay(Icons.storage, Color(0xFFCFD8DC)),
-              onPressed: onAddGeoPackage,
-            ),
-          ],
         ],
       ),
     );

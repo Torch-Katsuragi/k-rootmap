@@ -1,29 +1,20 @@
 // 地図画面の左側ツールバーウィジェット
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:io' show Platform;
-import '../models/nodes/folder_node.dart';
 import '../providers/tool_providers.dart';
-import '../providers/ui_state_providers.dart';
-import '../screens/gallery_import_screen.dart';
 
-/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン, 写真インポート）
+/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン）
 class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
-  final FolderNode? currentFolder;
 
   const MapToolbar({
     super.key,
     required this.onToolChanged,
-    this.currentFolder,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTool = ref.watch(currentToolProvider);
-    // プラットフォーム判定: モバイル（Android/iOS）のみカメラ使用可能
-    final isMobilePlatform = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     return Positioned(
       left: 0,
@@ -36,7 +27,6 @@ class MapToolbar extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             const SizedBox(height: 16),
-            // Panツールボタン
             _ToolButton(
               icon: Icons.pan_tool_alt,
               tooltip: 'Pan',
@@ -47,7 +37,6 @@ class MapToolbar extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 8),
-            // Penツールボタン
             _ToolButton(
               icon: Icons.edit,
               tooltip: 'Pen',
@@ -58,7 +47,6 @@ class MapToolbar extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 8),
-            // Selectツールボタン
             _ToolButton(
               icon: Icons.select_all,
               tooltip: 'Select',
@@ -69,7 +57,6 @@ class MapToolbar extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 8),
-            // GPSツールボタン
             _ToolButton(
               icon: Icons.gps_fixed,
               tooltip: 'GPS Tool',
@@ -79,31 +66,6 @@ class MapToolbar extends ConsumerWidget {
                 onToolChanged();
               },
             ),
-            // 写真インポートボタン（モバイルのみ表示）
-            if (isMobilePlatform) ...[
-              const SizedBox(height: 8),
-              _ToolButton(
-                icon: Icons.photo_library,
-                tooltip: 'Import Photos',
-                isSelected: false,
-                onPressed: currentFolder != null
-                    ? () async {
-                        final imported = await GalleryImporter.pickAndImport(
-                          context,
-                          currentFolder!,
-                        );
-                        if (imported) {
-                          await currentFolder!.updateChildren();
-                          ref.read(featureRefreshTriggerProvider.notifier).trigger();
-                        }
-                      }
-                    : () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Select a folder to import photos into')),
-                        );
-                      },
-              ),
-            ],
           ],
         ),
       ),

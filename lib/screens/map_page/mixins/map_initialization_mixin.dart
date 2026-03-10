@@ -33,7 +33,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     if (ref.read(folderTreeProvider) == null) {
       ref
           .read(folderTreeProvider.notifier)
-          .set(FolderNode("rootNode", visible: true));
+          .set(FolderNode("Home", visible: true));
     }
     currentNode = ref.read(folderTreeProvider);
 

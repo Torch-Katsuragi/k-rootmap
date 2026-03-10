@@ -286,7 +286,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
       ref.read(projectRootDirProvider.notifier).set(dir);
       AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
-      final rootNode = FolderNode('rootNode', visible: true);
+      final rootNode = FolderNode('Home', visible: true);
       ref.read(folderTreeProvider.notifier).set(rootNode);
       AppLogger.debug('[HomeScreen] rootNode 設定完了');
 

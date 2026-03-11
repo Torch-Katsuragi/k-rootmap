@@ -41,35 +41,47 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     // 背景地図サービス初期化（TileServer起動を最優先）
     await initializeBaseMapService();
 
-    // 設定ストアを読み込み＆変更リスナー登録
-    await layerStyleSettings.load();
-    layerStyleSettings.addListener(onLayerStyleChanged);
-
-    // プロジェクトツリー初期化
-    await initializeProjectTree();
-
-    // GPS管理サービス初期化
-    await initializeGpsManager();
-
-    // GPS履歴レコーダー初期化
-    await initializeGpsHistoryRecorder();
-
-    // コンパス機能の初期化
-    await initializeCompass();
+    // ツリー初期化とGPS初期化は互いに独立なので並列実行
+    await Future.wait([
+      // ブランチ1: プロジェクトツリー + フィーチャ
+      () async {
+        await layerStyleSettings.load();
+        layerStyleSettings.addListener(onLayerStyleChanged);
+        await initializeProjectTree();
+      }(),
+      // ブランチ2: GPS → 履歴 → コンパス
+      () async {
+        await initializeGpsManager();
+        await initializeGpsHistoryRecorder();
+        await initializeCompass();
+      }(),
+    ]);
 
     AppLogger.debug('[Init] complete');
   }
 
   /// プロジェクトツリーの初期化（非同期）
+  /// ツリー構造が読み込まれた時点でUIに反映し、
+  /// 重いフィーチャパースはその後ろで実行する
   Future<void> initializeProjectTree() async {
     AppLogger.debug('[Init] projectTree start');
     final rootNode = ref.read(folderTreeProvider);
     if (rootNode != null) {
-      await updateNodeRecursively(rootNode);
-      // フィーチャデータを更新（サブクラスで実装）
-      await updateFeatures();
-      // UI更新
+      try {
+        await updateNodeRecursively(rootNode);
+      } catch (e) {
+        AppLogger.debug('[Init] projectTree error (部分的に初期化): $e');
+      }
+
+      // ツリー構造が揃った時点でDrawerに反映（フィーチャ読込を待たない）
       triggerSetState(() {});
+
+      try {
+        await updateFeatures();
+        triggerSetState(() {});
+      } catch (e) {
+        AppLogger.debug('[Init] updateFeatures error: $e');
+      }
 
       // AutoSyncServiceを起動（WiFi時に自動同期、conflict時はサブタイトル通知）
       if (PlatformCapabilities.supportsDriveSyncStatusCheck) {
@@ -97,15 +109,21 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
   /// 兄弟ノードは並列処理（異なる.gpkgは別DB接続なので安全）
+  /// 個別ノードの失敗は握りつぶし、成功したノードだけでツリーを構築する
   Future<void> updateNodeRecursively(LayerTreeNode node) async {
-    await node.ensureInitialized();
+    try {
+      await node.ensureInitialized();
+    } catch (e) {
+      AppLogger.debug('[Init] ノード初期化失敗 "${node.name}": $e');
+      return;
+    }
 
-    // 兄弟ノードをFuture.waitで並列初期化
+    // 兄弟ノードをFuture.waitで並列初期化（個別失敗は伝播させない）
     final childFutures = node.children
         .where((c) => c is FolderNode || c is GeoPackageNode)
         .map((c) => updateNodeRecursively(c));
 
-    await Future.wait(childFutures);
+    await Future.wait(childFutures, eagerError: false);
   }
 
   /// 背景地図サービス初期化（タイルサーバーも起動）

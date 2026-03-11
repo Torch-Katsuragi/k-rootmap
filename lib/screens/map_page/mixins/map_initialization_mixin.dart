@@ -134,10 +134,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       final compassStream = FlutterCompass.events;
       if (compassStream == null) return;
 
-      // コンパスストリームの監視（ValueNotifier経由、setStateなし）
       compassSubscription = compassStream.listen((event) {
         if (mounted && event.heading != null) {
-          headingNotifier.value = event.heading;
+          headingNotifier.value = _smoothHeading(event.heading!);
         }
       });
 
@@ -145,6 +144,31 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     } catch (e) {
       AppLogger.debug('[ERROR] Compass: 初期化エラー: $e');
     }
+  }
+
+  /// 指数移動平均（EMA）によるヘディング平滑化
+  ///
+  /// 角度は0°/360°の境界で不連続になるため、最短角度差分を用いる。
+  /// [alpha] が小さいほど滑らかだが追従が遅い（0.25 = バランス型）。
+  static const double _compassAlpha = 0.25;
+
+  double _smoothHeading(double rawHeading) {
+    final prev = lastSmoothedHeading;
+    if (prev == null) {
+      lastSmoothedHeading = rawHeading;
+      return rawHeading;
+    }
+
+    // 最短角度差分を計算（-180° ~ +180°）
+    double diff = rawHeading - prev;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+
+    double smoothed = (prev + _compassAlpha * diff) % 360;
+    if (smoothed < 0) smoothed += 360;
+
+    lastSmoothedHeading = smoothed;
+    return smoothed;
   }
 
   /// GPS管理サービス初期化
@@ -254,6 +278,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     positionSubscription?.cancel();
     compassSubscription?.cancel();
     headingNotifier.dispose();
+    mapBearingNotifier.dispose();
     longPressCountUpdateTimer?.cancel();
   }
 

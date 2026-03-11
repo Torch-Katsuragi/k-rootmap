@@ -59,6 +59,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 現在のデバイス方角（ValueNotifier化で局所再描画）
   final ValueNotifier<double?> headingNotifier = ValueNotifier<double?>(null);
 
+  /// 地図の回転角（bearing）— MapEventMoveCamera で毎フレーム更新
+  final ValueNotifier<double> mapBearingNotifier = ValueNotifier<double>(0.0);
+
+  /// コンパスヘディングの前回スムーズ値（ローパスフィルタ用）
+  double? lastSmoothedHeading;
+
   /// コンパスイベントサブスクリプション
   StreamSubscription<CompassEvent>? compassSubscription;
 

@@ -212,43 +212,48 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   // =============================================
 
   /// コンパス方向付きの現在位置マーカー
-  /// headingNotifier経由で局所再描画（MapPage全体のrebuildを回避）
+  ///
+  /// heading（磁気センサ）と mapBearing（地図回転角）の両方を監視し、
+  /// どちらが変わっても即座に扇の角度を更新する。
   Widget _buildLocationMarkerWithCompass() {
-    return ValueListenableBuilder<double?>(
-      valueListenable: headingNotifier,
-      builder: (_, heading, child) {
+    final child = Container(
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+        color: Colors.blue,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+    );
+
+    return ListenableBuilder(
+      listenable: Listenable.merge([headingNotifier, mapBearingNotifier]),
+      builder: (_, __) {
+        final heading = headingNotifier.value;
+        final mapBearing = mapBearingNotifier.value;
         return Stack(
           alignment: Alignment.center,
           children: [
             if (heading != null)
               Transform.rotate(
-                angle: (heading * pi / 180) - (pi / 2),
+                angle: ((heading - mapBearing) * pi / 180) - (pi / 2),
                 child: SizedBox(
                   width: 60,
                   height: 60,
                   child: CustomPaint(painter: CompassFanPainter()),
                 ),
               ),
-            child!,
+            child,
           ],
         );
       },
-      child: Container(
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          color: Colors.blue,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -524,8 +529,16 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     }
   }
 
-  /// マップイベント処理（カメラ移動完了時にクラスタ更新）
+  /// マップイベント処理
   void _onMapEvent(ml.MapEvent event) {
+    // カメラ移動中: bearing変化時のみコンパス扇を更新（低コスト）
+    if (event is ml.MapEventMoveCamera) {
+      final b = event.camera.bearing;
+      if (b != mapBearingNotifier.value) {
+        mapBearingNotifier.value = b;
+      }
+    }
+    // カメラ停止: クラスタ再計算
     if (event is ml.MapEventCameraIdle || event is ml.MapEventIdle) {
       _refreshPointClusters();
     }

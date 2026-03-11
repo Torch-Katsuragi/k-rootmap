@@ -287,6 +287,10 @@
   - [ ] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
     - 注: バンドル版pmtiles.jsがNode.js用ビルドでブラウザ非互換のため保留
 
+- [x] Windows版マップ表示不具合の修正（2026/03/11）
+  - [x] WebSocketレースコンディション修正（map.on('load')がWS接続前に発火→onStyleLoaded未到達→ベースマップ追加されず灰色画面）
+  - [x] ホーム画面RenderFlexオーバーフロー修正（Column→LayoutBuilder+SingleChildScrollView）
+
 ### 未完了
 
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）

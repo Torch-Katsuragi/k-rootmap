@@ -90,6 +90,7 @@ class GpsManagerService extends ChangeNotifier {
 
   // GPS機能の初期化状態
   bool _isInitialized = false;
+  Completer<void>? _initCompleter;
   bool _isGpsActive = false;
   bool _isSurveyMode = false; // GPS測量モード
 
@@ -205,13 +206,18 @@ class GpsManagerService extends ChangeNotifier {
     return sources;
   }
 
-  /// GPS管理サービスを初期化（待機状態）
+  /// GPS管理サービスを初期化（待機状態・二重実行防止）
   Future<void> initialize() async {
     if (_isInitialized) {
       AppLogger.debug('$_logTag: 既に初期化済みです');
       return;
     }
 
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+
+    _initCompleter = Completer<void>();
     try {
       AppLogger.debug('$_logTag: GPS管理サービスを初期化中...');
 
@@ -221,10 +227,14 @@ class GpsManagerService extends ChangeNotifier {
       _isInitialized = true;
       AppLogger.debug('$_logTag: GPS管理サービスの初期化完了（待機状態）');
       notifyListeners();
+      _initCompleter!.complete();
     } catch (e) {
       AppLogger.debug('$_logTag: GPS管理サービス初期化エラー: $e');
       _isInitialized = false;
+      _initCompleter!.completeError(e);
       rethrow;
+    } finally {
+      _initCompleter = null;
     }
   }
 

@@ -1,6 +1,7 @@
 // K-MAPS: MapLibre GeoJSONソース直接管理
 // layersプロパティを経由せず、StyleController経由でソース/レイヤを管理
 // データ変更時のみupdateGeoJsonSourceを呼び出し、OOMを防止
+import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -18,6 +19,7 @@ import '../utils/map_icon_generator.dart';
 class MapSourceManager {
   ml.StyleController? _style;
   bool _initialized = false;
+  Completer<void>? _initCompleter;
 
   // 前回送信したGeoJSON文字列（変更検知用）
   final Map<String, String> _lastData = {};
@@ -332,26 +334,41 @@ class MapSourceManager {
   // 初期化
   // --------------------------------------------------
 
-  /// StyleController にソースとレイヤを一括登録
+  /// StyleController にソースとレイヤを一括登録（二重実行防止）
   Future<void> initialize(ml.StyleController style) async {
-    _style = style;
+    if (_initialized) return;
 
-    // アイコン画像を登録（4枚: 通常/選択 × 方向あり/なし）
-    await _registerPhotoIcons(style);
-
-    // 全ソースを空GeoJSONで登録
-    for (final id in _allSourceIds) {
-      await style.addSource(
-        ml.GeoJsonSource(id: id, data: _emptyGeoJson),
-      );
-      _lastData[id] = _emptyGeoJson;
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
     }
 
-    // デフォルトスタイルでレイヤを登録（basemap-layerの上に積む）
-    await _addDefaultLayers(style);
+    _initCompleter = Completer<void>();
+    try {
+      _style = style;
 
-    _initialized = true;
-    AppLogger.debug('[MapSourceManager] initialized: ${_allSourceIds.length} sources, ${_allLayerIds.length} layers');
+      // アイコン画像を登録（4枚: 通常/選択 × 方向あり/なし）
+      await _registerPhotoIcons(style);
+
+      // 全ソースを空GeoJSONで登録
+      for (final id in _allSourceIds) {
+        await style.addSource(
+          ml.GeoJsonSource(id: id, data: _emptyGeoJson),
+        );
+        _lastData[id] = _emptyGeoJson;
+      }
+
+      // デフォルトスタイルでレイヤを登録（basemap-layerの上に積む）
+      await _addDefaultLayers(style);
+
+      _initialized = true;
+      AppLogger.debug('[MapSourceManager] initialized: ${_allSourceIds.length} sources, ${_allLayerIds.length} layers');
+      _initCompleter!.complete();
+    } catch (e, stack) {
+      _initCompleter!.completeError(e, stack);
+      rethrow;
+    } finally {
+      _initCompleter = null;
+    }
   }
 
   /// 写真マーカーアイコンをMapLibreに登録（バッファ競合回避のため1枚ずつ生成・登録）

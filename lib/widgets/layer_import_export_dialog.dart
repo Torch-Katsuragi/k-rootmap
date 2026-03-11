@@ -241,7 +241,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
       Text('Export Format:', style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 8),
       DropdownButtonFormField<FileFormat>(
-        value: _exportFormat,
+        initialValue: _exportFormat,
         decoration: const InputDecoration(
           border: OutlineInputBorder(),
           labelText: 'Select Export Format',

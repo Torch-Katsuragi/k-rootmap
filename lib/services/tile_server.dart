@@ -4,6 +4,7 @@
 /// BaseMapServiceのキャッシュ機能をlocalhostプロキシ経由で提供する。
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../models/basemap_provider.dart';
@@ -16,20 +17,35 @@ class TileServer {
 
   /// オフライン対応: ネットワーク不要なローカルスタイルの file:// URI（遅延初期化）
   static String? _localStyleUri;
+  static Completer<String>? _localStyleCompleter;
   static String? get localStyleUri => _localStyleUri;
 
   /// 空のローカルスタイルJSONをファイルに書き出しパスを返す。
   /// オフラインでも onStyleLoaded を確実に発火させるための最小スタイル。
   static Future<String> ensureLocalStyle() async {
     if (_localStyleUri != null) return _localStyleUri!;
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/k_maps_style.json');
-    const style = '{"version":8,"sources":{},'
-        '"glyphs":"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",'
-        '"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
-    await file.writeAsString(style);
-    _localStyleUri = file.path.startsWith('/') ? file.path : style;
-    return _localStyleUri!;
+
+    if (_localStyleCompleter != null) {
+      return _localStyleCompleter!.future;
+    }
+
+    _localStyleCompleter = Completer<String>();
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/k_maps_style.json');
+      const style = '{"version":8,"sources":{},'
+          '"glyphs":"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",'
+          '"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
+      await file.writeAsString(style);
+      _localStyleUri = file.path.startsWith('/') ? file.path : style;
+      _localStyleCompleter!.complete(_localStyleUri!);
+      return _localStyleUri!;
+    } catch (e) {
+      _localStyleCompleter!.completeError(e);
+      rethrow;
+    } finally {
+      _localStyleCompleter = null;
+    }
   }
 
   /// サーバーが待ち受けているポート（起動後に有効）

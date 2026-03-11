@@ -1,6 +1,7 @@
 // K-MAPS: Google Drive連携サービス
 // OAuth認証とDrive API操作を担当
 
+import 'dart:async';
 import 'dart:io';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -36,6 +37,7 @@ class GoogleDriveService {
 
   /// Google Sign-Inインスタンス
   GoogleSignIn? _googleSignIn;
+  Completer<void>? _initCompleter;
 
   /// Drive APIクライアント
   drive.DriveApi? _driveApi;
@@ -52,24 +54,39 @@ class GoogleDriveService {
     'email', // メールアドレス取得
   ];
 
-  /// 初期化
+  /// 初期化（二重実行防止）
   Future<void> initialize() async {
     if (_googleSignIn != null) return;
 
-    _googleSignIn = GoogleSignIn(
-      scopes: _scopes,
-    );
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
 
-    // 既存のサインイン状態を確認
+    _initCompleter = Completer<void>();
     try {
-      final account = await _googleSignIn!.signInSilently();
-      if (account != null) {
-        await _initializeDriveApi(account);
-        authState.setAuthenticated(DriveUser.fromGoogleAccount(account));
-        AppLogger.debug('[GoogleDriveService] サイレントサインイン成功: ${account.email}');
+      _googleSignIn = GoogleSignIn(
+        scopes: _scopes,
+      );
+
+      // 既存のサインイン状態を確認
+      try {
+        final account = await _googleSignIn!.signInSilently();
+        if (account != null) {
+          await _initializeDriveApi(account);
+          authState.setAuthenticated(DriveUser.fromGoogleAccount(account));
+          AppLogger.debug('[GoogleDriveService] サイレントサインイン成功: ${account.email}');
+        }
+      } catch (e) {
+        AppLogger.debug('[GoogleDriveService] サイレントサインイン失敗: $e');
       }
+
+      _initCompleter!.complete();
     } catch (e) {
-      AppLogger.debug('[GoogleDriveService] サイレントサインイン失敗: $e');
+      _googleSignIn = null;
+      _initCompleter!.completeError(e);
+      rethrow;
+    } finally {
+      _initCompleter = null;
     }
   }
 

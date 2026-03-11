@@ -270,32 +270,31 @@ class _FeatureImportExportDialogState extends State<FeatureImportExportDialog>
                     'Export Scope:',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
-                  RadioListTile<bool>(
-                    title: const Text('Selected features only'),
-                    subtitle:
-                        widget.selectedFeatureIds != null
-                            ? Text(
-                              '${widget.selectedFeatureIds!.length} features selected',
-                            )
-                            : const Text('No features selected'),
-                    value: true,
+                  RadioGroup<bool>(
                     groupValue: _exportSelectedOnly,
-                    onChanged:
-                        widget.selectedFeatureIds != null
-                            ? (value) => setState(
-                              () => _exportSelectedOnly = value ?? true,
-                            )
-                            : null,
-                  ),
-                  RadioListTile<bool>(
-                    title: const Text('All features in layer'),
-                    subtitle: const Text('Export entire layer content'),
-                    value: false,
-                    groupValue: _exportSelectedOnly,
-                    onChanged:
-                        (value) => setState(
-                          () => _exportSelectedOnly = value ?? false,
+                    onChanged: (value) => setState(
+                      () => _exportSelectedOnly = value!,
+                    ),
+                    child: Column(
+                      children: [
+                        RadioListTile<bool>(
+                          title: const Text('Selected features only'),
+                          subtitle:
+                              widget.selectedFeatureIds != null
+                                  ? Text(
+                                    '${widget.selectedFeatureIds!.length} features selected',
+                                  )
+                                  : const Text('No features selected'),
+                          value: true,
+                          enabled: widget.selectedFeatureIds != null,
                         ),
+                        RadioListTile<bool>(
+                          title: const Text('All features in layer'),
+                          subtitle: const Text('Export entire layer content'),
+                          value: false,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

@@ -66,6 +66,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   // フラグ
   bool _isInitialized = false;
+  Completer<void>? _initCompleter;
   bool _isConsolidating = false;
 
   // ==============================
@@ -94,6 +95,11 @@ class GpsHistoryRecorder extends ChangeNotifier {
   ) async {
     if (_isInitialized) return;
 
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+
+    _initCompleter = Completer<void>();
     try {
       AppLogger.debug('$_logTag: 初期化開始');
 
@@ -143,8 +149,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
         '$_logTag: 初期化完了 (日付: $_currentDateKey, '
         'キャッシュ: ${_todayPoints.length}点)',
       );
+      _initCompleter!.complete();
     } catch (e) {
       AppLogger.debug('$_logTag: 初期化エラー: $e');
+      _initCompleter!.completeError(e);
+    } finally {
+      _initCompleter = null;
     }
   }
 

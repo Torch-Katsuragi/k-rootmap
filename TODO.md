@@ -118,7 +118,14 @@
   - [x] GlobalDrawingState.instance直接アクセス → drawingStateProvider経由に統一
   - [x] GpsManagerService()直接インスタンス化 → gpsManagerServiceProvider経由に統一
   - [x] GpsSettingsScreenのConsumerStatefulWidget化
-- [ ] 非同期競合状態防止の改善（Completer使用）
+- [x] 非同期競合状態防止の改善（Completer使用）（2026/03/12）
+  - [x] GeoPackageConnection._initializeDatabase(): Completer<void>で二重初期化防止
+  - [x] MapSourceManager.initialize(): Completerガード追加
+  - [x] GpsManagerService.initialize(): Completerガード追加
+  - [x] GpsHistoryRecorder.initialize(): Completerガード追加
+  - [x] GoogleDriveService.initialize(): Completerガード追加
+  - [x] TileServer.ensureLocalStyle(): static Completer<String>で排他制御
+  - [x] LayerNode.updateChildren(): スキップ→完了待ちに改善（共有Future方式）
 - [x] フィーチャキャッシュの差分更新対応
 - [x] LayerNodeサブクラスの個別ファイル分離（部分的完了：PathResolver、NodePresenter、ExifParser、LayerMigrationService分離済み）
 
@@ -140,14 +147,15 @@
 
 ### 優先度：中（非推奨API・未使用コード）
 
-- [ ] 非推奨APIの更新（残り）
-  - [ ] DropdownButtonFormField value → initialValue
-  - [ ] Radio groupValue/onChanged → RadioGroup
-- [ ] 未使用importの削除（主要ファイル）
+- [x] 非推奨APIの更新（残り）（2026/03/12）
+  - [x] DropdownButtonFormField value → initialValue（layer_import_export_dialog.dart）
+  - [x] RadioListTile groupValue/onChanged → RadioGroup（drive_connect_dialog.dart, feature_import_export_dialog.dart）
+  - [x] withOpacity → withValues()残存6箇所修正（node_presenter, drive_url_input_dialog, add_folder_type_dialog）
+- [x] 未使用importの削除（主要ファイル）（2026/03/12確認済み: flutter analyze で検出0件）
 
 ### 優先度：低（スタイル改善）
 
-- [ ] print()をロギングフレームワークに置換
+- [x] print()をロギングフレームワークに置換（確認済み: AppLogger統一済み、lib/内print()は0件）
 - [ ] その他のスタイル問題修正
 
 ## 機能改善
@@ -296,3 +304,15 @@
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）
 - [ ] 国土地理院DEMタイル → Terrain-RGB変換の実装・検証
 - [ ] Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）
+
+## 内部テスト（Google Play）
+
+- [ ] リリース準備
+  - [ ] keystore確認（key.propertiesのパス `C:\Users\kitay\k-maps-release.keystore` と実ファイルの一致確認）
+  - [ ] バージョン番号設定（pubspec.yaml の version）
+  - [ ] 署名付きAABビルド（`flutter build appbundle --release`）
+- [ ] Play Consoleアップロード・公開
+  - [ ] 内部テストトラックにAABアップロード
+  - [ ] ストア掲載情報（アプリ名、説明文、スクリーンショット等）
+  - [ ] 内部テスターリスト設定
+  - [ ] 内部テストとしてリリース

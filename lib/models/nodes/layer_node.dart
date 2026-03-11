@@ -2,6 +2,7 @@
 // GeoPackage内のレイヤに対応するレイヤツリーノード
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
+import 'dart:async';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
@@ -60,8 +61,8 @@ abstract class LayerNode extends LayerTreeNode {
   /// dispose済みフラグ（null参照対策）
   bool _isDisposed = false;
 
-  /// updateChildren実行中フラグ（競合状態防止）
-  bool _isUpdatingChildren = false;
+  /// updateChildren進行中のCompleter（二重実行防止＋完了待ち）
+  Completer<void>? _updateChildrenCompleter;
 
   /// dispose済みかどうかを取得
   bool get isDisposed => _isDisposed;
@@ -451,15 +452,15 @@ abstract class LayerNode extends LayerTreeNode {
       return;
     }
 
-    // 競合状態を防止：既に実行中の場合はスキップ
-    if (_isUpdatingChildren) {
+    // 実行中なら完了を待つ（二重実行防止＋呼び出し元に結果を返す）
+    if (_updateChildrenCompleter != null) {
       AppLogger.debug(
-        '[LayerNode] updateChildren already in progress for $layerName, skipping',
+        '[LayerNode] updateChildren already in progress for $layerName, waiting',
       );
-      return;
+      return _updateChildrenCompleter!.future;
     }
 
-    _isUpdatingChildren = true;
+    _updateChildrenCompleter = Completer<void>();
 
     try {
       final featureList = await _loadFeaturesFromDB();
@@ -484,8 +485,12 @@ abstract class LayerNode extends LayerTreeNode {
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
       _markDirty();
+      _updateChildrenCompleter!.complete();
+    } catch (e) {
+      _updateChildrenCompleter!.completeError(e);
+      rethrow;
     } finally {
-      _isUpdatingChildren = false;
+      _updateChildrenCompleter = null;
     }
   }
 

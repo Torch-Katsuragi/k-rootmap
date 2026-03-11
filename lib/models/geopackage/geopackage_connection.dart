@@ -1,5 +1,6 @@
 // K-MAPS: GeoPackage DB接続管理クラス
 // DB接続の初期化、クローズ、バリデーションを担当
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
@@ -22,6 +23,9 @@ class GeoPackageConnection {
   /// データベース接続インスタンス
   Database? _database;
 
+  /// 初期化の排他制御用Completer（進行中のみ非null）
+  Completer<void>? _initCompleter;
+
   /// データベース初期化完了フラグ
   bool _isInitialized = false;
 
@@ -40,11 +44,31 @@ class GeoPackageConnection {
     return _database!;
   }
 
-  /// データベース初期化（遅延初期化）
+  /// データベース初期化（遅延初期化・Completerで二重実行防止）
   Future<void> _initializeDatabase() async {
     if (_isInitialized && _database != null) {
       return;
     }
+
+    // 別の呼び出しが初期化中なら、その完了を待つ
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+
+    _initCompleter = Completer<void>();
+    try {
+      await _initializeDatabaseImpl();
+      _initCompleter!.complete();
+    } catch (e, stack) {
+      _initCompleter!.completeError(e, stack);
+      rethrow;
+    } finally {
+      _initCompleter = null;
+    }
+  }
+
+  /// データベース初期化の実体
+  Future<void> _initializeDatabaseImpl() async {
 
     // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
     final String absPath;
@@ -259,6 +283,7 @@ class GeoPackageConnection {
       _database = null;
     }
     _isInitialized = false;
+    _initCompleter = null;
   }
 
   /// ファイル自体を削除（物理削除）

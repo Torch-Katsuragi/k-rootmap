@@ -108,7 +108,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Row(
@@ -161,7 +161,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.05) : null,
+          color: isSelected ? Theme.of(context).primaryColor.withValues(alpha: 0.05) : null,
         ),
         child: Row(
           children: [

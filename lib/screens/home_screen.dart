@@ -1,6 +1,7 @@
 // K-MAPS: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
@@ -339,7 +340,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           padding: const EdgeInsets.all(20.0),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: constraints.maxHeight - 40,
+              minHeight: math.max(0, constraints.maxHeight - 40),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,

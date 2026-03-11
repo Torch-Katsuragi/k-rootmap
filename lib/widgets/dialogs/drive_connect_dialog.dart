@@ -265,30 +265,34 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
             const Text('保存先フォルダ:'),
             const SizedBox(height: 8),
 
-            // 新規フォルダ作成オプション
-            RadioListTile<bool>(
-              title: Text('新規フォルダ "${widget.projectName}"'),
-              subtitle: const Text('K-MAPS Projectsフォルダ内に作成'),
-              value: true,
+            // フォルダ作成オプション
+            RadioGroup<bool>(
               groupValue: _createNewFolder,
               onChanged: (value) {
                 setState(() {
-                  _createNewFolder = true;
-                  _selectedFolderId = null;
+                  _createNewFolder = value!;
+                  if (_createNewFolder) _selectedFolderId = null;
                 });
               },
+              child: Column(
+                children: [
+                  RadioListTile<bool>(
+                    title: Text('新規フォルダ "${widget.projectName}"'),
+                    subtitle: const Text('K-MAPS Projectsフォルダ内に作成'),
+                    value: true,
+                  ),
+
+                  // 既存フォルダ選択オプション
+                  if (_existingFolders.isNotEmpty)
+                    RadioListTile<bool>(
+                      title: const Text('既存フォルダを選択'),
+                      value: false,
+                    ),
+                ],
+              ),
             ),
 
-            // 既存フォルダ選択オプション
             if (_existingFolders.isNotEmpty) ...[
-              RadioListTile<bool>(
-                title: const Text('既存フォルダを選択'),
-                value: false,
-                groupValue: _createNewFolder,
-                onChanged: (value) {
-                  setState(() => _createNewFolder = false);
-                },
-              ),
               if (!_createNewFolder)
                 Container(
                   margin: const EdgeInsets.only(left: 32),

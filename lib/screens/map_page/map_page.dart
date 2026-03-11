@@ -496,7 +496,8 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   }
 
   /// ベースマップソース追加（TileServer経由のlocalhost URL）
-  Future<void> _addBasemapSource(ml.StyleController style) async {
+  /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSource用）
+  Future<void> _addBasemapSource(ml.StyleController style, {String? belowLayerId}) async {
     final provider = baseMapService.currentProvider;
     final url = tileServer.isRunning
         ? tileServer.urlTemplate(provider.id)
@@ -515,6 +516,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       await style.addSource(source);
       await style.addLayer(
         const ml.RasterStyleLayer(id: 'basemap-layer', sourceId: 'basemap'),
+        belowLayerId: belowLayerId,
       );
       AppLogger.debug('[MAP] addBasemapSource: success');
     } catch (e) {
@@ -537,7 +539,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       await style.removeLayer('basemap-layer');
       await style.removeSource('basemap');
     } catch (_) {}
-    await _addBasemapSource(style);
+    await _addBasemapSource(style, belowLayerId: MapSourceManager.kPolygonsFill);
   }
 
   /// 描画プレビュー用ポリラインレイヤのリスト生成

@@ -176,7 +176,7 @@ class TileCacheGeoPackage {
       onOpen: _onOpen,
     );
     
-    AppLogger.debug('[TILE-CACHE] GeoPackage initialized: $_databasePath');
+    // initialized silently
   }
 
   /// データベース作成時の処理

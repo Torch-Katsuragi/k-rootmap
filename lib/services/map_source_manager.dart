@@ -295,7 +295,6 @@ class MapSourceManager {
       );
     }
 
-    AppLogger.debug('[MapSourceManager] imageClusters: $clusterCount clusters, $imageCount singles');
     _updateRaw(kImageClusters,
         '{"type":"FeatureCollection","features":[$clusterBuf]}');
     _updateRaw(kImages,
@@ -688,7 +687,6 @@ class MapSourceManager {
     final geoJson = features.length > _isolateThreshold
         ? await _serializeInIsolate(features)
         : geo.FeatureCollection(features).toText();
-    AppLogger.debug('[MapSourceManager] updateFeatures: $sourceId count=${features.length} jsonLen=${geoJson.length}');
     _updateRaw(sourceId, geoJson);
   }
 

@@ -87,7 +87,6 @@ class TileServer {
 
     try {
       final segments = request.uri.pathSegments;
-      AppLogger.debug('[TileServer] request: ${request.uri}');
       // /tiles/{providerId}/{z}/{x}/{y}.ext → 5セグメント
       if (segments.length != 5 || segments[0] != 'tiles') {
         request.response

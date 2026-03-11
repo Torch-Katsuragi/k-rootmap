@@ -121,7 +121,6 @@ class BaseMapService extends ChangeNotifier {
   bool _cancelDownload = false;
   
   // 診断用カウンタ
-  int _tileRequestCount = 0;
 
   /// 現在の背景地図プロバイダー
   BaseMapProvider get currentProvider => _currentProvider;
@@ -160,9 +159,7 @@ class BaseMapService extends ChangeNotifier {
   Future<void> _initConnectivity() async {
     try {
       final result = await _connectivity.checkConnectivity();
-      AppLogger.debug('[BaseMapService] Connectivity check result: $result');
       _updateConnectionStatus(result);
-      AppLogger.debug('[BaseMapService] _isNetworkAvailable=$_isNetworkAvailable');
       
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
     } catch (e) {
@@ -201,9 +198,8 @@ class BaseMapService extends ChangeNotifier {
     try {
       _tileCacheDb = TileCacheGeoPackage();
       await _tileCacheDb!.initialize(_cacheDirectory!);
-      final stats = await _tileCacheDb!.getStatistics();
       final total = await _tileCacheDb!.getTotalTileCount();
-      AppLogger.debug('[BaseMapService] Cache stats: total=$total providers=$stats');
+      AppLogger.debug('[BaseMapService] Cache: $total tiles');
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ TileDB init error: $e');
       rethrow;
@@ -356,17 +352,8 @@ class BaseMapService extends ChangeNotifier {
     int retryCount = 0,
   }) async {
     try {
-      _tileRequestCount++;
-      if (_tileRequestCount <= 5) {
-        AppLogger.debug('[TILE] #$_tileRequestCount ${provider.id}/$z/$x/$y network=$_isNetworkAvailable offline=$_isOfflineMode');
-      }
-      // まずキャッシュから取得を試行
       final cachedData = await _getCachedTile(provider.id, z, x, y);
-      if (cachedData != null) {
-        if (_tileRequestCount <= 5) AppLogger.debug('[TILE] #$_tileRequestCount cache HIT (${cachedData.length} bytes)');
-        return cachedData;
-      }
-      if (_tileRequestCount <= 5) AppLogger.debug('[TILE] #$_tileRequestCount cache MISS');
+      if (cachedData != null) return cachedData;
 
       // 明示的オフラインモードまたはネットワークアクセス禁止の場合のみ終了
       if (_isOfflineMode || !allowNetworkAccess) {
@@ -406,9 +393,7 @@ class BaseMapService extends ChangeNotifier {
           // decodeImageで失敗すれば最終的に弾かれるため問題ない。
         }
 
-        // キャッシュに保存
         await _cacheTile(provider.id, z, x, y, data);
-        AppLogger.debug('[TILE] 📥 Downloaded: ${provider.id}');
 
         return data;
       } else {

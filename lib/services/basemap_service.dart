@@ -113,12 +113,15 @@ class BaseMapService extends ChangeNotifier {
   
   // ネットワーク状態監視
   final Connectivity _connectivity = Connectivity();
-  bool _isNetworkAvailable = true;
+  bool _isNetworkAvailable = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   // キャンセルトークン用
   bool _isDownloading = false;
   bool _cancelDownload = false;
+  
+  // 診断用カウンタ
+  int _tileRequestCount = 0;
 
   /// 現在の背景地図プロバイダー
   BaseMapProvider get currentProvider => _currentProvider;
@@ -145,8 +148,8 @@ class BaseMapService extends ChangeNotifier {
       // 設定の読み込み
       await _loadSettings();
 
-      // ネットワーク状態の監視開始
-      _initConnectivity();
+      // ネットワーク状態の監視開始（初期状態を確定してから続行）
+      await _initConnectivity();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Init error: $e');
       _currentProvider = BaseMapProvider.defaultProvider;
@@ -154,10 +157,12 @@ class BaseMapService extends ChangeNotifier {
   }
 
   /// ネットワーク状態の監視初期化
-  void _initConnectivity() async {
+  Future<void> _initConnectivity() async {
     try {
       final result = await _connectivity.checkConnectivity();
+      AppLogger.debug('[BaseMapService] Connectivity check result: $result');
       _updateConnectionStatus(result);
+      AppLogger.debug('[BaseMapService] _isNetworkAvailable=$_isNetworkAvailable');
       
       _connectivitySubscription = _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
     } catch (e) {
@@ -196,6 +201,9 @@ class BaseMapService extends ChangeNotifier {
     try {
       _tileCacheDb = TileCacheGeoPackage();
       await _tileCacheDb!.initialize(_cacheDirectory!);
+      final stats = await _tileCacheDb!.getStatistics();
+      final total = await _tileCacheDb!.getTotalTileCount();
+      AppLogger.debug('[BaseMapService] Cache stats: total=$total providers=$stats');
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ TileDB init error: $e');
       rethrow;
@@ -348,24 +356,25 @@ class BaseMapService extends ChangeNotifier {
     int retryCount = 0,
   }) async {
     try {
+      _tileRequestCount++;
+      if (_tileRequestCount <= 5) {
+        AppLogger.debug('[TILE] #$_tileRequestCount ${provider.id}/$z/$x/$y network=$_isNetworkAvailable offline=$_isOfflineMode');
+      }
       // まずキャッシュから取得を試行
       final cachedData = await _getCachedTile(provider.id, z, x, y);
       if (cachedData != null) {
+        if (_tileRequestCount <= 5) AppLogger.debug('[TILE] #$_tileRequestCount cache HIT (${cachedData.length} bytes)');
         return cachedData;
       }
+      if (_tileRequestCount <= 5) AppLogger.debug('[TILE] #$_tileRequestCount cache MISS');
 
-      // オフラインモードまたはネットワークアクセス禁止の場合はここで終了
+      // 明示的オフラインモードまたはネットワークアクセス禁止の場合のみ終了
       if (_isOfflineMode || !allowNetworkAccess) {
         return null;
       }
-      
-      // ネットワークインターフェースがない場合は即座に終了（無駄なリクエスト防止）
-      if (!_isNetworkAvailable) {
-        // AppLogger.debug('[TILE] ⚠️ No network interface');
-        return null;
-      }
 
-      // ネットワークからダウンロード（リトライ機能付き）
+      // ネットワークからダウンロード（connectivity_plusはヒントのみ、短いタイムアウトで実際に試行）
+      final timeout = _isNetworkAvailable ? 10 : 3;
       final url = provider.urlTemplate
           .replaceAll('{z}', z.toString())
           .replaceAll('{x}', x.toString())
@@ -379,7 +388,7 @@ class BaseMapService extends ChangeNotifier {
                 'User-Agent': provider.userAgentPackageName!,
             },
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(Duration(seconds: timeout));
 
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         final data = response.bodyBytes;

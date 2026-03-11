@@ -20,23 +20,14 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
   /// フィーチャデータを非同期で更新（キャッシュに保存）
   /// KMetaスタイル読み込みとDB読み込みを並列実行し、最後にフィーチャを分類
   Future<void> updateFeaturesImpl() async {
-    AppLogger.debug('[DEBUG] updateFeatures: start');
     final folderTree = ref.read(folderTreeProvider);
-    AppLogger.debug('[DEBUG] updateFeatures: folderTree=$folderTree');
-    
     final visibleLayers =
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
-    AppLogger.debug(
-      '[DEBUG] updateFeatures: found ${visibleLayers.length} visible layers',
-    );
-    
+
     final newPhotoNodes = <ImageNode>[];
     if (folderTree != null) {
       collectImageNodesRecursive(folderTree, newPhotoNodes);
     }
-    AppLogger.debug(
-      '[DEBUG] updateFeatures: collected ${newPhotoNodes.length} photo nodes',
-    );
     
     // LayerNodeのみ抽出
     final layers = visibleLayers.whereType<LayerNode>().toList();
@@ -58,9 +49,6 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     }).toList();
 
     if (layersNeedingLoad.isNotEmpty) {
-      AppLogger.debug(
-        '[DEBUG] updateFeatures: loading ${layersNeedingLoad.length} layers from DB in parallel',
-      );
       await Future.wait(
         layersNeedingLoad.map((l) => l.updateChildren()),
       );
@@ -86,9 +74,9 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     }
     
     AppLogger.debug(
-      '[DEBUG] updateFeatures: total - points:${newPointFeatures.length}, lines:${newLineFeatures.length}, polygons:${newPolygonFeatures.length}, photos:${newPhotoNodes.length}',
+      '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length}',
     );
-    
+
     if (mounted) {
       triggerSetState(() {
         pointFeatures = newPointFeatures;
@@ -97,9 +85,6 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
         photoNodes = newPhotoNodes;
       });
       invalidateLayerCache();
-      AppLogger.debug('[DEBUG] updateFeatures: state updated successfully');
-    } else {
-      AppLogger.debug('[DEBUG] updateFeatures: widget not mounted, skipping state update');
     }
   }
   

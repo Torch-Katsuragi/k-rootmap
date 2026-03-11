@@ -5,7 +5,7 @@
 library;
 
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
 import '../models/basemap_provider.dart';
 import '../utils/app_logger.dart';
 import 'basemap_service.dart';
@@ -13,6 +13,24 @@ import 'basemap_service.dart';
 class TileServer {
   final BaseMapService _baseMapService;
   HttpServer? _server;
+
+  /// オフライン対応: ネットワーク不要なローカルスタイルの file:// URI（遅延初期化）
+  static String? _localStyleUri;
+  static String? get localStyleUri => _localStyleUri;
+
+  /// 空のローカルスタイルJSONをファイルに書き出しパスを返す。
+  /// オフラインでも onStyleLoaded を確実に発火させるための最小スタイル。
+  static Future<String> ensureLocalStyle() async {
+    if (_localStyleUri != null) return _localStyleUri!;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/k_maps_style.json');
+    const style = '{"version":8,"sources":{},'
+        '"glyphs":"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",'
+        '"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
+    await file.writeAsString(style);
+    _localStyleUri = file.path.startsWith('/') ? file.path : style;
+    return _localStyleUri!;
+  }
 
   /// サーバーが待ち受けているポート（起動後に有効）
   int get port => _server?.port ?? 0;
@@ -39,7 +57,7 @@ class TileServer {
 
   /// 指定プロバイダのタイルURL テンプレートを返す
   String urlTemplate(String providerId) {
-    return 'http://localhost:$port/tiles/$providerId/{z}/{x}/{y}.png';
+    return 'http://127.0.0.1:$port/tiles/$providerId/{z}/{x}/{y}.png';
   }
 
   /// 現在のプロバイダのタイルURL テンプレートを返す
@@ -69,6 +87,7 @@ class TileServer {
 
     try {
       final segments = request.uri.pathSegments;
+      AppLogger.debug('[TileServer] request: ${request.uri}');
       // /tiles/{providerId}/{z}/{x}/{y}.ext → 5セグメント
       if (segments.length != 5 || segments[0] != 'tiles') {
         request.response

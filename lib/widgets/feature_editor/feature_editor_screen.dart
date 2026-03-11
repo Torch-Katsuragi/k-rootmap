@@ -110,9 +110,6 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
       );
     }
 
-    final baseMapService = ref.read(baseMapServiceProvider);
-    final tileServerInstance = ref.read(tileServerProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -126,9 +123,11 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
       ),
       body: Column(
         children: [
-          // 上: FlutterMap
           Expanded(
-            child: _buildMap(baseMapService, tileServerInstance),
+            child: _buildMap(
+              ref.watch(baseMapServiceProvider),
+              ref.watch(tileServerProvider),
+            ),
           ),
 
           // 下: コントロールパネル
@@ -145,29 +144,30 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
 
   Widget _buildMap(BaseMapService baseMapService, TileServer ts) {
     final lines = _previewLines.value;
-    final provider = baseMapService.currentProvider;
-    final tileUrl = ts.isRunning
-        ? ts.urlTemplate(provider.id)
-        : provider.urlTemplate;
     return KMapWidget(
-      options: const ml.MapOptions(
+      options: ml.MapOptions(
         initZoom: 14,
-        initCenter: geo.Geographic(lon: 139.7671, lat: 35.6812),
+        initCenter: const geo.Geographic(lon: 139.7671, lat: 35.6812),
+        initStyle: TileServer.localStyleUri ?? kEmptyMapStyle,
       ),
       onMapCreated: (controller) {
         _mapController.attach(controller.raw!);
       },
       onStyleLoaded: (_, style) async {
-        final src = ml.RasterSource(
+        final provider = baseMapService.currentProvider;
+        final url = ts.isRunning
+            ? ts.urlTemplate(provider.id)
+            : provider.urlTemplate;
+        await style.addSource(ml.RasterSource(
           id: 'editor-basemap',
-          tiles: [tileUrl],
+          tiles: [url],
           maxZoom: provider.maxZoom.toDouble(),
           tileSize: 256,
-        );
-        await style.addSource(src);
-        await style.addLayer(
-          const ml.RasterStyleLayer(id: 'editor-basemap-layer', sourceId: 'editor-basemap'),
-        );
+        ));
+        await style.addLayer(ml.RasterStyleLayer(
+          id: 'editor-basemap-layer',
+          sourceId: 'editor-basemap',
+        ));
         _onMapReady();
       },
       layers: [

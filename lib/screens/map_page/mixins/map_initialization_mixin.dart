@@ -12,8 +12,9 @@ import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
-import '../../../models/nodes/drive_folder_node.dart';
 import '../../../services/google_drive/index.dart';
+import '../../../services/google_drive/auto_sync_service.dart';
+import '../../../services/tile_server.dart';
 import '../map_page_state_base.dart';
 import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
@@ -28,7 +29,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// 全サービスの初期化を実行
   Future<void> initializeAllServices() async {
-    AppLogger.debug('[DEBUG] initializeAllServices: start');
+    AppLogger.debug('[Init] start');
 
     if (ref.read(folderTreeProvider) == null) {
       ref
@@ -56,12 +57,12 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     // コンパス機能の初期化
     await initializeCompass();
 
-    AppLogger.debug('[DEBUG] initializeAllServices: complete');
+    AppLogger.debug('[Init] complete');
   }
 
   /// プロジェクトツリーの初期化（非同期）
   Future<void> initializeProjectTree() async {
-    AppLogger.debug('[DEBUG] initializeProjectTree: start');
+    AppLogger.debug('[Init] projectTree start');
     final rootNode = ref.read(folderTreeProvider);
     if (rootNode != null) {
       await updateNodeRecursively(rootNode);
@@ -70,87 +71,28 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // UI更新
       triggerSetState(() {});
 
-      // Drive連携フォルダの同期状態をバックグラウンドでチェック
-      _checkDriveFoldersSyncStatus(rootNode);
-    }
-    AppLogger.debug('[DEBUG] initializeProjectTree: complete');
-  }
-
-  /// Drive連携フォルダの同期状態をチェック（バックグラウンド実行）
-  /// PC版では実行しない（Google Drive Desktop使用を想定）
-  Future<void> _checkDriveFoldersSyncStatus(LayerTreeNode rootNode) async {
-    // PC版ではDrive連携機能を無効化
-    if (!PlatformCapabilities.supportsDriveSyncStatusCheck) {
-      AppLogger.debug('[DEBUG] PC版のためDrive同期状態チェックをスキップ');
-      return;
-    }
-
-    final driveFolders = _collectDriveFolderNodes(rootNode);
-    if (driveFolders.isEmpty) return;
-
-    AppLogger.debug('[DEBUG] Drive連携フォルダ同期状態チェック: ${driveFolders.length}件');
-
-    // Drive認証を確認
-    final driveService = GoogleDriveService();
-    await driveService.initialize();
-    if (!driveService.isDriveApiAvailable) {
-      AppLogger.debug('[DEBUG] Drive未認証のため同期状態チェックをスキップ');
-      return;
-    }
-
-    // トークンをリフレッシュ
-    await driveService.refreshToken();
-
-    final syncEngine = SyncEngine();
-
-    for (final node in driveFolders) {
-      final localPath = node.getAbsoluteFilePath();
-      if (localPath == null) continue;
-
-      try {
-        final status = await syncEngine.checkSyncStatus(localPath);
-        switch (status) {
-          case FolderSyncStatus.synced:
-            node.syncStatus = SyncStatus.synced;
-            break;
-          case FolderSyncStatus.localChanges:
-            node.syncStatus = SyncStatus.localChanges;
-            break;
-          case FolderSyncStatus.remoteChanges:
-            node.syncStatus = SyncStatus.remoteChanges;
-            break;
-          case FolderSyncStatus.conflict:
-            node.syncStatus = SyncStatus.conflict;
-            break;
-          case FolderSyncStatus.notLinked:
-          case FolderSyncStatus.error:
-            node.syncStatus = SyncStatus.error;
-            break;
-        }
-        AppLogger.debug('[DEBUG] ${node.name} 同期状態: ${node.syncStatus}');
-      } catch (e) {
-        AppLogger.debug('[DEBUG] ${node.name} 同期状態チェックエラー: $e');
-        node.syncStatus = SyncStatus.error;
+      // AutoSyncServiceを起動（WiFi時に自動同期、conflict時はサブタイトル通知）
+      if (PlatformCapabilities.supportsDriveSyncStatusCheck) {
+        AutoSyncService.instance.start(
+          root: rootNode,
+          onStatusChanged: () => triggerSetState(() {}),
+          onRefreshNeeded: (node) => _updateChildrenRecursive(node),
+        );
       }
     }
-
-    // UI更新
-    triggerSetState(() {});
+    AppLogger.debug('[Init] projectTree complete');
   }
 
-  /// ツリーからDriveFolderNodeを収集
-  List<DriveFolderNode> _collectDriveFolderNodes(LayerTreeNode node) {
-    final result = <DriveFolderNode>[];
-
-    if (node is DriveFolderNode) {
-      result.add(node);
-    }
-
+  /// 子ノードを再帰的に更新（Pull後のツリーリフレッシュ用）
+  Future<void> _updateChildrenRecursive(LayerTreeNode node) async {
+    await node.updateChildren();
     for (final child in node.children) {
-      result.addAll(_collectDriveFolderNodes(child));
+      if (child is FolderNode) {
+        await _updateChildrenRecursive(child);
+      } else if (child is GeoPackageNode) {
+        await child.updateChildren();
+      }
     }
-
-    return result;
   }
 
   /// ノードを再帰的に更新（サブフォルダ・GeoPackage・レイヤすべて）
@@ -169,19 +111,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// 背景地図サービス初期化（タイルサーバーも起動）
   Future<void> initializeBaseMapService() async {
     try {
-      AppLogger.debug('[DEBUG] BaseMapService: 初期化開始');
       await baseMapService.initialize();
       await tileServer.start();
-
+      basemapStyleUri = await TileServer.ensureLocalStyle();
       baseMapService.addListener(onBaseMapServiceUpdate);
-
-      // スタイルが既に読み込まれていたらベースマップを再設定
-      if (mapControllerInstance.style != null) {
-        AppLogger.debug('[DEBUG] BaseMapService: スタイル読み込み済み→ベースマップ再設定');
-        onBaseMapServiceUpdate();
-      }
-
-      AppLogger.debug('[DEBUG] BaseMapService: 初期化完了 (TileServer port=${tileServer.port})');
+      if (mapControllerInstance.style != null) onBaseMapServiceUpdate();
+      triggerSetState(() {});
+      AppLogger.debug('[Init] BaseMap ready (port=${tileServer.port})');
     } catch (e) {
       AppLogger.debug('[ERROR] BaseMapService: 初期化エラー: $e');
     }
@@ -190,18 +126,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// コンパス機能初期化
   Future<void> initializeCompass() async {
     if (!PlatformCapabilities.supportsCompass) {
-      AppLogger.debug('[DEBUG] Compass: デスクトップ環境のためスキップ');
+      AppLogger.debug('[Init] Compass: skipped (desktop)');
       return;
     }
 
     try {
-      AppLogger.debug('[DEBUG] Compass: 初期化開始');
-      // コンパスストリームが利用可能かチェック
       final compassStream = FlutterCompass.events;
-      if (compassStream == null) {
-        AppLogger.debug('[DEBUG] Compass: コンパスストリームが利用できません');
-        return;
-      }
+      if (compassStream == null) return;
 
       // コンパスストリームの監視（ValueNotifier経由、setStateなし）
       compassSubscription = compassStream.listen((event) {
@@ -210,7 +141,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         }
       });
 
-      AppLogger.debug('[DEBUG] Compass: 初期化完了');
+      AppLogger.debug('[Init] Compass ready');
     } catch (e) {
       AppLogger.debug('[ERROR] Compass: 初期化エラー: $e');
     }
@@ -218,7 +149,6 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// GPS管理サービス初期化
   Future<void> initializeGpsManager() async {
-    AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化開始');
 
     try {
       // GPS管理サービスを初期化
@@ -250,26 +180,21 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           });
         },
         onError: (error) {
-          AppLogger.debug('[DEBUG] GPS: Store position stream error: $error');
+          AppLogger.debug('[GPS] stream error: $error');
         },
       );
 
-      AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化完了');
+      AppLogger.debug('[Init] GPS ready');
     } catch (e) {
-      AppLogger.debug('[DEBUG] GPS: GPS管理サービス初期化エラー: $e');
+      AppLogger.debug('[Init] GPS error: $e');
     }
   }
 
   /// GPS履歴レコーダー初期化
   Future<void> initializeGpsHistoryRecorder() async {
-    AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化開始');
-
     try {
       final globalPath = ref.read(globalFolderPathProvider);
-      if (globalPath == null) {
-        AppLogger.debug('[DEBUG] GPS: グローバルフォルダパスが未設定のためスキップ');
-        return;
-      }
+      if (globalPath == null) return;
 
       // AppSupportDir（rawバッファ用、プロジェクトUIに非表示）
       final supportDir = await getApplicationSupportDirectory();
@@ -283,9 +208,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // 軌跡更新リスナー登録（地図上にリアルタイム表示するため）
       gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
 
-      AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化完了');
+      AppLogger.debug('[Init] GpsHistory ready');
     } catch (e) {
-      AppLogger.debug('[DEBUG] GPS: GPS履歴レコーダー初期化エラー: $e');
+      AppLogger.debug('[Init] GpsHistory error: $e');
     }
   }
 
@@ -301,13 +226,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// 外部GNSS機器をバックグラウンドでスキャン
   Future<void> scanGnssDevicesBackground() async {
     try {
-      AppLogger.debug('[DEBUG] GPS: 外部GNSS機器バックグラウンドスキャン開始');
       await gpsManager.scanExternalGnssDevices();
-      AppLogger.debug(
-        '[DEBUG] GPS: 外部GNSS機器スキャン完了: ${gpsManager.availableGnssDevices.length}件',
-      );
     } catch (e) {
-      AppLogger.debug('[DEBUG] GPS: 外部GNSS機器スキャンエラー: $e');
+      AppLogger.debug('[GPS] GNSS scan error: $e');
       // エラーでもマップ画面の表示は継続
     }
   }
@@ -318,6 +239,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// 全サービスの破棄処理
   void disposeAllServices() {
+    AutoSyncService.instance.stop();
     tileServer.stop();
     gpsManager.removeListener(onGpsManagerUpdate);
     baseMapService.removeListener(onBaseMapServiceUpdate);

@@ -295,6 +295,7 @@ class MapSourceManager {
       );
     }
 
+    AppLogger.debug('[MapSourceManager] imageClusters: $clusterCount clusters, $imageCount singles');
     _updateRaw(kImageClusters,
         '{"type":"FeatureCollection","features":[$clusterBuf]}');
     _updateRaw(kImages,
@@ -365,7 +366,7 @@ class MapSourceManager {
       (_iconPhotoMarkerNoDirSel, MapIconGenerator.generatePhotoMarkerNoDirSel),
     ];
     for (final (id, gen) in entries) {
-      final color = id.contains('Sel') ? selColor : normalColor;
+      final color = id.contains('-sel') ? selColor : normalColor;
       for (var attempt = 0; attempt < 3; attempt++) {
         try {
           final bytes = await gen(color);
@@ -588,7 +589,7 @@ class MapSourceManager {
         'text-halo-width': 1.5,
       },
     ));
-    // ImageNode（通常）: SymbolStyleLayerでGPU描画
+    // ImageNode（通常）
     await style.addLayer(ml.SymbolStyleLayer(
       id: kImagesSymbol,
       sourceId: kImages,
@@ -600,7 +601,7 @@ class MapSourceManager {
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
-        'icon-size': 1.5,
+        'icon-size': 1.2,
         'text-field': <Object>['get', 'name'],
         'text-size': 10.0,
         'text-anchor': 'left',
@@ -609,7 +610,7 @@ class MapSourceManager {
         'text-optional': true,
       },
       paint: {
-        'text-color': '#9C27B0',
+        'text-color': '#000000',
         'text-halo-color': '#FFFFFF',
         'text-halo-width': 1.5,
       },
@@ -863,17 +864,16 @@ class MapSourceManager {
       layout: {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
-        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.5,
+        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.2,
         'text-field': <Object>['get', 'name'], 'text-size': 10.0,
         'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
-      paint: {'text-color': '#9C27B0', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+      paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImagesSelSymbol, sourceId: kImagesSel,
       layout: {
-        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
-        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
-        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.8,
-        'text-field': <Object>['get', 'name'], 'text-size': 11.0,
+        'icon-image': _iconPhotoMarkerNoDirSel,
+        'icon-allow-overlap': true, 'icon-size': 1.8,
+        'text-field': '{name}', 'text-size': 11.0,
         'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));

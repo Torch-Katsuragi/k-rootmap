@@ -92,7 +92,6 @@ class ExifParser {
   static Map<String, dynamic>? _parseBasicExif(Uint8List bytes) {
     try {
       if (bytes.length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) {
-        AppLogger.debug('[DEBUG] ExifParser._parseBasicExif: not a JPEG file');
         return null;
       }
 
@@ -125,7 +124,6 @@ class ExifParser {
         }
       }
 
-      AppLogger.debug('[DEBUG] ExifParser._parseBasicExif: no EXIF data found');
       return null;
     } catch (e) {
       AppLogger.debug('[ERROR] ExifParser._parseBasicExif: $e');
@@ -145,7 +143,6 @@ class ExifParser {
       final isLittleEndian = bytes[start] == 0x49 && bytes[start + 1] == 0x49;
       if (!isLittleEndian &&
           !(bytes[start] == 0x4D && bytes[start + 1] == 0x4D)) {
-        AppLogger.debug('[DEBUG] ExifParser._parseTiffExif: invalid TIFF header');
         return null;
       }
 
@@ -154,7 +151,6 @@ class ExifParser {
               ? bytes[start + 2] | (bytes[start + 3] << 8)
               : (bytes[start + 2] << 8) | bytes[start + 3];
       if (tiffId != 42) {
-        AppLogger.debug('[DEBUG] ExifParser._parseTiffExif: invalid TIFF identifier');
         return null;
       }
 
@@ -364,10 +360,6 @@ class ExifParser {
         final lat = dmsToDecimal(latDms) * (latRef == 'S' ? -1 : 1);
         final lng = dmsToDecimal(lngDms) * (lngRef == 'W' ? -1 : 1);
 
-        AppLogger.debug(
-          '[DEBUG] ExifParser._parseGpsIFD: GPS found: $lat, $lng'
-          '${imgDirection != null ? ', dir: ${imgDirection.toStringAsFixed(1)}°' : ''}',
-        );
         return {
           'lat': lat,
           'lng': lng,

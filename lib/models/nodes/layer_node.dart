@@ -462,15 +462,7 @@ abstract class LayerNode extends LayerTreeNode {
     _isUpdatingChildren = true;
 
     try {
-      AppLogger.debug('[LayerNode] updateChildren開始: $layerName');
-
-      // await 前に _featureMap を空にすると、async gap 中に外部参照
-      // （selectedFeatures 等）が turfFeature を参照して StateError になる。
-      // そのため、DB読み込みを先に行い、同期的にスワップする。
       final featureList = await _loadFeaturesFromDB();
-      AppLogger.debug(
-        '[LayerNode] DBから読み込み: ${featureList.length}個のフィーチャ ($layerName)',
-      );
 
       // コンストラクタで _featureMap に登録済みの新エントリを退避
       final newEntries = <int, turf.Feature>{};
@@ -488,10 +480,6 @@ abstract class LayerNode extends LayerTreeNode {
       for (final node in featureList) {
         super.addChild(node);
       }
-
-      AppLogger.debug(
-        '[LayerNode] updateChildren完了: $layerName (${children.length}個)',
-      );
 
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();

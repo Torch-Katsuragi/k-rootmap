@@ -95,27 +95,17 @@ class ImageNode extends LayerTreeNode {
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    AppLogger.debug('[DEBUG] ImageNode.loadNodes: called with parent=${parent?.name}');
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
     final absPath = parent.getAbsoluteFilePath();
-    if (absPath == null) {
-      AppLogger.debug(
-        '[DEBUG] ImageNode.loadNodes: absPath is null for parent ${parent.name}',
-      );
-      return nodes;
-    }
+    if (absPath == null) return nodes;
 
     final dir = Directory(absPath);
-    if (!dir.existsSync()) {
-      AppLogger.debug('[DEBUG] ImageNode.loadNodes: directory does not exist: $absPath');
-      return nodes;
-    }
+    if (!dir.existsSync()) return nodes;
 
-    AppLogger.debug('[DEBUG] ImageNode.loadNodes: scanning directory: $absPath');
-    final supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
-    
+    const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
+
     final imageFiles = dir
         .listSync()
         .whereType<File>()
@@ -124,12 +114,9 @@ class ImageNode extends LayerTreeNode {
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
     for (var entity in imageFiles) {
-      final fileName = p.basename(entity.path);
-      AppLogger.debug('[DEBUG] ImageNode.loadNodes: found image file: $fileName');
-
       try {
         final exifData = await ExifParser.extractFromFile(entity.path);
-        final imageNode = ImageNode(
+        nodes.add(ImageNode(
           entity.path,
           exifData?.location,
           exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync()),
@@ -137,22 +124,15 @@ class ImageNode extends LayerTreeNode {
           direction: exifData?.direction,
           visible: true,
           parent: parent,
-        );
-        nodes.add(imageNode);
-        AppLogger.debug(
-          '[DEBUG] ImageNode.loadNodes: created ImageNode for $fileName'
-          '${exifData != null ? ' at ${exifData.location}' : ' (no GPS)'}',
-        );
+        ));
       } catch (e) {
-        AppLogger.debug(
-          '[ERROR] ImageNode.loadNodes: failed to process $fileName: $e',
-        );
+        AppLogger.debug('[ImageNode] failed: ${p.basename(entity.path)}: $e');
       }
     }
 
-    AppLogger.debug(
-      '[DEBUG] ImageNode.loadNodes: found ${nodes.length} images, returning',
-    );
+    if (nodes.isNotEmpty) {
+      AppLogger.debug('[ImageNode] ${nodes.length} images in ${parent.name}');
+    }
     return nodes;
   }
 

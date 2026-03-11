@@ -87,7 +87,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   @override
   void initState() {
     super.initState();
-    AppLogger.debug('[DEBUG] initState: KMapsHomePage start');
+    AppLogger.debug('[MapPage] initState start');
     initializeAllServices();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -397,12 +397,18 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// フィーチャ系レイヤはMapSourceManager経由で管理（OOM防止）
   /// layersには描画プレビューと投げ縄のみ（超軽量）
   Widget _buildMapLibreMap(bool isPanTool) {
+    // TileServer 起動 + ローカルスタイル生成待ち
+    if (basemapStyleUri == null) {
+      return const SizedBox.expand();
+    }
+
     final selectedSet = ref.read(selectedFeaturesProvider).toSet();
     final drawingState = GlobalDrawingState.instance;
     final currentTool = ref.read(currentToolProvider);
 
     return KMapWidget(
       options: ml.MapOptions(
+        initStyle: basemapStyleUri!,
         initCenter: defaultCenter.toGeographic(),
         initZoom: 16.0,
         gestures: const ml.MapGestures(
@@ -476,27 +482,17 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     );
   }
 
-  /// mapスタイル読み込み完了時: タイルソース・GeoJSONソース初期化
   Future<void> _onMapStyleLoaded(ml.StyleController style) async {
+    AppLogger.debug('[MAP] onStyleLoaded fired');
     mapControllerInstance.attachStyle(style);
     await _addBasemapSource(style);
-
-    // GeoJSONソース/スタイルレイヤを一括初期化
     await sourceManager.initialize(style);
 
     // 現在のスタイル設定を反映
     _applyLayerStyles();
 
     // ソース初期化完了 → dirty フラグを強制セットして確実にフィーチャを送信
-    // invalidateLayerCache() 内で _syncFeatureSources() も呼ばれる
     invalidateLayerCache();
-  }
-
-  /// マップイベント処理（カメラ移動完了時にクラスタ更新）
-  void _onMapEvent(ml.MapEvent event) {
-    if (event is ml.MapEventCameraIdle || event is ml.MapEventIdle) {
-      _refreshPointClusters();
-    }
   }
 
   /// ベースマップソース追加（TileServer経由のlocalhost URL）
@@ -523,6 +519,13 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       AppLogger.debug('[MAP] addBasemapSource: success');
     } catch (e) {
       AppLogger.debug('[MAP] addBasemapSource: error: $e');
+    }
+  }
+
+  /// マップイベント処理（カメラ移動完了時にクラスタ更新）
+  void _onMapEvent(ml.MapEvent event) {
+    if (event is ml.MapEventCameraIdle || event is ml.MapEventIdle) {
+      _refreshPointClusters();
     }
   }
 

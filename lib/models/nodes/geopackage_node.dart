@@ -58,10 +58,7 @@ class GeoPackageNode extends LayerTreeNode {
     children.removeWhere((child) {
       final shouldRemove = !currentLayerNames.contains(child.name);
       if (shouldRemove) {
-        AppLogger.debug(
-          '[DEBUG] GeoPackageNode.updateChildren: removing layer ${child.name} (no longer exists)',
-        );
-        child.parent = null; // 親子関係を切断
+        child.parent = null;
       }
       return shouldRemove;
     });
@@ -74,9 +71,7 @@ class GeoPackageNode extends LayerTreeNode {
     // KMetaの可視性設定をレイヤーに適用
     await _applyMetaVisibility();
 
-    AppLogger.debug(
-      '[DEBUG] GeoPackageNode.updateChildren: ${children.length} layers after update',
-    );
+    AppLogger.debug('[GeoPackageNode] ${children.length} layers in $name');
   }
 
   /// 親フォルダのKMetaを取得
@@ -105,50 +100,34 @@ class GeoPackageNode extends LayerTreeNode {
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
-    AppLogger.debug(
-      '[DEBUG] GeoPackageNode.loadNodes: called with parent=${parent?.name}',
-    );
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
     final absPath = parent.getAbsoluteFilePath();
-    if (absPath == null) {
-      AppLogger.debug(
-        '[DEBUG] GeoPackageNode.loadNodes: absPath is null for parent ${parent.name}',
-      );
-      return nodes;
-    }
+    if (absPath == null) return nodes;
 
     final dir = Directory(absPath);
-    if (!dir.existsSync()) {
-      AppLogger.debug(
-        '[DEBUG] GeoPackageNode.loadNodes: directory does not exist: $absPath',
-      );
-      return nodes;
-    }
+    if (!dir.existsSync()) return nodes;
 
-    AppLogger.debug('[DEBUG] GeoPackageNode.loadNodes: scanning directory: $absPath');
-    // ディレクトリ内の.gpkgファイルをスキャンして名前順にソート
     final gpkgFiles = dir
         .listSync()
         .whereType<File>()
         .where((f) => f.path.endsWith('.gpkg'))
         .toList()
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
-    
-    for (var entity in gpkgFiles) {
-      final fileName = p.basename(entity.path);
-      AppLogger.debug('[DEBUG] GeoPackageNode.loadNodes: found .gpkg file: $fileName');
 
-      final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
+    for (var entity in gpkgFiles) {
+      final gpkgFile = GeoPackageFile(
+        [p.basename(entity.path)],
+        absolutePath: entity.path,
+      );
       nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
+    }
+    if (nodes.isNotEmpty) {
       AppLogger.debug(
-        '[DEBUG] GeoPackageNode.loadNodes: created GeoPackageNode for $fileName',
+        '[GeoPackageNode] loadNodes: ${nodes.length} files in ${parent.name}',
       );
     }
-    AppLogger.debug(
-      '[DEBUG] GeoPackageNode.loadNodes: found ${nodes.length} .gpkg files, returning',
-    );
     return nodes;
   }
 

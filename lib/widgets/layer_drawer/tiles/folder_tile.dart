@@ -47,7 +47,7 @@ class FolderTile extends ConsumerWidget {
           syncStatus: driveNode.syncStatus,
         ),
         title: Text(node.name),
-        subtitle: _buildSyncSubtitle(driveNode),
+        subtitle: _buildSyncSubtitle(context, driveNode),
         onTap: onTap,
         trailing: _buildDriveMenu(context, driveNode),
       );
@@ -109,17 +109,30 @@ class FolderTile extends ConsumerWidget {
     );
   }
 
-  Widget _buildSyncSubtitle(DriveFolderNode driveNode) {
-    final (text, color) = switch (driveNode.syncStatus) {
-      SyncStatus.synced => ('同期済み', Colors.green),
-      SyncStatus.localChanges => ('ローカル変更あり', Colors.orange),
-      SyncStatus.remoteChanges => ('Drive変更あり', Colors.blue),
-      SyncStatus.conflict => ('競合あり', Colors.red),
-      SyncStatus.syncing => ('同期中...', Colors.blue),
-      SyncStatus.error => ('エラー', Colors.red),
-      SyncStatus.unknown => (driveNode.isReadOnly ? '読み取り専用' : 'Drive連携', Colors.grey),
+  Widget _buildSyncSubtitle(BuildContext context, DriveFolderNode driveNode) {
+    final (text, color, icon) = switch (driveNode.syncStatus) {
+      SyncStatus.synced => ('Synced', Colors.green, null),
+      SyncStatus.localChanges => ('Local changes pending', Colors.orange, null),
+      SyncStatus.remoteChanges => ('Drive changes available', Colors.blue, null),
+      SyncStatus.conflict => ('Conflict — tap to resolve', Colors.red, Icons.warning_amber_rounded),
+      SyncStatus.syncing => ('Syncing...', Colors.blue, null),
+      SyncStatus.error => ('Error', Colors.red, null),
+      SyncStatus.unknown => (driveNode.isReadOnly ? 'Read-only' : 'Drive linked', Colors.grey, null),
     };
-    return Text(text, style: TextStyle(fontSize: 12, color: color));
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[Icon(icon, size: 14, color: color), const SizedBox(width: 4)],
+        Text(text, style: TextStyle(fontSize: 12, color: color)),
+      ],
+    );
+    if (driveNode.syncStatus == SyncStatus.conflict) {
+      return GestureDetector(
+        onTap: () => onSyncMerge?.call(context, driveNode, mode: SyncMode.download),
+        child: child,
+      );
+    }
+    return child;
   }
 
   Widget _buildDriveMenu(BuildContext context, DriveFolderNode driveNode) {

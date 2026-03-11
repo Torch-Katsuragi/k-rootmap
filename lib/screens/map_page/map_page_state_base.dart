@@ -34,6 +34,9 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 地図の初期中心座標（東京駅）
   final LatLng defaultCenter = const LatLng(35.681236, 139.767125);
 
+  /// ローカルスタイルの file:// URI（TileServer起動後にセット）
+  String? basemapStyleUri;
+
   /// 現在位置
   LatLng? currentLocation;
 

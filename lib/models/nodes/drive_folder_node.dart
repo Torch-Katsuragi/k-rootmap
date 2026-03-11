@@ -116,7 +116,7 @@ class DriveFolderNode extends FolderNode {
 
     // 既存の子ノードで、ファイルシステムに存在しないものを削除
     children.removeWhere((child) {
-      if (child.isGlobalNode) return false;
+      if (child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
         AppLogger.debug(
@@ -245,7 +245,7 @@ class DriveSubFolderNode extends FolderNode {
     };
 
     children.removeWhere((child) {
-      if (child.isGlobalNode) return false;
+      if (child is GlobalFolderNode || child is GlobalSubFolderNode) return false;
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
         child.parent = null;

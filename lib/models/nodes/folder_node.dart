@@ -8,6 +8,7 @@ import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
 import 'drive_folder_node.dart';
+import 'global_folder_node.dart';
 import '../kmeta.dart';
 import '../../services/kmeta_service.dart';
 import '../../core/node_types.dart';
@@ -98,18 +99,14 @@ class FolderNode extends LayerTreeNode {
     };
 
     // 既存の子ノードで、ファイルシステムに存在しないものを削除
-    // ただし、グローバルノードはファイルシステム外に存在するため削除しない
+    // ただし、グローバル構造ノードはファイルシステム外に存在するため削除しない
     children.removeWhere((child) {
-      // グローバルノード（GlobalFolderNode/GlobalSubFolderNode等）は保持
-      if (child.isGlobalNode) {
+      if (child is GlobalFolderNode || child is GlobalSubFolderNode) {
         return false;
       }
       final shouldRemove = !allCurrentNames.contains(child.name);
       if (shouldRemove) {
-        AppLogger.debug(
-          '[DEBUG] FolderNode.updateChildren: removing ${child.name} (no longer exists)',
-        );
-        child.parent = null; // 親子関係を切断
+        child.parent = null;
       }
       return shouldRemove;
     });
@@ -128,9 +125,6 @@ class FolderNode extends LayerTreeNode {
     // KMetaの可視性設定を子ノードに適用
     await applyMetaVisibility();
 
-    AppLogger.debug(
-      '[DEBUG] FolderNode.updateChildren: ${children.length} children after update',
-    );
   }
 
   /// メタデータから状態を読み込み（サブクラスから呼び出し可能）

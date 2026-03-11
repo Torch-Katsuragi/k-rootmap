@@ -33,7 +33,6 @@ class KMetaService {
     _rawCache.remove(folderPath);
     // マージ済みキャッシュは子フォルダも影響を受けるのでクリア
     _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
-    AppLogger.debug('[KMetaService] Cache invalidated for: $folderPath');
   }
 
   /// フォルダの生メタデータを取得（キャッシュ対応・バージョンゲート付き）

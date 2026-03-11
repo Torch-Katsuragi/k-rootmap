@@ -283,7 +283,6 @@ class PenTool extends MapTool {
           'FreeHandPoint',
           '',
         ).then((_) {
-          // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
         drawingState.setPointPreview(null);
@@ -295,11 +294,9 @@ class PenTool extends MapTool {
           'FreeHandLine',
           '',
         ).then((_) {
-          // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
         drawingState.clearLine();
-        _isDrawing = false;
         mapState.setState(() {});
       } else if (selected is PolygonLayerNode && drawingPolygon.length >= 3) {
         final closed = mapState.closeRing(drawingPolygon);
@@ -309,7 +306,6 @@ class PenTool extends MapTool {
           'FreeHandPolygon',
           '',
         ).then((_) {
-          // フィーチャー作成完了後にUI更新
           mapState.refreshFeatures();
         });
         drawingState.clearPolygon();

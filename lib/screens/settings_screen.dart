@@ -1,9 +1,12 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
+import '../services/google_drive/auto_sync_service.dart';
 import '../widgets/settings_widgets.dart';
 
 /// 設定カテゴリー定義
@@ -11,6 +14,7 @@ enum SettingsCategory {
   basemap,
   gps,
   layerStyle,
+  sync,
   feedback,
   appInfo,
 }
@@ -24,6 +28,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPS・測位';
       case SettingsCategory.layerStyle:
         return 'レイヤ描画';
+      case SettingsCategory.sync:
+        return 'Drive同期';
       case SettingsCategory.feedback:
         return 'フィードバック';
       case SettingsCategory.appInfo:
@@ -39,6 +45,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return Icons.gps_fixed;
       case SettingsCategory.layerStyle:
         return Icons.palette;
+      case SettingsCategory.sync:
+        return Icons.sync;
       case SettingsCategory.feedback:
         return Icons.feedback;
       case SettingsCategory.appInfo:
@@ -54,6 +62,8 @@ extension SettingsCategoryExt on SettingsCategory {
         return 'GPSソース選択、外部GNSS接続';
       case SettingsCategory.layerStyle:
         return '点・線・ポリゴンの描画スタイル';
+      case SettingsCategory.sync:
+        return 'WiFi自動同期、同期間隔';
       case SettingsCategory.feedback:
         return '要望・バグ報告をお送りください';
       case SettingsCategory.appInfo:
@@ -104,6 +114,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  List<SettingsCategory> get _visibleCategories => SettingsCategory.values
+      .where((c) => c != SettingsCategory.sync || _isMobile)
+      .toList();
+
+  static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+
   /// 狭い画面（スマホ等）用レイアウト
   Widget _buildNarrowLayout() {
     return Scaffold(
@@ -111,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('設定'),
       ),
       body: ListView(
-        children: SettingsCategory.values.map((category) {
+        children: _visibleCategories.map((category) {
           return ListTile(
             leading: Icon(category.icon, color: Colors.blueGrey),
             title: Text(category.title),
@@ -151,7 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: SettingsCategory.values.map((category) {
+                    children: _visibleCategories.map((category) {
                       final isSelected = category == _selectedCategory;
                       return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -222,6 +238,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return GpsSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.layerStyle:
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.sync:
+        return SyncSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.feedback:
         return FeedbackScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.appInfo:
@@ -418,6 +436,104 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                     applicationVersion: _packageInfo?.version ?? '',
                   );
                 },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Drive同期設定画面
+class SyncSettingsScreen extends StatefulWidget {
+  final bool isEmbedded;
+  const SyncSettingsScreen({super.key, this.isEmbedded = false});
+
+  @override
+  State<SyncSettingsScreen> createState() => _SyncSettingsScreenState();
+}
+
+class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
+  bool _autoSyncEnabled = true;
+  int _intervalMinutes = kAutoSyncDefaultInterval;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _autoSyncEnabled = prefs.getBool(kAutoSyncEnabledKey) ?? true;
+      _intervalMinutes =
+          prefs.getInt(kAutoSyncIntervalKey) ?? kAutoSyncDefaultInterval;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScaffold(
+      title: 'Drive同期',
+      isEmbedded: widget.isEmbedded,
+      body: SettingsBody(
+        sections: [
+          SettingsSection(
+            title: 'Auto Sync',
+            icon: Icons.sync,
+            iconColor: Colors.blue,
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.wifi, color: Colors.blue),
+                title: const Text('WiFi Auto Sync'),
+                subtitle: const Text('Sync automatically when connected to WiFi'),
+                value: _autoSyncEnabled,
+                onChanged: (v) async {
+                  setState(() => _autoSyncEnabled = v);
+                  await AutoSyncService.instance.setEnabled(v);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.timer, color: Colors.blueGrey),
+                title: const Text('Sync Interval'),
+                subtitle: Text('Every $_intervalMinutes min'),
+                trailing: DropdownButton<int>(
+                  value: _intervalMinutes,
+                  underline: const SizedBox.shrink(),
+                  items: const [
+                    DropdownMenuItem(value: 1, child: Text('1 min')),
+                    DropdownMenuItem(value: 3, child: Text('3 min')),
+                    DropdownMenuItem(value: 5, child: Text('5 min')),
+                    DropdownMenuItem(value: 10, child: Text('10 min')),
+                    DropdownMenuItem(value: 30, child: Text('30 min')),
+                  ],
+                  onChanged: (v) async {
+                    if (v == null) return;
+                    setState(() => _intervalMinutes = v);
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt(kAutoSyncIntervalKey, v);
+                  },
+                ),
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: 'Info',
+            icon: Icons.info_outline,
+            iconColor: Colors.grey,
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Auto sync runs only over WiFi to save mobile data.\n\n'
+                  'When both local and Drive have changes to the same file '
+                  '(conflict), sync pauses and shows a warning on the folder. '
+                  'Tap the subtitle to resolve manually.',
+                  style: TextStyle(height: 1.5, color: Colors.grey),
+                ),
               ),
             ],
           ),

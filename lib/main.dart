@@ -18,6 +18,7 @@ import 'utils/background_save_manager.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _setupErrorHandlers();
+  _setupDebugPrintFilter();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
@@ -31,18 +32,39 @@ void _setupErrorHandlers() {
   final originalOnError = FlutterError.onError;
   FlutterError.onError = (FlutterErrorDetails details) {
     final errorString = details.exception.toString();
-    if (errorString.contains('KeyDownEvent') &&
-        errorString.contains('physical key is already pressed')) {
+
+    // Windows IME切り替え時のキーイベント不整合を握りつぶす
+    // (デバッグモードのassertのみ発火、リリースでは無害)
+    if (errorString.contains('_pressedKeys') ||
+        (errorString.contains('KeyDownEvent') &&
+            errorString.contains('physical key is already pressed')) ||
+        (errorString.contains('KeyRepeatEvent') &&
+            errorString.contains('physical key is not pressed'))) {
       if (kDebugMode) {
-        AppLogger.debug('[K-MAPS] IME関連キーボードイベントを無視');
+        AppLogger.debug('[K-MAPS] IME関連キーイベント不整合を無視');
       }
       return;
     }
+
     if (originalOnError != null) {
       originalOnError(details);
     } else {
       FlutterError.presentError(details);
     }
+  };
+}
+
+/// Flutterエンジンが出す「Unable to parse JSON message」を抑制
+void _setupDebugPrintFilter() {
+  if (!kDebugMode) return;
+  final original = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message != null &&
+        (message.contains('Unable to parse JSON message') ||
+            message.contains('The document is empty'))) {
+      return;
+    }
+    original(message, wrapWidth: wrapWidth);
   };
 }
 

@@ -35,6 +35,7 @@ tags: [index, navigation]
 | [[technical/gps-architecture]] | GPS追跡・測量アーキテクチャ |
 | [[technical/google-drive-setup]] | Google Drive連携セットアップガイド |
 | [[technical/ui-layer-tree]] | レイヤツリーUI更新ガイド（updateChildren） |
+| [[technical/signing]] | Android署名鍵の管理（保管場所・リリースビルド手順） |
 
 ---
 

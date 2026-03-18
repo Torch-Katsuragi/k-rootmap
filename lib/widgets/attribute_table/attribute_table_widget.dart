@@ -97,14 +97,20 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
             widget.layer,
             _rebuildGrid,
           ),
+          onDuplicateFiltered: (filterSql) => showDuplicateFilteredDialog(
+            context,
+            widget.layer,
+            filterSql,
+            _rebuildGrid,
+          ),
         ),
 
         // PlutoGrid
         Expanded(
           child: PlutoGrid(
             key: _plutoGridKey,
-            columns: _controller.columns,
-            rows: _controller.rows,
+            columns: List.of(_controller.columns),
+            rows: List.of(_controller.rows),
             mode: PlutoGridMode.normal,
             onLoaded: _onGridLoaded,
             onChanged: _onGridChanged,

@@ -199,6 +199,13 @@
   - ポイントの詳細情報画面に「Google Mapリンクをコピー」ボタンを設置
   - 座標からGoogle MapsのURLを生成してクリップボードにコピー
 
+- [x] 属性テーブルからQGIS構文でフィーチャをフィルタして複製する機能（2026/03/13）
+  - [x] QgisExpressionFilter: QGIS式→SQL WHERE句変換（安全性バリデーション付き）
+  - [x] FeatureRepository: getFilteredFeatureIds / countFilteredFeatures / duplicateFilteredFeatures
+  - [x] AttributeTableController: フィルタ状態管理（applyFilter/clearFilter）
+  - [x] AttributeTableToolbar: フィルタ入力バー（QGIS式入力、適用/クリア、フィルタ件数表示）
+  - [x] 複製ダイアログ: フィルタ結果を新規レイヤに一括コピー（スキーマ自動移植）
+
 ### パフォーマンス改善
 
 - [x] 大量フィーチャのロード・通常動作の軽量化リファクタリング（2026/02/20）
@@ -307,12 +314,14 @@
 
 ## 内部テスト（Google Play）
 
-- [ ] リリース準備
-  - [ ] keystore確認（key.propertiesのパス `C:\Users\kitay\k-maps-release.keystore` と実ファイルの一致確認）
-  - [ ] バージョン番号設定（pubspec.yaml の version）
-  - [ ] 署名付きAABビルド（`flutter build appbundle --release`）
+- [x] リリース準備
+  - [x] keystore統一（`C:\Users\kitay\k-maps-release.keystore` に一本化、ヒント: `android/KEYSTORE_HINT.txt`）
+  - [x] バージョン番号設定（pubspec.yaml: 0.4.0+2）
+  - [x] 署名付きAABビルド（`flutter build appbundle --release`）
+  - [x] ACCESS_MOCK_LOCATION をdebugマニフェストに移動
 - [ ] Play Consoleアップロード・公開
-  - [ ] 内部テストトラックにAABアップロード
+  - [x] アップロード鍵リセット申請（2026/03/12、3/14 10:37 JST以降に有効化）
+  - [ ] 内部テストトラックにAABアップロード（鍵リセット有効化後に再実施）
   - [ ] ストア掲載情報（アプリ名、説明文、スクリーンショット等）
   - [ ] 内部テスターリスト設定
   - [ ] 内部テストとしてリリース

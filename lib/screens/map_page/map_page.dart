@@ -1040,6 +1040,8 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       minWidth: minDrawerWidth,
       maxWidthRatio: 0.67,
       initiallyOpen: drawerOpen,
+      backgroundColor: Colors.white.withValues(alpha: 0.8),
+      handleColor: Colors.black.withValues(alpha: 0.08),
       onOpenChanged: (isOpen) {
         triggerSetState(() {
           drawerOpen = isOpen;

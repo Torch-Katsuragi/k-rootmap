@@ -754,6 +754,88 @@ class FeatureRepository {
         createWkbPolygon,
       );
 
+  /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
+  Future<List<int>> getFilteredFeatureIds(
+    String tableName,
+    String whereClause,
+  ) async {
+    try {
+      final db = await connection.getDatabase();
+      final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+
+      final selectClause = pkColumn == 'rowid'
+          ? 'SELECT rowid FROM "$tableName" WHERE $whereClause'
+          : 'SELECT "$pkColumn" FROM "$tableName" WHERE $whereClause';
+
+      final rows = await db.rawQuery(selectClause);
+      return rows.map((row) {
+        final val = row.values.first;
+        return val is int ? val : 0;
+      }).where((id) => id != 0).toList();
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] getFilteredFeatureIds: エラー発生 - $e',
+      );
+      return [];
+    }
+  }
+
+  /// WHERE句にマッチするフィーチャ数を取得（プレビュー用）
+  Future<int> countFilteredFeatures(
+    String tableName,
+    String whereClause,
+  ) async {
+    try {
+      final db = await connection.getDatabase();
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM "$tableName" WHERE $whereClause',
+      );
+      return (result.first['cnt'] as int?) ?? 0;
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] countFilteredFeatures: エラー発生 - $e',
+      );
+      return -1;
+    }
+  }
+
+  /// WHERE句でフィルタしたフィーチャを別レイヤに複製
+  Future<int> duplicateFilteredFeatures(
+    String sourceTable,
+    String targetTable,
+    String whereClause,
+  ) async {
+    try {
+      final db = await connection.getDatabase();
+      final sourceColumns = await schema.getTableColumns(sourceTable);
+      final columnsToInsert = sourceColumns
+          .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
+          .toList();
+
+      if (columnsToInsert.isEmpty) return 0;
+
+      final columnList = columnsToInsert.map((c) => '"$c"').join(', ');
+      await db.execute('''
+        INSERT INTO "$targetTable" ($columnList)
+        SELECT $columnList FROM "$sourceTable"
+        WHERE $whereClause
+      ''');
+
+      final countResult = await db.rawQuery('SELECT changes() as count');
+      final copiedCount = (countResult.first['count'] as int?) ?? 0;
+      AppLogger.debug(
+        '[FeatureRepository] duplicateFilteredFeatures: '
+        '$sourceTable -> $targetTable ($copiedCount件, WHERE: $whereClause)',
+      );
+      return copiedCount;
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] duplicateFilteredFeatures エラー: $e',
+      );
+      return 0;
+    }
+  }
+
   Future<int> copyFeaturesBetweenLayers(
     String sourceTable,
     String targetTable,

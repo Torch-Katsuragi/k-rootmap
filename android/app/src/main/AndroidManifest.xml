@@ -22,8 +22,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- デバイスを検出可能にする（必要に応じて） -->
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <!-- Mock Location Provider権限（テスト・開発用） -->
-    <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
     
     <!-- フォアグラウンドサービス権限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

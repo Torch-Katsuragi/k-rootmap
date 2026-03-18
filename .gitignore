@@ -44,10 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Keystore credentials (NEVER commit!)
+# 署名鍵関連（鍵はGoogle Driveで保管。リリース時のみ key.properties を一時配置）
 android/key.properties
 *.keystore
 *.jks
+KEYSTORE_HINT.txt
 
 # Native build cache
 **/.cxx/

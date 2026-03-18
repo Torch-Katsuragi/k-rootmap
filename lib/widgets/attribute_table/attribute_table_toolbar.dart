@@ -8,7 +8,7 @@ import '../../utils/app_logger.dart';
 import 'attribute_table_controller.dart';
 
 /// 属性テーブルツールバー
-class AttributeTableToolbar extends StatelessWidget {
+class AttributeTableToolbar extends StatefulWidget {
   final AttributeTableController controller;
   final VoidCallback? onRefresh;
   final VoidCallback? onCopyTable;
@@ -16,6 +16,7 @@ class AttributeTableToolbar extends StatelessWidget {
   final VoidCallback? onDeleteSelected;
   final VoidCallback? onSave;
   final VoidCallback? onAddColumn;
+  final Future<void> Function(String expression)? onDuplicateFiltered;
 
   const AttributeTableToolbar({
     super.key,
@@ -26,10 +27,51 @@ class AttributeTableToolbar extends StatelessWidget {
     this.onDeleteSelected,
     this.onSave,
     this.onAddColumn,
+    this.onDuplicateFiltered,
   });
 
   @override
+  State<AttributeTableToolbar> createState() => _AttributeTableToolbarState();
+}
+
+class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
+  final _filterController = TextEditingController();
+  bool _isFilterApplied = false;
+
+  @override
+  void dispose() {
+    _filterController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _applyFilter() async {
+    final expression = _filterController.text.trim();
+    if (expression.isEmpty) {
+      _clearFilter();
+      return;
+    }
+    final error = await widget.controller.applyFilter(expression);
+    setState(() => _isFilterApplied = error == null);
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('フィルタエラー: $error'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _clearFilter() {
+    _filterController.clear();
+    widget.controller.clearFilter();
+    setState(() => _isFilterApplied = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ctrl = widget.controller;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
       decoration: BoxDecoration(
@@ -41,37 +83,113 @@ class AttributeTableToolbar extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // レイヤー名とフィーチャ数
-          Text(
-            '${controller.layer.layerName} (${controller.features.length})',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              fontSize: 9,
-              height: 1.0,
-            ),
+          // 上段: レイヤー名 + ボタン群
+          Row(
+            children: [
+              Text(
+                ctrl.isFiltered
+                    ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
+                    : '${ctrl.layer.layerName} (${ctrl.totalCount})',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 9,
+                  height: 1.0,
+                  color: ctrl.isFiltered ? Colors.orange.shade800 : null,
+                ),
+              ),
+
+              if (ctrl.isPointLayer) ...[
+                const SizedBox(width: 8),
+                _buildWgs84Checkbox(context),
+                const SizedBox(width: 8),
+                _buildEpsgSelector(context),
+              ],
+
+              const Spacer(),
+
+              _buildIconButton(Icons.add_box, Colors.blue, widget.onAddColumn, 'カラム追加'),
+              _buildIconButton(Icons.refresh, null, widget.onRefresh, '更新'),
+              _buildIconButton(Icons.copy, null, widget.onCopyTable, 'テーブルをコピー'),
+              if (widget.onAddFeature != null)
+                _buildIconButton(Icons.add, null, widget.onAddFeature, 'フィーチャ追加'),
+              _buildIconButton(Icons.delete, Colors.red, widget.onDeleteSelected, '選択フィーチャ削除'),
+              _buildIconButton(Icons.save, null, widget.onSave, '即座に保存'),
+            ],
           ),
-
-          // Pointレイヤーの場合のみ座標オプション表示
-          if (controller.isPointLayer) ...[
-            const SizedBox(width: 8),
-            _buildWgs84Checkbox(context),
-            const SizedBox(width: 8),
-            _buildEpsgSelector(context),
-          ],
-
-          const Spacer(),
-
-          // 操作ボタン群
-          _buildIconButton(Icons.add_box, Colors.blue, onAddColumn, 'カラム追加'),
-          _buildIconButton(Icons.refresh, null, onRefresh, '更新'),
-          _buildIconButton(Icons.copy, null, onCopyTable, 'テーブルをコピー'),
-          if (onAddFeature != null)
-            _buildIconButton(Icons.add, null, onAddFeature, 'フィーチャ追加'),
-          _buildIconButton(Icons.delete, Colors.red, onDeleteSelected, '選択フィーチャ削除'),
-          _buildIconButton(Icons.save, null, onSave, '即座に保存'),
+          // 下段: フィルタバー
+          _buildFilterBar(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: SizedBox(
+        height: 28,
+        child: Row(
+          children: [
+            Icon(Icons.filter_alt, size: 14, color: _isFilterApplied ? Colors.orange : Colors.grey),
+            const SizedBox(width: 4),
+            Expanded(
+              child: TextField(
+                controller: _filterController,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  hintText: '"name" = \'Tokyo\'  |  "pop" > 1000',
+                  hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  suffixIcon: _isFilterApplied
+                      ? GestureDetector(
+                          onTap: _clearFilter,
+                          child: Icon(Icons.clear, size: 14, color: Colors.orange.shade700),
+                        )
+                      : null,
+                ),
+                onSubmitted: (_) => _applyFilter(),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              height: 24,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: Colors.blue,
+                ),
+                onPressed: _applyFilter,
+                child: const Text('適用', style: TextStyle(fontSize: 11)),
+              ),
+            ),
+            if (_isFilterApplied && widget.onDuplicateFiltered != null) ...[
+              const SizedBox(width: 2),
+              SizedBox(
+                height: 24,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: Colors.green.shade700,
+                  ),
+                  icon: const Icon(Icons.copy_all, size: 14),
+                  label: const Text('複製', style: TextStyle(fontSize: 11)),
+                  onPressed: () {
+                    widget.onDuplicateFiltered?.call(widget.controller.filterSql);
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -86,10 +204,10 @@ class AttributeTableToolbar extends StatelessWidget {
             width: 18,
             height: 18,
             child: Checkbox(
-              value: controller.settings.showWgs84,
+              value: widget.controller.settings.showWgs84,
               onChanged: (value) {
-                controller.updateSettings(
-                  controller.settings.copyWith(showWgs84: value ?? true),
+                widget.controller.updateSettings(
+                  widget.controller.settings.copyWith(showWgs84: value ?? true),
                 );
               },
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -106,15 +224,15 @@ class AttributeTableToolbar extends StatelessWidget {
       width: 200,
       height: 22,
       child: _EpsgAutocomplete(
-        initialValue: controller.settings.additionalEpsg,
+        initialValue: widget.controller.settings.additionalEpsg,
         onSelected: (epsg) {
-          controller.updateSettings(
-            controller.settings.copyWith(additionalEpsg: epsg),
+          widget.controller.updateSettings(
+            widget.controller.settings.copyWith(additionalEpsg: epsg),
           );
         },
         onCleared: () {
-          controller.updateSettings(
-            controller.settings.copyWith(clearAdditionalEpsg: true),
+          widget.controller.updateSettings(
+            widget.controller.settings.copyWith(clearAdditionalEpsg: true),
           );
         },
       ),

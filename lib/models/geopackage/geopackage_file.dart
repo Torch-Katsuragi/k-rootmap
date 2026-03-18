@@ -447,6 +447,28 @@ class GeoPackageFile {
   ) =>
       _features.addPolygonsBatch(tableName, polygonData);
 
+  /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
+  Future<List<int>> getFilteredFeatureIds(
+    String tableName,
+    String whereClause,
+  ) =>
+      _features.getFilteredFeatureIds(tableName, whereClause);
+
+  /// WHERE句にマッチするフィーチャ数を取得
+  Future<int> countFilteredFeatures(
+    String tableName,
+    String whereClause,
+  ) =>
+      _features.countFilteredFeatures(tableName, whereClause);
+
+  /// WHERE句でフィルタしたフィーチャを別レイヤに複製
+  Future<int> duplicateFilteredFeatures(
+    String sourceTable,
+    String targetTable,
+    String whereClause,
+  ) =>
+      _features.duplicateFilteredFeatures(sourceTable, targetTable, whereClause);
+
   /// レイヤー間でフィーチャをコピー
   Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) =>
       _features.copyFeaturesBetweenLayers(sourceTable, targetTable);

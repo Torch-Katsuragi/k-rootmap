@@ -7,6 +7,7 @@ import 'package:pluto_grid/pluto_grid.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/qgis_expression_filter.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
@@ -48,15 +49,31 @@ class AttributeTableController extends ChangeNotifier {
   bool _isLoading = true;
   AttributeTableSettings _settings = const AttributeTableSettings();
 
+  // フィルタ状態
+  String _filterExpression = '';
+  String _filterSql = '';
+  Set<int> _filteredRowIds = {};
+  bool _isFiltered = false;
+  String? _filterError;
+  List<FeatureNode> _displayFeatures = [];
+  List<PlutoRow> _displayRows = [];
+
   // ゲッター
   PlutoGridStateManager? get stateManager => _stateManager;
   List<PlutoColumn> get columns => _columns;
-  List<PlutoRow> get rows => _rows;
+  List<PlutoRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
-  List<FeatureNode> get features => _features;
+  List<FeatureNode> get features => _displayFeatures;
+  List<FeatureNode> get allFeatures => _features;
   bool get isLoading => _isLoading;
   AttributeTableSettings get settings => _settings;
   bool get isPointLayer => layer.runtimeType.toString().contains('PointLayerNode');
+  bool get isFiltered => _isFiltered;
+  String get filterExpression => _filterExpression;
+  String get filterSql => _filterSql;
+  String? get filterError => _filterError;
+  int get totalCount => _features.length;
+  int get filteredCount => _displayFeatures.length;
 
   AttributeTableController(this.layer, this._ref);
 
@@ -83,6 +100,14 @@ class AttributeTableController extends ChangeNotifier {
       _columns = _createColumns();
       _rows = await _createRows();
 
+      // フィルタが有効ならフィルタ済みビューを構築
+      if (_isFiltered && _filterSql.isNotEmpty) {
+        await _applyFilterToDisplay();
+      } else {
+        _displayFeatures = List.of(_features);
+        _displayRows = List.of(_rows);
+      }
+
       AppLogger.debug('[AttributeTableController] 初期化完了');
     } catch (e) {
       AppLogger.debug('[AttributeTableController] 初期化エラー: $e');
@@ -90,6 +115,8 @@ class AttributeTableController extends ChangeNotifier {
       _features = [];
       _columns = [];
       _rows = [];
+      _displayFeatures = [];
+      _displayRows = [];
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -183,11 +210,93 @@ class AttributeTableController extends ChangeNotifier {
     }
   }
 
+  // ========== フィルタ操作 ==========
+
+  /// QGIS式でフィルタを適用
+  Future<String?> applyFilter(String expression) async {
+    if (expression.trim().isEmpty) {
+      clearFilter();
+      return null;
+    }
+
+    final result = QgisExpressionFilter.toSqlWhere(expression);
+    if (result is FilterResultError) {
+      _filterError = result.message;
+      notifyListeners();
+      return result.message;
+    }
+
+    final sql = (result as FilterResultOk).sql;
+
+    // カラム名バリデーション
+    final allColumns = await layer.getAttributeColumnNames(getAll: true, skipPrimaryKey: false);
+    final fieldError = QgisExpressionFilter.validateFieldReferences(
+      sql,
+      allColumns.toSet(),
+    );
+    if (fieldError != null) {
+      _filterError = fieldError;
+      notifyListeners();
+      return fieldError;
+    }
+
+    // SQLを実行してマッチするrowIdを取得
+    final ids = await layer.geoPackageFile.getFilteredFeatureIds(
+      layer.layerName,
+      sql,
+    );
+    if (ids.isEmpty && await layer.geoPackageFile.countFilteredFeatures(layer.layerName, sql) < 0) {
+      _filterError = 'SQL実行エラー（式の構文を確認してください）';
+      notifyListeners();
+      return _filterError;
+    }
+
+    _filterExpression = expression;
+    _filterSql = sql;
+    _filteredRowIds = ids.toSet();
+    _isFiltered = true;
+    _filterError = null;
+
+    await _applyFilterToDisplay();
+    notifyListeners();
+    return null;
+  }
+
+  /// フィルタ結果を表示用リストに適用
+  Future<void> _applyFilterToDisplay() async {
+    _displayFeatures = [];
+    _displayRows = [];
+
+    for (var i = 0; i < _features.length; i++) {
+      if (_filteredRowIds.contains(_features[i].rowId)) {
+        _displayFeatures.add(_features[i]);
+        if (i < _rows.length) _displayRows.add(_rows[i]);
+      }
+    }
+
+    AppLogger.debug(
+      '[AttributeTableController] フィルタ適用: '
+      '${_displayFeatures.length}/${_features.length}件',
+    );
+  }
+
+  /// フィルタを解除
+  void clearFilter() {
+    _filterExpression = '';
+    _filterSql = '';
+    _filteredRowIds = {};
+    _isFiltered = false;
+    _filterError = null;
+    _displayFeatures = List.of(_features);
+    _displayRows = List.of(_rows);
+    notifyListeners();
+  }
+
   /// フィーチャを選択
   void selectFeature(int rowIndex) {
-    if (rowIndex < 0 || rowIndex >= _features.length) return;
+    if (rowIndex < 0 || rowIndex >= _displayFeatures.length) return;
 
-    final feature = _features[rowIndex];
+    final feature = _displayFeatures[rowIndex];
 
     final currentSelection = _ref.read(selectedFeaturesProvider);
     if (currentSelection.length == 1 &&

@@ -25,14 +25,19 @@ class AddFolderTypeResult {
 
 /// フォルダ種類選択ダイアログ
 class AddFolderTypeDialog extends StatefulWidget {
-  const AddFolderTypeDialog({super.key});
+  final bool allowDrive;
+
+  const AddFolderTypeDialog({super.key, this.allowDrive = true});
 
   /// ダイアログを表示
-  /// スマホの場合のみDriveオプションを表示
-  static Future<AddFolderTypeResult?> show(BuildContext context) {
+  /// [allowDrive] が false の場合、Driveオプションを非表示にする
+  static Future<AddFolderTypeResult?> show(
+    BuildContext context, {
+    bool allowDrive = true,
+  }) {
     return showDialog<AddFolderTypeResult>(
       context: context,
-      builder: (context) => const AddFolderTypeDialog(),
+      builder: (context) => AddFolderTypeDialog(allowDrive: allowDrive),
     );
   }
 
@@ -44,8 +49,9 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
   final TextEditingController _nameController = TextEditingController();
   AddFolderType _selectedType = AddFolderType.local;
 
-  /// スマホかどうか（Drive連携はスマホ限定）
-  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  /// Driveオプションを表示するか
+  bool get _showDriveOption =>
+      widget.allowDrive && (Platform.isAndroid || Platform.isIOS);
 
   @override
   void dispose() {
@@ -62,8 +68,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // フォルダ種類選択（スマホのみDriveオプション表示）
-            if (_isMobile) ...[
+            if (_showDriveOption) ...[
               const Text(
                 'フォルダの種類',
                 style: TextStyle(

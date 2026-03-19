@@ -12,6 +12,7 @@ import '../models/nodes/global_folder_node.dart';
 import '../models/nodes/drive_folder_node.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../services/google_drive/index.dart';
+import '../services/kmeta_service.dart';
 
 class LayerDrawerService {
   const LayerDrawerService._();
@@ -103,7 +104,12 @@ class LayerDrawerService {
     String newName, {
     required String projectRootDir,
   }) async {
+    final oldPath = node.getAbsoluteFilePath();
     final newFileName = await node.rename(newName, projectRootDir: projectRootDir);
+    if (oldPath != null) {
+      final newPath = p.join(p.dirname(oldPath), newFileName);
+      await notifySyncedPathChange(node, oldPath, newPath);
+    }
     if (node.parent != null) await node.parent!.updateChildren();
     return newFileName;
   }
@@ -112,11 +118,45 @@ class LayerDrawerService {
 
   /// 写真をリネーム
   static Future<void> renamePhoto(ImageNode node, String newName) async {
+    final oldPath = node.filePath;
     await node.rename(newName);
+    final ext = p.extension(oldPath);
+    final newFileName = newName.endsWith(ext) ? newName : '$newName$ext';
+    final newPath = p.join(p.dirname(oldPath), newFileName);
+    await notifySyncedPathChange(node, oldPath, newPath);
     if (node.parent != null) await node.parent!.updateChildren();
   }
 
   // ---------- ヘルパー ----------
+
+  /// DriveFolderNodeの祖先を探す
+  static DriveFolderNode? findDriveRoot(LayerTreeNode? node) {
+    LayerTreeNode? current = node;
+    while (current != null) {
+      if (current is DriveFolderNode) return current;
+      if (current is GlobalFolderNode) return null;
+      current = current.parent;
+    }
+    return null;
+  }
+
+  /// ローカルリネーム/移動時にsyncedFilesのパスを更新
+  static Future<void> notifySyncedPathChange(
+    LayerTreeNode node,
+    String oldAbsPath,
+    String newAbsPath,
+  ) async {
+    final driveRoot = findDriveRoot(node);
+    if (driveRoot == null) return;
+    final rootPath = driveRoot.getAbsoluteFilePath();
+    if (rootPath == null) return;
+
+    final oldRel = p.relative(oldAbsPath, from: rootPath).replaceAll('\\', '/');
+    final newRel = p.relative(newAbsPath, from: rootPath).replaceAll('\\', '/');
+    if (oldRel == newRel) return;
+
+    await KMetaService.instance.renameSyncedFiles(rootPath, oldRel, newRel);
+  }
 
   static Future<void> _reloadRecursive(LayerTreeNode node) async {
     await node.updateChildren();

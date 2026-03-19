@@ -313,15 +313,11 @@ class KMetaSyncFile {
   /// DriveファイルID
   final String driveFileId;
 
-  /// 期待する親フォルダID（移動検出用）
-  final String? expectedParentId;
-
   /// 最終同期時刻（同期完了時点のDateTime.now()）
   final DateTime? lastSyncedTime;
 
   const KMetaSyncFile({
     required this.driveFileId,
-    this.expectedParentId,
     this.lastSyncedTime,
   });
 
@@ -331,9 +327,9 @@ class KMetaSyncFile {
         json['lastSyncedModifiedTime'] != null
             ? DateTime.tryParse(json['lastSyncedModifiedTime'] as String)
             : null;
+    // expectedParentId は廃止済み（読み捨て）
     return KMetaSyncFile(
       driveFileId: json['driveFileId'] as String,
-      expectedParentId: json['expectedParentId'] as String?,
       lastSyncedTime:
           json['lastSyncedTime'] != null
               ? DateTime.tryParse(json['lastSyncedTime'] as String)
@@ -343,9 +339,6 @@ class KMetaSyncFile {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{'driveFileId': driveFileId};
-    if (expectedParentId != null) {
-      json['expectedParentId'] = expectedParentId;
-    }
     if (lastSyncedTime != null) {
       json['lastSyncedTime'] = lastSyncedTime!.toIso8601String();
     }
@@ -355,12 +348,10 @@ class KMetaSyncFile {
   /// コピーを作成（一部フィールドを更新）
   KMetaSyncFile copyWith({
     String? driveFileId,
-    String? expectedParentId,
     DateTime? lastSyncedTime,
   }) {
     return KMetaSyncFile(
       driveFileId: driveFileId ?? this.driveFileId,
-      expectedParentId: expectedParentId ?? this.expectedParentId,
       lastSyncedTime: lastSyncedTime ?? this.lastSyncedTime,
     );
   }

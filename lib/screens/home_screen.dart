@@ -287,9 +287,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
       ref.read(projectRootDirProvider.notifier).set(dir);
       AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
-      final rootNode = FolderNode('Home', visible: true);
+      final rootNode = await FolderNode.createRootNode(dir);
       ref.read(folderTreeProvider.notifier).set(rootNode);
-      AppLogger.debug('[HomeScreen] rootNode 設定完了');
+      AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
 
       setState(() {
         _openingProjectStatus = '共有フォルダを準備しています...';

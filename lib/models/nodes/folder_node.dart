@@ -247,6 +247,34 @@ class FolderNode extends LayerTreeNode {
     );
   }
 
+  /// プロジェクトルート用のノードを作成
+  /// .kmeta.jsonにDrive連携情報があればDriveFolderNodeを返す
+  static Future<LayerTreeNode> createRootNode(String projectDir) async {
+    try {
+      final meta = await KMetaService.instance.getRawMeta(projectDir);
+      if (meta != null && meta.sync.isLinked) {
+        final driveId = meta.sync.driveId;
+        if (driveId != null) {
+          AppLogger.debug(
+            '[FolderNode] ルートがDrive連携: driveId=$driveId',
+          );
+          return DriveFolderNode(
+            'Home',
+            driveId: driveId,
+            driveUrl: meta.sync.driveUrl ?? '',
+            isReadOnly: meta.sync.isReadOnly ?? false,
+            lastSynced: meta.sync.lastSynced,
+            driveRevisionId: meta.sync.driveRevisionId,
+            visible: true,
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.debug('[FolderNode] ルートDrive連携チェックエラー: $e');
+    }
+    return FolderNode('Home', visible: true);
+  }
+
   @override
   Future<void> dispose() async {
     for (final child in children) {

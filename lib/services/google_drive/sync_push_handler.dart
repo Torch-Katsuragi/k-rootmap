@@ -73,67 +73,45 @@ class SyncPushHandler {
         return SyncResult.success(skippedCount: 0);
       }
 
-      // 移動検出
+      final folderIdCache = <String, String>{};
+
+      // Drive上の現在のファイル配置を取得し、ID↔パスの突合で移動を検出
       int movedCount = 0;
       final movedFileIds = <String>{};
 
-      final previousIdToPath = <String, String>{};
-      for (final entry in previousSyncedFiles.entries) {
-        previousIdToPath[entry.value.driveFileId] = entry.key;
+      final driveEntries =
+          await _fileOps.listDriveFilesRecursive(targetFolderId);
+      final driveIdToEntry = <String, DriveFileEntry>{};
+      for (final e in driveEntries) {
+        if (e.file.id != null) driveIdToEntry[e.file.id!] = e;
       }
 
-      final localPathToFile = <String, LocalSyncFile>{};
-      for (final localFile in filesToSync) {
-        localPathToFile[localFile.relativePath] = localFile;
-      }
-
-      final folderIdCache = <String, String>{};
-
       for (final entry in previousSyncedFiles.entries) {
-        final previousPath = entry.key;
-        final syncInfo = entry.value;
-        final driveFileId = syncInfo.driveFileId;
+        final syncedPath = entry.key;
+        if (p.basename(syncedPath) == kMetaFileName) continue;
+        final driveFileId = entry.value.driveFileId;
+        final driveEntry = driveIdToEntry[driveFileId];
+        if (driveEntry == null) continue;
+        if (driveEntry.relativePath == syncedPath) continue;
 
-        if (localPathToFile.containsKey(previousPath)) {
-          continue;
-        }
-
-        final previousFileName = p.posix.basename(previousPath);
-        String? newPath;
-        LocalSyncFile? newLocalFile;
-
-        for (final localFile in filesToSync) {
-          if (p.basename(localFile.file.path) == previousFileName) {
-            if (!previousSyncedFiles.containsKey(localFile.relativePath)) {
-              newPath = localFile.relativePath;
-              newLocalFile = localFile;
-              break;
-            }
-          }
-        }
-
-        if (newPath != null && newLocalFile != null) {
-          final relativeDir = p.posix.dirname(newPath);
-          final newParentId = await _fileOps.getDriveFolderIdForRelativeDir(
-            targetFolderId,
-            relativeDir,
-            folderIdCache,
+        // syncedFilesのパスとDrive上のパスが異なる → ローカルで移動された
+        final relativeDir = p.posix.dirname(syncedPath);
+        final newParentId = await _fileOps.getDriveFolderIdForRelativeDir(
+          targetFolderId, relativeDir, folderIdCache,
+        );
+        if (newParentId != null) {
+          final oldParentId = driveEntry.file.parents?.firstOrNull;
+          final moved = await _driveService.moveFile(
+            driveFileId,
+            newParentId: newParentId,
+            oldParentId: oldParentId,
           );
-
-          if (newParentId != null) {
-            final moved = await _driveService.moveFile(
-              driveFileId,
-              newParentId: newParentId,
-              oldParentId: syncInfo.expectedParentId,
+          if (moved) {
+            movedCount++;
+            movedFileIds.add(driveFileId);
+            AppLogger.debug(
+              '[SyncEngine] Drive上で移動: ${driveEntry.relativePath} → $syncedPath',
             );
-
-            if (moved) {
-              movedCount++;
-              movedFileIds.add(driveFileId);
-              AppLogger.debug(
-                '[SyncEngine] Drive上で移動: $previousPath → $newPath',
-              );
-            }
           }
         }
       }
@@ -189,7 +167,6 @@ class SyncPushHandler {
           if (kmetaFile != null) {
             syncedFiles[relativePath] = KMetaSyncFile(
               driveFileId: kmetaFile.id!,
-              expectedParentId: targetFolderForFile,
               lastSyncedTime: DateTime.now(),
             );
           }
@@ -247,7 +224,6 @@ class SyncPushHandler {
             uploadedCount++;
             syncedFiles[relativePath] = KMetaSyncFile(
               driveFileId: result.id!,
-              expectedParentId: targetFolderForFile,
               lastSyncedTime: DateTime.now(),
             );
           } else {
@@ -288,10 +264,10 @@ class SyncPushHandler {
         }
       }
 
-      final driveEntries =
+      final currentDriveEntries =
           await _fileOps.listDriveFilesRecursive(targetFolderId);
 
-      for (final entry in driveEntries) {
+      for (final entry in currentDriveEntries) {
         if (deletedFileIds.contains(entry.file.id)) {
           continue;
         }

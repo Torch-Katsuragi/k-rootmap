@@ -32,9 +32,15 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     AppLogger.debug('[Init] start');
 
     if (ref.read(folderTreeProvider) == null) {
-      ref
-          .read(folderTreeProvider.notifier)
-          .set(FolderNode("Home", visible: true));
+      final projectDir = ref.read(projectRootDirProvider);
+      if (projectDir != null) {
+        final rootNode = await FolderNode.createRootNode(projectDir);
+        ref.read(folderTreeProvider.notifier).set(rootNode);
+      } else {
+        ref
+            .read(folderTreeProvider.notifier)
+            .set(FolderNode("Home", visible: true));
+      }
     }
     currentNode = ref.read(folderTreeProvider);
 

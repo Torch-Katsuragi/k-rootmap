@@ -31,6 +31,9 @@ class SyncResult {
   /// 削除したファイル数
   final int deletedCount;
 
+  /// 移動したファイル数
+  final int movedCount;
+
   const SyncResult({
     required this.success,
     this.errorMessage,
@@ -38,6 +41,7 @@ class SyncResult {
     this.downloadedCount = 0,
     this.skippedCount = 0,
     this.deletedCount = 0,
+    this.movedCount = 0,
   });
 
   factory SyncResult.success({
@@ -45,6 +49,7 @@ class SyncResult {
     int downloadedCount = 0,
     int skippedCount = 0,
     int deletedCount = 0,
+    int movedCount = 0,
   }) {
     return SyncResult(
       success: true,
@@ -52,6 +57,7 @@ class SyncResult {
       downloadedCount: downloadedCount,
       skippedCount: skippedCount,
       deletedCount: deletedCount,
+      movedCount: movedCount,
     );
   }
 
@@ -228,6 +234,10 @@ class SyncEngine {
     List<MergeDecision> decisions,
   ) =>
       _conflictResolver.executeMerge(localPath, decisions);
+
+  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）
+  Future<int> ensureDriveFolders(String localPath) =>
+      _conflictResolver.ensureDriveFolders(localPath);
 }
 
 /// フォルダの同期状態

@@ -8,6 +8,9 @@ import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/drive_folder_node.dart';
 
+/// Drive連携UIのテーマカラー（彩度控えめ・明度高めのモダンな青）
+const Color cloudColor = Color(0xFF7EB0D5);
+
 /// ノードのUI表示情報を提供するクラス
 /// 
 /// 単一責任原則に従い、ノードのUI表示に関する責務のみを担当：
@@ -82,11 +85,10 @@ class NodePresenter {
   /// ノードインスタンスに基づく色を取得
   /// グローバルノードは青色系、サブクラス固有の色がある場合はそれを返す
   static Color getColor(LayerTreeNode node) {
-    // Drive連携フォルダは青色（クラウドを象徴）
-    if (node is DriveFolderNode || node is DriveSubFolderNode) {
-      return Colors.blue.shade600;
+    if (node is DriveFolderNode) {
+      return cloudColor;
     }
-    
+
     // グローバルノードは青色で差別化
     if (node.isGlobalNode) {
       return Colors.blue.shade700;

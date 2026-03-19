@@ -279,6 +279,46 @@ class KMetaService {
     return saveMeta(folderPath, updatedMeta);
   }
 
+  /// syncedFiles内のファイルパスを更新（ローカル移動/リネーム対応）
+  ///
+  /// [oldPrefix] に完全一致またはプレフィックス一致するキーを
+  /// [newPrefix] に付け替える。driveFileId は維持される。
+  Future<bool> renameSyncedFiles(
+    String folderPath,
+    String oldPrefix,
+    String newPrefix,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final files = Map<String, KMetaSyncFile>.from(rawMeta.sync.files);
+    if (files.isEmpty) return true;
+
+    bool changed = false;
+    final updates = <String, KMetaSyncFile>{};
+    final removals = <String>[];
+
+    for (final entry in files.entries) {
+      if (entry.key == oldPrefix) {
+        removals.add(entry.key);
+        updates[newPrefix] = entry.value;
+        changed = true;
+      } else if (entry.key.startsWith('$oldPrefix/')) {
+        final newKey = newPrefix + entry.key.substring(oldPrefix.length);
+        removals.add(entry.key);
+        updates[newKey] = entry.value;
+        changed = true;
+      }
+    }
+
+    if (!changed) return true;
+
+    for (final key in removals) {
+      files.remove(key);
+    }
+    files.addAll(updates);
+
+    return setDriveSync(folderPath, files: files);
+  }
+
   /// Drive連携を解除
   Future<bool> unlinkDrive(String folderPath) async {
     final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;

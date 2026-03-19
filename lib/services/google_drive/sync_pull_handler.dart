@@ -51,9 +51,26 @@ class SyncPullHandler {
         return SyncResult.failure('Driveフォルダの情報を取得できません');
       }
 
-      final filesToDownload =
-          await _fileOps.listDriveFilesRecursive(driveFolderId);
+      final driveResult =
+          await _fileOps.listDriveFilesWithFolders(driveFolderId);
+      final filesToDownload = driveResult.files;
+
+      // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）
+      for (final relativeFolderPath in driveResult.folderMap.values) {
+        if (relativeFolderPath.isEmpty) continue;
+        final dir = Directory(
+          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
+        );
+        if (!await dir.exists()) await dir.create(recursive: true);
+      }
+
       if (filesToDownload.isEmpty) {
+        await _kmetaService.setDriveSync(
+          localPath,
+          driveId: driveFolderId,
+          driveFolderName: folderInfo.name,
+          lastSynced: DateTime.now(),
+        );
         return SyncResult.success(downloadedCount: 0);
       }
 
@@ -71,12 +88,12 @@ class SyncPullHandler {
       );
       int processedBytes = 0;
 
-      // ディレクトリを事前に一括作成（並列中の競合回避）
-      final dirs = filesToDownload
+      // ファイルのあるディレクトリも念のため作成（並列DL中の競合回避）
+      final fileDirs = filesToDownload
           .map((e) => p.dirname(
               _fileOps.relativePathToLocalPath(localPath, e.relativePath)))
           .toSet();
-      for (final dir in dirs) {
+      for (final dir in fileDirs) {
         final d = Directory(dir);
         if (!await d.exists()) await d.create(recursive: true);
       }
@@ -104,10 +121,8 @@ class SyncPullHandler {
 
           if (success) {
             downloadedCount++;
-            final parentId = driveFile.parents?.firstOrNull;
             syncedFiles[driveEntry.relativePath] = KMetaSyncFile(
               driveFileId: driveFile.id!,
-              expectedParentId: parentId,
               lastSyncedTime: DateTime.now(),
             );
           } else {
@@ -126,7 +141,7 @@ class SyncPullHandler {
         maxConcurrency: _downloadConcurrency,
       );
 
-      // Driveにないファイルをローカルから削除
+      // Driveにないファイルをローカルから削除（.kmeta.jsonは保護）
       int deletedCount = 0;
       final driveFilePaths =
           filesToDownload.map((f) => f.relativePath).toSet();
@@ -135,6 +150,7 @@ class SyncPullHandler {
         await for (final entity in localDir.list(recursive: true)) {
           if (entity is File) {
             final localName = p.basename(entity.path);
+            if (localName == kMetaFileName) continue;
             if (!_fileOps.matchesSyncPattern(localName)) continue;
             final relativePath = _fileOps.normalizeRelativePath(
               p.relative(entity.path, from: localPath),
@@ -144,6 +160,27 @@ class SyncPullHandler {
               deletedCount++;
               AppLogger.debug('[SyncEngine] ローカルから削除: $relativePath');
             }
+          }
+        }
+
+        // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
+        final driveFolderPaths = driveResult.folderMap.values
+            .where((v) => v.isNotEmpty)
+            .toSet();
+        final localDirs = <Directory>[];
+        await for (final entity in localDir.list(recursive: true)) {
+          if (entity is Directory) localDirs.add(entity);
+        }
+        localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+
+        for (final dir in localDirs) {
+          final relativePath = _fileOps.normalizeRelativePath(
+            p.relative(dir.path, from: localPath),
+          );
+          if (driveFolderPaths.contains(relativePath)) continue;
+          if (await dir.list().isEmpty) {
+            await dir.delete();
+            AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
           }
         }
       }
@@ -203,13 +240,9 @@ class SyncPullHandler {
   }
 
   /// Driveフォルダをローカルにクローン
-  /// Drive連携フォルダとして初回クローンを実行
-  /// [driveId] DriveフォルダID
-  /// [localPath] ローカル保存先パス
-  /// [folderName] フォルダ名
-  /// [driveUrl] 元のDrive URL
-  /// [isReadOnly] 読み取り専用か
-  /// [onProgress] 進捗コールバック
+  ///
+  /// 実質的には「メタデータ設定 → 空フォルダへのpull」と同じ。
+  /// pull() がファイルのダウンロードとメタデータの更新を全て行う。
   Future<bool> cloneFromDrive({
     required String driveId,
     required String localPath,
@@ -220,22 +253,29 @@ class SyncPullHandler {
   }) async {
     AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
 
-    final result = await pull(
-      driveId,
+    final dir = Directory(localPath);
+    if (!await dir.exists()) await dir.create(recursive: true);
+
+    // クローン固有のメタデータを先にセットアップ
+    // pull() 内の setDriveSync はマージ動作なのでこれらを上書きしない
+    final saved = await _kmetaService.setDriveSync(
       localPath,
-      onProgress: onProgress,
+      driveId: driveId,
+      driveUrl: driveUrl,
+      isReadOnly: isReadOnly,
     );
+    if (!saved) {
+      AppLogger.error('[SyncEngine] クローン: .kmeta.json 初期化失敗');
+      return false;
+    }
+
+    // あとは通常のダウンロード同期と同じ
+    final result = await pull(driveId, localPath, onProgress: onProgress);
 
     if (!result.success) {
       AppLogger.error('[SyncEngine] クローン失敗: ${result.errorMessage}');
       return false;
     }
-
-    await _kmetaService.setDriveSync(
-      localPath,
-      driveUrl: driveUrl,
-      isReadOnly: isReadOnly,
-    );
 
     AppLogger.debug(
       '[SyncEngine] クローン完了: ${result.downloadedCount} ファイルダウンロード',

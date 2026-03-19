@@ -258,6 +258,16 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   }
 
   // =============================================
+  // AppBar: タイトル
+  // =============================================
+
+  Widget _buildAppBarTitle(LayerTreeNode? rootNode) {
+    return Text(
+      p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS'),
+    );
+  }
+
+  // =============================================
   // ビルドメソッド
   // =============================================
 
@@ -287,31 +297,33 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       mapState: this,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS')),
-          actions: buildMapAppBarActions(
-            context: context,
-            showAttributeTable: showAttributeTable,
-            drawerOpen: drawerOpen,
-            onAttributeTableToggle: () {
-              if (showAttributeTable) {
-                _closeAttributeTable();
-              } else {
-                _openAttributeTable();
-              }
-            },
-            onDrawerToggle: () {
-              triggerSetState(() {
-                if (drawerOpen) {
-                  drawerOpen = false;
+          title: _buildAppBarTitle(folderTree),
+          actions: [
+            ...buildMapAppBarActions(
+              context: context,
+              showAttributeTable: showAttributeTable,
+              drawerOpen: drawerOpen,
+              onAttributeTableToggle: () {
+                if (showAttributeTable) {
+                  _closeAttributeTable();
                 } else {
-                  drawerOpen = true;
-                  drawerWidth = 320;
-                  showAttributeTable = false;
-                  attributeTableLayer = null;
+                  _openAttributeTable();
                 }
-              });
-            },
-          ),
+              },
+              onDrawerToggle: () {
+                triggerSetState(() {
+                  if (drawerOpen) {
+                    drawerOpen = false;
+                  } else {
+                    drawerOpen = true;
+                    drawerWidth = 320;
+                    showAttributeTable = false;
+                    attributeTableLayer = null;
+                  }
+                });
+              },
+            ),
+          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(36),
             child: GpsInfoBar(
@@ -1040,7 +1052,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       minWidth: minDrawerWidth,
       maxWidthRatio: 0.67,
       initiallyOpen: drawerOpen,
-      backgroundColor: Colors.white.withValues(alpha: 0.8),
+      backgroundColor: Colors.white.withValues(alpha: 0.9),
       handleColor: Colors.black.withValues(alpha: 0.08),
       onOpenChanged: (isOpen) {
         triggerSetState(() {

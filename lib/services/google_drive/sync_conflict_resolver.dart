@@ -93,88 +93,74 @@ class SyncConflictResolver {
       final remoteModifiedFiles = <String>[];
       final remoteMovedFiles = <FileChangeInfo>[];
 
+      // syncedFilesを driveFileId → syncedPath に反転
+      final syncedIdToPath = <String, String>{};
+      for (final entry in syncedFiles.entries) {
+        if (p.basename(entry.key) == kMetaFileName) continue;
+        syncedIdToPath[entry.value.driveFileId] = entry.key;
+      }
+
       final movedFileIds = <String>{};
       final movedToPathSet = <String>{};
 
       for (final entry in syncedFiles.entries) {
-        final fileName = entry.key;
-        if (p.basename(fileName) == kMetaFileName) continue;
+        final syncedPath = entry.key;
+        if (p.basename(syncedPath) == kMetaFileName) continue;
 
         final syncInfo = entry.value;
         final lastSyncedTime = syncInfo.lastSyncedTime;
-        final expectedParentId = syncInfo.expectedParentId;
-
         final driveEntry = driveIdMap[syncInfo.driveFileId];
 
         if (driveEntry == null) {
           remoteDeleted++;
-          remoteDeletedFiles.add(fileName);
+          remoteDeletedFiles.add(syncedPath);
         } else {
+          final drivePath = driveEntry.relativePath;
           final driveFile = driveEntry.file;
-          bool isMoved = false;
 
-          if (expectedParentId != null &&
-              driveFile.parents != null &&
-              driveFile.parents!.isNotEmpty) {
-            final currentParentId = driveFile.parents!.first;
-            if (currentParentId != expectedParentId) {
-              isMoved = true;
-              final newParentPath = driveFolderMap[currentParentId];
+          if (syncedPath != drivePath) {
+            final alsoModified = lastSyncedTime != null &&
+                driveFile.modifiedTime != null &&
+                driveFile.modifiedTime!.isAfter(lastSyncedTime);
 
-              if (newParentPath != null) {
-                final newPath = newParentPath.isEmpty
-                    ? driveFile.name ?? fileName
-                    : '$newParentPath/${driveFile.name ?? fileName}';
-
-                final alsoModified = lastSyncedTime != null &&
-                    driveFile.modifiedTime != null &&
-                    driveFile.modifiedTime!.isAfter(lastSyncedTime);
-
-                remoteMoved++;
-                remoteMovedFiles.add(FileChangeInfo(
-                  fileName: fileName,
-                  type: alsoModified
-                      ? FileChangeType.movedAndModified
-                      : FileChangeType.moved,
-                  movedFrom: fileName,
-                  movedTo: newPath,
-                ));
-                movedFileIds.add(syncInfo.driveFileId);
-                movedToPathSet.add(newPath);
-              } else {
-                remoteDeleted++;
-                remoteDeletedFiles.add(fileName);
-              }
-            }
-          }
-
-          if (!isMoved) {
+            remoteMoved++;
+            remoteMovedFiles.add(FileChangeInfo(
+              fileName: syncedPath,
+              type: alsoModified
+                  ? FileChangeType.movedAndModified
+                  : FileChangeType.moved,
+              movedFrom: syncedPath,
+              movedTo: drivePath,
+            ));
+            movedFileIds.add(syncInfo.driveFileId);
+            movedToPathSet.add(drivePath);
+          } else {
             if (lastSyncedTime == null) {
               remoteModified++;
-              remoteModifiedFiles.add(fileName);
+              remoteModifiedFiles.add(syncedPath);
             } else if (driveFile.modifiedTime != null &&
                 driveFile.modifiedTime!.isAfter(lastSyncedTime)) {
               remoteModified++;
-              remoteModifiedFiles.add(fileName);
+              remoteModifiedFiles.add(syncedPath);
             }
           }
         }
 
         if (movedFileIds.contains(syncInfo.driveFileId)) {
-          localFiles.remove(fileName);
-        } else if (localFiles.containsKey(fileName)) {
-          final localModifiedTime = localFiles[fileName]!;
+          localFiles.remove(syncedPath);
+        } else if (localFiles.containsKey(syncedPath)) {
+          final localModifiedTime = localFiles[syncedPath]!;
           if (lastSyncedTime == null) {
             localModified++;
-            localModifiedFiles.add(fileName);
+            localModifiedFiles.add(syncedPath);
           } else if (localModifiedTime.isAfter(lastSyncedTime)) {
             localModified++;
-            localModifiedFiles.add(fileName);
+            localModifiedFiles.add(syncedPath);
           }
-          localFiles.remove(fileName);
+          localFiles.remove(syncedPath);
         } else {
           localDeleted++;
-          localDeletedFiles.add(fileName);
+          localDeletedFiles.add(syncedPath);
         }
       }
 
@@ -187,9 +173,23 @@ class SyncConflictResolver {
         if (p.basename(entry.relativePath) == kMetaFileName) continue;
         if (movedToPathSet.contains(entry.relativePath)) continue;
         if (movedFileIds.contains(entry.file.id)) continue;
+        // syncedIdToPathにIDがあればsyncedFilesに登録済み（パスが違っても移動として処理済み）
+        if (syncedIdToPath.containsKey(entry.file.id)) continue;
         if (!syncedFiles.containsKey(entry.relativePath)) {
           remoteAdded++;
           remoteAddedFiles.add(entry.relativePath);
+        }
+      }
+
+      // Driveにあるがローカルに存在しないフォルダを検出
+      for (final relativeFolderPath in driveFolderMap.values) {
+        if (relativeFolderPath.isEmpty) continue;
+        final localFolder = Directory(
+          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
+        );
+        if (!localFolder.existsSync()) {
+          remoteAdded++;
+          remoteAddedFiles.add('$relativeFolderPath/');
         }
       }
 
@@ -268,9 +268,8 @@ class SyncConflictResolver {
         return entries;
       }
 
-      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
-      final driveAllEntries = driveData.files;
-      final driveFolderMap = driveData.folderMap;
+      final driveAllEntries =
+          (await _fileOps.listDriveFilesWithFolders(driveId)).files;
 
       final driveIdMap = <String, DriveFileEntry>{};
       for (final entry in driveAllEntries) {
@@ -280,19 +279,22 @@ class SyncConflictResolver {
 
       final localFiles = await localFilesFuture;
 
-      final processedFiles = <String>{};
+      // syncedFilesを driveFileId → syncedPath に反転
+      final syncedIdToPath = <String, String>{};
+      for (final entry in syncedFiles.entries) {
+        if (p.basename(entry.key) == kMetaFileName) continue;
+        syncedIdToPath[entry.value.driveFileId] = entry.key;
+      }
 
       final movedFileIds = <String>{};
       final movedToPathSet = <String>{};
 
       for (final entry in syncedFiles.entries) {
-        final fileName = entry.key;
-        if (p.basename(fileName) == kMetaFileName) continue;
+        final syncedPath = entry.key;
+        if (p.basename(syncedPath) == kMetaFileName) continue;
 
         final syncInfo = entry.value;
         final lastSyncedTime = syncInfo.lastSyncedTime;
-        final expectedParentId = syncInfo.expectedParentId;
-
         final driveEntry = driveIdMap[syncInfo.driveFileId];
 
         MergeChangeType localChange = MergeChangeType.none;
@@ -304,56 +306,39 @@ class SyncConflictResolver {
         if (driveEntry == null) {
           remoteChange = MergeChangeType.deleted;
         } else {
-          final driveFile = driveEntry.file;
-          if (expectedParentId != null &&
-              driveFile.parents != null &&
-              driveFile.parents!.isNotEmpty) {
-            final currentParentId = driveFile.parents!.first;
-            if (currentParentId != expectedParentId) {
-              final newParentPath = driveFolderMap[currentParentId];
-              if (newParentPath != null) {
-                remoteChange = MergeChangeType.moved;
-                final newPath = newParentPath.isEmpty
-                    ? driveFile.name ?? fileName
-                    : '$newParentPath/${driveFile.name ?? fileName}';
-                moveInfo = FileChangeInfo(
-                  fileName: fileName,
-                  type: FileChangeType.moved,
-                  movedFrom: fileName,
-                  movedTo: newPath,
-                );
-                movedFileIds.add(syncInfo.driveFileId);
-                movedToPathSet.add(newPath);
-              } else {
-                remoteChange = MergeChangeType.deleted;
-              }
-            }
-          }
+          final drivePath = driveEntry.relativePath;
 
-          if (remoteChange == MergeChangeType.none) {
-            if (lastSyncedTime != null &&
-                driveFile.modifiedTime != null &&
-                driveFile.modifiedTime!.isAfter(lastSyncedTime)) {
-              remoteChange = MergeChangeType.modified;
-            }
+          if (syncedPath != drivePath) {
+            remoteChange = MergeChangeType.moved;
+            moveInfo = FileChangeInfo(
+              fileName: syncedPath,
+              type: FileChangeType.moved,
+              movedFrom: syncedPath,
+              movedTo: drivePath,
+            );
+            movedFileIds.add(syncInfo.driveFileId);
+            movedToPathSet.add(drivePath);
+          } else if (lastSyncedTime != null &&
+              driveEntry.file.modifiedTime != null &&
+              driveEntry.file.modifiedTime!.isAfter(lastSyncedTime)) {
+            remoteChange = MergeChangeType.modified;
           }
         }
 
         if (movedFileIds.contains(syncInfo.driveFileId)) {
           localChange = MergeChangeType.none;
-        } else if (localFiles.containsKey(fileName)) {
-          localModTime = localFiles[fileName];
+        } else if (localFiles.containsKey(syncedPath)) {
+          localModTime = localFiles[syncedPath];
           if (lastSyncedTime != null && localModTime!.isAfter(lastSyncedTime)) {
             localChange = MergeChangeType.modified;
           }
-          processedFiles.add(fileName);
         } else {
           localChange = MergeChangeType.deleted;
         }
 
         if (localChange != MergeChangeType.none || remoteChange != MergeChangeType.none) {
           entries.add(MergeFileEntry(
-            relativePath: fileName,
+            relativePath: syncedPath,
             localChange: localChange,
             remoteChange: remoteChange,
             localModifiedTime: localModTime,
@@ -363,7 +348,7 @@ class SyncConflictResolver {
           ));
         }
 
-        localFiles.remove(fileName);
+        localFiles.remove(syncedPath);
       }
 
       for (final entry in localFiles.entries) {
@@ -381,6 +366,7 @@ class SyncConflictResolver {
         if (p.basename(driveEntry.relativePath) == kMetaFileName) continue;
         if (movedToPathSet.contains(driveEntry.relativePath)) continue;
         if (movedFileIds.contains(driveEntry.file.id)) continue;
+        if (syncedIdToPath.containsKey(driveEntry.file.id)) continue;
         if (!syncedFiles.containsKey(driveEntry.relativePath)) {
           AppLogger.debug('  リモート追加検出: ${driveEntry.relativePath} (id: ${driveEntry.file.id})');
           entries.add(MergeFileEntry(
@@ -416,9 +402,12 @@ class SyncConflictResolver {
         return SyncResult.failure('Drive連携されていません');
       }
 
+      await ensureDriveFolders(localPath, driveId: driveId);
+
       int uploadedCount = 0;
       int downloadedCount = 0;
       int deletedCount = 0;
+      int movedCount = 0;
 
       final folderIdCache = <String, String>{};
 
@@ -457,7 +446,6 @@ class SyncConflictResolver {
                   uploadedCount++;
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: result.id!,
-                    expectedParentId: targetFolderId,
                     lastSyncedTime: DateTime.now(),
                   );
                 }
@@ -491,7 +479,6 @@ class SyncConflictResolver {
                       uploadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: result.id!,
-                        expectedParentId: targetFolderId,
                         lastSyncedTime: DateTime.now(),
                       );
                     }
@@ -539,21 +526,24 @@ class SyncConflictResolver {
                       uploadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: result.id!,
-                        expectedParentId: targetFolderId,
                         lastSyncedTime: DateTime.now(),
                       );
                     }
                   }
                   break;
                 case MergeChangeType.moved:
+                  // ローカルを採用 → Driveのファイルを元の場所（ローカルのパス）に戻す
                   if (entry.driveFileId != null && entry.moveInfo != null) {
-                    final syncedFile = syncedFiles[relativePath];
-                    if (syncedFile?.expectedParentId != null) {
+                    final relDir = p.dirname(relativePath);
+                    final localParentId = await _fileOps.getDriveFolderIdForRelativeDir(
+                      driveId, relDir, folderIdCache);
+                    if (localParentId != null) {
                       await _driveService.moveFile(
                         entry.driveFileId!,
-                        newParentId: syncedFile!.expectedParentId!,
+                        newParentId: localParentId,
                       );
-                      syncedFiles[relativePath] = syncedFile.copyWith(
+                      syncedFiles[relativePath] = KMetaSyncFile(
+                        driveFileId: entry.driveFileId!,
                         lastSyncedTime: DateTime.now(),
                       );
                     }
@@ -583,13 +573,8 @@ class SyncConflictResolver {
                 );
                 if (success) {
                   downloadedCount++;
-                  final driveMetadata = await _driveService.getFileMetadata(entry.driveFileId!);
-                  final parentId = driveMetadata?.parents.isNotEmpty == true
-                      ? driveMetadata!.parents.first
-                      : driveId;
                   syncedFiles[relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
-                    expectedParentId: parentId,
                     lastSyncedTime: DateTime.now(),
                   );
                 }
@@ -606,24 +591,21 @@ class SyncConflictResolver {
             case MergeChangeType.moved:
               if (entry.moveInfo != null && entry.driveFileId != null) {
                 final oldPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedFrom ?? relativePath);
-                final newPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedTo ?? relativePath);
+                final newLocalPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedTo ?? relativePath);
                 final oldFile = File(oldPath);
                 if (await oldFile.exists()) {
-                  final newDir = Directory(p.dirname(newPath));
+                  final newDir = Directory(p.dirname(newLocalPath));
                   if (!await newDir.exists()) {
                     await newDir.create(recursive: true);
                   }
-                  await oldFile.rename(newPath);
+                  await oldFile.rename(newLocalPath);
                   syncedFiles.remove(entry.moveInfo!.movedFrom ?? relativePath);
 
-                  final driveMetadata = await _driveService.getFileMetadata(entry.driveFileId!);
                   syncedFiles[entry.moveInfo!.movedTo ?? relativePath] = KMetaSyncFile(
                     driveFileId: entry.driveFileId!,
-                    expectedParentId: driveMetadata?.parents.isNotEmpty == true
-                        ? driveMetadata!.parents.first
-                        : driveId,
                     lastSyncedTime: DateTime.now(),
                   );
+                  movedCount++;
                 }
               }
               break;
@@ -642,13 +624,8 @@ class SyncConflictResolver {
                     );
                     if (success) {
                       downloadedCount++;
-                      final driveMetadata = await _driveService.getFileMetadata(entry.driveFileId!);
-                      final parentId = driveMetadata?.parents.isNotEmpty == true
-                          ? driveMetadata!.parents.first
-                          : driveId;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
-                        expectedParentId: parentId,
                         lastSyncedTime: DateTime.now(),
                       );
                     }
@@ -672,7 +649,6 @@ class SyncConflictResolver {
                       downloadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
                         driveFileId: entry.driveFileId!,
-                        expectedParentId: syncedFiles[relativePath]?.expectedParentId ?? driveId,
                         lastSyncedTime: DateTime.now(),
                       );
                     }
@@ -696,19 +672,91 @@ class SyncConflictResolver {
         files: syncedFiles,
       );
 
+      // Driveに存在しない空フォルダをローカルから削除（深い階層から処理）
+      await _cleanupEmptyLocalFolders(localPath, driveId);
+
       AppLogger.debug(
         '[SyncEngine] Merge完了: $uploadedCount uploaded, '
-        '$downloadedCount downloaded, $deletedCount deleted',
+        '$downloadedCount downloaded, $deletedCount deleted, $movedCount moved',
       );
 
       return SyncResult.success(
         uploadedCount: uploadedCount,
         downloadedCount: downloadedCount,
         deletedCount: deletedCount,
+        movedCount: movedCount,
       );
     } catch (e) {
       AppLogger.error('[SyncEngine] Merge エラー: $e');
       return SyncResult.failure(e.toString());
+    }
+  }
+
+  /// Driveのフォルダ構造をローカルに反映（空フォルダ含む）
+  ///
+  /// [driveId] を省略すると .kmeta.json から取得する。
+  /// 作成したフォルダ数を返す。
+  Future<int> ensureDriveFolders(
+    String localPath, {
+    String? driveId,
+  }) async {
+    try {
+      driveId ??= (await _kmetaService.getMergedMeta(localPath)).sync.driveId;
+      if (driveId == null) return 0;
+
+      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
+      int created = 0;
+      for (final relativeFolderPath in driveData.folderMap.values) {
+        if (relativeFolderPath.isEmpty) continue;
+        final dir = Directory(
+          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
+        );
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+          created++;
+          AppLogger.debug('[SyncEngine] フォルダ作成: $relativeFolderPath');
+        }
+      }
+      return created;
+    } catch (e) {
+      AppLogger.error('[SyncEngine] ensureDriveFolders エラー: $e');
+      return 0;
+    }
+  }
+
+  /// Driveに存在しない空のローカルフォルダを削除
+  Future<void> _cleanupEmptyLocalFolders(
+    String localPath,
+    String driveId,
+  ) async {
+    try {
+      final driveData = await _fileOps.listDriveFilesWithFolders(driveId);
+      final driveFolderPaths = driveData.folderMap.values
+          .where((v) => v.isNotEmpty)
+          .toSet();
+
+      final localDir = Directory(localPath);
+      if (!await localDir.exists()) return;
+
+      final localDirs = <Directory>[];
+      await for (final entity in localDir.list(recursive: true)) {
+        if (entity is Directory) localDirs.add(entity);
+      }
+      // 深い階層から処理して連鎖削除を可能にする
+      localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+
+      for (final dir in localDirs) {
+        final relativePath = _fileOps.normalizeRelativePath(
+          p.relative(dir.path, from: localPath),
+        );
+        if (driveFolderPaths.contains(relativePath)) continue;
+        if (await dir.list().isEmpty) {
+          await dir.delete();
+          AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
+        }
+      }
+    } catch (e) {
+      AppLogger.error('[SyncEngine] 空フォルダクリーンアップエラー: $e');
     }
   }
 }

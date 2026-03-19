@@ -20,12 +20,14 @@ import '../../models/nodes/drive_folder_node.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
+import '../../services/kmeta_service.dart';
 import '../../services/layer_drawer_service.dart';
 import '../dialogs/add_folder_type_dialog.dart';
 import '../dialogs/drive_url_input_dialog.dart';
 import 'common_dialogs.dart';
 import 'layer_drawer_title_bar.dart';
 import 'layer_drawer_drive_sync.dart';
+import 'sync_merge_dialog.dart';
 import 'tiles/drag_feedback_card.dart';
 import 'tiles/folder_tile.dart';
 import 'tiles/geopackage_tile.dart';
@@ -182,6 +184,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
 
     try {
       await _moveFileOrDir(sourcePath, newPath, isDir: source is FolderNode);
+      await LayerDrawerService.notifySyncedPathChange(source, sourcePath, newPath);
 
       final sourceParent = source.parent;
       if (sourceParent != null) await sourceParent.updateChildren();
@@ -249,6 +252,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
 
     final parent = widget.currentNode!.parent;
+    final driveRoot = LayerDrawerService.findDriveRoot(widget.currentNode);
     Widget titleBar = LayerDrawerTitleBar(
       title: widget.currentNode!.name,
       currentNode: widget.currentNode!,
@@ -260,6 +264,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
               }
           : null,
       onBack: parent != null ? () => widget.onDirChanged(parent) : null,
+      syncStatus: driveRoot?.syncStatus,
+      isReadOnly: driveRoot?.isReadOnly ?? false,
+      onCloudAction: driveRoot != null
+          ? (action) => _handleCloudAction(context, driveRoot, action)
+          : null,
     );
     if (parent != null) {
       titleBar = _wrapDragNav(
@@ -367,7 +376,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (node is GeoPackageNode) {
       return GeoPackageTile(
         node: node,
-        isDropTarget: _isLayerDrag && _dragTarget == node,
+        isDropTarget: (_isLayerDrag || !_isDragging) && _dragTarget == node,
         onRename: () => _renameGeoPackage(context, node),
         onDragTargetChanged: (t) => setState(() => _dragTarget = t),
         onDragActiveChanged: (dragNode) => setState(() {
@@ -409,6 +418,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       if (absPath != null) {
         final newPath = p.join(p.dirname(absPath), result);
         await Directory(absPath).rename(newPath);
+        await LayerDrawerService.notifySyncedPathChange(node, absPath, newPath);
       }
       node.name = result;
       triggerMapRefresh();
@@ -483,8 +493,82 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
   }
 
+  Future<void> _handleCloudAction(
+    BuildContext context,
+    DriveFolderNode driveRoot,
+    String action,
+  ) async {
+    switch (action) {
+      case 'upload':
+        await openSyncMergeDialog(context, driveRoot, mode: SyncMode.upload);
+      case 'download':
+        await openSyncMergeDialog(context, driveRoot, mode: SyncMode.download);
+      case 'refresh':
+        await refreshSyncStatus(driveRoot);
+      case 'unlink':
+        if (driveRoot.parent != null) {
+          await unlinkDriveFolder(context, driveRoot);
+        } else {
+          await _unlinkRootDrive(context, driveRoot);
+        }
+    }
+  }
+
+  Future<void> _unlinkRootDrive(
+    BuildContext context,
+    DriveFolderNode driveRoot,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Drive連携を解除'),
+        content: Text(
+          '${driveRoot.name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('解除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    final folderPath = driveRoot.getAbsoluteFilePath();
+    if (folderPath == null) return;
+
+    await KMetaService.instance.unlinkDrive(folderPath);
+
+    final replacement = FolderNode(
+      driveRoot.name,
+      visible: driveRoot.visible,
+      children: [],
+    );
+    for (final child in driveRoot.children) {
+      child.parent = replacement;
+      replacement.children.add(child);
+    }
+    driveRoot.children.clear();
+
+    ref.read(folderTreeProvider.notifier).set(replacement);
+    widget.onDirChanged(replacement);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Drive連携を解除しました')),
+      );
+    }
+  }
+
   Future<void> _addFolder(BuildContext context) async {
-    final typeResult = await AddFolderTypeDialog.show(context);
+    final isUnderDrive = LayerDrawerService.findDriveRoot(widget.currentNode) != null;
+    final typeResult = await AddFolderTypeDialog.show(context, allowDrive: !isUnderDrive);
     if (typeResult == null) return;
     if (typeResult.type == AddFolderType.local) {
       try {

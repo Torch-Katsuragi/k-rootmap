@@ -161,7 +161,11 @@ class GeoPackageTile extends ConsumerWidget {
       final result = await ImportExportService().importFile(filePath, node);
       if (result.success) {
         await node.updateChildren();
-        if (result.createdLayer != null) await result.createdLayer!.updateChildren();
+        if (result.createdLayers != null) {
+          for (final layer in result.createdLayers!) {
+            await layer.updateChildren();
+          }
+        }
 
         final absPath = node.geoPackageFile.getAbsolutePath();
         if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);

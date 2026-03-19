@@ -39,10 +39,9 @@ class GeoJSONImporter extends BaseImporter {
       }
 
       final fileContent = await file.readAsString();
-      
-      // turfでGeoJSONをパース
+
       final geoJson = turf.GeoJSONObject.fromJson(json.decode(fileContent));
-      
+
       if (geoJson is! turf.FeatureCollection) {
         return ImportExportResult.error('FeatureCollection形式のGeoJSONのみサポートしています');
       }
@@ -54,81 +53,83 @@ class GeoJSONImporter extends BaseImporter {
 
       AppLogger.debug('[GeoJSONImporter] フィーチャ数: ${turfFeatures.length}');
 
-      // 最初のフィーチャからジオメトリタイプを判定
-      final geometryType = _detectGeometryType(turfFeatures.first);
-      if (geometryType == null) {
-        return ImportExportResult.error('サポートされていないジオメトリタイプです');
+      // フィーチャをジオメトリ型ごとにグループ化
+      final grouped = _groupByGeometryType(turfFeatures);
+      if (grouped.isEmpty) {
+        return ImportExportResult.error('サポートされているジオメトリタイプのフィーチャがありません');
       }
 
-      // レイヤ名決定
-      final fileName = p.basenameWithoutExtension(filePath);
-      final actualLayerName = await _generateUniqueLayerName(
-        targetGeoPackage,
-        layerName ?? fileName,
-      );
+      AppLogger.debug('[GeoJSONImporter] ジオメトリ型数: ${grouped.length} (${grouped.keys.map((t) => t.value).join(", ")})');
 
-      // レイヤ作成
-      await targetGeoPackage.geoPackageFile.addLayer(actualLayerName, geometryType);
+      final baseName = layerName ?? p.basenameWithoutExtension(filePath);
+      final useTypeSuffix = grouped.length > 1;
+      final createdLayerNames = <String>[];
+      int totalSuccess = 0;
+      int totalSkip = 0;
 
-      // GeoJSONスキーマをGeoPackageに追加
-      await _addSchemaFromFeatures(targetGeoPackage, actualLayerName, turfFeatures);
+      for (final entry in grouped.entries) {
+        final geometryType = entry.key;
+        final features = entry.value;
 
-      // フィーチャをインポート
-      final batchData = <Map<String, dynamic>>[];
-      int successCount = 0;
-      int skipCount = 0;
+        final rawName = useTypeSuffix ? '${baseName}_${geometryType.value}' : baseName;
+        final actualLayerName = await _generateUniqueLayerName(targetGeoPackage, rawName);
 
-      for (int i = 0; i < turfFeatures.length; i++) {
-        try {
-          final turfFeature = turfFeatures[i];
-          final featureData = _convertTurfFeatureToData(turfFeature, geometryType);
+        await targetGeoPackage.geoPackageFile.addLayer(actualLayerName, geometryType);
+        await _addSchemaFromFeatures(targetGeoPackage, actualLayerName, features);
 
-          if (featureData != null) {
-            batchData.add(featureData);
-            successCount++;
-          } else {
+        final batchData = <Map<String, dynamic>>[];
+        int successCount = 0;
+        int skipCount = 0;
+
+        for (final feature in features) {
+          try {
+            final featureData = _convertTurfFeatureToData(feature, geometryType);
+            if (featureData != null) {
+              batchData.add(featureData);
+              successCount++;
+            } else {
+              skipCount++;
+            }
+
+            if (batchData.length >= 1000) {
+              await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
+              batchData.clear();
+            }
+          } catch (e) {
+            AppLogger.debug('[GeoJSONImporter] フィーチャ処理エラー ($actualLayerName): $e');
             skipCount++;
           }
-
-          // バッチ処理
-          if (batchData.length >= 1000) {
-            await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
-            batchData.clear();
-            AppLogger.debug('[GeoJSONImporter] バッチ処理完了: $successCount件');
-          }
-        } catch (e) {
-          AppLogger.debug('[GeoJSONImporter] フィーチャ[$i]の処理エラー: $e');
-          skipCount++;
         }
+
+        if (batchData.isNotEmpty) {
+          await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
+        }
+
+        createdLayerNames.add(actualLayerName);
+        totalSuccess += successCount;
+        totalSkip += skipCount;
+        AppLogger.debug('[GeoJSONImporter] レイヤ "$actualLayerName": $successCount成功, $skipCountスキップ');
       }
 
-      // 残りのバッチを処理
-      if (batchData.isNotEmpty) {
-        await _processBatch(targetGeoPackage, actualLayerName, geometryType, batchData);
-      }
-
-      AppLogger.debug('[GeoJSONImporter] インポート完了: $successCount成功, $skipCountスキップ');
-
-      // レイヤ更新
       await targetGeoPackage.updateChildren();
 
-      // 作成されたレイヤノードを取得
-      final createdLayer = targetGeoPackage.children
+      final createdLayers = targetGeoPackage.children
           .whereType<LayerNode>()
-          .where((layer) => layer.layerName == actualLayerName)
-          .firstOrNull;
+          .where((layer) => createdLayerNames.contains(layer.layerName))
+          .toList();
 
-      if (createdLayer == null) {
-        return ImportExportResult.error('GeoJSONレイヤー作成後の取得に失敗しました: $actualLayerName');
+      if (createdLayers.isEmpty) {
+        return ImportExportResult.error('GeoJSONレイヤー作成後の取得に失敗しました');
       }
 
       return ImportExportResult.success(
-        createdLayer: createdLayer,
+        createdLayers: createdLayers,
         metadata: {
           'sourceFile': filePath,
-          'featureCount': successCount,
-          'skippedCount': skipCount,
-          'geometryType': geometryType.value,
+          'featureCount': totalSuccess,
+          'skippedCount': totalSkip,
+          'layerCount': grouped.length,
+          'geometryTypes': grouped.keys.map((t) => t.value).toList(),
         },
       );
     } catch (e, stack) {
@@ -136,6 +137,17 @@ class GeoJSONImporter extends BaseImporter {
       AppLogger.debug('スタックトレース: $stack');
       return ImportExportResult.error('GeoJSONの読み込みでエラーが発生しました: $e');
     }
+  }
+
+  /// フィーチャをジオメトリ型ごとにグループ化
+  Map<GeometryType, List<turf.Feature>> _groupByGeometryType(List<turf.Feature> features) {
+    final grouped = <GeometryType, List<turf.Feature>>{};
+    for (final feature in features) {
+      final type = _detectGeometryType(feature);
+      if (type == null) continue;
+      grouped.putIfAbsent(type, () => []).add(feature);
+    }
+    return grouped;
   }
 
   /// turfのFeatureからジオメトリタイプを判定

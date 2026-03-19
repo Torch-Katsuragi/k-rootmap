@@ -106,23 +106,28 @@ enum FileFormat {
 class ImportExportResult {
   final bool success;
   final String? errorMessage;
-  final LayerNode? createdLayer;
+  final List<LayerNode>? createdLayers;
   final Map<String, dynamic>? metadata;
+
+  /// 後方互換: 最初の作成レイヤを返す
+  LayerNode? get createdLayer => createdLayers?.firstOrNull;
 
   ImportExportResult({
     required this.success,
     this.errorMessage,
-    this.createdLayer,
+    this.createdLayers,
     this.metadata,
   });
 
   factory ImportExportResult.success({
     LayerNode? createdLayer,
+    List<LayerNode>? createdLayers,
     Map<String, dynamic>? metadata,
   }) {
+    final layers = createdLayers ?? (createdLayer != null ? [createdLayer] : null);
     return ImportExportResult(
       success: true,
-      createdLayer: createdLayer,
+      createdLayers: layers,
       metadata: metadata,
     );
   }

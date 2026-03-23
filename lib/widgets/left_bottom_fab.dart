@@ -16,7 +16,7 @@ class LeftBottomFab extends ConsumerWidget {
     
     Widget centerIcon;
     switch (currentTool.runtimeType) {
-      case PenTool:
+      case PenTool _:
         centerIcon = Icon(
           Icons.auto_fix_normal,
           color: isActive ? Colors.white : Colors.grey,

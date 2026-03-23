@@ -256,6 +256,7 @@ class LayerTile extends ConsumerWidget {
       builder: (_) => ConvertPointsToGeometryDialog(sourceLayer: sourceLayer, availableLayers: targetLayers),
     );
     if (targetLayer == null) return;
+    if (!context.mounted) return;
 
     final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
     String? featureName = await showDialog<String>(
@@ -381,6 +382,7 @@ class LayerTile extends ConsumerWidget {
 
     try {
       final targetColumns = await parentGpkg.geoPackageFile.getTableColumns(node.name);
+      if (!context.mounted) return;
       if (targetColumns.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('レイヤーのカラム情報を取得できませんでした')));
         return;
@@ -407,8 +409,9 @@ class LayerTile extends ConsumerWidget {
         final cols = await parentGpkg.geoPackageFile.getTableColumns(layer.name);
         if (columnsMatch(targetColumns, cols)) matching.add(layer);
       }
+      if (!context.mounted) return;
       if (matching.isEmpty) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('カラム構造が一致するレイヤーが見つかりません')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('カラム構造が一致するレイヤーが見つかりません')));
         return;
       }
 

@@ -17,10 +17,7 @@ class AttributeTableSettings {
   final bool showWgs84;
   final EpsgDefinition? additionalEpsg;
 
-  const AttributeTableSettings({
-    this.showWgs84 = true,
-    this.additionalEpsg,
-  });
+  const AttributeTableSettings({this.showWgs84 = true, this.additionalEpsg});
 
   AttributeTableSettings copyWith({
     bool? showWgs84,
@@ -29,7 +26,8 @@ class AttributeTableSettings {
   }) {
     return AttributeTableSettings(
       showWgs84: showWgs84 ?? this.showWgs84,
-      additionalEpsg: clearAdditionalEpsg ? null : (additionalEpsg ?? this.additionalEpsg),
+      additionalEpsg:
+          clearAdditionalEpsg ? null : (additionalEpsg ?? this.additionalEpsg),
     );
   }
 }
@@ -39,12 +37,13 @@ class AttributeTableSettings {
 class AttributeTableController extends ChangeNotifier {
   final LayerNode layer;
   final WidgetRef _ref;
-  
+
   // 状態
   PlutoGridStateManager? _stateManager;
   List<PlutoColumn> _columns = [];
   List<PlutoRow> _rows = [];
   List<String> _columnNames = [];
+  Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
   bool _isLoading = true;
   AttributeTableSettings _settings = const AttributeTableSettings();
@@ -58,6 +57,16 @@ class AttributeTableController extends ChangeNotifier {
   List<FeatureNode> _displayFeatures = [];
   List<PlutoRow> _displayRows = [];
 
+  // ページング状態
+  int _currentPageOffset = 0;
+  static const int defaultPageSize = 100;
+
+  // エラー状態
+  String? _lastError;
+
+  // カラム非表示状態
+  final Set<String> _hiddenColumns = {};
+
   // ゲッター
   PlutoGridStateManager? get stateManager => _stateManager;
   List<PlutoColumn> get columns => _columns;
@@ -67,13 +76,53 @@ class AttributeTableController extends ChangeNotifier {
   List<FeatureNode> get allFeatures => _features;
   bool get isLoading => _isLoading;
   AttributeTableSettings get settings => _settings;
-  bool get isPointLayer => layer.runtimeType.toString().contains('PointLayerNode');
+  bool get isPointLayer => layer is PointLayerNode;
   bool get isFiltered => _isFiltered;
   String get filterExpression => _filterExpression;
   String get filterSql => _filterSql;
   String? get filterError => _filterError;
   int get totalCount => _features.length;
   int get filteredCount => _displayFeatures.length;
+  int get currentPageOffset => _currentPageOffset;
+  String? get lastError => _lastError;
+
+  /// エラーをクリア
+  void clearError() {
+    _lastError = null;
+  }
+
+  Set<String> get hiddenColumns => _hiddenColumns;
+
+  /// カラムの表示/非表示を切り替え
+  void toggleColumnVisibility(String columnName) {
+    if (_hiddenColumns.contains(columnName)) {
+      _hiddenColumns.remove(columnName);
+    } else {
+      _hiddenColumns.add(columnName);
+    }
+    if (_stateManager != null) {
+      for (final col in _stateManager!.refColumns) {
+        if (col.field == columnName) {
+          _stateManager!.hideColumn(col, _hiddenColumns.contains(columnName));
+          break;
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  /// 全カラムを表示
+  void showAllColumns() {
+    if (_stateManager != null) {
+      for (final col in _stateManager!.refColumns) {
+        if (_hiddenColumns.contains(col.field)) {
+          _stateManager!.hideColumn(col, false);
+        }
+      }
+    }
+    _hiddenColumns.clear();
+    notifyListeners();
+  }
 
   AttributeTableController(this.layer, this._ref);
 
@@ -90,27 +139,44 @@ class AttributeTableController extends ChangeNotifier {
         getAll: true,
         skipPrimaryKey: true,
       );
-      AppLogger.debug('[AttributeTableController] カラム名: ${_columnNames.length}個');
+      AppLogger.debug(
+        '[AttributeTableController] カラム名: ${_columnNames.length}個',
+      );
+
+      // スキーマからカラム型情報を取得
+      final columnInfo = await layer.geoPackageFile.getAttributeColumnInfo(
+        layer.layerName,
+        includeBuiltIn: true,
+      );
+      _columnTypeMap = {
+        for (final info in columnInfo)
+          info['name'] as String: (info['type'] as String).toUpperCase(),
+      };
 
       // フィーチャを取得
       _features = layer.features;
       AppLogger.debug('[AttributeTableController] フィーチャ: ${_features.length}個');
 
-      // カラムと行を構築
+      // カラムを構築
       _columns = _createColumns();
-      _rows = await _createRows();
 
       // フィルタが有効ならフィルタ済みビューを構築
       if (_isFiltered && _filterSql.isNotEmpty) {
         await _applyFilterToDisplay();
       } else {
         _displayFeatures = List.of(_features);
-        _displayRows = List.of(_rows);
       }
+
+      // 初回ページのデータを構築
+      _currentPageOffset = 0;
+      _displayRows = await _createRowsForRange(0, defaultPageSize);
+      _rows = _displayRows;
 
       AppLogger.debug('[AttributeTableController] 初期化完了');
     } catch (e) {
-      AppLogger.debug('[AttributeTableController] 初期化エラー: $e');
+      final msg = '属性テーブル初期化エラー: $e';
+      AppLogger.debug('[AttributeTableController] $msg');
+      _lastError = msg;
       _columnNames = [];
       _features = [];
       _columns = [];
@@ -126,7 +192,7 @@ class AttributeTableController extends ChangeNotifier {
   /// PlutoGridのStateManagerを設定
   void setStateManager(PlutoGridStateManager manager) {
     _stateManager = manager;
-    
+
     // 編集モードの監視
     _stateManager?.addListener(_onStateChanged);
   }
@@ -178,7 +244,9 @@ class AttributeTableController extends ChangeNotifier {
       _features.remove(feature);
     }
 
-    await _ref.read(selectedFeaturesProvider.notifier).disposeSelectedFeatures();
+    await _ref
+        .read(selectedFeaturesProvider.notifier)
+        .disposeSelectedFeatures();
 
     // 再読み込み
     await initialize();
@@ -186,27 +254,33 @@ class AttributeTableController extends ChangeNotifier {
     AppLogger.debug('[AttributeTableController] 削除完了: $featureCount個');
   }
 
-  /// 属性値を保存
-  Future<void> saveAttributeChange(
+  /// 属性値を保存。失敗時はエラーメッセージを返す。
+  Future<String?> saveAttributeChange(
     FeatureNode feature,
     String field,
     dynamic value,
   ) async {
-    // システムフィールドは編集不可
-    if (field == 'id' || field == 'fid' || field == 'geom' || field == 'geometry') {
-      return;
+    if (field == 'id' ||
+        field == 'fid' ||
+        field == 'geom' ||
+        field == 'geometry') {
+      return null;
     }
 
-    // 仮想カラム（_で始まる）は表示専用
     if (field.startsWith('_')) {
-      return;
+      return null;
     }
 
     try {
       await feature.setAttributeValue(field, value);
       AppLogger.debug('[AttributeTableController] 属性保存: $field = $value');
+      return null;
     } catch (e) {
-      AppLogger.debug('[AttributeTableController] 属性保存エラー: $e');
+      final msg = '属性保存エラー ($field): $e';
+      _lastError = msg;
+      AppLogger.debug('[AttributeTableController] $msg');
+      notifyListeners();
+      return msg;
     }
   }
 
@@ -215,7 +289,7 @@ class AttributeTableController extends ChangeNotifier {
   /// QGIS式でフィルタを適用
   Future<String?> applyFilter(String expression) async {
     if (expression.trim().isEmpty) {
-      clearFilter();
+      await clearFilter();
       return null;
     }
 
@@ -229,7 +303,10 @@ class AttributeTableController extends ChangeNotifier {
     final sql = (result as FilterResultOk).sql;
 
     // カラム名バリデーション
-    final allColumns = await layer.getAttributeColumnNames(getAll: true, skipPrimaryKey: false);
+    final allColumns = await layer.getAttributeColumnNames(
+      getAll: true,
+      skipPrimaryKey: false,
+    );
     final fieldError = QgisExpressionFilter.validateFieldReferences(
       sql,
       allColumns.toSet(),
@@ -245,7 +322,9 @@ class AttributeTableController extends ChangeNotifier {
       layer.layerName,
       sql,
     );
-    if (ids.isEmpty && await layer.geoPackageFile.countFilteredFeatures(layer.layerName, sql) < 0) {
+    if (ids.isEmpty &&
+        await layer.geoPackageFile.countFilteredFeatures(layer.layerName, sql) <
+            0) {
       _filterError = 'SQL実行エラー（式の構文を確認してください）';
       notifyListeners();
       return _filterError;
@@ -265,14 +344,16 @@ class AttributeTableController extends ChangeNotifier {
   /// フィルタ結果を表示用リストに適用
   Future<void> _applyFilterToDisplay() async {
     _displayFeatures = [];
-    _displayRows = [];
 
     for (var i = 0; i < _features.length; i++) {
       if (_filteredRowIds.contains(_features[i].rowId)) {
         _displayFeatures.add(_features[i]);
-        if (i < _rows.length) _displayRows.add(_rows[i]);
       }
     }
+
+    _currentPageOffset = 0;
+    _displayRows = await _createRowsForRange(0, defaultPageSize);
+    _rows = _displayRows;
 
     AppLogger.debug(
       '[AttributeTableController] フィルタ適用: '
@@ -281,31 +362,86 @@ class AttributeTableController extends ChangeNotifier {
   }
 
   /// フィルタを解除
-  void clearFilter() {
+  Future<void> clearFilter() async {
     _filterExpression = '';
     _filterSql = '';
     _filteredRowIds = {};
     _isFiltered = false;
     _filterError = null;
     _displayFeatures = List.of(_features);
-    _displayRows = List.of(_rows);
+    _currentPageOffset = 0;
+    _displayRows = await _createRowsForRange(0, defaultPageSize);
+    _rows = _displayRows;
     notifyListeners();
   }
 
-  /// フィーチャを選択
+  /// フィーチャを選択（ページオフセットを考慮）
   void selectFeature(int rowIndex) {
-    if (rowIndex < 0 || rowIndex >= _displayFeatures.length) return;
+    final absoluteIndex = _currentPageOffset + rowIndex;
+    if (absoluteIndex < 0 || absoluteIndex >= _displayFeatures.length) return;
 
-    final feature = _displayFeatures[rowIndex];
+    final feature = _displayFeatures[absoluteIndex];
 
     final currentSelection = _ref.read(selectedFeaturesProvider);
-    if (currentSelection.length == 1 &&
-        currentSelection.first == feature) {
+    if (currentSelection.length == 1 && currentSelection.first == feature) {
       return;
     }
 
     _ref.read(selectedFeaturesProvider.notifier).set([feature]);
-    AppLogger.debug('[AttributeTableController] フィーチャ選択: rowId=${feature.rowId}');
+    AppLogger.debug(
+      '[AttributeTableController] フィーチャ選択: rowId=${feature.rowId}',
+    );
+  }
+
+  /// 外部からの選択に応じてテーブルの行をハイライト（同一ページ内）
+  void highlightFeatureOnCurrentPage(FeatureNode feature) {
+    if (_stateManager == null) return;
+
+    final absoluteIndex = _displayFeatures.indexOf(feature);
+    if (absoluteIndex < 0) return;
+
+    final pageEnd = _currentPageOffset + defaultPageSize;
+    if (absoluteIndex < _currentPageOffset || absoluteIndex >= pageEnd) return;
+
+    final localIndex = absoluteIndex - _currentPageOffset;
+    if (localIndex >= 0 && localIndex < _stateManager!.refRows.length) {
+      _stateManager!.setCurrentCell(
+        _stateManager!.refRows[localIndex].cells.values.first,
+        localIndex,
+      );
+    }
+  }
+
+  // ========== 統計 ==========
+
+  /// 指定カラムの統計情報を計算
+  Future<Map<String, dynamic>> getColumnStatistics(String columnName) async {
+    return layer.geoPackageFile.getColumnStatistics(
+      layer.layerName,
+      columnName,
+    );
+  }
+
+  // ========== 検索・置換 ==========
+
+  /// テキスト検索（全カラム横断）。マッチしたrowIdを返す。
+  Future<List<int>> searchText(String text) async {
+    if (text.isEmpty) return [];
+    return layer.geoPackageFile.searchText(layer.layerName, text, _columnNames);
+  }
+
+  /// テキスト置換（指定カラム内）
+  Future<int> replaceText(String column, String search, String replace) async {
+    final count = await layer.geoPackageFile.replaceText(
+      layer.layerName,
+      column,
+      search,
+      replace,
+    );
+    if (count > 0) {
+      await initialize();
+    }
+    return count;
   }
 
   // ========== カラム構築 ==========
@@ -314,84 +450,102 @@ class AttributeTableController extends ChangeNotifier {
     final tableColumns = <PlutoColumn>[];
 
     // 行番号カラム
-    tableColumns.add(PlutoColumn(
-      title: '#',
-      field: '_row_num',
-      type: PlutoColumnType.number(),
-      enableEditingMode: false,
-      width: 50,
-      frozen: PlutoColumnFrozen.start,
-    ));
+    tableColumns.add(
+      PlutoColumn(
+        title: '#',
+        field: '_row_num',
+        type: PlutoColumnType.number(),
+        enableEditingMode: false,
+        width: 50,
+        frozen: PlutoColumnFrozen.start,
+      ),
+    );
 
     // Pointレイヤーの座標カラム
     if (isPointLayer) {
       if (_settings.showWgs84) {
-        tableColumns.add(PlutoColumn(
-          title: '_lat',
-          field: '_lat',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-          width: 100,
-        ));
-        tableColumns.add(PlutoColumn(
-          title: '_lon',
-          field: '_lon',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-          width: 100,
-        ));
+        tableColumns.add(
+          PlutoColumn(
+            title: '_lat',
+            field: '_lat',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 100,
+          ),
+        );
+        tableColumns.add(
+          PlutoColumn(
+            title: '_lon',
+            field: '_lon',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 100,
+          ),
+        );
       }
 
       if (_settings.additionalEpsg != null) {
-        tableColumns.add(PlutoColumn(
-          title: '_x',
-          field: '_x',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-          width: 110,
-        ));
-        tableColumns.add(PlutoColumn(
-          title: '_y',
-          field: '_y',
-          type: PlutoColumnType.text(),
-          enableEditingMode: false,
-          width: 110,
-        ));
+        tableColumns.add(
+          PlutoColumn(
+            title: '_x',
+            field: '_x',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 110,
+          ),
+        );
+        tableColumns.add(
+          PlutoColumn(
+            title: '_y',
+            field: '_y',
+            type: PlutoColumnType.text(),
+            enableEditingMode: false,
+            width: 110,
+          ),
+        );
       }
     }
 
     // 属性カラム
     for (final columnName in _columnNames) {
-      tableColumns.add(PlutoColumn(
-        title: columnName,
-        field: columnName,
-        type: _determineColumnType(columnName),
-        enableEditingMode: _isColumnEditable(columnName),
-        width: _getColumnWidth(columnName),
-      ));
+      tableColumns.add(
+        PlutoColumn(
+          title: columnName,
+          field: columnName,
+          type: _determineColumnType(columnName),
+          enableEditingMode: _isColumnEditable(columnName),
+          width: _getColumnWidth(columnName),
+        ),
+      );
     }
 
     return tableColumns;
   }
 
+  /// SQLiteのカラム型からPlutoColumnTypeにマッピング
   PlutoColumnType _determineColumnType(String columnName) {
-    final lowerName = columnName.toLowerCase();
-    if (lowerName == 'id' || lowerName == 'fid' || lowerName.contains('_id')) {
+    final sqlType = _columnTypeMap[columnName] ?? '';
+    if (sqlType.contains('INT')) {
       return PlutoColumnType.number();
-    } else if (lowerName.contains('date') || lowerName.contains('time')) {
+    } else if (sqlType.contains('REAL') ||
+        sqlType.contains('DOUBLE') ||
+        sqlType.contains('FLOAT') ||
+        sqlType.contains('NUMERIC')) {
+      return PlutoColumnType.number(format: '#,##0.######');
+    } else if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
       return PlutoColumnType.date();
-    } else if (lowerName.contains('number') || lowerName.contains('count') ||
-        lowerName.contains('size') || lowerName.contains('length') ||
-        lowerName.contains('area')) {
-      return PlutoColumnType.number();
+    } else if (sqlType.contains('BOOL')) {
+      return PlutoColumnType.text();
     }
     return PlutoColumnType.text();
   }
 
   bool _isColumnEditable(String columnName) {
     final lowerName = columnName.toLowerCase();
-    if (lowerName == 'id' || lowerName == 'fid' ||
-        lowerName == 'geom' || lowerName == 'geometry' ||
+    if (lowerName == 'id' ||
+        lowerName == 'fid' ||
+        lowerName == 'geom' ||
+        lowerName == 'geometry' ||
         lowerName.startsWith('_')) {
       return false;
     }
@@ -407,22 +561,43 @@ class AttributeTableController extends ChangeNotifier {
     return 60;
   }
 
+  // ========== ページング ==========
+
+  /// ページ取得（PlutoLazyPagination用）
+  Future<PlutoLazyPaginationResponse> fetchPage(
+    PlutoLazyPaginationRequest request,
+  ) async {
+    final page = request.page;
+    final pageSize = defaultPageSize;
+    final totalFeatures = _displayFeatures.length;
+    final totalPages =
+        (totalFeatures / pageSize).ceil().clamp(1, double.infinity).toInt();
+    final start = (page - 1) * pageSize;
+
+    _currentPageOffset = start;
+    final rows = await _createRowsForRange(start, pageSize);
+
+    return PlutoLazyPaginationResponse(totalPage: totalPages, rows: rows);
+  }
+
   // ========== 行データ構築 ==========
 
-  Future<List<PlutoRow>> _createRows() async {
-    if (_features.isEmpty) return [];
+  /// 指定範囲のフィーチャからPlutoRowを構築
+  Future<List<PlutoRow>> _createRowsForRange(int start, int count) async {
+    if (_displayFeatures.isEmpty) return [];
+
+    final end = (start + count).clamp(0, _displayFeatures.length);
+    if (start >= end) return [];
 
     final tableRows = <PlutoRow>[];
     final coordService = CoordinateService.instance;
 
-    for (int i = 0; i < _features.length; i++) {
-      final feature = _features[i];
+    for (int i = start; i < end; i++) {
+      final feature = _displayFeatures[i];
       final cells = <String, PlutoCell>{};
 
-      // 行番号
       cells['_row_num'] = PlutoCell(value: i + 1);
 
-      // 属性値
       for (final columnName in _columnNames) {
         try {
           final value = await feature.getAttributeValue(columnName);
@@ -432,7 +607,6 @@ class AttributeTableController extends ChangeNotifier {
         }
       }
 
-      // Pointレイヤーの座標
       if (isPointLayer && feature is PointFeatureNode) {
         final point = feature.point;
 
@@ -442,7 +616,10 @@ class AttributeTableController extends ChangeNotifier {
         }
 
         if (_settings.additionalEpsg != null) {
-          final xy = coordService.transformToXYFormatted(point, _settings.additionalEpsg!);
+          final xy = coordService.transformToXYFormatted(
+            point,
+            _settings.additionalEpsg!,
+          );
           cells['_x'] = PlutoCell(value: xy['x'] ?? '');
           cells['_y'] = PlutoCell(value: xy['y'] ?? '');
         }

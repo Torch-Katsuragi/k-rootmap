@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:maplibre/maplibre.dart' as ml;
+// ignore: implementation_imports
 import 'package:maplibre_webview/src/style_controller.dart' as webview_style;
 import 'package:supercluster/supercluster.dart';
 import '../core/constants.dart';
@@ -768,30 +769,22 @@ class MapSourceManager {
 
     final clusterRadius = <Object>['step', ['get', 'point_count'], 7.0, 10, 9.0, 50, 11.0, 200, 14.0];
 
-    // ペイントプロパティを1回のJS呼び出しで一括更新（60+回→1回）
-    final updates = <String, Map<String, Object>>{
-      kPolygonsFill: {'fill-color': fillHex, 'fill-opacity': polygonFillOpacity},
-      kPolygonsOutline: {'line-color': outlineHex, 'line-opacity': polygonOutlineOpacity, 'line-width': 2.0},
-      kPolygonsSelFill: {'fill-color': selHex, 'fill-opacity': 0.5},
-      kPolygonsSelOutline: {'line-color': selHex, 'line-width': 3.0},
-      kLinesLine: {'line-color': lineHex, 'line-width': lineWidth},
-      kLinesSelLine: {'line-color': selHex, 'line-width': lineWidth * selectedMultiplier},
-      kGpsTrackLine: {'line-color': _colorToHex(MapColors.trackingRoute), 'line-width': 3.0},
-      kPolyVerticesCircle: {'circle-radius': polyVR, 'circle-color': _colorToHex(polygonOutlineColor), 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
-      kPolyVerticesSelCircle: {'circle-radius': polyVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
-      kLineVerticesCircle: {'circle-radius': lineVR, 'circle-color': lineHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
-      kLineVerticesSelCircle: {'circle-radius': lineVSelR, 'circle-color': selHex, 'circle-stroke-width': 1.0, 'circle-stroke-color': '#FFFFFF'},
-      kClusterCircle: {'circle-color': pointHex, 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
-      kPointsCircle: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
-      kPointsSelCircle: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'},
-      kImageClusterCircle: {'circle-color': '#9C27B0', 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'},
-    };
-
     if (s is webview_style.StyleControllerWebView) {
-      // WebView（Windows）: 1回のJS呼び出しで全プロパティ一括更新
-      await s.batchSetPaintProperties(updates);
+      await _webViewBatchSetPaint(
+        s,
+        fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
+        lineHex: lineHex, pointHex: pointHex,
+        polygonFillOpacity: polygonFillOpacity,
+        polygonOutlineOpacity: polygonOutlineOpacity,
+        polygonBorderWidth: polygonBorderWidth,
+        lineWidth: lineWidth, pointSize: pointSize,
+        selectedMultiplier: selectedMultiplier,
+        polygonOutlineColor: polygonOutlineColor,
+        polyVR: polyVR, polyVSelR: polyVSelR,
+        lineVR: lineVR, lineVSelR: lineVSelR,
+        clusterRadius: clusterRadius,
+      );
     } else {
-      // Android/iOS ネイティブ: setPaintProperty未実装のため remove/add で更新
       await _removeAndReaddLayers(
         s,
         fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
@@ -809,6 +802,85 @@ class MapSourceManager {
     }
 
     AppLogger.debug('[MapSourceManager] layer styles updated');
+  }
+
+  /// Windows/macOS WebView向け: setPaintPropertyで直接ペイント属性を更新
+  /// removeLayer+addLayerと違い、レイヤー削除時のE_INVALIDARGエラーを回避
+  Future<void> _webViewBatchSetPaint(
+    webview_style.StyleControllerWebView s, {
+    required String fillHex,
+    required String outlineHex,
+    required String selHex,
+    required String lineHex,
+    required String pointHex,
+    required double polygonFillOpacity,
+    required double polygonOutlineOpacity,
+    required double polygonBorderWidth,
+    required double lineWidth,
+    required double pointSize,
+    required double selectedMultiplier,
+    required Color polygonOutlineColor,
+    required double polyVR,
+    required double polyVSelR,
+    required double lineVR,
+    required double lineVSelR,
+    required List<Object> clusterRadius,
+  }) async {
+    final outlineColorHex = _colorToHex(polygonOutlineColor);
+    final clusterRadiusJson = jsonEncode(clusterRadius);
+
+    final js = StringBuffer('const m = window.map;\n');
+
+    void sp(String layerId, String prop, Object value) {
+      final v = value is String ? '"$value"' : '$value';
+      js.writeln('m.setPaintProperty("$layerId","$prop",$v);');
+    }
+
+    void spExpr(String layerId, String prop, String jsonExpr) {
+      js.writeln('m.setPaintProperty("$layerId","$prop",$jsonExpr);');
+    }
+
+    sp(kPolygonsFill, 'fill-color', fillHex);
+    sp(kPolygonsFill, 'fill-opacity', polygonFillOpacity);
+
+    sp(kPolygonsOutline, 'line-color', outlineHex);
+    sp(kPolygonsOutline, 'line-opacity', polygonOutlineOpacity);
+    sp(kPolygonsOutline, 'line-width', polygonBorderWidth);
+
+    sp(kPolygonsSelFill, 'fill-color', selHex);
+
+    sp(kPolygonsSelOutline, 'line-color', selHex);
+
+    sp(kLinesLine, 'line-color', lineHex);
+    sp(kLinesLine, 'line-width', lineWidth);
+
+    sp(kLinesSelLine, 'line-color', selHex);
+    sp(kLinesSelLine, 'line-width', lineWidth * selectedMultiplier);
+
+    sp(kPolyVerticesCircle, 'circle-radius', polyVR);
+    sp(kPolyVerticesCircle, 'circle-color', outlineColorHex);
+
+    sp(kPolyVerticesSelCircle, 'circle-radius', polyVSelR);
+    sp(kPolyVerticesSelCircle, 'circle-color', selHex);
+
+    sp(kLineVerticesCircle, 'circle-radius', lineVR);
+    sp(kLineVerticesCircle, 'circle-color', lineHex);
+
+    sp(kLineVerticesSelCircle, 'circle-radius', lineVSelR);
+    sp(kLineVerticesSelCircle, 'circle-color', selHex);
+
+    spExpr(kClusterCircle, 'circle-color', '"$pointHex"');
+    spExpr(kClusterCircle, 'circle-radius', clusterRadiusJson);
+
+    sp(kPointsCircle, 'circle-radius', pointSize);
+    sp(kPointsCircle, 'circle-color', pointHex);
+
+    sp(kPointsSelCircle, 'circle-radius', pointSize * selectedMultiplier);
+    sp(kPointsSelCircle, 'circle-color', selHex);
+
+    await s.webViewController.callAsyncJavaScript(
+      functionBody: js.toString(),
+    );
   }
 
   /// Android/iOS向け: 全レイヤーを削除→再追加でスタイル更新

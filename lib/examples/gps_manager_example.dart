@@ -128,7 +128,7 @@ class _GpsManagerExampleScreenState extends State<GpsManagerExampleScreen> {
         );
       }
 
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('GPSソースを${source['name']}に切り替えました'),
@@ -137,7 +137,7 @@ class _GpsManagerExampleScreenState extends State<GpsManagerExampleScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('GPS切り替えエラー: $e'),
@@ -157,7 +157,7 @@ class _GpsManagerExampleScreenState extends State<GpsManagerExampleScreen> {
     try {
       await _gpsManager.startRecording(options);
 
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('GPS記録を開始しました'),
@@ -166,7 +166,7 @@ class _GpsManagerExampleScreenState extends State<GpsManagerExampleScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('GPS記録開始エラー: $e'),

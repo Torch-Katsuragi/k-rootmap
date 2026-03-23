@@ -198,7 +198,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     final bluetoothConnectGranted = await Permission.bluetoothConnect.isGranted;
     final locationGranted = await Permission.location.isGranted;
 
-    if (!context.mounted) return;
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {

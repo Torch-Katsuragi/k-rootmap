@@ -43,6 +43,7 @@ class GeoPackageNode extends LayerTreeNode {
       name,
       visible,
     );
+    parentFolder.invalidateMetaCache();
   }
 
   /// このGeoPackage内のLayerNodeのみ生成（非同期化）
@@ -84,7 +85,12 @@ class GeoPackageNode extends LayerTreeNode {
   }
 
   /// KMetaの可視性設定をレイヤーに適用（layerKey形式で照合）
+  /// 親FolderNodeのキャッシュを無効化して最新の.kmeta.jsonを読む
   Future<void> _applyMetaVisibility() async {
+    final folderParent = parent;
+    if (folderParent is FolderNode) {
+      folderParent.invalidateMetaCache();
+    }
     final meta = await _getParentMeta();
     if (meta == null) return;
 

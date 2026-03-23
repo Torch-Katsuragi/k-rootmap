@@ -102,6 +102,7 @@ abstract class LayerNode extends LayerTreeNode {
       layerKey,
       visible,
     );
+    folder.invalidateMetaCache();
   }
 
   /// レイヤーの一意キー（gpkgName/layerName形式）
@@ -314,7 +315,7 @@ abstract class LayerNode extends LayerTreeNode {
 
   /// childrenから属性値辞書を取得し、属性テーブルの2次元配列を返す
   /// [columns] 取得するカラム名のリスト（nullの場合は全カラム取得）
-  /// 戻り値: List<List<dynamic>> - [ヘッダー行, データ行1, データ行2, ...]
+  /// 戻り値: `List<List<dynamic>>` - [ヘッダー行, データ行1, データ行2, ...]
   Future<List<List<dynamic>>> getAttributeTableData({
     List<String>? columns,
     bool getAll = false,
@@ -343,7 +344,7 @@ abstract class LayerNode extends LayerTreeNode {
   }
 
   /// 属性テーブルデータを辞書形式で取得（UI表示用）
-  /// 戻り値: Map<String, List<dynamic>> - カラム名をキーとした列データのマップ
+  /// 戻り値: `Map<String, List<dynamic>>` - カラム名をキーとした列データのマップ
   Future<Map<String, List<dynamic>>> getAttributeTableMap({
     List<String>? columns,
     bool getAll = false,

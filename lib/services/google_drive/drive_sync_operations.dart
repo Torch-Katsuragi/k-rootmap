@@ -64,6 +64,7 @@ class DriveSyncOperations {
       node.syncStatus = SyncStatus.syncing;
       onStateChanged();
 
+      if (!context.mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -320,6 +321,7 @@ class DriveSyncOperations {
       return true;
     }
 
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Google Driveにログインしています...'),
@@ -328,6 +330,7 @@ class DriveSyncOperations {
     );
 
     final signInResult = await driveService.signIn();
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     if (signInResult) {

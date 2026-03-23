@@ -116,12 +116,19 @@ class KMetaService {
   }
 
   /// メタデータを保存
+  /// キャッシュを先に更新し、並行 read-modify-write の変更消失を防止
   Future<bool> saveMeta(String folderPath, KMeta meta) async {
+    final prevRaw = _rawCache[folderPath];
+    _rawCache[folderPath] = meta;
+    _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
+
     final success = await meta.saveToFile(folderPath);
-    if (success) {
-      _rawCache[folderPath] = meta;
-      // マージ済みキャッシュを無効化（子フォルダにも影響）
-      _mergedCache.removeWhere((key, _) => key.startsWith(folderPath));
+    if (!success) {
+      if (prevRaw != null) {
+        _rawCache[folderPath] = prevRaw;
+      } else {
+        _rawCache.remove(folderPath);
+      }
     }
     return success;
   }

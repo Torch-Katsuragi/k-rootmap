@@ -13,9 +13,9 @@ import 'feature_repository.dart';
 import 'layer_repository.dart';
 
 /// GeoPackageファイルを管理するファサードクラス
-/// 
+///
 /// 責務: 既存APIの維持、内部サービスへの委譲
-/// 
+///
 /// PRIMARY KEY戦略:
 /// - 新規作成: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
 /// - 読み込み: 動的検出（fid, id, rowid等）して内部的に'id'として正規化
@@ -55,7 +55,11 @@ class GeoPackageFile {
   void _initializeServices() {
     if (_servicesInitialized) return;
 
-    _connection = GeoPackageConnection(pathList, absolutePath: absolutePath, projectRootDir: projectRootDir);
+    _connection = GeoPackageConnection(
+      pathList,
+      absolutePath: absolutePath,
+      projectRootDir: projectRootDir,
+    );
     _schema = GeoPackageSchema(_connection);
     _spatial = SpatialIndexManager(_connection);
     _features = FeatureRepository(_connection, _schema, _spatial);
@@ -164,8 +168,11 @@ class GeoPackageFile {
     String tableName, {
     bool getAll = false,
     bool skipPrimaryKey = false,
-  }) =>
-      _schema.getColumnNames(tableName, getAll: getAll, skipPrimaryKey: skipPrimaryKey);
+  }) => _schema.getColumnNames(
+    tableName,
+    getAll: getAll,
+    skipPrimaryKey: skipPrimaryKey,
+  );
 
   /// テーブルのカラム名リストを取得
   Future<List<String>> getTableColumns(String tableName) =>
@@ -176,15 +183,13 @@ class GeoPackageFile {
     String tableName,
     String columnName,
     String columnType,
-  ) =>
-      _schema.addAttributeColumn(tableName, columnName, columnType);
+  ) => _schema.addAttributeColumn(tableName, columnName, columnType);
 
   /// 複数の属性カラムを一括追加
   Future<void> addAttributeColumns(
     String tableName,
     Map<String, String> attributeSchema,
-  ) =>
-      _schema.addAttributeColumns(tableName, attributeSchema);
+  ) => _schema.addAttributeColumns(tableName, attributeSchema);
 
   /// レイヤの全属性カラム情報を取得
   Future<List<Map<String, dynamic>>> getAttributeColumnInfo(
@@ -224,8 +229,7 @@ class GeoPackageFile {
     String tableName,
     LatLng point,
     Map<String, dynamic> attributes,
-  ) =>
-      _features.addPointWithAttributes(tableName, point, attributes);
+  ) => _features.addPointWithAttributes(tableName, point, attributes);
 
   /// 点フィーチャを追加
   Future<int?> addPoint(
@@ -234,14 +238,13 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.addPoint(
-        tableName,
-        pt,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.addPoint(
+    tableName,
+    pt,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   /// 点フィーチャを更新
   Future<bool> updatePoint(
@@ -251,15 +254,14 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.updatePoint(
-        tableName,
-        id,
-        pt,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.updatePoint(
+    tableName,
+    id,
+    pt,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   // ============================================================
   // Line Feature操作（FeatureRepositoryに委譲）
@@ -270,8 +272,7 @@ class GeoPackageFile {
     String tableName,
     List<LatLng> line,
     Map<String, dynamic> attributes,
-  ) =>
-      _features.addLineWithAttributes(tableName, line, attributes);
+  ) => _features.addLineWithAttributes(tableName, line, attributes);
 
   /// 線フィーチャを追加
   Future<int?> addLine(
@@ -280,14 +281,13 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.addLine(
-        tableName,
-        line,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.addLine(
+    tableName,
+    line,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   /// 線フィーチャを更新
   Future<bool> updateLine(
@@ -297,15 +297,14 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.updateLine(
-        tableName,
-        id,
-        line,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.updateLine(
+    tableName,
+    id,
+    line,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   // ============================================================
   // Polygon Feature操作（FeatureRepositoryに委譲）
@@ -316,8 +315,7 @@ class GeoPackageFile {
     String tableName,
     List<List<LatLng>> polygon,
     Map<String, dynamic> attributes,
-  ) =>
-      _features.addPolygonWithAttributes(tableName, polygon, attributes);
+  ) => _features.addPolygonWithAttributes(tableName, polygon, attributes);
 
   /// ポリゴンフィーチャを追加
   Future<int?> addPolygon(
@@ -326,14 +324,13 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.addPolygon(
-        tableName,
-        rings,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.addPolygon(
+    tableName,
+    rings,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   /// ポリゴンフィーチャを更新
   Future<bool> updatePolygon(
@@ -343,15 +340,14 @@ class GeoPackageFile {
     String name = '',
     String description = '',
     Map<String, dynamic>? metadata,
-  }) =>
-      _features.updatePolygon(
-        tableName,
-        id,
-        rings,
-        name: name,
-        description: description,
-        metadata: metadata,
-      );
+  }) => _features.updatePolygon(
+    tableName,
+    id,
+    rings,
+    name: name,
+    description: description,
+    metadata: metadata,
+  );
 
   // ============================================================
   // 共通Feature操作（FeatureRepositoryに委譲）
@@ -383,8 +379,7 @@ class GeoPackageFile {
   Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
     String tableName, {
     List<String>? columns,
-  }) =>
-      _features.getAllFeatureAttributes(tableName, columns: columns);
+  }) => _features.getAllFeatureAttributes(tableName, columns: columns);
 
   // ============================================================
   // 属性操作（FeatureRepositoryに委譲）
@@ -395,15 +390,13 @@ class GeoPackageFile {
     String tableName,
     int rowId,
     String attributeName,
-  ) =>
-      _features.getFeatureAttribute(tableName, rowId, attributeName);
+  ) => _features.getFeatureAttribute(tableName, rowId, attributeName);
 
   /// 指定テーブル・rowIdの全属性値を取得
   Future<Map<String, dynamic>?> getFeatureAttributes(
     String tableName,
     int rowId,
-  ) =>
-      _features.getFeatureAttributes(tableName, rowId);
+  ) => _features.getFeatureAttributes(tableName, rowId);
 
   /// 指定テーブル・rowId・カラム名の属性値を更新
   Future<bool> updateFeatureAttribute(
@@ -411,16 +404,19 @@ class GeoPackageFile {
     int rowId,
     String attributeName,
     dynamic newValue,
-  ) =>
-      _features.updateFeatureAttribute(tableName, rowId, attributeName, newValue);
+  ) => _features.updateFeatureAttribute(
+    tableName,
+    rowId,
+    attributeName,
+    newValue,
+  );
 
   /// 複数の属性値を一括更新
   Future<bool> updateFeatureAttributes(
     String tableName,
     int rowId,
     Map<String, dynamic> attributes,
-  ) =>
-      _features.updateFeatureAttributes(tableName, rowId, attributes);
+  ) => _features.updateFeatureAttributes(tableName, rowId, attributes);
 
   // ============================================================
   // バッチ操作（FeatureRepositoryに委譲）
@@ -430,35 +426,28 @@ class GeoPackageFile {
   Future<List<int>> addPointsBatch(
     String tableName,
     List<Map<String, dynamic>> pointData,
-  ) =>
-      _features.addPointsBatch(tableName, pointData);
+  ) => _features.addPointsBatch(tableName, pointData);
 
   /// バッチ処理でラインを高速追加
   Future<List<int>> addLinesBatch(
     String tableName,
     List<Map<String, dynamic>> lineData,
-  ) =>
-      _features.addLinesBatch(tableName, lineData);
+  ) => _features.addLinesBatch(tableName, lineData);
 
   /// バッチ処理でポリゴンを高速追加
   Future<List<int>> addPolygonsBatch(
     String tableName,
     List<Map<String, dynamic>> polygonData,
-  ) =>
-      _features.addPolygonsBatch(tableName, polygonData);
+  ) => _features.addPolygonsBatch(tableName, polygonData);
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
   Future<List<int>> getFilteredFeatureIds(
     String tableName,
     String whereClause,
-  ) =>
-      _features.getFilteredFeatureIds(tableName, whereClause);
+  ) => _features.getFilteredFeatureIds(tableName, whereClause);
 
   /// WHERE句にマッチするフィーチャ数を取得
-  Future<int> countFilteredFeatures(
-    String tableName,
-    String whereClause,
-  ) =>
+  Future<int> countFilteredFeatures(String tableName, String whereClause) =>
       _features.countFilteredFeatures(tableName, whereClause);
 
   /// WHERE句でフィルタしたフィーチャを別レイヤに複製
@@ -466,19 +455,139 @@ class GeoPackageFile {
     String sourceTable,
     String targetTable,
     String whereClause,
-  ) =>
-      _features.duplicateFilteredFeatures(sourceTable, targetTable, whereClause);
+  ) => _features.duplicateFilteredFeatures(
+    sourceTable,
+    targetTable,
+    whereClause,
+  );
 
   /// レイヤー間でフィーチャをコピー
-  Future<int> copyFeaturesBetweenLayers(String sourceTable, String targetTable) =>
-      _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
+  Future<int> copyFeaturesBetweenLayers(
+    String sourceTable,
+    String targetTable,
+  ) => _features.copyFeaturesBetweenLayers(sourceTable, targetTable);
 
   /// フィーチャを完全な属性テーブルとして追加
   Future<int?> addFeatureWithAttributes(
     String tableName,
     Uint8List geometry,
     Map<String, dynamic> attributes,
-  ) =>
-      _features.addFeatureWithAttributes(tableName, geometry, attributes);
-}
+  ) => _features.addFeatureWithAttributes(tableName, geometry, attributes);
 
+  // ============================================================
+  // フィールド計算機
+  // ============================================================
+
+  /// SQL式でカラムの値を一括更新
+  Future<int> updateColumnWithExpression(
+    String tableName,
+    String targetColumn,
+    String expression,
+  ) async {
+    final db = await _connection.getDatabase();
+    final sanitizedCol = _schema.sanitizeColumnName(targetColumn);
+    if (sanitizedCol.isEmpty) {
+      throw Exception('無効なカラム名: $targetColumn');
+    }
+
+    final result = await db.rawUpdate(
+      'UPDATE "$tableName" SET "$sanitizedCol" = $expression',
+    );
+    return result;
+  }
+
+  // ============================================================
+  // スキーマ変更（カラム削除・リネーム）
+  // ============================================================
+
+  /// カラムをリネーム
+  Future<void> renameColumn(
+    String tableName,
+    String oldName,
+    String newName,
+  ) async {
+    final db = await _connection.getDatabase();
+    final sanitizedNew = _schema.sanitizeColumnName(newName);
+    if (sanitizedNew.isEmpty) throw Exception('無効なカラム名: $newName');
+    await db.execute(
+      'ALTER TABLE "$tableName" RENAME COLUMN "$oldName" TO "$sanitizedNew"',
+    );
+    _schema.clearPrimaryKeyCache();
+  }
+
+  /// カラムを削除
+  Future<void> dropColumn(String tableName, String columnName) async {
+    final db = await _connection.getDatabase();
+    await db.execute('ALTER TABLE "$tableName" DROP COLUMN "$columnName"');
+    _schema.clearPrimaryKeyCache();
+  }
+
+  /// 指定カラムの統計情報を取得
+  Future<Map<String, dynamic>> getColumnStatistics(
+    String tableName,
+    String columnName,
+  ) async {
+    final db = await _connection.getDatabase();
+    final result = await db.rawQuery(
+      'SELECT '
+      'COUNT("$columnName") as cnt, '
+      "SUM(CASE WHEN typeof(\"$columnName\") IN ('integer','real') THEN \"$columnName\" ELSE NULL END) as total, "
+      "AVG(CASE WHEN typeof(\"$columnName\") IN ('integer','real') THEN \"$columnName\" ELSE NULL END) as avg_val, "
+      'MIN("$columnName") as min_val, '
+      'MAX("$columnName") as max_val, '
+      'COUNT(DISTINCT "$columnName") as unique_cnt '
+      'FROM "$tableName"',
+    );
+
+    if (result.isEmpty) return {};
+    final row = result.first;
+    return {
+      'count': row['cnt'] ?? 0,
+      'sum': row['total'],
+      'avg': row['avg_val'],
+      'min': row['min_val'],
+      'max': row['max_val'],
+      'unique': row['unique_cnt'] ?? 0,
+    };
+  }
+
+  /// テキスト検索（全カラム横断）。マッチした rowId のリストを返す。
+  Future<List<int>> searchText(
+    String tableName,
+    String searchText,
+    List<String> columns,
+  ) async {
+    if (searchText.isEmpty || columns.isEmpty) return [];
+    final db = await _connection.getDatabase();
+    final pkColumn = await _schema.getPrimaryKeyColumn(tableName);
+    final conditions = columns
+        .map((c) => 'CAST("$c" AS TEXT) LIKE ?')
+        .join(' OR ');
+    final pattern = '%$searchText%';
+    final args = List.filled(columns.length, pattern);
+    final result = await db.rawQuery(
+      'SELECT "$pkColumn" FROM "$tableName" WHERE $conditions',
+      args,
+    );
+    return result.map((r) => r[pkColumn] as int).toList();
+  }
+
+  /// テキスト置換（指定カラム内）
+  Future<int> replaceText(
+    String tableName,
+    String columnName,
+    String searchText,
+    String replaceText,
+  ) async {
+    if (searchText.isEmpty) return 0;
+    final db = await _connection.getDatabase();
+    final sanitized = _schema.sanitizeColumnName(columnName);
+    if (sanitized.isEmpty) throw Exception('無効なカラム名: $columnName');
+    final result = await db.rawUpdate(
+      'UPDATE "$tableName" SET "$sanitized" = REPLACE(CAST("$sanitized" AS TEXT), ?, ?) '
+      'WHERE CAST("$sanitized" AS TEXT) LIKE ?',
+      [searchText, replaceText, '%$searchText%'],
+    );
+    return result;
+  }
+}

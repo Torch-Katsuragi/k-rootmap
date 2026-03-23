@@ -85,8 +85,9 @@ class KMetaLayerStyle {
     if (polygonFillColor != null) {
       json['polygonFillColor'] = _colorToHex(polygonFillColor!);
     }
-    if (polygonFillOpacity != null)
+    if (polygonFillOpacity != null) {
       json['polygonFillOpacity'] = polygonFillOpacity;
+    }
     if (polygonBorderOpacity != null) {
       json['polygonBorderOpacity'] = polygonBorderOpacity;
     }

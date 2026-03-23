@@ -91,24 +91,12 @@ dependencies:
   flutter_secure_storage: ^9.2.4    # トークン安全保存用
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0
-  maplibre:
-    path: third_party/flutter-maplibre/packages/maplibre
-  maplibre_webview:
-    path: third_party/flutter-maplibre/packages/maplibre_webview
+  maplibre: ^0.3.4
+  maplibre_webview: ^0.3.4         # Windows/macOS WebView実装
   supercluster: ^3.2.0
   geobase: ^1.5.0
 
 dependency_overrides:
-  maplibre_android:
-    path: third_party/flutter-maplibre/packages/maplibre_android
-  maplibre_ios:
-    path: third_party/flutter-maplibre/packages/maplibre_ios
-  maplibre_platform_interface:
-    path: third_party/flutter-maplibre/packages/maplibre_platform_interface
-  maplibre_web:
-    path: third_party/flutter-maplibre/packages/maplibre_web
-  maplibre_webview:
-    path: third_party/flutter-maplibre/packages/maplibre_webview
   jni:
     path: third_party/jni
   rxdart: ^0.28.0

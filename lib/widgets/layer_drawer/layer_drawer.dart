@@ -423,7 +423,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       node.name = result;
       triggerMapRefresh();
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rename failed: $e')));
       }
     }
@@ -441,11 +441,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       await LayerDrawerService.renamePhoto(node, result);
       triggerMapRefresh();
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('写真をリネームしました: $result')));
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('リネームに失敗しました: $e')));
       }
     }
@@ -463,21 +463,24 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       final oldPath = node.geoPackageFile.getAbsolutePath();
       final wasExpanded = ref.read(expandedGeoPackagesProvider).isExpanded(oldPath);
+      // updateChildren()でnode.parentがnullになるため、先に保持
+      final parentNode = node.parent;
 
       final projectRoot = ref.read(projectRootDirProvider);
       final newFileName = await LayerDrawerService.renameGeoPackage(
         node, result, projectRootDir: projectRoot ?? '',
       );
 
-      if (oldPath != null && wasExpanded) {
+      if (oldPath != null && parentNode != null) {
         final newPath = p.join(p.dirname(oldPath), newFileName);
-        ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);
-        if (node.parent != null) {
-          for (final child in node.parent!.children) {
-            if (child is GeoPackageNode && child.geoPackageFile.getAbsolutePath() == newPath) {
-              await child.updateChildren();
-              break;
-            }
+        if (wasExpanded) {
+          ref.read(expandedGeoPackagesProvider.notifier).updatePath(oldPath, newPath);
+        }
+        // 新しいGeoPackageNodeのレイヤを読み込む
+        for (final child in parentNode.children) {
+          if (child is GeoPackageNode && child.geoPackageFile.getAbsolutePath() == newPath) {
+            await child.updateChildren();
+            break;
           }
         }
       }
@@ -559,7 +562,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ref.read(folderTreeProvider.notifier).set(replacement);
     widget.onDirChanged(replacement);
 
-    if (mounted) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Drive連携を解除しました')),
       );
@@ -575,9 +578,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
         triggerMapRefresh();
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
     } else {
+      if (!context.mounted) return;
       await _addDriveFolder(context);
     }
   }
@@ -586,7 +590,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final urlResult = await DriveUrlInputDialog.show(context);
     if (urlResult == null) return;
 
-    if (mounted) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(children: [
@@ -607,23 +611,23 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         url: urlResult.url,
         isReadOnly: urlResult.isReadOnly,
       );
-      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (context.mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (node != null) {
         triggerMapRefresh();
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${urlResult.folderName} をクローンしました'), backgroundColor: Colors.green),
           );
         }
-      } else if (mounted) {
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('クローンに失敗しました'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
@@ -645,7 +649,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       final newNode = await LayerDrawerService.createGeoPackage(widget.currentNode as FolderNode, result);
       if (newNode == null) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
           );
@@ -656,7 +660,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
       triggerMapRefresh();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 

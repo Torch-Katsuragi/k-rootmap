@@ -121,7 +121,7 @@ abstract class LayerTreeNode {
   }
 
   /// 再帰的に子ノードをたどり、ノード構造を辞書形式で返す
-  /// @return Map<String, dynamic> ノード構造を示す辞書
+  /// @return `Map<String, dynamic>` ノード構造を示す辞書
   Map<String, dynamic> toDict() {
     final Map<String, dynamic> dict = {
       'name': name,

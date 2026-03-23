@@ -761,8 +761,11 @@ class BaseMapService extends ChangeNotifier {
               processedTiles++;
               if (result == 'downloaded') {
                 downloadedTiles++;
-              } else if (result == 'skipped') skippedTiles++;
-              else errorTiles++;
+              } else if (result == 'skipped') {
+                skippedTiles++;
+              } else {
+                errorTiles++;
+              }
             }
           ).then((_) {
             // 完了したらリストから自分自身を削除

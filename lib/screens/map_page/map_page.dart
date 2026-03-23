@@ -19,7 +19,7 @@ import '../../models/nodes/feature_node.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/resizable_side_panel.dart';
-import '../../widgets/dynamic_attribute_table_widget.dart';
+import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/compass_fan_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/left_bottom_fab.dart';
@@ -224,11 +224,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 3),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
     );
@@ -262,9 +258,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   // =============================================
 
   Widget _buildAppBarTitle(LayerTreeNode? rootNode) {
-    return Text(
-      p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS'),
-    );
+    return Text(p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS'));
   }
 
   // =============================================
@@ -335,9 +329,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         body: Stack(
           children: [
             // 左側ツールバー
-            MapToolbar(
-              onToolChanged: () => triggerSetState(() {}),
-            ),
+            MapToolbar(onToolChanged: () => triggerSetState(() {})),
             // 地図本体
             Positioned.fill(
               left: 44,
@@ -359,9 +351,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
               Positioned(
                 left: 60,
                 top: 20,
-                child: FeatureDetailPanel(
-                  feature: selectedFeatures.first,
-                ),
+                child: FeatureDetailPanel(feature: selectedFeatures.first),
               ),
             // Left bottom floating buttons
             Positioned(
@@ -389,10 +379,11 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           onConfirmDrawing: onConfirmDrawing,
           onConfirmGpsSurvey: onConfirmGpsSurvey,
           onTriggerSetState: () => triggerSetState(() {}),
-          getGpsTool: () =>
-              ref.read(currentToolProvider) is GpsTool
-                  ? ref.read(currentToolProvider) as GpsTool
-                  : null,
+          getGpsTool:
+              () =>
+                  ref.read(currentToolProvider) is GpsTool
+                      ? ref.read(currentToolProvider) as GpsTool
+                      : null,
           onShowSnackBar: (message, {color}) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -443,8 +434,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       // 描画プレビューと投げ縄のみ（数点、超軽量）
       layers: [
         // 描画プレビュー: ポリゴン（GPSツール）
-        if (currentTool is GpsTool &&
-            drawingState.drawingPolygon.length >= 3)
+        if (currentTool is GpsTool && drawingState.drawingPolygon.length >= 3)
           ml.PolygonLayer(
             polygons: [
               geo.Feature(
@@ -457,8 +447,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             outlineColor: Colors.purple,
           ),
         // 描画プレビュー: ポリゴン（ペンツール）
-        if (currentTool is PenTool &&
-            drawingState.drawingPolygon.length >= 3)
+        if (currentTool is PenTool && drawingState.drawingPolygon.length >= 3)
           ml.PolygonLayer(
             polygons: [
               geo.Feature(
@@ -471,7 +460,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             outlineColor: Colors.orange,
           ),
         // 投げ縄選択ポリゴン
-        if (currentTool case SelectTool(:final lassoPoints) when lassoPoints.length >= 3)
+        if (currentTool case SelectTool(
+          :final lassoPoints,
+        ) when lassoPoints.length >= 3)
           ml.PolygonLayer(
             polygons: [
               geo.Feature(
@@ -492,9 +483,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       ],
       children: [
         // Widgetマーカー（現在位置、測量ポイント、頂点マーカー）
-        ml.WidgetLayer(
-          markers: _buildOverlayWidgetMarkers(selectedSet),
-        ),
+        ml.WidgetLayer(markers: _buildOverlayWidgetMarkers(selectedSet)),
       ],
     );
   }
@@ -514,13 +503,19 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
   /// ベースマップソース追加（TileServer経由のlocalhost URL）
   /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSource用）
-  Future<void> _addBasemapSource(ml.StyleController style, {String? belowLayerId}) async {
+  Future<void> _addBasemapSource(
+    ml.StyleController style, {
+    String? belowLayerId,
+  }) async {
     final provider = baseMapService.currentProvider;
-    final url = tileServer.isRunning
-        ? tileServer.urlTemplate(provider.id)
-        : provider.urlTemplate;
+    final url =
+        tileServer.isRunning
+            ? tileServer.urlTemplate(provider.id)
+            : provider.urlTemplate;
 
-    AppLogger.debug('[MAP] addBasemapSource: url=$url (tileServer=${tileServer.isRunning})');
+    AppLogger.debug(
+      '[MAP] addBasemapSource: url=$url (tileServer=${tileServer.isRunning})',
+    );
 
     try {
       final source = ml.RasterSource(
@@ -564,7 +559,10 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       await style.removeLayer('basemap-layer');
       await style.removeSource('basemap');
     } catch (_) {}
-    await _addBasemapSource(style, belowLayerId: MapSourceManager.kPolygonsFill);
+    await _addBasemapSource(
+      style,
+      belowLayerId: MapSourceManager.kPolygonsFill,
+    );
   }
 
   /// 描画プレビュー用ポリラインレイヤのリスト生成
@@ -574,57 +572,69 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   ) {
     final layers = <ml.PolylineLayer>[];
     // GPSツールの線プレビュー（LineStringは最低2点必要）
-    if (currentTool is GpsTool && drawingState.drawingLine.length >= 2)
-      layers.add(ml.PolylineLayer(
-        polylines: [
-          geo.Feature(
-            geometry: geo.LineString.from(
-              drawingState.drawingLine.toGeographics(),
+    if (currentTool is GpsTool && drawingState.drawingLine.length >= 2) {
+      layers.add(
+        ml.PolylineLayer(
+          polylines: [
+            geo.Feature(
+              geometry: geo.LineString.from(
+                drawingState.drawingLine.toGeographics(),
+              ),
             ),
-          ),
-        ],
-        color: Colors.purple,
-        width: 2,
-      ));
+          ],
+          color: Colors.purple,
+          width: 2,
+        ),
+      );
+    }
     // ペンツールの線プレビュー（LineStringは最低2点必要）
-    if (currentTool is PenTool && drawingState.drawingLine.length >= 2)
-      layers.add(ml.PolylineLayer(
-        polylines: [
-          geo.Feature(
-            geometry: geo.LineString.from(
-              drawingState.drawingLine.toGeographics(),
+    if (currentTool is PenTool && drawingState.drawingLine.length >= 2) {
+      layers.add(
+        ml.PolylineLayer(
+          polylines: [
+            geo.Feature(
+              geometry: geo.LineString.from(
+                drawingState.drawingLine.toGeographics(),
+              ),
             ),
-          ),
-        ],
-        color: Colors.orange,
-        width: 2,
-      ));
+          ],
+          color: Colors.orange,
+          width: 2,
+        ),
+      );
+    }
     // GPSツールのポリゴン辺プレビュー（2点時）
-    if (currentTool is GpsTool && drawingState.drawingPolygon.length == 2)
-      layers.add(ml.PolylineLayer(
-        polylines: [
-          geo.Feature(
-            geometry: geo.LineString.from(
-              drawingState.drawingPolygon.toGeographics(),
+    if (currentTool is GpsTool && drawingState.drawingPolygon.length == 2) {
+      layers.add(
+        ml.PolylineLayer(
+          polylines: [
+            geo.Feature(
+              geometry: geo.LineString.from(
+                drawingState.drawingPolygon.toGeographics(),
+              ),
             ),
-          ),
-        ],
-        color: Colors.purple,
-        width: 2,
-      ));
+          ],
+          color: Colors.purple,
+          width: 2,
+        ),
+      );
+    }
     // ペンツールのポリゴン辺プレビュー（2点時）
-    if (currentTool is PenTool && drawingState.drawingPolygon.length == 2)
-      layers.add(ml.PolylineLayer(
-        polylines: [
-          geo.Feature(
-            geometry: geo.LineString.from(
-              drawingState.drawingPolygon.toGeographics(),
+    if (currentTool is PenTool && drawingState.drawingPolygon.length == 2) {
+      layers.add(
+        ml.PolylineLayer(
+          polylines: [
+            geo.Feature(
+              geometry: geo.LineString.from(
+                drawingState.drawingPolygon.toGeographics(),
+              ),
             ),
-          ),
-        ],
-        color: Colors.orange,
-        width: 2,
-      ));
+          ],
+          color: Colors.orange,
+          width: 2,
+        ),
+      );
+    }
     return layers;
   }
 
@@ -632,8 +642,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// データ変更時のみネイティブに送信（変更なしならスキップ）
   void _syncFeatureSources() {
     final currentSelection = ref.read(selectedFeaturesProvider);
-    final selectionChanged =
-        !identical(lastCacheSelection, currentSelection);
+    final selectionChanged = !identical(lastCacheSelection, currentSelection);
 
     if (!layerCacheDirty && !selectionChanged) return;
     layerCacheDirty = false;
@@ -647,9 +656,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     for (final f in lineFeatures) {
       if (f.geometry == null) continue;
       final pts = (f.geometry as List<LatLng>).toGeographics();
-      final feature = geo.Feature(
-        geometry: geo.LineString.from(pts),
-      );
+      final feature = geo.Feature(geometry: geo.LineString.from(pts));
       if (selectedSet.contains(f)) {
         cachedSelectedPolylines.add(feature);
       } else {
@@ -664,9 +671,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       if (f.geometry == null) continue;
       final rings = f.geometry as List<List<LatLng>>;
       final geoRings = rings.map((r) => r.toGeographics()).toList();
-      final feature = geo.Feature(
-        geometry: geo.Polygon.from(geoRings),
-      );
+      final feature = geo.Feature(geometry: geo.Polygon.from(geoRings));
       if (selectedSet.contains(f)) {
         cachedSelectedPolygons.add(feature);
       } else {
@@ -700,7 +705,8 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         'name': photo.name,
         'has_direction': photo.direction != null,
         if (photo.direction != null) 'direction': photo.direction,
-        if (photo.takenAt != null) 'taken_at': photo.takenAt!.millisecondsSinceEpoch,
+        if (photo.takenAt != null)
+          'taken_at': photo.takenAt!.millisecondsSinceEpoch,
       };
       final feature = geo.Feature(
         geometry: geo.Point(photo.location!.toGeographic()),
@@ -720,8 +726,10 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       for (final f in lineFeatures) {
         if (f.geometry == null) continue;
         final pts = (f.geometry as List<LatLng>).toGeographics();
-        final list = selectedSet.contains(f)
-            ? cachedLineVerticesSel : cachedLineVertices;
+        final list =
+            selectedSet.contains(f)
+                ? cachedLineVerticesSel
+                : cachedLineVertices;
         for (final pt in pts) {
           list.add(geo.Feature(geometry: geo.Point(pt)));
         }
@@ -735,8 +743,10 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       for (final f in polygonFeatures) {
         if (f.geometry == null) continue;
         final rings = f.geometry as List<List<LatLng>>;
-        final list = selectedSet.contains(f)
-            ? cachedPolyVerticesSel : cachedPolyVertices;
+        final list =
+            selectedSet.contains(f)
+                ? cachedPolyVerticesSel
+                : cachedPolyVertices;
         for (final ring in rings) {
           if (ring.isEmpty) continue;
           final pts = List<LatLng>.from(ring);
@@ -761,17 +771,41 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       return;
     }
     sourceManager.updateFeatures(MapSourceManager.kPolygons, cachedPolygons);
-    sourceManager.updateFeatures(MapSourceManager.kPolygonsSel, cachedSelectedPolygons);
+    sourceManager.updateFeatures(
+      MapSourceManager.kPolygonsSel,
+      cachedSelectedPolygons,
+    );
     sourceManager.updateFeatures(MapSourceManager.kLines, cachedPolylines);
-    sourceManager.updateFeatures(MapSourceManager.kLinesSel, cachedSelectedPolylines);
+    sourceManager.updateFeatures(
+      MapSourceManager.kLinesSel,
+      cachedSelectedPolylines,
+    );
     sourceManager.updateFeatures(MapSourceManager.kPoints, cachedMarkers);
-    sourceManager.updateFeatures(MapSourceManager.kPointsSel, cachedSelectedMarkers);
+    sourceManager.updateFeatures(
+      MapSourceManager.kPointsSel,
+      cachedSelectedMarkers,
+    );
     sourceManager.updateFeatures(MapSourceManager.kImages, cachedImageFeatures);
-    sourceManager.updateFeatures(MapSourceManager.kImagesSel, cachedSelectedImageFeatures);
-    sourceManager.updateFeatures(MapSourceManager.kLineVertices, cachedLineVertices);
-    sourceManager.updateFeatures(MapSourceManager.kLineVerticesSel, cachedLineVerticesSel);
-    sourceManager.updateFeatures(MapSourceManager.kPolyVertices, cachedPolyVertices);
-    sourceManager.updateFeatures(MapSourceManager.kPolyVerticesSel, cachedPolyVerticesSel);
+    sourceManager.updateFeatures(
+      MapSourceManager.kImagesSel,
+      cachedSelectedImageFeatures,
+    );
+    sourceManager.updateFeatures(
+      MapSourceManager.kLineVertices,
+      cachedLineVertices,
+    );
+    sourceManager.updateFeatures(
+      MapSourceManager.kLineVerticesSel,
+      cachedLineVerticesSel,
+    );
+    sourceManager.updateFeatures(
+      MapSourceManager.kPolyVertices,
+      cachedPolyVertices,
+    );
+    sourceManager.updateFeatures(
+      MapSourceManager.kPolyVerticesSel,
+      cachedPolyVerticesSel,
+    );
     // クラスタリング: 現在のズームでクラスタ表示を更新
     _refreshPointClusters();
   }
@@ -779,9 +813,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   /// 現在のズームレベルでクラスタ表示を更新
   void _refreshPointClusters() {
     if (!sourceManager.isInitialized) return;
-    final zoom = mapController.raw != null
-        ? mapController.camera.zoom
-        : 16.0;
+    final zoom = mapController.raw != null ? mapController.camera.zoom : 16.0;
     sourceManager.refreshClusters(zoom);
   }
 
@@ -938,18 +970,18 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           if (event.buttons == kMiddleMouseButton) {
             ref.read(currentToolProvider).onMiddleButtonMove(event, this);
           } else {
-            ref.read(currentToolProvider).addPointerToBuffer(
-              event.localPosition,
-            );
+            ref
+                .read(currentToolProvider)
+                .addPointerToBuffer(event.localPosition);
           }
         },
         onPointerDown: (event) {
           if (event.buttons == kMiddleMouseButton) {
             ref.read(currentToolProvider).onMiddleButtonDown(event, this);
           } else {
-            ref.read(currentToolProvider).addPointerToBuffer(
-              event.localPosition,
-            );
+            ref
+                .read(currentToolProvider)
+                .addPointerToBuffer(event.localPosition);
           }
         },
         onPointerUp: (event) {
@@ -1098,26 +1130,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           attributeTableWidth = width;
         });
       },
-      child: DynamicAttributeTableWidget(
+      child: AttributeTableWidget(
         layer: attributeTableLayer!,
         onFeatureSelected: _onAttributeTableFeatureSelected,
-        onFeatureDeleted: (feature) async {
-          try {
-            await feature.dispose();
-            attributeTableLayer!.children.remove(feature);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('フィーチャが削除されました: ID ${feature.rowId}'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-            refreshMapUI();
-          } catch (e) {
-            AppLogger.debug('[MAP] フィーチャ削除エラー: $e');
-          }
-        },
         onAddFeature: () {
           if (context.mounted) {
             ScaffoldMessenger.of(
@@ -1141,16 +1156,18 @@ class _CrosshairPainter extends CustomPainter {
     final r = size.width / 2;
 
     // 白アウトライン → オレンジ本体の順で描画
-    final outline = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final fill = Paint()
-      ..color = Colors.orange
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+    final outline =
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 3.0
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round;
+    final fill =
+        Paint()
+          ..color = Colors.orange
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round;
 
     for (final p in [outline, fill]) {
       canvas.drawLine(Offset(cx - r, cy), Offset(cx + r, cy), p);

@@ -16,6 +16,10 @@ class AttributeTableToolbar extends StatefulWidget {
   final VoidCallback? onDeleteSelected;
   final VoidCallback? onSave;
   final VoidCallback? onAddColumn;
+  final VoidCallback? onFieldCalculator;
+  final void Function(String columnName, String action)? onColumnAction;
+  final VoidCallback? onToggleView;
+  final bool isFormView;
   final Future<void> Function(String expression)? onDuplicateFiltered;
 
   const AttributeTableToolbar({
@@ -27,6 +31,10 @@ class AttributeTableToolbar extends StatefulWidget {
     this.onDeleteSelected,
     this.onSave,
     this.onAddColumn,
+    this.onFieldCalculator,
+    this.onColumnAction,
+    this.onToggleView,
+    this.isFormView = false,
     this.onDuplicateFiltered,
   });
 
@@ -38,9 +46,18 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
   final _filterController = TextEditingController();
   bool _isFilterApplied = false;
 
+  // 検索・置換
+  bool _showSearchReplace = false;
+  final _searchController = TextEditingController();
+  final _replaceController = TextEditingController();
+  String? _selectedReplaceColumn;
+  int _searchResultCount = 0;
+
   @override
   void dispose() {
     _filterController.dispose();
+    _searchController.dispose();
+    _replaceController.dispose();
     super.dispose();
   }
 
@@ -63,9 +80,9 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
     }
   }
 
-  void _clearFilter() {
+  Future<void> _clearFilter() async {
     _filterController.clear();
-    widget.controller.clearFilter();
+    await widget.controller.clearFilter();
     setState(() => _isFilterApplied = false);
   }
 
@@ -77,10 +94,7 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 0.5,
-          ),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
         ),
       ),
       child: Column(
@@ -110,17 +124,58 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
 
               const Spacer(),
 
-              _buildIconButton(Icons.add_box, Colors.blue, widget.onAddColumn, 'カラム追加'),
+              _buildIconButton(
+                Icons.calculate,
+                Colors.deepPurple,
+                widget.onFieldCalculator,
+                'フィールド計算機',
+              ),
+              _buildColumnMenuButton(context),
+              _buildIconButton(
+                Icons.add_box,
+                Colors.blue,
+                widget.onAddColumn,
+                'カラム追加',
+              ),
               _buildIconButton(Icons.refresh, null, widget.onRefresh, '更新'),
-              _buildIconButton(Icons.copy, null, widget.onCopyTable, 'テーブルをコピー'),
+              _buildIconButton(
+                Icons.find_replace,
+                _showSearchReplace ? Colors.orange : null,
+                () => setState(() => _showSearchReplace = !_showSearchReplace),
+                '検索・置換',
+              ),
+              _buildIconButton(
+                Icons.copy,
+                null,
+                widget.onCopyTable,
+                'テーブルをコピー',
+              ),
               if (widget.onAddFeature != null)
-                _buildIconButton(Icons.add, null, widget.onAddFeature, 'フィーチャ追加'),
-              _buildIconButton(Icons.delete, Colors.red, widget.onDeleteSelected, '選択フィーチャ削除'),
+                _buildIconButton(
+                  Icons.add,
+                  null,
+                  widget.onAddFeature,
+                  'フィーチャ追加',
+                ),
+              _buildIconButton(
+                Icons.delete,
+                Colors.red,
+                widget.onDeleteSelected,
+                '選択フィーチャ削除',
+              ),
               _buildIconButton(Icons.save, null, widget.onSave, '即座に保存'),
+              _buildIconButton(
+                widget.isFormView ? Icons.table_chart : Icons.article,
+                widget.isFormView ? Colors.orange : null,
+                widget.onToggleView,
+                widget.isFormView ? 'テーブル表示' : 'フォーム表示',
+              ),
             ],
           ),
           // 下段: フィルタバー
           _buildFilterBar(context),
+          // 検索・置換バー
+          if (_showSearchReplace) _buildSearchReplaceBar(context),
         ],
       ),
     );
@@ -133,24 +188,39 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
         height: 28,
         child: Row(
           children: [
-            Icon(Icons.filter_alt, size: 14, color: _isFilterApplied ? Colors.orange : Colors.grey),
+            Icon(
+              Icons.filter_alt,
+              size: 14,
+              color: _isFilterApplied ? Colors.orange : Colors.grey,
+            ),
             const SizedBox(width: 4),
             Expanded(
               child: TextField(
                 controller: _filterController,
                 style: const TextStyle(fontSize: 12),
                 decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   border: const OutlineInputBorder(),
                   isDense: true,
                   hintText: '"name" = \'Tokyo\'  |  "pop" > 1000',
-                  hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-                  suffixIcon: _isFilterApplied
-                      ? GestureDetector(
-                          onTap: _clearFilter,
-                          child: Icon(Icons.clear, size: 14, color: Colors.orange.shade700),
-                        )
-                      : null,
+                  hintStyle: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade400,
+                  ),
+                  suffixIcon:
+                      _isFilterApplied
+                          ? GestureDetector(
+                            onTap: _clearFilter,
+                            child: Icon(
+                              Icons.clear,
+                              size: 14,
+                              color: Colors.orange.shade700,
+                            ),
+                          )
+                          : null,
                 ),
                 onSubmitted: (_) => _applyFilter(),
               ),
@@ -183,7 +253,9 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
                   icon: const Icon(Icons.copy_all, size: 14),
                   label: const Text('複製', style: TextStyle(fontSize: 11)),
                   onPressed: () {
-                    widget.onDuplicateFiltered?.call(widget.controller.filterSql);
+                    widget.onDuplicateFiltered?.call(
+                      widget.controller.filterSql,
+                    );
                   },
                 ),
               ),
@@ -192,6 +264,185 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
         ),
       ),
     );
+  }
+
+  Widget _buildSearchReplaceBar(BuildContext context) {
+    final ctrl = widget.controller;
+    final editableColumns =
+        ctrl.columnNames.where((c) => !c.startsWith('_')).toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: SizedBox(
+        height: 28,
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 14, color: Colors.blue.shade700),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 120,
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontSize: 11),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  hintText: '検索...',
+                  hintStyle: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+                onSubmitted: (_) => _doSearch(),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 120,
+              child: TextField(
+                controller: _replaceController,
+                style: const TextStyle(fontSize: 11),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  hintText: '置換...',
+                  hintStyle: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 100,
+              height: 24,
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedReplaceColumn,
+                isDense: true,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                style: const TextStyle(fontSize: 10, color: Colors.black87),
+                hint: const Text('カラム', style: TextStyle(fontSize: 10)),
+                items:
+                    editableColumns
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              c,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (v) => setState(() => _selectedReplaceColumn = v),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              height: 22,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: _doSearch,
+                child: const Text('検索', style: TextStyle(fontSize: 10)),
+              ),
+            ),
+            SizedBox(
+              height: 22,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: Colors.orange.shade800,
+                ),
+                onPressed: _doReplace,
+                child: const Text('置換', style: TextStyle(fontSize: 10)),
+              ),
+            ),
+            if (_searchResultCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(
+                  '$_searchResultCount件',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _doSearch() async {
+    final text = _searchController.text.trim();
+    if (text.isEmpty) return;
+    final results = await widget.controller.searchText(text);
+    setState(() => _searchResultCount = results.length);
+    if (mounted && results.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('該当なし'), duration: Duration(seconds: 1)),
+      );
+    }
+  }
+
+  Future<void> _doReplace() async {
+    final search = _searchController.text.trim();
+    final replace = _replaceController.text;
+    final column = _selectedReplaceColumn;
+    if (search.isEmpty || column == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('検索テキストと対象カラムを指定してください'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final count = await widget.controller.replaceText(
+        column,
+        search,
+        replace,
+      );
+      setState(() => _searchResultCount = 0);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$count件を置換しました'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      widget.onRefresh?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('置換エラー: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Widget _buildWgs84Checkbox(BuildContext context) {
@@ -234,6 +485,102 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
           widget.controller.updateSettings(
             widget.controller.settings.copyWith(clearAdditionalEpsg: true),
           );
+        },
+      ),
+    );
+  }
+
+  Widget _buildColumnMenuButton(BuildContext context) {
+    final ctrl = widget.controller;
+    final editableColumns =
+        ctrl.columnNames.where((c) => !c.startsWith('_')).toList();
+
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: PopupMenuButton<String>(
+        padding: EdgeInsets.zero,
+        iconSize: 12,
+        icon: const Icon(Icons.view_column, size: 12),
+        tooltip: 'カラム管理',
+        itemBuilder: (ctx) {
+          final items = <PopupMenuEntry<String>>[];
+
+          if (ctrl.hiddenColumns.isNotEmpty) {
+            items.add(
+              const PopupMenuItem(
+                value: '__show_all__',
+                child: Text(
+                  '全て表示',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            );
+            items.add(const PopupMenuDivider());
+          }
+
+          for (final col in editableColumns) {
+            final hidden = ctrl.hiddenColumns.contains(col);
+            items.add(
+              PopupMenuItem(
+                value: 'toggle:$col',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hidden ? Icons.visibility_off : Icons.visibility,
+                      size: 14,
+                      color: hidden ? Colors.grey : Colors.blue,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(col, style: const TextStyle(fontSize: 12)),
+                    ),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      iconSize: 14,
+                      icon: const Icon(Icons.more_vert, size: 14),
+                      itemBuilder:
+                          (_) => [
+                            PopupMenuItem(
+                              value: 'rename:$col',
+                              child: const Text(
+                                '名前変更',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete:$col',
+                              child: Text(
+                                '削除',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                      onSelected: (val) {
+                        Navigator.of(ctx).pop(val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          return items;
+        },
+        onSelected: (value) {
+          if (value == '__show_all__') {
+            ctrl.showAllColumns();
+          } else if (value.startsWith('toggle:')) {
+            ctrl.toggleColumnVisibility(value.substring(7));
+          } else if (value.startsWith('rename:') ||
+              value.startsWith('delete:')) {
+            final parts = value.split(':');
+            widget.onColumnAction?.call(parts[1], parts[0]);
+          }
         },
       ),
     );
@@ -313,20 +660,24 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
           focusNode: focusNode,
           style: const TextStyle(fontSize: 8, height: 1.0),
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical: 2,
+            ),
             border: const OutlineInputBorder(),
             isDense: true,
             hintText: 'EPSG (例: 6677, IX系)',
             hintStyle: const TextStyle(fontSize: 8),
-            suffixIcon: widget.initialValue != null
-                ? GestureDetector(
-                    onTap: () {
-                      controller.clear();
-                      widget.onCleared();
-                    },
-                    child: const Icon(Icons.clear, size: 12),
-                  )
-                : null,
+            suffixIcon:
+                widget.initialValue != null
+                    ? GestureDetector(
+                      onTap: () {
+                        controller.clear();
+                        widget.onCleared();
+                      },
+                      child: const Icon(Icons.clear, size: 12),
+                    )
+                    : null,
           ),
           onSubmitted: (value) {
             final code = value.split(' ').first.trim();
@@ -355,7 +706,10 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
                   return InkWell(
                     onTap: () => onSelected(option),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       child: Text(
                         option.displayString,
                         style: const TextStyle(fontSize: 9),
@@ -387,7 +741,8 @@ Future<void> copyTableToClipboard(
     final buffer = StringBuffer();
 
     // ヘッダー行
-    final headerNames = controller.columns.map((c) => _escapeTsvValue(c.title)).toList();
+    final headerNames =
+        controller.columns.map((c) => _escapeTsvValue(c.title)).toList();
     buffer.writeln(headerNames.join('\t'));
 
     // データ行

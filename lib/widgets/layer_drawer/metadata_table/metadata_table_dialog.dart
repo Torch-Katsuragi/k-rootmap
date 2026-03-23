@@ -53,7 +53,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
         currentTableData = newTableData;
       });
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('座標系の変更に失敗しました: $e')));

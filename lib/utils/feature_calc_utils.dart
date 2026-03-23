@@ -80,7 +80,7 @@ class GeometryCalc {
     return distance(pointA, pointB, Unit.meters).toDouble();
   }
 
-  /// 線分（List<LatLng>）の長さ（メートル）を計算
+  /// 線分（`List<LatLng>`）の長さ（メートル）を計算
   /// [line]: 線分の座標リスト
   /// 戻り値: 総距離（m）
   static double calcLineLength(List<LatLng> line) {
@@ -95,7 +95,7 @@ class GeometryCalc {
   }
 
   /// ポリゴン（外環＋穴リスト）の面積（m^2）
-  /// [polygon]: 外環＋穴リスト（List<List<LatLng>>）
+  /// [polygon]: 外環＋穴リスト（`List<List<LatLng>>`）
   /// 戻り値: 面積（m^2）
   static double calcPolygonArea(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].length < 3) return 0.0;
@@ -116,7 +116,7 @@ class GeometryCalc {
     return area(feature)?.toDouble() ?? 0.0; // デフォルトで平方メートル
   }
 
-  /// 線分（List<LatLng>）の重心（中点）を計算
+  /// 線分（`List<LatLng>`）の重心（中点）を計算
   /// [line]: 線分の座標リスト
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcLineCentroid(List<LatLng> line) {
@@ -135,7 +135,7 @@ class GeometryCalc {
   }
 
   /// ポリゴン（外環＋穴リスト）の重心を計算
-  /// [polygon]: 外環＋穴リスト（List<List<LatLng>>）
+  /// [polygon]: 外環＋穴リスト（`List<List<LatLng>>`）
   /// 戻り値: 重心座標（LatLng）
   static LatLng calcPolygonCentroid(List<List<LatLng>> polygon) {
     if (polygon.isEmpty || polygon[0].isEmpty) return LatLng(0, 0);
@@ -159,7 +159,7 @@ class GeometryCalc {
     return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
   }
 
-  /// 点集合（List<LatLng>）の重心を計算
+  /// 点集合（`List<LatLng>`）の重心を計算
   static LatLng calcPointsCentroid(List<LatLng> points) {
     if (points.isEmpty) return LatLng(0, 0);
     if (points.length == 1) return points.first;
@@ -175,7 +175,7 @@ class GeometryCalc {
     return LatLng(centerCoords.lat.toDouble(), centerCoords.lng.toDouble());
   }
 
-  /// 点と線分（List<LatLng>）の最短距離（メートル）を計算
+  /// 点と線分（`List<LatLng>`）の最短距離（メートル）を計算
   /// [pt]: 判定点
   /// [line]: 線分
   /// 戻り値: 最短距離（m）

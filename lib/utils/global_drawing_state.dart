@@ -26,7 +26,7 @@ class GlobalDrawingState {
   final List<LatLng> _drawingPolygon = [];
 
   /// 描画点に対応するメタデータのリスト
-  /// 各要素は Map<String, dynamic> またはnull（pen_toolでタップした点）
+  /// 各要素は `Map<String, dynamic>` またはnull（pen_toolでタップした点）
   final List<Map<String, dynamic>?> _lineMetadata = [];
   final List<Map<String, dynamic>?> _polygonMetadata = [];
 
@@ -414,7 +414,7 @@ class GlobalDrawingState {
   }
 
   /// メタデータ付きの線座標リストを取得
-  /// 戻り値: List<Map<String, dynamic>> - 座標とメタデータを含む構造
+  /// 戻り値: `List<Map<String, dynamic>>` - 座標とメタデータを含む構造
   List<Map<String, dynamic>> getLineWithMetadata() {
     final result = <Map<String, dynamic>>[];
     for (int i = 0; i < _drawingLine.length; i++) {
@@ -438,7 +438,7 @@ class GlobalDrawingState {
   }
 
   /// メタデータ付きのポリゴン座標リストを取得
-  /// 戻り値: List<Map<String, dynamic>> - 座標とメタデータを含む構造
+  /// 戻り値: `List<Map<String, dynamic>>` - 座標とメタデータを含む構造
   List<Map<String, dynamic>> getPolygonWithMetadata() {
     final result = <Map<String, dynamic>>[];
     for (int i = 0; i < _drawingPolygon.length; i++) {

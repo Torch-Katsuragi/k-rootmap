@@ -61,6 +61,7 @@ class ImageNode extends LayerTreeNode {
     final parentPath = parentFolder.getAbsoluteFilePath();
     if (parentPath == null) return;
     await KMetaService.instance.setImageVisibility(parentPath, name, visible);
+    parentFolder.invalidateMetaCache();
   }
 
   /// 詳細情報（項目名と値のペア、順序付き）

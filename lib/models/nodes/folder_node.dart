@@ -48,6 +48,7 @@ class FolderNode extends LayerTreeNode {
     final parentPath = parentFolder.getAbsoluteFilePath();
     if (parentPath == null) return;
     await KMetaService.instance.setFolderVisibility(parentPath, name, visible);
+    parentFolder.invalidateMetaCache();
   }
 
   /// マージ済みメタデータを取得（キャッシュ対応）

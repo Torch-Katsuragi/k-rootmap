@@ -50,7 +50,7 @@ class BluetoothGnssService extends ChangeNotifier {
   // SBAS衛星情報
   List<int> _usedSatellites = []; // 使用中の衛星PRN番号
   String? _detectedSbasSystem; // 検出されたSBASシステム名
-  List<int> _sbasInView = []; // 視野内のSBAS衛星（GSVから検出）
+  final List<int> _sbasInView = []; // 視野内のSBAS衛星（GSVから検出）
   int? _sbasPrn; // 検出されたSBAS衛星のPRN番号
 
   // DGPS基準局情報（GGA文フィールド14から取得）

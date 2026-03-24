@@ -5,6 +5,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../core/k_map_controller.dart';
+import '../models/nodes/feature_node.dart';
+import '../models/nodes/image_node.dart';
 
 /// 地図状態の抽象インターフェース
 /// 
@@ -37,4 +39,16 @@ abstract class IMapState {
 
   /// StateがWidgetツリーにマウントされているか
   bool get mounted;
+
+  /// キャッシュ済みポイントフィーチャ（全可視レイヤー）
+  List<PointFeatureNode> get pointFeatures;
+
+  /// キャッシュ済みラインフィーチャ（全可視レイヤー）
+  List<LineFeatureNode> get lineFeatures;
+
+  /// キャッシュ済みポリゴンフィーチャ（全可視レイヤー）
+  List<PolygonFeatureNode> get polygonFeatures;
+
+  /// キャッシュ済み写真ノード（全可視ImageNode）
+  List<ImageNode> get photoNodes;
 }

@@ -143,16 +143,16 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // フィーチャキャッシュ
   // =============================================
 
-  /// ポイントフィーチャキャッシュ
+  @override
   List<PointFeatureNode> pointFeatures = [];
 
-  /// ラインフィーチャキャッシュ
+  @override
   List<LineFeatureNode> lineFeatures = [];
 
-  /// ポリゴンフィーチャキャッシュ
+  @override
   List<PolygonFeatureNode> polygonFeatures = [];
 
-  /// 写真ノードキャッシュ
+  @override
   List<ImageNode> photoNodes = [];
 
   // =============================================

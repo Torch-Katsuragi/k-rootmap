@@ -1,14 +1,12 @@
 // K-MAPS: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
-import '../../models/nodes/image_node.dart';
 import '../../services/map_source_manager.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/geo_converter.dart';
@@ -806,40 +804,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     sourceManager.refreshClusters(zoom);
   }
 
-  /// タップ位置のImageNodeを検出し選択する（見つかればtrue）
-  bool _trySelectImageNodeAt(Offset localPosition) {
-    if (photoNodes.isEmpty) return false;
-    LatLng tapLatLng;
-    try {
-      tapLatLng = offsetToLatLng(localPosition);
-    } catch (_) {
-      return false;
-    }
-    // ズームに応じた選択範囲（メートル）
-    final zoom = mapController.raw != null ? mapController.camera.zoom : 16.0;
-    final thresholdMeters = 20.0 * pow(2, 16 - zoom);
-
-    final distCalc = const Distance();
-    ImageNode? nearest;
-    double nearestDist = double.infinity;
-
-    for (final photo in photoNodes) {
-      if (!photo.hasLocation) continue;
-      final d = distCalc.as(LengthUnit.Meter, tapLatLng, photo.location!);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = photo;
-      }
-    }
-
-    if (nearest != null && nearestDist <= thresholdMeters) {
-      ref.read(selectedFeaturesProvider.notifier).set([nearest]);
-      ref.read(featureRefreshTriggerProvider.notifier).trigger();
-      return true;
-    }
-    return false;
-  }
-
   /// レイヤスタイル設定をMapSourceManagerに反映
   void _applyLayerStyles() {
     final style = layerStyleSettings;
@@ -985,8 +949,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTapUp: (details) {
-            // ImageNode（SymbolStyleLayer）のタップ検出を先に行う
-            if (_trySelectImageNodeAt(details.localPosition)) return;
             ref.read(currentToolProvider).onTap(details, this);
           },
           onScaleStart: (details) {

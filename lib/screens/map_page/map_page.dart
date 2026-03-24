@@ -35,6 +35,8 @@ import '../../tools/gps_tool.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../utils/global_drawing_state.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../layer_style_settings_screen.dart'
     show
@@ -159,12 +161,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       final layer = targetLayer ?? ref.read(selectedLayerNodeProvider);
 
       if (layer == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('レイヤーが選択されていません'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        ref
+            .read(notificationCenterProvider.notifier)
+            .add(title: 'レイヤーが選択されていません', level: NotificationLevel.warning);
         return;
       }
 
@@ -177,12 +176,13 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       });
     } catch (e) {
       AppLogger.debug('[MAP] 属性テーブル表示エラー: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('属性テーブルの表示に失敗しました: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '属性テーブルの表示に失敗しました',
+            detail: '$e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -384,17 +384,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                   ref.read(currentToolProvider) is GpsTool
                       ? ref.read(currentToolProvider) as GpsTool
                       : null,
-          onShowSnackBar: (message, {color}) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(message),
-                  backgroundColor: color,
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            }
-          },
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
@@ -1134,11 +1123,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         layer: attributeTableLayer!,
         onFeatureSelected: _onAttributeTableFeatureSelected,
         onAddFeature: () {
-          if (context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('新規フィーチャ追加機能は開発中です')));
-          }
+          ref
+              .read(notificationCenterProvider.notifier)
+              .add(title: '新規フィーチャ追加機能は開発中です', level: NotificationLevel.info);
         },
       ),
     );

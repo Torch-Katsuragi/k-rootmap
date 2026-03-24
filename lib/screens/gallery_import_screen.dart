@@ -4,10 +4,13 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../utils/app_logger.dart';
 import '../utils/exif_parser.dart';
 
@@ -19,8 +22,9 @@ class GalleryImporter {
   /// file_picker は ACTION_OPEN_DOCUMENT を使用するため EXIF が完全保持される。
   static Future<bool> pickAndImport(
     BuildContext context,
-    FolderNode targetFolder,
-  ) async {
+    FolderNode targetFolder, {
+    WidgetRef? ref,
+  }) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
@@ -29,12 +33,10 @@ class GalleryImporter {
 
     final folderPath = targetFolder.getAbsoluteFilePath();
     if (folderPath == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to resolve folder path'),
-            backgroundColor: Colors.red,
-          ),
+      if (ref != null) {
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'Failed to resolve folder path',
+          level: NotificationLevel.error,
         );
       }
       return false;
@@ -62,12 +64,10 @@ class GalleryImporter {
       }
     }
 
-    if (context.mounted && imported > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Imported $imported photo${imported != 1 ? 's' : ''}'),
-          backgroundColor: Colors.green,
-        ),
+    if (imported > 0 && ref != null) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'Imported $imported photo${imported != 1 ? 's' : ''}',
+        level: NotificationLevel.success,
       );
     }
     return imported > 0;

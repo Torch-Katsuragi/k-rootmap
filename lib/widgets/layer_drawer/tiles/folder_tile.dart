@@ -94,6 +94,7 @@ class FolderTile extends ConsumerWidget {
     final absPath = node.getAbsoluteFilePath();
     await confirmAndExecute(
       context,
+      ref: ref,
       title: 'Delete Folder',
       content: Text('Delete "${node.name}" and all its contents?'),
       confirmLabel: 'Delete',

@@ -1,6 +1,7 @@
 // 地図画面のAppBarアクションボタン群
 import 'package:flutter/material.dart';
 import '../screens/settings_screen.dart';
+import 'notification/notification_bell.dart';
 
 /// 地図画面AppBarの右側アクションボタン群を生成する関数
 List<Widget> buildMapAppBarActions({
@@ -11,37 +12,31 @@ List<Widget> buildMapAppBarActions({
   required VoidCallback onDrawerToggle,
 }) {
   return [
-      // 設定ボタン
-      IconButton(
-        icon: const Icon(Icons.settings),
-        tooltip: '設定',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const SettingsScreen(),
-            ),
-          );
-        },
+    const NotificationBell(),
+    IconButton(
+      icon: const Icon(Icons.settings),
+      tooltip: '設定',
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+        );
+      },
+    ),
+    // 属性テーブルボタン
+    IconButton(
+      icon: Icon(
+        Icons.table_view,
+        color: showAttributeTable ? Colors.blue : null,
       ),
-      // 属性テーブルボタン
-      IconButton(
-        icon: Icon(
-          Icons.table_view,
-          color: showAttributeTable ? Colors.blue : null,
-        ),
-        tooltip: showAttributeTable ? '属性テーブルを閉じる' : '属性テーブルを開く',
-        onPressed: onAttributeTableToggle,
-      ),
-      // レイヤードロワーボタン
-      IconButton(
-        icon: Icon(
-          Icons.layers,
-          color: drawerOpen ? Colors.blue : null,
-        ),
-        tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',
-        onPressed: onDrawerToggle,
-      ),
+      tooltip: showAttributeTable ? '属性テーブルを閉じる' : '属性テーブルを開く',
+      onPressed: onAttributeTableToggle,
+    ),
+    // レイヤードロワーボタン
+    IconButton(
+      icon: Icon(Icons.layers, color: drawerOpen ? Colors.blue : null),
+      tooltip: drawerOpen ? 'Close Layer Drawer' : 'Open Layer Drawer',
+      onPressed: onDrawerToggle,
+    ),
   ];
 }
-

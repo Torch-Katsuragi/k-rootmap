@@ -12,6 +12,8 @@ import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/geometry_conversion_service.dart';
 import '../../../utils/feature_calc_utils.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../widgets/dialog_manager.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
 import '../../../screens/layer_style_settings_screen.dart';
@@ -184,16 +186,20 @@ class LayerTile extends ConsumerWidget {
       await node.geoPackageNode.updateChildren();
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rename failed: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Rename failed: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
   Future<void> _openStyleSettings(BuildContext context, WidgetRef ref) async {
     final folderPath = node.folderNode?.getAbsoluteFilePath();
     if (folderPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not determine folder path')));
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Could not determine folder path',
+            level: NotificationLevel.info,
+          );
       return;
     }
     await Navigator.push(
@@ -206,6 +212,7 @@ class LayerTile extends ConsumerWidget {
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
     await confirmAndExecute(
       context,
+      ref: ref,
       title: 'レイヤ削除',
       content: Text('${node.name} を本当に削除しますか？'),
       confirmLabel: '削除',
@@ -234,19 +241,19 @@ class LayerTile extends ConsumerWidget {
   ) async {
     final features = sourceLayer.features;
     if (features.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ポイントが存在しないため変換できません')),
-      );
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'ポイントが存在しないため変換できません',
+            level: NotificationLevel.info,
+          );
       return;
     }
 
     final targetLayers = GeometryConversionService.findTargetLayersForPoints(currentDir);
     if (targetLayers.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('カレントディレクトリ直下にライン/ポリゴンレイヤーが見つかりません。\n先にレイヤーを作成してください。')),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'カレントディレクトリ直下にライン/ポリゴンレイヤーが見つかりません。\n先にレイヤーを作成してください。',
+            level: NotificationLevel.info,
+          );
       return;
     }
 
@@ -284,18 +291,21 @@ class LayerTile extends ConsumerWidget {
       if (created != null) {
         await targetLayer.updateChildren();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ポイントを$typeLabel に変換しました (${features.length}個の点)')),
-          );
-        }
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('フィーチャの作成に失敗しました')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'ポイントを$typeLabel に変換しました (${features.length}個の点)',
+              level: NotificationLevel.info,
+            );
+      } else {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'フィーチャの作成に失敗しました',
+              level: NotificationLevel.info,
+            );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('変換処理中にエラーが発生しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '変換処理中にエラーが発生しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
@@ -307,9 +317,10 @@ class LayerTile extends ConsumerWidget {
     final features = layerNode.children.cast<FeatureNode>();
     final mergeableCount = PolygonMerge.countMergeablePolygons(features);
     if (mergeableCount < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('合成するには2つ以上の有効なポリゴンが必要です')),
-      );
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '合成するには2つ以上の有効なポリゴンが必要です',
+            level: NotificationLevel.info,
+          );
       return;
     }
 
@@ -333,7 +344,10 @@ class LayerTile extends ConsumerWidget {
     try {
       final merged = PolygonMerge.mergePolygonFeatures(features);
       if (merged.isEmpty) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ポリゴンの合成に失敗しました')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'ポリゴンの合成に失敗しました',
+              level: NotificationLevel.info,
+            );
         return;
       }
 
@@ -341,7 +355,10 @@ class LayerTile extends ConsumerWidget {
       final newLayerName = '${layerNode.name}_merged';
       final newLayer = await PolygonLayerNode.createIn(parentGpkg, newLayerName);
       if (newLayer == null) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新しいレイヤーの作成に失敗しました')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '新しいレイヤーの作成に失敗しました',
+              level: NotificationLevel.info,
+            );
         return;
       }
 
@@ -358,25 +375,31 @@ class LayerTile extends ConsumerWidget {
       );
       if (mergedFeature != null) {
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。')),
-          );
-        }
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('合成ポリゴンの保存に失敗しました')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。',
+              level: NotificationLevel.info,
+            );
+      } else {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '合成ポリゴンの保存に失敗しました',
+              level: NotificationLevel.info,
+            );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('合成処理中にエラーが発生しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '合成処理中にエラーが発生しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
   Future<void> _absorbMatchingLayers(BuildContext context, WidgetRef ref) async {
     final parentGpkg = node.parent;
     if (parentGpkg is! GeoPackageNode) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GeoPackage内のレイヤーではありません')));
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'GeoPackage内のレイヤーではありません',
+            level: NotificationLevel.info,
+          );
       return;
     }
 
@@ -384,7 +407,10 @@ class LayerTile extends ConsumerWidget {
       final targetColumns = await parentGpkg.geoPackageFile.getTableColumns(node.name);
       if (!context.mounted) return;
       if (targetColumns.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('レイヤーのカラム情報を取得できませんでした')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'レイヤーのカラム情報を取得できませんでした',
+              level: NotificationLevel.info,
+            );
         return;
       }
 
@@ -393,7 +419,10 @@ class LayerTile extends ConsumerWidget {
           .where((l) => l != node && l.runtimeType == node.runtimeType)
           .toList();
       if (siblings.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('同じ型の他のレイヤーがありません')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '同じ型の他のレイヤーがありません',
+              level: NotificationLevel.info,
+            );
         return;
       }
 
@@ -411,7 +440,10 @@ class LayerTile extends ConsumerWidget {
       }
       if (!context.mounted) return;
       if (matching.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('カラム構造が一致するレイヤーが見つかりません')));
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'カラム構造が一致するレイヤーが見つかりません',
+              level: NotificationLevel.info,
+            );
         return;
       }
 
@@ -449,13 +481,15 @@ class LayerTile extends ConsumerWidget {
       await node.updateChildren();
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count 件のフィーチャを吸収しました')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '$count 件のフィーチャを吸収しました',
+            level: NotificationLevel.info,
+          );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('吸収処理中にエラーが発生しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '吸収処理中にエラーが発生しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 }

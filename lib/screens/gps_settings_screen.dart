@@ -15,6 +15,8 @@ import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
 import '../widgets/gps_info_widget.dart';
 import '../widgets/settings_widgets.dart';
@@ -374,25 +376,15 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         );
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPSソースを「${source['name']}」に切り替えました'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPSソースを「${source['name']}」に切り替えました',
+            level: NotificationLevel.success,
+          );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS切り替えエラー: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS切り替えエラー: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -458,23 +450,17 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
             );
           },
         );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS位置取得がタイムアウトしました'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+      } else if (gpsInfo == null) {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'GPS位置取得がタイムアウトしました',
+              level: NotificationLevel.warning,
+            );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS位置取得テストエラー: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS位置取得テストエラー: $e',
+            level: NotificationLevel.error,
+          );
     } finally {
       // テスト終了時にGPS測量を停止
       await _gpsManager.stopGpsSurvey();

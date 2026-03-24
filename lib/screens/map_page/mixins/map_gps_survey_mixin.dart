@@ -8,6 +8,8 @@ import '../../../tools/gps_tool.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../utils/global_drawing_state.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../map_page_state_base.dart';
 
 /// GPS測量Mixin
@@ -30,11 +32,9 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       final selected = ref.read(selectedLayerNodeProvider);
       if (selected == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('レイヤーが選択されていません'),
-              backgroundColor: Colors.orange,
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'レイヤーが選択されていません',
+            level: NotificationLevel.warning,
           );
         }
         return;
@@ -42,24 +42,18 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       if (!selected.isVisibleRecursive()) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('このレイヤは不可視のため編集できません'),
-              backgroundColor: Colors.orange,
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'このレイヤは不可視のため編集できません',
+            level: NotificationLevel.warning,
           );
         }
         return;
       }
       
-      // GPS位置情報取得開始のスナックバーを表示
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS位置情報を取得中...'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 1),
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS位置情報を取得中...',
+          level: NotificationLevel.info,
         );
       }
       
@@ -73,30 +67,25 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
           final totalPoints =
               drawState.drawingLine.length +
               drawState.drawingPolygon.length;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('GPS位置を記録しました ($totalPointsポイント目)'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 1),
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS位置を記録しました ($totalPointsポイント目)',
+            level: NotificationLevel.success,
           );
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('GPS位置情報が取得できません。位置情報の許可と設定を確認してください。'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS位置情報が取得できません。位置情報の許可と設定を確認してください。',
+            level: NotificationLevel.error,
           );
         }
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量エラー: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('GPS測量エラー: $e'), backgroundColor: Colors.red),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS測量エラー: $e',
+          level: NotificationLevel.error,
         );
       }
     }
@@ -136,14 +125,10 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         },
       );
       
-      // 長押し中のフィードバック用のスナックバーを表示
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS長押し測量中... 離すと平均位置を記録します'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 1),
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS長押し測量中... 離すと平均位置を記録します',
+          level: NotificationLevel.info,
         );
       }
     } catch (e) {
@@ -155,11 +140,9 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         longPressGpsCount = 0;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS長押し測量開始エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS長押し測量開始エラー: $e',
+          level: NotificationLevel.error,
         );
       }
     }
@@ -191,12 +174,9 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       longPressCountUpdateTimer = null;
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS長押し測量完了 - 平均位置でポイントを作成しました'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS長押し測量完了 - 平均位置でポイントを作成しました',
+          level: NotificationLevel.success,
         );
       }
     } catch (e) {
@@ -208,11 +188,9 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         longPressGpsCount = 0;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS長押し測量エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS長押し測量エラー: $e',
+          level: NotificationLevel.error,
         );
       }
     }
@@ -310,31 +288,25 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         await updateFeatures();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('GPS測量フィーチャを作成しました'),
-              backgroundColor: Colors.green,
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS測量フィーチャを作成しました',
+            level: NotificationLevel.success,
           );
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('GPS測量フィーチャの作成に失敗しました'),
-              backgroundColor: Colors.red,
-            ),
+          ref.read(notificationCenterProvider.notifier).add(
+            title: 'GPS測量フィーチャの作成に失敗しました',
+            level: NotificationLevel.error,
           );
         }
       }
     } catch (e) {
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量確定エラー: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('GPS測量確定エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS測量確定エラー: $e',
+          level: NotificationLevel.error,
         );
       }
     }

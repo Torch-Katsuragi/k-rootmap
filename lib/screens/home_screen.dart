@@ -14,6 +14,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../providers/project_providers.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../utils/folder_utils.dart';
 import 'map_page/map_page.dart';
@@ -182,15 +184,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     } else {
       AppLogger.debug('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
       // Bluetooth権限がなくてもアプリは動作可能なので、警告のみ表示してストレージ権限で起動許可
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bluetooth GNSS機能を使用するには、Bluetooth権限が必要です'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Bluetooth GNSS機能を使用するには、Bluetooth権限が必要です',
+            level: NotificationLevel.warning,
+          );
       
       // ストレージ権限があれば、基本機能は使える
       setState(() {
@@ -250,14 +247,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       final projectDir = ref.read(projectRootDirProvider);
       if (projectDir != null) {
         final warning = checkContainmentRelation(globalPath, projectDir);
-        if (warning != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(warning),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 5),
-            ),
-          );
+        if (warning != null) {
+          ref.read(notificationCenterProvider.notifier).add(
+                title: warning,
+                level: NotificationLevel.warning,
+              );
         }
       }
 
@@ -286,12 +280,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     if (!_permissionsGranted) {
       AppLogger.debug('[HomeScreen] 権限が許可されていません');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('まずストレージ権限を許可してください'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'まずストレージ権限を許可してください',
+            level: NotificationLevel.error,
+          );
       return;
     }
 

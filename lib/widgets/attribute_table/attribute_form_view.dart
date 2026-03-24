@@ -2,10 +2,13 @@
 // 個別フィーチャの属性をフォーム形式で表示・編集
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import 'attribute_table_controller.dart';
 
 /// 個別フィーチャの属性をフォーム形式で表示
-class AttributeFormView extends StatefulWidget {
+class AttributeFormView extends ConsumerStatefulWidget {
   final AttributeTableController controller;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
@@ -18,10 +21,10 @@ class AttributeFormView extends StatefulWidget {
   });
 
   @override
-  State<AttributeFormView> createState() => _AttributeFormViewState();
+  ConsumerState<AttributeFormView> createState() => _AttributeFormViewState();
 }
 
-class _AttributeFormViewState extends State<AttributeFormView> {
+class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   int _currentIndex = 0;
   final Map<String, TextEditingController> _fieldControllers = {};
 
@@ -83,9 +86,10 @@ class _AttributeFormViewState extends State<AttributeFormView> {
     if (_currentIndex >= ctrl.features.length) return;
     final feature = ctrl.features[_currentIndex];
     final error = await ctrl.saveAttributeChange(feature, field, value);
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red),
+    if (error != null) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title: error,
+        level: NotificationLevel.error,
       );
     }
   }

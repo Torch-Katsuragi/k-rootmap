@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../widgets/track_extraction_dialog.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../map_page_state_base.dart';
 
 /// GPS軌跡抽出Mixin
@@ -14,12 +16,9 @@ mixin MapGpsTrackingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<
   Future<void> openTrackExtractionDialog() async {
     if (!gpsHistoryRecorder.isInitialized) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS履歴が初期化されていません'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'GPS履歴が初期化されていません',
+          level: NotificationLevel.warning,
         );
       }
       return;

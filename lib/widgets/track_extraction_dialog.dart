@@ -11,11 +11,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/app_notification.dart';
 import '../models/gps_track.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/gps_history_recorder.dart';
 import '../utils/app_logger.dart';
@@ -218,18 +221,17 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       if (feature != null && mounted) {
         Navigator.of(context).pop(true);
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('軌跡の保存に失敗しました'),
-            backgroundColor: Colors.red,
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '軌跡の保存に失敗しました',
+          level: NotificationLevel.error,
         );
       }
     } catch (e) {
       AppLogger.debug('[TrackExtractionDialog] 保存エラー: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存エラー: $e'), backgroundColor: Colors.red),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '保存エラー: $e',
+          level: NotificationLevel.error,
         );
       }
     } finally {
@@ -258,11 +260,9 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
 
     if (lineLayers.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('保存先のラインレイヤがありません。先にラインレイヤを作成してください。'),
-            backgroundColor: Colors.orange,
-          ),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '保存先のラインレイヤがありません。先にラインレイヤを作成してください。',
+          level: NotificationLevel.warning,
         );
       }
       return null;

@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pluto_grid/pluto_grid.dart';
+import '../../models/app_notification.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
+import '../../providers/notification_providers.dart';
 import '../../providers/selection_providers.dart';
 import '../../utils/app_logger.dart';
 import 'attribute_table_controller.dart';
@@ -126,18 +128,19 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
         AttributeTableToolbar(
           controller: _controller,
           onRefresh: _rebuildGrid,
-          onCopyTable: () => copyTableToClipboard(context, _controller),
+          onCopyTable: () => copyTableToClipboard(context, _controller, ref: ref),
           onAddFeature: widget.onAddFeature,
           onDeleteSelected: _handleDeleteSelected,
           onSave: _handleSave,
           onAddColumn:
-              () => showAddColumnDialog(context, widget.layer, _rebuildGrid),
+              () => showAddColumnDialog(context, widget.layer, _rebuildGrid, ref: ref),
           onFieldCalculator:
               () => showFieldCalculatorDialog(
                 context,
                 widget.layer,
                 _controller.columnNames,
                 _rebuildGrid,
+                ref: ref,
               ),
           onColumnAction: (columnName, action) {
             if (action == 'rename') {
@@ -146,6 +149,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 widget.layer,
                 columnName,
                 _rebuildGrid,
+                ref: ref,
               );
             } else if (action == 'delete') {
               showDeleteColumnDialog(
@@ -153,6 +157,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 widget.layer,
                 columnName,
                 _rebuildGrid,
+                ref: ref,
               );
             }
           },
@@ -171,6 +176,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 widget.layer,
                 filterSql,
                 _rebuildGrid,
+                ref: ref,
               ),
         ),
 
@@ -240,13 +246,10 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
         field,
         newValue,
       );
-      if (error != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+      if (error != null) {
+        ref.read(notificationCenterProvider.notifier).add(
+          title: error,
+          level: NotificationLevel.error,
         );
       }
     }
@@ -254,41 +257,25 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
 
   Future<void> _handleDeleteSelected() async {
     await _controller.deleteSelectedFeatures();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('フィーチャを削除しました'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+      title: 'フィーチャを削除しました',
+      level: NotificationLevel.success,
+    );
   }
 
   Future<void> _handleSave() async {
     try {
       await widget.layer.geoPackageFile.flushChanges();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('保存完了'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: '保存完了',
+        level: NotificationLevel.info,
+      );
     } catch (e) {
       AppLogger.debug('[AttributeTableWidget] 保存エラー: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存エラー: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: '保存エラー: $e',
+        level: NotificationLevel.error,
+      );
     }
   }
 

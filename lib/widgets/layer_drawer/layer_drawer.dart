@@ -17,6 +17,8 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import '../../providers/project_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../screens/gallery_import_screen.dart';
@@ -174,11 +176,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (sourcePath == newPath) return;
 
     if (FileSystemEntity.typeSync(newPath) != FileSystemEntityType.notFound) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('"$baseName" already exists in ${target.name}')),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '"$baseName" already exists in ${target.name}',
+            level: NotificationLevel.info,
+          );
       return;
     }
 
@@ -196,18 +197,16 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         if (moved != null) await moved.updateChildren();
       }
 
-      if (mounted) {
-        ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Moved "${source.name}" to ${target.name}')),
-        );
-      }
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Moved "${source.name}" to ${target.name}',
+            level: NotificationLevel.info,
+          );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Move failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Move failed: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -423,9 +422,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       node.name = result;
       triggerMapRefresh();
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rename failed: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'Rename failed: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
@@ -441,13 +441,15 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       await LayerDrawerService.renamePhoto(node, result);
       triggerMapRefresh();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('写真をリネームしました: $result')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '写真をリネームしました: $result',
+            level: NotificationLevel.info,
+          );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('リネームに失敗しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'リネームに失敗しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
@@ -486,13 +488,15 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       }
 
       triggerMapRefresh();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GeoPackageをリネームしました: $newFileName')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'GeoPackageをリネームしました: $newFileName',
+            level: NotificationLevel.info,
+          );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('リネームに失敗しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'リネームに失敗しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
@@ -562,11 +566,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ref.read(folderTreeProvider.notifier).set(replacement);
     widget.onDirChanged(replacement);
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Drive連携を解除しました')),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Drive連携を解除しました',
+          level: NotificationLevel.info,
+        );
   }
 
   Future<void> _addFolder(BuildContext context) async {
@@ -578,7 +581,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
         triggerMapRefresh();
       } catch (e) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ref.read(notificationCenterProvider.notifier).add(title: '$e', level: NotificationLevel.info);
       }
     } else {
       if (!context.mounted) return;
@@ -590,18 +593,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final urlResult = await DriveUrlInputDialog.show(context);
     if (urlResult == null) return;
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: [
-            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: 12),
-            Text('${urlResult.folderName} をクローン中...'),
-          ]),
-          duration: const Duration(seconds: 30),
-        ),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+          title: '${urlResult.folderName} をクローン中...',
+          level: NotificationLevel.info,
+        );
 
     try {
       final node = await LayerDrawerService.cloneDriveFolder(
@@ -611,28 +606,25 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
         url: urlResult.url,
         isReadOnly: urlResult.isReadOnly,
       );
-      if (context.mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (node != null) {
         triggerMapRefresh();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${urlResult.folderName} をクローンしました'), backgroundColor: Colors.green),
-          );
-        }
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('クローンに失敗しました'), backgroundColor: Colors.red),
-        );
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '${urlResult.folderName} をクローンしました',
+              level: NotificationLevel.success,
+            );
+      } else {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'クローンに失敗しました',
+              level: NotificationLevel.error,
+            );
       }
     } catch (e) {
       AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラー: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'エラー: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -649,24 +641,23 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     try {
       final newNode = await LayerDrawerService.createGeoPackage(widget.currentNode as FolderNode, result);
       if (newNode == null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('GeoPackageファイルの作成に失敗しました')),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'GeoPackageファイルの作成に失敗しました',
+              level: NotificationLevel.info,
+            );
         return;
       }
       final absPath = newNode.geoPackageFile.getAbsolutePath();
       if (absPath != null) ref.read(expandedGeoPackagesProvider.notifier).addExpanded(absPath);
       triggerMapRefresh();
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ref.read(notificationCenterProvider.notifier).add(title: '$e', level: NotificationLevel.info);
     }
   }
 
   Future<void> _addPhoto(BuildContext context) async {
     final folder = widget.currentNode as FolderNode;
-    final imported = await GalleryImporter.pickAndImport(context, folder);
+    final imported = await GalleryImporter.pickAndImport(context, folder, ref: ref);
     if (imported) {
       await folder.updateChildren();
       triggerMapRefresh();

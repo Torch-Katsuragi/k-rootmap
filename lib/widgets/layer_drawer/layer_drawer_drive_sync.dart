@@ -15,6 +15,7 @@ mixin LayerDrawerDriveSync on ConsumerState<LayerDrawer> {
   DriveSyncOperations? _syncOps;
 
   DriveSyncOperations get syncOps => _syncOps ??= DriveSyncOperations(
+        ref: ref,
         onStateChanged: () => setState(() {}),
         onMapRefresh: triggerMapRefresh,
       );

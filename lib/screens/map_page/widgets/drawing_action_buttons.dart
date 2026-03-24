@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
 import '../../../utils/global_drawing_state.dart';
@@ -12,7 +14,6 @@ class DrawingActionButtons extends ConsumerWidget {
   final VoidCallback onConfirmDrawing;
   final VoidCallback onConfirmGpsSurvey;
   final VoidCallback onTriggerSetState;
-  final void Function(String message, {Color? color})? onShowSnackBar;
   final GpsTool? Function() getGpsTool;
 
   const DrawingActionButtons({
@@ -21,7 +22,6 @@ class DrawingActionButtons extends ConsumerWidget {
     required this.onConfirmGpsSurvey,
     required this.onTriggerSetState,
     required this.getGpsTool,
-    this.onShowSnackBar,
   });
 
   @override
@@ -50,7 +50,7 @@ class DrawingActionButtons extends ConsumerWidget {
         drawingState.drawingPolygon.isNotEmpty;
 
     if (isGpsSurveyLine || isGpsSurveyPolygon) {
-      return _buildGpsSurveyButtons(gpsTool, drawingState);
+      return _buildGpsSurveyButtons(ref, gpsTool, drawingState);
     } else if (isLineDrawing || isPolygonDrawing) {
       return _buildDrawingButtons(drawingState, isLineDrawing);
     }
@@ -58,6 +58,7 @@ class DrawingActionButtons extends ConsumerWidget {
   }
 
   Widget _buildGpsSurveyButtons(
+    WidgetRef ref,
     GpsTool gpsTool,
     GlobalDrawingState drawingState,
   ) {
@@ -79,7 +80,12 @@ class DrawingActionButtons extends ConsumerWidget {
           onPressed: () async {
             await gpsTool.cancelSurveyWithGpsStop();
             onTriggerSetState();
-            onShowSnackBar?.call('GPS測量をキャンセルしました', color: Colors.orange);
+            ref
+                .read(notificationCenterProvider.notifier)
+                .add(
+                  title: 'GPS測量をキャンセルしました',
+                  level: NotificationLevel.warning,
+                );
           },
           tooltip: 'GPS測量をキャンセル',
           child: const Icon(Icons.clear),

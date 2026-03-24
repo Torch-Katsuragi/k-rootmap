@@ -6,6 +6,8 @@ import '../models/nodes/layer_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../providers/ui_state_providers.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../services/gps_manager_service.dart';
 /// GPS追跡停止時の処理選択ダイアログ
 class TrackingStopDialog extends StatefulWidget {
@@ -333,11 +335,9 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
           onPressed: () async {
             // バリデーション
             if (_intervalSeconds < 1) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('保存間隔は1秒以上に設定してください'),
-                  backgroundColor: Colors.orange,
-                ),
+              ref.read(notificationCenterProvider.notifier).add(
+                title: '保存間隔は1秒以上に設定してください',
+                level: NotificationLevel.warning,
               );
               return;
             }
@@ -354,11 +354,9 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               // GeoPackageNodeを検索（プロジェクトルートから最初のGeoPackageを使用）
               final rootNode = ref.read(folderTreeProvider);
               if (rootNode == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('GeoPackageが見つかりません'),
-                    backgroundColor: Colors.red,
-                  ),
+                ref.read(notificationCenterProvider.notifier).add(
+                  title: 'GeoPackageが見つかりません',
+                  level: NotificationLevel.error,
                 );
                 return;
               }
@@ -378,11 +376,9 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               findGeoPackage(rootNode);
 
               if (geoPackageNode == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('GeoPackageが見つかりません'),
-                    backgroundColor: Colors.red,
-                  ),
+                ref.read(notificationCenterProvider.notifier).add(
+                  title: 'GeoPackageが見つかりません',
+                  level: NotificationLevel.error,
                 );
                 return;
               }
@@ -393,14 +389,10 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
                 newLayerName,
               );
               if (targetLayer == null) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('レイヤーの作成に失敗しました'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                ref.read(notificationCenterProvider.notifier).add(
+                  title: 'レイヤーの作成に失敗しました',
+                  level: NotificationLevel.error,
+                );
                 return;
               }
             }

@@ -8,6 +8,8 @@ import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/import_export_service.dart';
@@ -204,24 +206,22 @@ class GeoPackageTile extends ConsumerWidget {
     if (migrated != null) {
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
       ref.read(selectedLayerNodeProvider.notifier).select(migrated);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('「${sourceLayer.name}」を「${targetGpkg.name}」に移植しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('レイヤ移植に失敗しました'), backgroundColor: Colors.red),
-      );
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '「${sourceLayer.name}」を「${targetGpkg.name}」に移植しました',
+            level: NotificationLevel.success,
+          );
+    } else {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'レイヤ移植に失敗しました',
+            level: NotificationLevel.error,
+          );
     }
   }
 
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
     await confirmAndExecute(
       context,
+      ref: ref,
       title: 'GeoPackage削除',
       content: Text('${node.name} を本当に削除しますか？\nファイルも完全に削除されます。'),
       confirmLabel: '削除',

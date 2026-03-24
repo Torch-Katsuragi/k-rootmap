@@ -61,6 +61,7 @@ class PhotoTile extends ConsumerWidget {
   Future<void> _handleDelete(BuildContext context, WidgetRef ref) async {
     await confirmAndExecute(
       context,
+      ref: ref,
       title: '写真削除',
       content: Text('${node.name} を本当に削除しますか？\nファイルも完全に削除されます。'),
       confirmLabel: '削除',

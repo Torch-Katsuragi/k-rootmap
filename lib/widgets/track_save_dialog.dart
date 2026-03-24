@@ -1,16 +1,20 @@
 // lib/widgets/track_save_dialog.dart
 // GPS軌跡保存ダイアログ
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_notification.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/gps_track.dart';
+import '../providers/notification_providers.dart';
 
 /// GPS軌跡保存ダイアログ
 class TrackSaveDialog extends StatefulWidget {
   final GpsTrack track;
   final LayerTreeNode? rootNode;
+  final WidgetRef? ref;
 
-  const TrackSaveDialog({super.key, required this.track, this.rootNode});
+  const TrackSaveDialog({super.key, required this.track, this.rootNode, this.ref});
 
   @override
   State<TrackSaveDialog> createState() => _TrackSaveDialogState();
@@ -198,15 +202,21 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                   : () {
                     final trackName = _trackNameController.text.trim();
                     if (trackName.isEmpty) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('軌跡名を入力してください')));
+                      if (widget.ref != null) {
+                        widget.ref!.read(notificationCenterProvider.notifier).add(
+                          title: '軌跡名を入力してください',
+                          level: NotificationLevel.info,
+                        );
+                      }
                       return;
                     }
                     if (_selectedGeoPackage == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('保存先GeoPackageを選択してください')),
-                      );
+                      if (widget.ref != null) {
+                        widget.ref!.read(notificationCenterProvider.notifier).add(
+                          title: '保存先GeoPackageを選択してください',
+                          level: NotificationLevel.info,
+                        );
+                      }
                       return;
                     }
 

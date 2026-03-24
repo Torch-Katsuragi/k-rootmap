@@ -5,6 +5,8 @@ import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../utils/global_drawing_state.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
@@ -83,10 +85,10 @@ class PenTool extends MapTool {
 
     if (!selected.isVisibleRecursive()) {
       AppLogger.debug('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
-      // 警告ポップアップ
-      ScaffoldMessenger.of(
-        mapState.context,
-      ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
+      _ref.read(notificationCenterProvider.notifier).add(
+        title: 'このレイヤは不可視のため編集できません',
+        level: NotificationLevel.warning,
+      );
       return;
     }
 
@@ -156,9 +158,10 @@ class PenTool extends MapTool {
     // 1本指の場合のみレイヤー選択チェック
     if (selected == null || !selected.isVisibleRecursive()) {
       if (selected != null && !selected.isVisibleRecursive()) {
-        ScaffoldMessenger.of(
-          mapState.context,
-        ).showSnackBar(const SnackBar(content: Text('このレイヤは不可視のため編集できません')));
+        _ref.read(notificationCenterProvider.notifier).add(
+          title: 'このレイヤは不可視のため編集できません',
+          level: NotificationLevel.warning,
+        );
       }
       return;
     }

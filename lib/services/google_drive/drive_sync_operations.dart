@@ -4,7 +4,10 @@ library;
 
 import 'dart:io' show Directory;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_notification.dart';
 import '../../models/nodes/layer_tree_node.dart';
+import '../../providers/notification_providers.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
@@ -19,6 +22,9 @@ import 'index.dart';
 /// UI依存（setState等）はコールバックで受け取ることで、
 /// LayerDrawer・タイトルバーどちらからでも利用可能。
 class DriveSyncOperations {
+  /// Riverpod ref（通知システム用）
+  final WidgetRef ref;
+
   /// UI更新コールバック（setState相当）
   final VoidCallback onStateChanged;
 
@@ -26,6 +32,7 @@ class DriveSyncOperations {
   final VoidCallback? onMapRefresh;
 
   DriveSyncOperations({
+    required this.ref,
     required this.onStateChanged,
     this.onMapRefresh,
   });
@@ -58,7 +65,7 @@ class DriveSyncOperations {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
 
-    if (!await ensureDriveAuthenticated(context)) return;
+    if (!await ensureDriveAuthenticated()) return;
 
     try {
       node.syncStatus = SyncStatus.syncing;
@@ -95,16 +102,12 @@ class DriveSyncOperations {
           await updateChildrenRecursive(node);
           onStateChanged();
         }
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(foldersCreated > 0
+        ref.read(notificationCenterProvider.notifier).add(
+              title: foldersCreated > 0
                   ? '$foldersCreatedフォルダを作成しました'
-                  : '変更はありません'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+                  : '変更はありません',
+              level: NotificationLevel.success,
+            );
         return;
       }
 
@@ -136,40 +139,26 @@ class DriveSyncOperations {
           onStateChanged();
         }
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '同期完了: ${result.uploadedCount}アップロード, '
-                '${result.downloadedCount}ダウンロード, '
-                '${result.deletedCount}削除, '
-                '${result.movedCount}移動',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '同期完了: ${result.uploadedCount}アップロード, '
+                  '${result.downloadedCount}ダウンロード, '
+                  '${result.deletedCount}削除, '
+                  '${result.movedCount}移動',
+              level: NotificationLevel.success,
+            );
       } else {
         node.syncStatus = SyncStatus.error;
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('エラー: ${result.errorMessage}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'エラー: ${result.errorMessage}',
+              level: NotificationLevel.error,
+            );
       }
     } catch (e) {
       node.syncStatus = SyncStatus.error;
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('エラー: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'エラー: $e',
+            level: NotificationLevel.error,
+          );
     }
 
     onStateChanged();
@@ -244,11 +233,10 @@ class DriveSyncOperations {
 
     onStateChanged();
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Drive連携を解除しました')),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Drive連携を解除しました',
+          level: NotificationLevel.info,
+        );
   }
 
   /// Drive連携フォルダをローカルから完全削除
@@ -292,23 +280,21 @@ class DriveSyncOperations {
       node.parent?.removeChild(node);
       onStateChanged();
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${node.name} を削除しました')),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '${node.name} を削除しました',
+            level: NotificationLevel.info,
+          );
     } catch (e) {
       AppLogger.error('[DriveSyncOps] フォルダ削除エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('削除に失敗しました: $e')),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '削除に失敗しました: $e',
+            level: NotificationLevel.info,
+          );
     }
   }
 
   /// Drive操作前の認証チェック
-  static Future<bool> ensureDriveAuthenticated(BuildContext context) async {
+  Future<bool> ensureDriveAuthenticated() async {
     final driveService = GoogleDriveService();
 
     if (driveService.isDriveApiAvailable) {
@@ -321,28 +307,21 @@ class DriveSyncOperations {
       return true;
     }
 
-    if (!context.mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Google Driveにログインしています...'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Google Driveにログインしています...',
+          level: NotificationLevel.info,
+        );
 
     final signInResult = await driveService.signIn();
-    if (!context.mounted) return false;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     if (signInResult) {
       return true;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Google Driveへのログインに失敗しました'),
-        backgroundColor: Colors.red,
-      ),
-    );
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Google Driveへのログインに失敗しました',
+          level: NotificationLevel.error,
+        );
     return false;
   }
 

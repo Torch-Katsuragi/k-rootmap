@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/basemap_provider.dart';
 import '../services/basemap_service.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../widgets/settings_widgets.dart';
 import '../providers/ui_state_providers.dart';
 
@@ -62,23 +64,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     try {
       await _baseMapService.setProvider(provider);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('背景地図を「${provider.name}」に変更しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '背景地図を「${provider.name}」に変更しました',
+            level: NotificationLevel.success,
+          );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('背景地図の変更に失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '背景地図の変更に失敗しました: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -87,23 +81,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     try {
       await _baseMapService.setOfflineMode(value);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(value ? 'オフラインモードを有効にしました' : 'オフラインモードを無効にしました'),
-            backgroundColor: value ? Colors.orange : Colors.blue,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: value ? 'オフラインモードを有効にしました' : 'オフラインモードを無効にしました',
+            level: value ? NotificationLevel.warning : NotificationLevel.info,
+          );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('オフラインモードの変更に失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'オフラインモードの変更に失敗しました: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -139,24 +125,16 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         await _baseMapService.clearCache(providerId: providerId);
         await _loadCacheInfo(); // キャッシュ情報を再読み込み
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('キャッシュをクリアしました'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'キャッシュをクリアしました',
+              level: NotificationLevel.success,
+            );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('キャッシュクリアに失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'キャッシュクリアに失敗しました: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -239,28 +217,20 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         // キャッシュ情報を再読み込み
         await _loadCacheInfo();
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
-              ),
-              backgroundColor: Colors.blue,
-            ),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
+              level: NotificationLevel.info,
+            );
       }
     } catch (e) {
       // エラー時はダイアログを閉じる
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('キャッシュ検証に失敗しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'キャッシュ検証に失敗しました: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 

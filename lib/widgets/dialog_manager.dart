@@ -2,13 +2,16 @@
 // ダイアログとコンバーターを統合管理するマネージャー
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
 import '../converters/base_converter.dart';
 import '../converters/layer_converter.dart';
 import '../converters/feature_converter.dart';
+import '../models/app_notification.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
+import '../providers/notification_providers.dart';
 import '../services/import_export_service.dart';
 import 'layer_import_export_dialog.dart';
 
@@ -48,7 +51,9 @@ class DialogManager {
 
         return result?.files.first.path;
       } catch (fallbackError) {
-        AppLogger.debug('[DialogManager] file_picker also failed: $fallbackError');
+        AppLogger.debug(
+          '[DialogManager] file_picker also failed: $fallbackError',
+        );
         return null;
       }
     }
@@ -86,7 +91,9 @@ class DialogManager {
 
         return result;
       } catch (fallbackError) {
-        AppLogger.debug('[DialogManager] file_picker save also failed: $fallbackError');
+        AppLogger.debug(
+          '[DialogManager] file_picker save also failed: $fallbackError',
+        );
         return null;
       }
     }
@@ -96,17 +103,28 @@ class DialogManager {
   static Future<void> showLayerImportDialog(
     BuildContext context, {
     LayerTreeNode? targetLayer,
+    WidgetRef? ref,
   }) async {
     final result = await showDialog<ConversionResult>(
       context: context,
       builder: (context) => _LayerImportDialog(targetLayer: targetLayer),
     );
 
-    if (!context.mounted) return;
-    if (result != null && result.success) {
-      _showSuccessSnackBar(context, 'Layer imported successfully!');
-    } else if (result != null && !result.success) {
-      _showErrorSnackBar(context, result.errorMessage ?? 'Import failed');
+    if (ref == null || result == null) return;
+    if (result.success) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: 'Layer imported successfully!',
+            level: NotificationLevel.success,
+          );
+    } else {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: result.errorMessage ?? 'Import failed',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -127,6 +145,7 @@ class DialogManager {
     BuildContext context, {
     required LayerNode targetLayer,
     List<Map<String, dynamic>>? features,
+    WidgetRef? ref,
   }) async {
     final result = await showDialog<ConversionResult>(
       context: context,
@@ -137,13 +156,22 @@ class DialogManager {
           ),
     );
 
-    if (!context.mounted) return;
-    if (result != null && result.success) {
-      final metadata = result.metadata;
-      final count = metadata?['successfulImports'] ?? 0;
-      _showSuccessSnackBar(context, '$count features imported successfully!');
-    } else if (result != null && !result.success) {
-      _showErrorSnackBar(context, result.errorMessage ?? 'Import failed');
+    if (ref == null || result == null) return;
+    if (result.success) {
+      final count = result.metadata?['successfulImports'] ?? 0;
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '$count features imported successfully!',
+            level: NotificationLevel.success,
+          );
+    } else {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: result.errorMessage ?? 'Import failed',
+            level: NotificationLevel.error,
+          );
     }
   }
 
@@ -152,6 +180,7 @@ class DialogManager {
     BuildContext context, {
     required List<Map<String, dynamic>> features,
     List<int>? selectedFeatureIds,
+    WidgetRef? ref,
   }) async {
     final result = await showDialog<ConversionResult>(
       context: context,
@@ -162,48 +191,23 @@ class DialogManager {
           ),
     );
 
-    if (!context.mounted) return;
-    if (result != null && result.success) {
-      final metadata = result.metadata;
-      final count = metadata?['featureCount'] ?? 0;
-      _showSuccessSnackBar(context, '$count features exported successfully!');
-    } else if (result != null && !result.success) {
-      _showErrorSnackBar(context, result.errorMessage ?? 'Export failed');
+    if (ref == null || result == null) return;
+    if (result.success) {
+      final count = result.metadata?['featureCount'] ?? 0;
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '$count features exported successfully!',
+            level: NotificationLevel.success,
+          );
+    } else {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: result.errorMessage ?? 'Export failed',
+            level: NotificationLevel.error,
+          );
     }
-  }
-
-  /// 成功メッセージを表示
-  static void _showSuccessSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  /// エラーメッセージを表示
-  static void _showErrorSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 5),
-      ),
-    );
   }
 
   /// ファイル形式から拡張子を取得
@@ -651,4 +655,3 @@ class _FeatureExportDialogState extends State<_FeatureExportDialog> {
     }
   }
 }
-

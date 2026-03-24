@@ -8,9 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../models/app_notification.dart';
 import '../../../models/nodes/feature_node.dart';
-import '../../../utils/app_logger.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../../utils/app_logger.dart';
 import '../feature_edit_action.dart';
 import '../shared/simplification_controls.dart';
 
@@ -105,16 +107,18 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('簡略化が適用されました')),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '簡略化が適用されました',
+          level: NotificationLevel.success,
         );
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       AppLogger.debug('[SimplifyAction] 適用失敗: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('簡略化の適用に失敗しました: $e')),
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '簡略化の適用に失敗しました: $e',
+          level: NotificationLevel.error,
         );
       }
     } finally {

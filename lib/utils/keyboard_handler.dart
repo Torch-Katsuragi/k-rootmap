@@ -5,6 +5,8 @@ import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
 import '../providers/ui_state_providers.dart';
 
@@ -83,28 +85,17 @@ class KeyboardHandler {
 
       AppLogger.debug('[KeyboardHandler] フィーチャ削除完了: $featureCount個');
 
-      // 成功メッセージ
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$featureCount個のフィーチャを削除しました'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: '$featureCount個のフィーチャを削除しました',
+        level: NotificationLevel.success,
+      );
     } catch (e) {
       AppLogger.debug('[KeyboardHandler] フィーチャ削除エラー: $e');
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('フィーチャの削除に失敗しました: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'フィーチャの削除に失敗しました: $e',
+        level: NotificationLevel.error,
+      );
     }
   }
 

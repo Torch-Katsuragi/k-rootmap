@@ -2,17 +2,27 @@
 // カラム追加、フィルタ複製、フィールド計算機、カラム操作など
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_notification.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/geometry_type.dart';
+import '../../providers/notification_providers.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/qgis_expression_filter.dart';
+
+void _notify(WidgetRef? ref, String title, NotificationLevel level) {
+  ref
+      ?.read(notificationCenterProvider.notifier)
+      .add(title: title, level: level);
+}
 
 /// カラム追加ダイアログを表示
 Future<void> showAddColumnDialog(
   BuildContext context,
   LayerNode layer,
-  VoidCallback onColumnAdded,
-) async {
+  VoidCallback onColumnAdded, {
+  WidgetRef? ref,
+}) async {
   final columnNameController = TextEditingController();
   String selectedType = 'TEXT';
 
@@ -74,12 +84,7 @@ Future<void> showAddColumnDialog(
                 onPressed: () {
                   final columnName = columnNameController.text.trim();
                   if (columnName.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('カラム名を入力してください'),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
+                    _notify(ref, 'カラム名を入力してください', NotificationLevel.warning);
                     return;
                   }
                   Navigator.of(
@@ -108,27 +113,10 @@ Future<void> showAddColumnDialog(
       );
       layer.clearColumnNamesCache();
       onColumnAdded();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('カラム「$columnName」を追加しました'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      _notify(ref, 'カラム「$columnName」を追加しました', NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[AttributeTableDialogs] カラム追加エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('カラム追加に失敗しました: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      _notify(ref, 'カラム追加に失敗しました: $e', NotificationLevel.error);
     }
   }
 }
@@ -138,8 +126,9 @@ Future<void> showDuplicateFilteredDialog(
   BuildContext context,
   LayerNode layer,
   String filterSql,
-  VoidCallback onDuplicated,
-) async {
+  VoidCallback onDuplicated, {
+  WidgetRef? ref,
+}) async {
   final layerNameController = TextEditingController(
     text: '${layer.layerName}_filtered',
   );
@@ -197,12 +186,7 @@ Future<void> showDuplicateFilteredDialog(
             onPressed: () {
               final name = layerNameController.text.trim();
               if (name.isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('レイヤ名を入力してください'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
+                _notify(ref, 'レイヤ名を入力してください', NotificationLevel.warning);
                 return;
               }
               Navigator.of(dialogContext).pop(name);
@@ -220,10 +204,8 @@ Future<void> showDuplicateFilteredDialog(
       final gpkgFile = layer.geoPackageFile;
       final geomType = await gpkgFile.getGeometryType(layer.layerName);
 
-      // 新レイヤ作成
       await gpkgFile.addLayer(result, geomType ?? GeometryType.point);
 
-      // 属性スキーマを移植
       final sourceColumns = await gpkgFile.getAttributeColumnInfo(
         layer.layerName,
         includeBuiltIn: false,
@@ -238,7 +220,6 @@ Future<void> showDuplicateFilteredDialog(
         }
       }
 
-      // フィルタ結果を複製
       final copiedCount = await gpkgFile.duplicateFilteredFeatures(
         layer.layerName,
         result,
@@ -246,27 +227,14 @@ Future<void> showDuplicateFilteredDialog(
       );
 
       onDuplicated();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$copiedCount件を「$result」にコピーしました'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      _notify(
+        ref,
+        '$copiedCount件を「$result」にコピーしました',
+        NotificationLevel.success,
+      );
     } catch (e) {
       AppLogger.debug('[AttributeTableDialogs] フィルタ複製エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('複製に失敗しました: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      _notify(ref, '複製に失敗しました: $e', NotificationLevel.error);
     }
   }
 }
@@ -276,8 +244,9 @@ Future<void> showFieldCalculatorDialog(
   BuildContext context,
   LayerNode layer,
   List<String> columnNames,
-  VoidCallback onUpdated,
-) async {
+  VoidCallback onUpdated, {
+  WidgetRef? ref,
+}) async {
   final expressionController = TextEditingController();
   String? selectedColumn;
   bool createNew = false;
@@ -435,17 +404,9 @@ Future<void> showFieldCalculatorDialog(
       final expression = result['expression'] as String;
       final isNew = result['createNew'] as bool;
 
-      // 式の安全性チェック（SELECT用のバリデーションを流用）
       final validation = QgisExpressionFilter.toSqlWhere(expression);
       if (validation is FilterResultError) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('式エラー: ${validation.message}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        _notify(ref, '式エラー: ${validation.message}', NotificationLevel.error);
         return;
       }
 
@@ -463,27 +424,10 @@ Future<void> showFieldCalculatorDialog(
           .updateColumnWithExpression(layer.layerName, target, expression);
 
       onUpdated();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$updatedCount件を更新しました（$target）'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      _notify(ref, '$updatedCount件を更新しました（$target）', NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[FieldCalculator] エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('フィールド計算エラー: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      _notify(ref, 'フィールド計算エラー: $e', NotificationLevel.error);
     }
   }
 }
@@ -493,8 +437,9 @@ Future<void> showRenameColumnDialog(
   BuildContext context,
   LayerNode layer,
   String currentName,
-  VoidCallback onRenamed,
-) async {
+  VoidCallback onRenamed, {
+  WidgetRef? ref,
+}) async {
   final controller = TextEditingController(text: currentName);
 
   final newName = await showDialog<String>(
@@ -537,22 +482,14 @@ Future<void> showRenameColumnDialog(
       );
       layer.clearColumnNamesCache();
       onRenamed();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('カラム名を「$currentName」→「$newName」に変更しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _notify(
+        ref,
+        'カラム名を「$currentName」→「$newName」に変更しました',
+        NotificationLevel.success,
+      );
     } catch (e) {
       AppLogger.debug('[RenameColumn] エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('カラム名変更エラー: $e'), backgroundColor: Colors.red),
-        );
-      }
+      _notify(ref, 'カラム名変更エラー: $e', NotificationLevel.error);
     }
   }
 }
@@ -562,8 +499,9 @@ Future<void> showDeleteColumnDialog(
   BuildContext context,
   LayerNode layer,
   String columnName,
-  VoidCallback onDeleted,
-) async {
+  VoidCallback onDeleted, {
+  WidgetRef? ref,
+}) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder:
@@ -589,22 +527,10 @@ Future<void> showDeleteColumnDialog(
       await layer.geoPackageFile.dropColumn(layer.layerName, columnName);
       layer.clearColumnNamesCache();
       onDeleted();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('カラム「$columnName」を削除しました'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _notify(ref, 'カラム「$columnName」を削除しました', NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[DeleteColumn] エラー: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('カラム削除エラー: $e'), backgroundColor: Colors.red),
-        );
-      }
+      _notify(ref, 'カラム削除エラー: $e', NotificationLevel.error);
     }
   }
 }

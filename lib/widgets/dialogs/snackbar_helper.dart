@@ -1,37 +1,22 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 
-/// SnackBar表示のヘルパー
-/// 成功・エラー・情報メッセージのSnackBarを統一的に表示する
-class SnackBarHelper {
-  static void showSuccess(BuildContext context, String message) {
-    _show(context, message, backgroundColor: Colors.green);
-  }
+/// 通知ヘルパー（NotificationCenterへの通知追加を簡潔に記述）
+class NotificationHelper {
+  static void success(WidgetRef ref, String title, {String? detail}) => ref
+      .read(notificationCenterProvider.notifier)
+      .add(title: title, detail: detail, level: NotificationLevel.success);
 
-  static void showError(BuildContext context, String message) {
-    _show(context, message, backgroundColor: Colors.red, duration: 4);
-  }
+  static void error(WidgetRef ref, String title, {String? detail}) => ref
+      .read(notificationCenterProvider.notifier)
+      .add(title: title, detail: detail, level: NotificationLevel.error);
 
-  static void showInfo(BuildContext context, String message) {
-    _show(context, message);
-  }
+  static void warning(WidgetRef ref, String title, {String? detail}) => ref
+      .read(notificationCenterProvider.notifier)
+      .add(title: title, detail: detail, level: NotificationLevel.warning);
 
-  static void showWarning(BuildContext context, String message) {
-    _show(context, message, backgroundColor: Colors.orange);
-  }
-
-  static void _show(
-    BuildContext context,
-    String message, {
-    Color? backgroundColor,
-    int duration = 2,
-  }) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: backgroundColor,
-        duration: Duration(seconds: duration),
-      ),
-    );
-  }
+  static void info(WidgetRef ref, String title, {String? detail}) => ref
+      .read(notificationCenterProvider.notifier)
+      .add(title: title, detail: detail, level: NotificationLevel.info);
 }

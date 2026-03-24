@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import '../../../models/app_notification.dart';
+import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
 import '../../../utils/metadata_parser.dart';
 
@@ -54,9 +56,10 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('座標系の変更に失敗しました: $e')));
+        ref.read(notificationCenterProvider.notifier).add(
+          title: '座標系の変更に失敗しました: $e',
+          level: NotificationLevel.error,
+        );
       }
     }
   }
@@ -67,11 +70,10 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
       // プロジェクトルートディレクトリを取得
       final projectRoot = ref.read(projectRootDirProvider);
       if (projectRoot == null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('プロジェクトルートディレクトリが見つかりません')),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+          title: 'プロジェクトルートディレクトリが見つかりません',
+          level: NotificationLevel.error,
+        );
         return;
       }
 
@@ -110,20 +112,15 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
 
       await sink.close();
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('メタデータTSVファイルを出力しました:\n$tsvFileName'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'メタデータTSVファイルを出力しました: $tsvFileName',
+        level: NotificationLevel.success,
+      );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('メタデータTSVエクスポートに失敗しました: $e')));
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'メタデータTSVエクスポートに失敗しました: $e',
+        level: NotificationLevel.error,
+      );
     }
   }
 

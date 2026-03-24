@@ -14,6 +14,8 @@ import '../services/google_drive/auto_sync_service.dart';
 import '../providers/project_providers.dart';
 import '../utils/folder_utils.dart';
 import '../widgets/settings_widgets.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_providers.dart';
 
 /// グローバルフォルダのカスタムパス用SharedPreferencesキー
 const kGlobalFolderCustomPathKey = 'global_folder_custom_path';
@@ -240,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 /// フィードバック画面
-class FeedbackScreen extends StatelessWidget {
+class FeedbackScreen extends ConsumerWidget {
   final bool isEmbedded;
   
   /// Google Forms フィードバックURL
@@ -251,35 +253,27 @@ class FeedbackScreen extends StatelessWidget {
     this.isEmbedded = false,
   });
 
-  Future<void> _openFeedbackForm(BuildContext context) async {
+  Future<void> _openFeedbackForm(WidgetRef ref) async {
     final uri = Uri.parse(_feedbackUrl);
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('ブラウザを開けませんでした'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'ブラウザを開けませんでした',
+              level: NotificationLevel.error,
+            );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('エラーが発生しました: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ref.read(notificationCenterProvider.notifier).add(
+            title: 'エラーが発生しました: $e',
+            level: NotificationLevel.error,
+          );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SettingsScaffold(
       title: 'フィードバック',
       isEmbedded: isEmbedded,
@@ -296,7 +290,7 @@ class FeedbackScreen extends StatelessWidget {
                 '機能の要望やバグ報告など、お気軽にお送りください。'
                 '開発の参考にさせていただきます。',
             actionButton: ElevatedButton.icon(
-              onPressed: () => _openFeedbackForm(context),
+              onPressed: () => _openFeedbackForm(ref),
               icon: const Icon(Icons.open_in_new),
               label: const Text('フィードバックフォームを開く'),
               style: ElevatedButton.styleFrom(
@@ -490,14 +484,10 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     // 実行中のプロバイダに反映
     ref.read(globalFolderPathProvider.notifier).set(dir);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Global folder updated. Restart the app to take full effect.'),
-          backgroundColor: Colors.blue,
-        ),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Global folder updated. Restart the app to take full effect.',
+          level: NotificationLevel.info,
+        );
   }
 
   Future<void> _resetToDefault() async {
@@ -506,14 +496,10 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     setState(() => _customPath = null);
     ref.read(globalFolderPathProvider.notifier).set(_defaultPath);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Global folder reset to default. Restart the app to take full effect.'),
-          backgroundColor: Colors.blue,
-        ),
-      );
-    }
+    ref.read(notificationCenterProvider.notifier).add(
+          title: 'Global folder reset to default. Restart the app to take full effect.',
+          level: NotificationLevel.info,
+        );
   }
 
   Future<bool> _showContainmentWarning(String message) async {

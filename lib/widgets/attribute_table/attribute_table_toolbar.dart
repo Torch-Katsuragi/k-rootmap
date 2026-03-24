@@ -3,12 +3,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_notification.dart';
+import '../../providers/notification_providers.dart';
 import '../../services/coordinate/index.dart';
 import '../../utils/app_logger.dart';
 import 'attribute_table_controller.dart';
 
 /// 属性テーブルツールバー
-class AttributeTableToolbar extends StatefulWidget {
+class AttributeTableToolbar extends ConsumerStatefulWidget {
   final AttributeTableController controller;
   final VoidCallback? onRefresh;
   final VoidCallback? onCopyTable;
@@ -39,10 +42,11 @@ class AttributeTableToolbar extends StatefulWidget {
   });
 
   @override
-  State<AttributeTableToolbar> createState() => _AttributeTableToolbarState();
+  ConsumerState<AttributeTableToolbar> createState() =>
+      _AttributeTableToolbarState();
 }
 
-class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
+class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   final _filterController = TextEditingController();
   bool _isFilterApplied = false;
 
@@ -69,14 +73,10 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
     }
     final error = await widget.controller.applyFilter(expression);
     setState(() => _isFilterApplied = error == null);
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('フィルタエラー: $error'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    if (error != null) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: 'フィルタエラー: $error', level: NotificationLevel.error);
     }
   }
 
@@ -396,10 +396,10 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
     if (text.isEmpty) return;
     final results = await widget.controller.searchText(text);
     setState(() => _searchResultCount = results.length);
-    if (mounted && results.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('該当なし'), duration: Duration(seconds: 1)),
-      );
+    if (results.isEmpty) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: '該当なし', level: NotificationLevel.info);
     }
   }
 
@@ -408,15 +408,12 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
     final replace = _replaceController.text;
     final column = _selectedReplaceColumn;
     if (search.isEmpty || column == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('検索テキストと対象カラムを指定してください'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '検索テキストと対象カラムを指定してください',
+            level: NotificationLevel.warning,
+          );
       return;
     }
     try {
@@ -426,22 +423,14 @@ class _AttributeTableToolbarState extends State<AttributeTableToolbar> {
         replace,
       );
       setState(() => _searchResultCount = 0);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$count件を置換しました'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: '$count件を置換しました', level: NotificationLevel.success);
       widget.onRefresh?.call();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('置換エラー: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: '置換エラー: $e', level: NotificationLevel.error);
     }
   }
 
@@ -735,8 +724,9 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
 /// テーブルをTSV形式でクリップボードにコピー
 Future<void> copyTableToClipboard(
   BuildContext context,
-  AttributeTableController controller,
-) async {
+  AttributeTableController controller, {
+  WidgetRef? ref,
+}) async {
   try {
     final buffer = StringBuffer();
 
@@ -758,25 +748,20 @@ Future<void> copyTableToClipboard(
 
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${controller.rows.length}行をクリップボードにコピーしました'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    if (ref != null) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: '${controller.rows.length}行をクリップボードにコピーしました',
+            level: NotificationLevel.success,
+          );
     }
   } catch (e) {
     AppLogger.debug('[AttributeTableToolbar] クリップボードコピーエラー: $e');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('コピーエラー: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    if (ref != null) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(title: 'コピーエラー: $e', level: NotificationLevel.error);
     }
   }
 }

@@ -11,4 +11,6 @@ class PlatformCapabilities {
 
   static bool get supportsNativeLocationRender =>
       Platform.isAndroid || Platform.isIOS;
+
+  static bool get supportsGpsTracking => Platform.isAndroid || Platform.isIOS;
 }

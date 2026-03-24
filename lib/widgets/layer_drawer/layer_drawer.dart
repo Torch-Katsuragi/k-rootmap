@@ -184,6 +184,8 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
 
     try {
+      // Windows: GeoPackageのDB接続を閉じないとファイルロックで移動失敗する
+      await _closeGeoPackageConnections(source);
       await _moveFileOrDir(sourcePath, newPath, isDir: source is FolderNode);
       await LayerDrawerService.notifySyncedPathChange(source, sourcePath, newPath);
 
@@ -207,6 +209,17 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             title: 'Move failed: $e',
             level: NotificationLevel.error,
           );
+    }
+  }
+
+  Future<void> _closeGeoPackageConnections(LayerTreeNode node) async {
+    if (node is GeoPackageNode) {
+      await node.geoPackageFile.dispose();
+    }
+    if (node is FolderNode) {
+      for (final child in node.children) {
+        await _closeGeoPackageConnections(child);
+      }
     }
   }
 

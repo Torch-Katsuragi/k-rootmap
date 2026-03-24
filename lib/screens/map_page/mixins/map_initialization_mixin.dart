@@ -197,6 +197,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// GPS管理サービス初期化
   Future<void> initializeGpsManager() async {
+    if (!PlatformCapabilities.supportsGpsTracking) {
+      AppLogger.debug('[Init] GPS: skipped (desktop)');
+      return;
+    }
 
     try {
       // GPS管理サービスを初期化
@@ -240,6 +244,11 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// GPS履歴レコーダー初期化
   Future<void> initializeGpsHistoryRecorder() async {
+    if (!PlatformCapabilities.supportsGpsTracking) {
+      AppLogger.debug('[Init] GpsHistory: skipped (desktop)');
+      return;
+    }
+
     try {
       final globalPath = ref.read(globalFolderPathProvider);
       if (globalPath == null) return;

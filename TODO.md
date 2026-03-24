@@ -172,6 +172,11 @@
   - [x] GlobalGeoPackageNode/GlobalImageNodeクラス作成
   - [x] ホーム画面でのグローバルフォルダ初期化処理
   - [x] レイヤードロワーでの青色アイコン表示対応
+  - [x] PC版グローバルフォルダのカスタムパス設定（2026/03/24）
+    - [x] 設定画面「一般」カテゴリ追加（PC限定）
+    - [x] SharedPreferencesにカスタムパス永続化
+    - [x] home_screen.dartのカスタムパス対応初期化
+    - [x] グローバル/プロジェクトフォルダ含有関係チェック＆警告表示
 
 - [x] LayerTreeNode大規模リファクタリング（2026/01/09）
   - [x] NodeType enum作成（文字列からenumに移行）

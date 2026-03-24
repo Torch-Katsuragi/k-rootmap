@@ -10,12 +10,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../providers/project_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../utils/folder_utils.dart';
 import 'map_page/map_page.dart';
 import 'maplibre_poc_screen.dart';
+import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
 
 /// ホーム画面（最小構成）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -225,17 +228,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   }
 
   /// グローバルフォルダの初期化
-  /// アプリケーションDocumentsディレクトリにk_maps_globalフォルダを作成し、
-  /// ルートノードの先頭に追加
+  /// SharedPreferencesにカスタムパスがあればそちらを使用、なければデフォルト
   Future<void> _initializeGlobalFolder() async {
     try {
-      // アプリケーションDocumentsディレクトリを取得
-      final appDir = await getApplicationDocumentsDirectory();
-      final globalPath = p.join(appDir.path, 'k_maps_global');
-      
+      final prefs = await SharedPreferences.getInstance();
+      final customPath = prefs.getString(kGlobalFolderCustomPathKey);
+
+      final String globalPath;
+      if (customPath != null) {
+        globalPath = customPath;
+      } else {
+        final appDir = await getApplicationDocumentsDirectory();
+        globalPath = p.join(appDir.path, 'k_maps_global');
+      }
+
       // グローバルフォルダパスを保存
       ref.read(globalFolderPathProvider.notifier).set(globalPath);
       AppLogger.debug('[HomeScreen] グローバルフォルダパス: $globalPath');
+
+      // 含有関係チェック（プロジェクトフォルダとの重複警告）
+      final projectDir = ref.read(projectRootDirProvider);
+      if (projectDir != null) {
+        final warning = checkContainmentRelation(globalPath, projectDir);
+        if (warning != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(warning),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
 
       // グローバルフォルダノードを作成
       final globalFolderNode = GlobalFolderNode(
@@ -247,9 +271,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
       final rootNode = ref.read(folderTreeProvider);
       if (rootNode != null) {
-        // 既存のグローバルフォルダがあれば削除
         rootNode.children.removeWhere((child) => child is GlobalFolderNode);
-        // 先頭に挿入
         rootNode.children.insert(0, globalFolderNode);
         AppLogger.debug('[HomeScreen] グローバルフォルダをルートノードに追加');
       }

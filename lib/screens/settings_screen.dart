@@ -3,14 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'basemap_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
 import '../services/google_drive/auto_sync_service.dart';
+import '../providers/project_providers.dart';
+import '../utils/folder_utils.dart';
 import '../widgets/settings_widgets.dart';
+
+/// グローバルフォルダのカスタムパス用SharedPreferencesキー
+const kGlobalFolderCustomPathKey = 'global_folder_custom_path';
 
 /// 設定カテゴリー定義
 enum SettingsCategory {
+  general,
   basemap,
   gps,
   layerStyle,
@@ -20,56 +30,35 @@ enum SettingsCategory {
 }
 
 extension SettingsCategoryExt on SettingsCategory {
-  String get title {
-    switch (this) {
-      case SettingsCategory.basemap:
-        return '地図・タイル';
-      case SettingsCategory.gps:
-        return 'GPS・測位';
-      case SettingsCategory.layerStyle:
-        return 'レイヤ描画';
-      case SettingsCategory.sync:
-        return 'Drive同期';
-      case SettingsCategory.feedback:
-        return 'フィードバック';
-      case SettingsCategory.appInfo:
-        return 'アプリ情報';
-    }
-  }
+  String get title => switch (this) {
+    SettingsCategory.general => '一般',
+    SettingsCategory.basemap => '地図・タイル',
+    SettingsCategory.gps => 'GPS・測位',
+    SettingsCategory.layerStyle => 'レイヤ描画',
+    SettingsCategory.sync => 'Drive同期',
+    SettingsCategory.feedback => 'フィードバック',
+    SettingsCategory.appInfo => 'アプリ情報',
+  };
 
-  IconData get icon {
-    switch (this) {
-      case SettingsCategory.basemap:
-        return Icons.map;
-      case SettingsCategory.gps:
-        return Icons.gps_fixed;
-      case SettingsCategory.layerStyle:
-        return Icons.palette;
-      case SettingsCategory.sync:
-        return Icons.sync;
-      case SettingsCategory.feedback:
-        return Icons.feedback;
-      case SettingsCategory.appInfo:
-        return Icons.info_outline;
-    }
-  }
+  IconData get icon => switch (this) {
+    SettingsCategory.general => Icons.settings,
+    SettingsCategory.basemap => Icons.map,
+    SettingsCategory.gps => Icons.gps_fixed,
+    SettingsCategory.layerStyle => Icons.palette,
+    SettingsCategory.sync => Icons.sync,
+    SettingsCategory.feedback => Icons.feedback,
+    SettingsCategory.appInfo => Icons.info_outline,
+  };
 
-  String get description {
-    switch (this) {
-      case SettingsCategory.basemap:
-        return '背景地図、オフライン地図、キャッシュ管理';
-      case SettingsCategory.gps:
-        return 'GPSソース選択、外部GNSS接続';
-      case SettingsCategory.layerStyle:
-        return '点・線・ポリゴンの描画スタイル';
-      case SettingsCategory.sync:
-        return 'WiFi自動同期、同期間隔';
-      case SettingsCategory.feedback:
-        return '要望・バグ報告をお送りください';
-      case SettingsCategory.appInfo:
-        return 'バージョン情報、ライセンス';
-    }
-  }
+  String get description => switch (this) {
+    SettingsCategory.general => 'グローバルフォルダ設定',
+    SettingsCategory.basemap => '背景地図、オフライン地図、キャッシュ管理',
+    SettingsCategory.gps => 'GPSソース選択、外部GNSS接続',
+    SettingsCategory.layerStyle => '点・線・ポリゴンの描画スタイル',
+    SettingsCategory.sync => 'WiFi自動同期、同期間隔',
+    SettingsCategory.feedback => '要望・バグ報告をお送りください',
+    SettingsCategory.appInfo => 'バージョン情報、ライセンス',
+  };
 }
 
 /// 統合設定画面
@@ -232,6 +221,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final key = ValueKey('settings_${category.name}');
     
     switch (category) {
+      case SettingsCategory.general:
+        return GeneralSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.basemap:
         return BaseMapSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.gps:
@@ -436,6 +427,194 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                     applicationVersion: _packageInfo?.version ?? '',
                   );
                 },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 一般設定画面（PC専用: グローバルフォルダパス設定）
+class GeneralSettingsScreen extends ConsumerStatefulWidget {
+  final bool isEmbedded;
+  const GeneralSettingsScreen({super.key, this.isEmbedded = false});
+
+  @override
+  ConsumerState<GeneralSettingsScreen> createState() => _GeneralSettingsScreenState();
+}
+
+class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
+  String? _customPath;
+  String _defaultPath = '';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final appDir = await getApplicationDocumentsDirectory();
+    _defaultPath = p.join(appDir.path, 'k_maps_global');
+    _customPath = prefs.getString(kGlobalFolderCustomPathKey);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  String get _effectivePath => _customPath ?? _defaultPath;
+  bool get _isCustom => _customPath != null;
+
+  Future<void> _pickFolder() async {
+    final dir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Global Folder',
+    );
+    if (dir == null) return;
+
+    // 含有関係チェック（プロジェクトフォルダが開いている場合）
+    final projectDir = ref.read(projectRootDirProvider);
+    if (projectDir != null) {
+      final warning = checkContainmentRelation(dir, projectDir);
+      if (warning != null && mounted) {
+        final proceed = await _showContainmentWarning(warning);
+        if (!proceed) return;
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kGlobalFolderCustomPathKey, dir);
+    setState(() => _customPath = dir);
+
+    // 実行中のプロバイダに反映
+    ref.read(globalFolderPathProvider.notifier).set(dir);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Global folder updated. Restart the app to take full effect.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resetToDefault() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(kGlobalFolderCustomPathKey);
+    setState(() => _customPath = null);
+    ref.read(globalFolderPathProvider.notifier).set(_defaultPath);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Global folder reset to default. Restart the app to take full effect.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+  }
+
+  Future<bool> _showContainmentWarning(String message) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+        title: const Text('Folder Containment Warning'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Use Anyway'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScaffold(
+      title: '一般',
+      isEmbedded: widget.isEmbedded,
+      isLoading: _isLoading,
+      body: SettingsBody(
+        sections: [
+          SettingsSection(
+            title: 'Global Folder',
+            icon: Icons.folder_special,
+            iconColor: Colors.blue,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'The global folder is shared across all projects.\n'
+                  'GPS history, shared GeoPackages, and other global data are stored here.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: Icon(
+                  _isCustom ? Icons.folder : Icons.folder_outlined,
+                  color: _isCustom ? Colors.blue : Colors.blueGrey,
+                ),
+                title: Text(_isCustom ? 'Custom Path' : 'Default Path'),
+                subtitle: Text(
+                  _effectivePath,
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickFolder,
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('Change Folder'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (_isCustom) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _resetToDefault,
+                        icon: const Icon(Icons.restore),
+                        label: const Text('Reset'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: 'Info',
+            icon: Icons.info_outline,
+            iconColor: Colors.grey,
+            children: const [
+              Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Changing the global folder does not migrate existing data.\n'
+                  'The new folder will be created automatically if it does not exist.\n\n'
+                  'The global folder and project folder must not overlap '
+                  '(one containing the other).',
+                  style: TextStyle(height: 1.5, color: Colors.grey),
+                ),
               ),
             ],
           ),

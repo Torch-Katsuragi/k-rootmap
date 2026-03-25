@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
+import 'package:turf/turf.dart' as turf;
 import '../../services/map_source_manager.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/geo_converter.dart';
@@ -637,33 +638,26 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
     final selectedSet = currentSelection.toSet();
 
-    // ポリラインをmaplibre Feature型に変換（選択/非選択分離）
+    // ポリラインをmaplibre Feature型に変換（選択/非選択分離、Multi対応）
     cachedPolylines = [];
     cachedSelectedPolylines = [];
     for (final f in lineFeatures) {
-      if (f.geometry == null) continue;
-      final pts = (f.geometry as List<LatLng>).toGeographics();
-      final feature = geo.Feature(geometry: geo.LineString.from(pts));
-      if (selectedSet.contains(f)) {
-        cachedSelectedPolylines.add(feature);
-      } else {
-        cachedPolylines.add(feature);
-      }
+      final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
+      if (geoGeom == null) continue;
+      final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
+      (selectedSet.contains(f) ? cachedSelectedPolylines : cachedPolylines)
+          .add(feature);
     }
 
-    // ポリゴンをmaplibre Feature型に変換（選択/非選択分離）
+    // ポリゴンをmaplibre Feature型に変換（選択/非選択分離、Multi対応）
     cachedPolygons = [];
     cachedSelectedPolygons = [];
     for (final f in polygonFeatures) {
-      if (f.geometry == null) continue;
-      final rings = f.geometry as List<List<LatLng>>;
-      final geoRings = rings.map((r) => r.toGeographics()).toList();
-      final feature = geo.Feature(geometry: geo.Polygon.from(geoRings));
-      if (selectedSet.contains(f)) {
-        cachedSelectedPolygons.add(feature);
-      } else {
-        cachedPolygons.add(feature);
-      }
+      final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
+      if (geoGeom == null) continue;
+      final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
+      (selectedSet.contains(f) ? cachedSelectedPolygons : cachedPolygons)
+          .add(feature);
     }
 
     // ポイントをmaplibre Feature型に変換（選択/非選択分離）
@@ -711,13 +705,12 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     cachedLineVerticesSel = [];
     if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
       for (final f in lineFeatures) {
-        if (f.geometry == null) continue;
-        final pts = (f.geometry as List<LatLng>).toGeographics();
+        final allPts = _extractAllLineVertices(f.turfFeature.geometry);
         final list =
             selectedSet.contains(f)
                 ? cachedLineVerticesSel
                 : cachedLineVertices;
-        for (final pt in pts) {
+        for (final pt in allPts) {
           list.add(geo.Feature(geometry: geo.Point(pt)));
         }
       }
@@ -728,26 +721,123 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     cachedPolyVerticesSel = [];
     if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
       for (final f in polygonFeatures) {
-        if (f.geometry == null) continue;
-        final rings = f.geometry as List<List<LatLng>>;
+        final allPts = _extractAllPolyVertices(f.turfFeature.geometry);
         final list =
             selectedSet.contains(f)
                 ? cachedPolyVerticesSel
                 : cachedPolyVertices;
-        for (final ring in rings) {
-          if (ring.isEmpty) continue;
-          final pts = List<LatLng>.from(ring);
-          // 閉じたリングの末尾重複を除外
-          if (pts.length >= 2 && pts.first == pts.last) pts.removeLast();
-          for (final pt in pts.toGeographics()) {
-            list.add(geo.Feature(geometry: geo.Point(pt)));
-          }
+        for (final pt in allPts) {
+          list.add(geo.Feature(geometry: geo.Point(pt)));
         }
       }
     }
 
     // MapSourceManager経由でGeoJSONソースを更新（変更時のみ送信）
     _pushFeaturesToSources();
+  }
+
+  // ============================================================
+  // turf → geobase 変換ヘルパー（_syncFeatureSources用）
+  // ============================================================
+
+  geo.Geometry? _turfLineToGeo(turf.GeometryObject? geom) {
+    if (geom is turf.MultiLineString) {
+      return geo.MultiLineString.from(
+        geom.coordinates.map(
+          (line) => line.map(
+            (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
+          ),
+        ),
+      );
+    }
+    if (geom is turf.LineString) {
+      return geo.LineString.from(
+        geom.coordinates.map(
+          (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
+        ),
+      );
+    }
+    return null;
+  }
+
+  geo.Geometry? _turfPolyToGeo(turf.GeometryObject? geom) {
+    if (geom is turf.MultiPolygon) {
+      return geo.MultiPolygon.from(
+        geom.coordinates.map(
+          (rings) => rings.map(
+            (ring) => ring.map(
+              (p) => geo.Geographic(
+                lon: p.lng.toDouble(),
+                lat: p.lat.toDouble(),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (geom is turf.Polygon) {
+      return geo.Polygon.from(
+        geom.coordinates.map(
+          (ring) => ring.map(
+            (p) => geo.Geographic(lon: p.lng.toDouble(), lat: p.lat.toDouble()),
+          ),
+        ),
+      );
+    }
+    return null;
+  }
+
+  List<geo.Geographic> _extractAllLineVertices(turf.GeometryObject? geom) {
+    final pts = <geo.Geographic>[];
+    if (geom is turf.MultiLineString) {
+      for (final line in geom.coordinates) {
+        for (final p in line) {
+          pts.add(geo.Geographic(
+            lon: p.lng.toDouble(),
+            lat: p.lat.toDouble(),
+          ));
+        }
+      }
+    } else if (geom is turf.LineString) {
+      for (final p in geom.coordinates) {
+        pts.add(geo.Geographic(
+          lon: p.lng.toDouble(),
+          lat: p.lat.toDouble(),
+        ));
+      }
+    }
+    return pts;
+  }
+
+  List<geo.Geographic> _extractAllPolyVertices(turf.GeometryObject? geom) {
+    final pts = <geo.Geographic>[];
+    void addRingVertices(List<turf.Position> ring) {
+      final positions = List<turf.Position>.from(ring);
+      if (positions.length >= 2 &&
+          positions.first.lat == positions.last.lat &&
+          positions.first.lng == positions.last.lng) {
+        positions.removeLast();
+      }
+      for (final p in positions) {
+        pts.add(geo.Geographic(
+          lon: p.lng.toDouble(),
+          lat: p.lat.toDouble(),
+        ));
+      }
+    }
+
+    if (geom is turf.MultiPolygon) {
+      for (final rings in geom.coordinates) {
+        for (final ring in rings) {
+          addRingVertices(ring);
+        }
+      }
+    } else if (geom is turf.Polygon) {
+      for (final ring in geom.coordinates) {
+        addRingVertices(ring);
+      }
+    }
+    return pts;
   }
 
   /// キャッシュ済みフィーチャをMapSourceManagerに送信

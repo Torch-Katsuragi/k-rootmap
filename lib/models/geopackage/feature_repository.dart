@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
@@ -21,20 +22,10 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
 ) {
   for (final row in params.rows) {
     final geom = row['geom'] as Uint8List?;
-
     if (geom != null) {
-      switch (params.geomType) {
-        case GeometryType.point:
-          final point = parseWkbPoint(geom);
-          if (point != null) {
-            row['geometry'] = [point];
-          }
-        case GeometryType.linestring:
-          final lines = parseWkbLineString(geom);
-          if (lines.isNotEmpty) row['geometry'] = lines;
-        case GeometryType.polygon:
-          final polygons = parseWkbPolygon(geom);
-          if (polygons.isNotEmpty) row['geometry'] = polygons;
+      final geometry = parseGpkgGeometry(geom);
+      if (geometry != null) {
+        row['geometry'] = geobaseGeometryToLatLngs(geometry);
       }
     }
 
@@ -64,7 +55,6 @@ class FeatureRepository {
   // エンベロープ計算（共通）
   // ============================================================
 
-  /// 座標リストからエンベロープ(minX, minY, maxX, maxY)を計算
   ({double minX, double minY, double maxX, double maxY})? _calculateEnvelope(
     List<LatLng> coordinates,
   ) {
@@ -82,14 +72,12 @@ class FeatureRepository {
     return (minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
 
-  /// ポリゴンの全リングからエンベロープを計算
   ({double minX, double minY, double maxX, double maxY})?
       _calculatePolygonEnvelope(List<List<LatLng>> rings) {
     final allPoints = rings.expand((ring) => ring).toList();
     return _calculateEnvelope(allPoints);
   }
 
-  /// エンベロープをDB（空間インデックス）に反映
   Future<void> _updateSpatialIndex(
     String tableName,
     int rowId,
@@ -116,7 +104,6 @@ class FeatureRepository {
   // 属性ビルダー（共通）
   // ============================================================
 
-  /// テーブルに存在するカラムのみを含む属性マップを構築
   Future<Map<String, dynamic>> _buildSafeAttributes(
     String tableName, {
     String name = '',
@@ -138,7 +125,6 @@ class FeatureRepository {
     return attributes;
   }
 
-  /// ジオメトリ＋属性のUPDATE SQLを構築・実行する共通処理
   Future<bool> _updateFeatureGeometry(
     String tableName,
     int id,
@@ -190,7 +176,29 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // フィーチャ追加（WithAttributes版 - ジオメトリ型共通化）
+  // geobase Geometry 構築ヘルパー
+  // ============================================================
+
+  geo.Point _buildGeoPoint(LatLng pt) =>
+      geo.Point(geo.Geographic(lon: pt.longitude, lat: pt.latitude));
+
+  geo.MultiLineString _buildGeoMultiLineString(List<LatLng> line) =>
+      geo.MultiLineString.from([
+        line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+      ]);
+
+  geo.MultiPolygon _buildGeoMultiPolygon(List<List<LatLng>> rings) =>
+      geo.MultiPolygon.from([
+        rings.map(
+          (ring) =>
+              ring.map(
+                (p) => geo.Geographic(lon: p.longitude, lat: p.latitude),
+              ),
+        ),
+      ]);
+
+  // ============================================================
+  // フィーチャ追加（WithAttributes版）
   // ============================================================
 
   Future<int?> addPointWithAttributes(
@@ -200,7 +208,7 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-      final wkb = createWkbPoint(point.longitude, point.latitude);
+      final wkb = createGpkgWkb(_buildGeoPoint(point));
       _validateAndLogWkb(
         wkb,
         'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
@@ -228,7 +236,7 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-      final wkb = createWkbLineString(line);
+      final wkb = createGpkgWkb(_buildGeoMultiLineString(line));
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
@@ -252,7 +260,7 @@ class FeatureRepository {
   ) async {
     try {
       final db = await connection.getDatabase();
-      final wkb = createWkbPolygon(polygon);
+      final wkb = createGpkgWkb(_buildGeoMultiPolygon(polygon));
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
@@ -325,7 +333,7 @@ class FeatureRepository {
   }
 
   // ============================================================
-  // フィーチャ更新（共通メソッドに統一）
+  // フィーチャ更新
   // ============================================================
 
   Future<bool> updatePoint(
@@ -336,7 +344,7 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createWkbPoint(pt.longitude, pt.latitude);
+    final wkb = createGpkgWkb(_buildGeoPoint(pt));
     _validateAndLogWkb(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
     return _updateFeatureGeometry(
       tableName,
@@ -356,7 +364,7 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createWkbLineString(line);
+    final wkb = createGpkgWkb(_buildGeoMultiLineString(line));
     return _updateFeatureGeometry(
       tableName,
       id,
@@ -375,7 +383,7 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createWkbPolygon(rings);
+    final wkb = createGpkgWkb(_buildGeoMultiPolygon(rings));
     return _updateFeatureGeometry(
       tableName,
       id,
@@ -422,7 +430,10 @@ class FeatureRepository {
 
       final geom = row['geom'] as Uint8List?;
       if (geom != null && geomType != null) {
-        _parseGeometry(row, geom, geomType, rowId);
+        final geometry = parseGpkgGeometry(geom);
+        if (geometry != null) {
+          row['geometry'] = geobaseGeometryToLatLngs(geometry);
+        }
       }
 
       _parseMetadata(row);
@@ -454,9 +465,7 @@ class FeatureRepository {
     }
   }
 
-  /// 全フィーチャをジオメトリパース済みで一括取得（N+1クエリ解消版）
-  /// getFeatures + getFeature のN+1パターンを1クエリに統合
-  /// フィーチャ数が閾値を超える場合、WKBパースを別Isolateで実行
+  /// 全フィーチャをジオメトリパース済みで一括取得
   Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
     String tableName,
     GeometryType? geomType,
@@ -471,7 +480,6 @@ class FeatureRepository {
 
       final rows = await db.rawQuery(selectClause);
 
-      // PK正規化（Isolateに渡す前にMutable Mapに変換）
       final mutableRows = <Map<String, dynamic>>[];
       for (final row in rows) {
         final normalizedRow = Map<String, dynamic>.from(row);
@@ -482,7 +490,6 @@ class FeatureRepository {
 
       if (geomType == null) return mutableRows;
 
-      // 閾値以上なら別Isolateでジオメトリ＋メタデータパース
       if (mutableRows.length >= _kIsolateThreshold) {
         AppLogger.debug(
           '[FeatureRepository] Isolateパース: $tableName (${mutableRows.length}件)',
@@ -493,12 +500,13 @@ class FeatureRepository {
         );
       }
 
-      // 閾値未満はメインスレッドでパース
       for (final row in mutableRows) {
         final geom = row['geom'] as Uint8List?;
-        final rowId = row['id'] as int? ?? 0;
         if (geom != null) {
-          _parseGeometry(row, geom, geomType, rowId);
+          final geometry = parseGpkgGeometry(geom);
+          if (geometry != null) {
+            row['geometry'] = geobaseGeometryToLatLngs(geometry);
+          }
         }
         _parseMetadata(row);
       }
@@ -729,7 +737,7 @@ class FeatureRepository {
         tableName,
         pointData,
         'point',
-        (point) => createWkbPoint(point.longitude, point.latitude),
+        (point) => createGpkgWkb(_buildGeoPoint(point)),
       );
 
   Future<List<int>> addLinesBatch(
@@ -740,7 +748,7 @@ class FeatureRepository {
         tableName,
         lineData,
         'line',
-        createWkbLineString,
+        (line) => createGpkgWkb(_buildGeoMultiLineString(line)),
       );
 
   Future<List<int>> addPolygonsBatch(
@@ -751,7 +759,7 @@ class FeatureRepository {
         tableName,
         polygonData,
         'rings',
-        createWkbPolygon,
+        (rings) => createGpkgWkb(_buildGeoMultiPolygon(rings)),
       );
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
@@ -780,7 +788,6 @@ class FeatureRepository {
     }
   }
 
-  /// WHERE句にマッチするフィーチャ数を取得（プレビュー用）
   Future<int> countFilteredFeatures(
     String tableName,
     String whereClause,
@@ -799,7 +806,6 @@ class FeatureRepository {
     }
   }
 
-  /// WHERE句でフィルタしたフィーチャを別レイヤに複製
   Future<int> duplicateFilteredFeatures(
     String sourceTable,
     String targetTable,
@@ -929,64 +935,4 @@ class FeatureRepository {
       value is num ||
       value is bool ||
       value is Uint8List;
-
-  void _parseGeometry(
-    Map<String, dynamic> row,
-    Uint8List geom,
-    GeometryType geomType,
-    int rowId,
-  ) {
-    if (geomType == GeometryType.point) {
-      Uint8List pureWkb = _stripGpbHeader(geom);
-      if (pureWkb.length >= 21 && pureWkb[0] == 1 && pureWkb[1] == 1) {
-        final lon =
-            ByteData.sublistView(pureWkb, 5, 13).getFloat64(0, Endian.little);
-        final lat =
-            ByteData.sublistView(pureWkb, 13, 21).getFloat64(0, Endian.little);
-        if (_isValidCoordinate(lat, lon)) {
-          row['geometry'] = [LatLng(lat, lon)];
-        } else {
-          AppLogger.debug(
-            '[FeatureRepository] 警告: 無効なPoint座標値: lat=$lat, lon=$lon (rowId=$rowId)',
-          );
-        }
-      }
-    } else if (geomType == GeometryType.linestring) {
-      final lines = parseWkbLineString(geom);
-      if (lines.isNotEmpty) row['geometry'] = lines;
-    } else if (geomType == GeometryType.polygon) {
-      final polygons = parseWkbPolygon(geom);
-      if (polygons.isNotEmpty) row['geometry'] = polygons;
-    }
-  }
-
-  /// GPBinaryヘッダーをスキップして純粋なWKBデータを取得
-  Uint8List _stripGpbHeader(Uint8List geom) {
-    if (geom.length > 8 && geom[0] == 0x47 && geom[1] == 0x50) {
-      final flags = geom[3];
-      final envelopeType = (flags >> 1) & 0x07;
-      int headerSize = 8;
-      switch (envelopeType) {
-        case 1:
-          headerSize += 32;
-        case 2:
-        case 3:
-          headerSize += 48;
-        case 4:
-          headerSize += 64;
-      }
-      if (geom.length > headerSize) return geom.sublist(headerSize);
-    }
-    return geom;
-  }
-
-  bool _isValidCoordinate(double lat, double lon) =>
-      lat >= -90.0 &&
-      lat <= 90.0 &&
-      lon >= -180.0 &&
-      lon <= 180.0 &&
-      !lat.isNaN &&
-      !lon.isNaN &&
-      !lat.isInfinite &&
-      !lon.isInfinite;
 }

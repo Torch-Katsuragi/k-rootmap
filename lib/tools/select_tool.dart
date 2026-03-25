@@ -276,25 +276,31 @@ class SelectTool extends MapTool {
                 ]);
               }
               if (f is LineFeatureNode) {
-                final line = f.geometry as List<LatLng>;
-                return line.any(
-                  (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
-                    lassoPolygonLatLng,
-                  ]),
-                );
+                final geom = f.geometry;
+                if (geom is List<LatLng>) {
+                  return geom.any(
+                    (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
+                      lassoPolygonLatLng,
+                    ]),
+                  );
+                }
+                return false;
               }
               if (f is PolygonFeatureNode) {
-                final poly = f.geometry as List<List<LatLng>>;
-                return poly
-                        .expand((ring) => ring)
-                        .any(
-                          (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
-                            lassoPolygonLatLng,
-                          ]),
-                        ) ||
-                    lassoPolygonLatLng.any(
-                      (pt) => GeometryCalc.pointInPolygonWithHoles(pt, poly),
-                    );
+                final geom = f.geometry;
+                if (geom is List<List<LatLng>>) {
+                  return geom
+                          .expand((ring) => ring)
+                          .any(
+                            (pt) => GeometryCalc.pointInPolygonWithHoles(pt, [
+                              lassoPolygonLatLng,
+                            ]),
+                          ) ||
+                      lassoPolygonLatLng.any(
+                        (pt) => GeometryCalc.pointInPolygonWithHoles(pt, geom),
+                      );
+                }
+                return false;
               }
               return false;
             }).toList();

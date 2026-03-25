@@ -161,12 +161,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   // =============================================
 
   /// フィーチャ由来のPolyline（通常 / 選択済み）
-  List<geo.Feature<geo.LineString>> cachedPolylines = [];
-  List<geo.Feature<geo.LineString>> cachedSelectedPolylines = [];
+  List<geo.Feature<geo.Geometry>> cachedPolylines = [];
+  List<geo.Feature<geo.Geometry>> cachedSelectedPolylines = [];
 
   /// フィーチャ由来のPolygon（通常 / 選択済み）
-  List<geo.Feature<geo.Polygon>> cachedPolygons = [];
-  List<geo.Feature<geo.Polygon>> cachedSelectedPolygons = [];
+  List<geo.Feature<geo.Geometry>> cachedPolygons = [];
+  List<geo.Feature<geo.Geometry>> cachedSelectedPolygons = [];
 
   /// Point/ImageNodeのマーカー（通常 / 選択済み）
   List<geo.Feature<geo.Point>> cachedMarkers = [];

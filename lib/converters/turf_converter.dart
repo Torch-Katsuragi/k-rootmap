@@ -1,6 +1,3 @@
-// K-MAPS: turf_dartオブジェクトとGeoPackageデータ間の変換ユーティリティ
-// turf_dartのFeature/FeatureCollectionとLatLng座標データ間の相互変換を行う
-
 import 'dart:convert';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
@@ -8,132 +5,200 @@ import 'package:turf/turf.dart' as turf;
 
 /// turf_dartオブジェクトとK-MAPSのデータ形式間の変換を行うユーティリティクラス
 class TurfConverter {
-  /// LatLng座標をturf_dartのPosition形式に変換
-  /// LatLng(latitude, longitude) → [longitude, latitude]
-  static List<double> latlngToPosition(LatLng latlng) {
-    return [latlng.longitude, latlng.latitude];
-  }
+  // ============================================================
+  // LatLng ↔ Position 変換
+  // ============================================================
 
-  /// turf_dartのPosition形式をLatLng座標に変換
-  /// [longitude, latitude] → LatLng(latitude, longitude)
+  static List<double> latlngToPosition(LatLng latlng) =>
+      [latlng.longitude, latlng.latitude];
+
   static LatLng positionToLatlng(List<num> position) {
     if (position.length < 2) {
       throw ArgumentError('Position must have at least 2 elements (lon, lat)');
     }
-    return LatLng(position[1].toDouble(), position[0].toDouble()); // lat, lon
+    return LatLng(position[1].toDouble(), position[0].toDouble());
   }
 
-  /// LatLngリストをPositionリストに変換
-  static List<List<double>> latlngsToPositions(List<LatLng> latlngs) {
-    return latlngs.map(latlngToPosition).toList();
-  }
+  static List<List<double>> latlngsToPositions(List<LatLng> latlngs) =>
+      latlngs.map(latlngToPosition).toList();
 
-  /// PositionリストをLatLngリストに変換
-  static List<LatLng> positionsToLatlngs(List<List<num>> positions) {
-    return positions.map(positionToLatlng).toList();
-  }
+  static List<LatLng> positionsToLatlngs(List<List<num>> positions) =>
+      positions.map(positionToLatlng).toList();
 
-  /// LatLngからturf_dartのPointを作成
-  static turf.Point createPoint(
-    LatLng latlng, {
-    Map<String, dynamic>? properties,
-  }) {
-    return turf.Point(coordinates: turf.Position.of(latlngToPosition(latlng)));
-  }
+  // ============================================================
+  // LatLng → turf Geometry (Single)
+  // ============================================================
 
-  /// LatLngリストからturf_dartのLineStringを作成
-  static turf.LineString createLineString(
-    List<LatLng> line, {
-    Map<String, dynamic>? properties,
-  }) {
-    final positions = latlngsToPositions(line);
-    return turf.LineString(
-      coordinates: positions.map((pos) => turf.Position.of(pos)).toList(),
-    );
-  }
+  static turf.Point createPoint(LatLng latlng) =>
+      turf.Point(coordinates: turf.Position.of(latlngToPosition(latlng)));
 
-  /// LatLngリストのリストからturf_dartのPolygonを作成
-  static turf.Polygon createPolygon(
-    List<List<LatLng>> rings, {
-    Map<String, dynamic>? properties,
-  }) {
-    final positionRings =
-        rings
-            .map(
-              (ring) =>
-                  latlngsToPositions(
-                    ring,
-                  ).map((pos) => turf.Position.of(pos)).toList(),
-            )
-            .toList();
+  static turf.LineString createLineString(List<LatLng> line) =>
+      turf.LineString(
+        coordinates:
+            latlngsToPositions(line)
+                .map((pos) => turf.Position.of(pos))
+                .toList(),
+      );
 
-    return turf.Polygon(coordinates: positionRings);
-  }
+  static turf.Polygon createPolygon(List<List<LatLng>> rings) =>
+      turf.Polygon(
+        coordinates:
+            rings
+                .map(
+                  (ring) =>
+                      latlngsToPositions(ring)
+                          .map((pos) => turf.Position.of(pos))
+                          .toList(),
+                )
+                .toList(),
+      );
 
-  /// turf_dartのPointからLatLngを抽出
+  // ============================================================
+  // LatLng → turf Geometry (Multi)
+  // ============================================================
+
+  static turf.MultiLineString createMultiLineString(
+    List<List<LatLng>> lines,
+  ) =>
+      turf.MultiLineString(
+        coordinates:
+            lines
+                .map(
+                  (line) =>
+                      latlngsToPositions(line)
+                          .map((pos) => turf.Position.of(pos))
+                          .toList(),
+                )
+                .toList(),
+      );
+
+  static turf.MultiPolygon createMultiPolygon(
+    List<List<List<LatLng>>> polygons,
+  ) =>
+      turf.MultiPolygon(
+        coordinates:
+            polygons
+                .map(
+                  (rings) =>
+                      rings
+                          .map(
+                            (ring) =>
+                                latlngsToPositions(ring)
+                                    .map((pos) => turf.Position.of(pos))
+                                    .toList(),
+                          )
+                          .toList(),
+                )
+                .toList(),
+      );
+
+  // ============================================================
+  // turf Geometry → LatLng (Single)
+  // ============================================================
+
   static LatLng pointToLatlng(turf.Point point) {
-    final coords = point.coordinates;
-    return LatLng(coords.lat.toDouble(), coords.lng.toDouble());
+    final c = point.coordinates;
+    return LatLng(c.lat.toDouble(), c.lng.toDouble());
   }
 
-  /// turf_dartのLineStringからLatLngリストを抽出
-  static List<LatLng> lineStringToLatlngs(turf.LineString lineString) {
-    return lineString.coordinates
-        .map((pos) => LatLng(pos.lat.toDouble(), pos.lng.toDouble()))
-        .toList();
-  }
+  static List<LatLng> lineStringToLatlngs(turf.LineString ls) =>
+      ls.coordinates
+          .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
+          .toList();
 
-  /// turf_dartのPolygonからLatLngリストのリストを抽出
-  static List<List<LatLng>> polygonToLatlngs(turf.Polygon polygon) {
-    return polygon.coordinates
-        .map(
-          (ring) =>
-              ring
-                  .map((pos) => LatLng(pos.lat.toDouble(), pos.lng.toDouble()))
-                  .toList(),
-        )
-        .toList();
-  }
+  static List<List<LatLng>> polygonToLatlngs(turf.Polygon poly) =>
+      poly.coordinates
+          .map(
+            (ring) =>
+                ring
+                    .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
+                    .toList(),
+          )
+          .toList();
+
+  // ============================================================
+  // turf Geometry → LatLng (Multi)
+  // ============================================================
+
+  static List<List<LatLng>> multiLineStringToLatlngs(
+    turf.MultiLineString mls,
+  ) =>
+      mls.coordinates
+          .map(
+            (line) =>
+                line
+                    .map((p) => LatLng(p.lat.toDouble(), p.lng.toDouble()))
+                    .toList(),
+          )
+          .toList();
+
+  static List<List<List<LatLng>>> multiPolygonToLatlngs(
+    turf.MultiPolygon mp,
+  ) =>
+      mp.coordinates
+          .map(
+            (rings) =>
+                rings
+                    .map(
+                      (ring) =>
+                          ring
+                              .map(
+                                (p) =>
+                                    LatLng(p.lat.toDouble(), p.lng.toDouble()),
+                              )
+                              .toList(),
+                    )
+                    .toList(),
+          )
+          .toList();
+
+  // ============================================================
+  // Row → turf Feature（DB読み込み時）
+  // ============================================================
 
   /// GeoPackageのrowデータからturf_dartのFeatureを作成
-  /// [rowData] GeoPackageから取得したフィーチャデータ（geometry変換済み）
-  /// [geometryType] ジオメトリの種別（'Point', 'LineString', 'Polygon'）
+  /// geometryData は geobaseGeometryToLatLngs の戻り値
   static turf.Feature? createFeatureFromRow(
     Map<String, dynamic> rowData,
     String geometryType,
   ) {
     try {
-      // ジオメトリデータを取得
       final geometryData = rowData['geometry'];
       if (geometryData == null) return null;
 
-      // プロパティを準備（id, geom, geometryを除く全ての属性）
-      final properties = Map<String, dynamic>.from(rowData);
-      properties.remove('geom');
-      properties.remove('geometry');
+      final properties = Map<String, dynamic>.from(rowData)
+        ..remove('geom')
+        ..remove('geometry');
 
       turf.GeometryObject? geometry;
+      final type = geometryType.toLowerCase();
 
-      switch (geometryType.toLowerCase()) {
+      switch (type) {
         case 'point':
           if (geometryData is List<LatLng> && geometryData.isNotEmpty) {
             geometry = createPoint(geometryData.first);
           }
-          break;
+
         case 'linestring':
-          if (geometryData is List<LatLng>) {
+          if (geometryData is List<List<LatLng>>) {
+            // MultiLineString 中間データ
+            geometry = createMultiLineString(geometryData);
+          } else if (geometryData is List<LatLng>) {
+            // 後方互換: 単一 LineString
             geometry = createLineString(geometryData);
           }
-          break;
+
         case 'polygon':
-          if (geometryData is List<List<LatLng>>) {
+          if (geometryData is List<List<List<LatLng>>>) {
+            // MultiPolygon 中間データ
+            geometry = createMultiPolygon(geometryData);
+          } else if (geometryData is List<List<LatLng>>) {
+            // 後方互換: 単一 Polygon
             geometry = createPolygon(geometryData);
           }
-          break;
       }
 
       if (geometry == null) return null;
-
       return turf.Feature(geometry: geometry, properties: properties);
     } catch (e) {
       AppLogger.debug('[ERROR] TurfConverter.createFeatureFromRow: $e');
@@ -141,39 +206,28 @@ class TurfConverter {
     }
   }
 
-  /// turf_dartのFeatureからGeoPackage保存用のデータを生成
-  /// [feature] turf_dartのFeatureオブジェクト
-  /// 戻り値: GeoPackage保存用のMap（属性のみ、ジオメトリは除外）
+  // ============================================================
+  // turf Feature → Row データ
+  // ============================================================
+
   static Map<String, dynamic>? featureToRowData(turf.Feature feature) {
     try {
       final rowData = <String, dynamic>{};
-
-      // プロパティをコピー（属性データのみ）
       if (feature.properties != null) {
         for (final entry in feature.properties!.entries) {
           final key = entry.key;
           final value = entry.value;
-          
-          // ジオメトリ関連のキーは除外
-          if (key == 'geometry' || key == 'geom') {
-            continue;
-          }
-          
-          // SQLiteでサポートされている型のみを含める
-          if (value == null || 
-              value is String || 
-              value is num || 
+          if (key == 'geometry' || key == 'geom') continue;
+          if (value == null ||
+              value is String ||
+              value is num ||
               value is bool) {
             rowData[key] = value;
           } else if (value is Map) {
-            // メタデータなどのMapはJSON文字列として保存
             rowData[key] = jsonEncode(value);
-          } else {
-            AppLogger.debug('[WARNING] TurfConverter.featureToRowData: Unsupported property type: $key = $value (${value.runtimeType})');
           }
         }
       }
-
       return rowData;
     } catch (e) {
       AppLogger.debug('[ERROR] TurfConverter.featureToRowData: $e');
@@ -181,26 +235,35 @@ class TurfConverter {
     }
   }
 
-  /// turf_dartのFeatureCollectionを作成
+  // ============================================================
+  // FeatureCollection ヘルパー
+  // ============================================================
+
   static turf.FeatureCollection createFeatureCollection(
     List<turf.Feature> features,
-  ) {
-    return turf.FeatureCollection(features: features);
-  }
+  ) => turf.FeatureCollection(features: features);
 
-  /// FeatureCollectionからFeatureリストを取得
-  static List<turf.Feature> getFeatures(turf.FeatureCollection collection) {
-    return collection.features;
-  }
+  static List<turf.Feature> getFeatures(turf.FeatureCollection collection) =>
+      collection.features;
 
-  /// ジオメトリタイプを判定
+  // ============================================================
+  // ジオメトリタイプ判定
+  // ============================================================
+
   static String? getGeometryType(turf.Feature feature) {
-    final geometry = feature.geometry;
-    if (geometry is turf.Point) return 'Point';
-    if (geometry is turf.LineString) return 'LineString';
-    if (geometry is turf.Polygon) return 'Polygon';
+    final g = feature.geometry;
+    if (g is turf.Point) return 'Point';
+    if (g is turf.MultiPoint) return 'MultiPoint';
+    if (g is turf.LineString) return 'LineString';
+    if (g is turf.MultiLineString) return 'MultiLineString';
+    if (g is turf.Polygon) return 'Polygon';
+    if (g is turf.MultiPolygon) return 'MultiPolygon';
     return null;
   }
+
+  // ============================================================
+  // 計算ユーティリティ
+  // ============================================================
 
   /// Featureの重心を計算
   static LatLng? calculateCentroid(turf.Feature feature) {
@@ -216,12 +279,12 @@ class TurfConverter {
     }
   }
 
-  /// Featureの面積を計算（Polygon用）
+  /// Featureの面積を計算（Polygon/MultiPolygon対応）
   static double? calculateArea(turf.Feature feature) {
     try {
-      if (feature.geometry is turf.Polygon) {
-        final result = turf.area(feature);
-        return result?.toDouble();
+      final g = feature.geometry;
+      if (g is turf.Polygon || g is turf.MultiPolygon) {
+        return turf.area(feature)?.toDouble();
       }
       return null;
     } catch (e) {
@@ -230,17 +293,27 @@ class TurfConverter {
     }
   }
 
-  /// Featureの長さを計算（LineString用）
+  /// Featureの長さを計算（LineString/MultiLineString対応）
   static double? calculateLength(turf.Feature feature) {
     try {
-      if (feature.geometry is turf.LineString) {
-        final lineString = feature.geometry as turf.LineString;
-        final lineFeature = turf.Feature(
-          geometry: lineString,
-          properties: feature.properties,
-        );
-        final result = turf.length(lineFeature, turf.Unit.meters);
-        return result.toDouble();
+      final g = feature.geometry;
+      if (g is turf.LineString) {
+        return turf
+            .length(
+              turf.Feature(geometry: g, properties: feature.properties),
+              turf.Unit.meters,
+            )
+            .toDouble();
+      }
+      if (g is turf.MultiLineString) {
+        double total = 0;
+        for (final coords in g.coordinates) {
+          final sub = turf.Feature(
+            geometry: turf.LineString(coordinates: coords),
+          );
+          total += turf.length(sub, turf.Unit.meters).toDouble();
+        }
+        return total;
       }
       return null;
     } catch (e) {
@@ -248,9 +321,4 @@ class TurfConverter {
       return null;
     }
   }
-
-  /// position型のgetterヘルパー（LatLngから）
-  static List<double> get positionFromLatLng =>
-      throw UnsupportedError('Use latlngToPosition(LatLng latlng) instead');
 }
-

@@ -2,29 +2,28 @@
 // 文字列リテラルの代わりに型安全な定数として使用
 
 /// OGC Simple Features仕様に基づくジオメトリタイプ
-/// MULTI系を削除し、単一系のみサポート
+/// デフォルトは MULTI 系（Single も透過的に扱う）
 enum GeometryType {
-  point('POINT'),
-  linestring('LINESTRING'),
-  polygon('POLYGON');
+  point('MULTIPOINT'),
+  linestring('MULTILINESTRING'),
+  polygon('MULTIPOLYGON');
 
   const GeometryType(this.value);
 
   /// 文字列値
   final String value;
 
-  /// 文字列からGeometryTypeを取得
+  /// 文字列からGeometryTypeを取得（Single/Multi両方を受理）
   static GeometryType? fromString(String value) {
-    final valueUpper = value.toUpperCase();
-    switch (valueUpper) {
+    switch (value.toUpperCase()) {
       case 'POINT':
-      case 'MULTIPOINT': // 後方互換のため一時的に対応
+      case 'MULTIPOINT':
         return GeometryType.point;
       case 'LINESTRING':
-      case 'MULTILINESTRING': // 後方互換のため一時的に対応
+      case 'MULTILINESTRING':
         return GeometryType.linestring;
       case 'POLYGON':
-      case 'MULTIPOLYGON': // 後方互換のため一時的に対応
+      case 'MULTIPOLYGON':
         return GeometryType.polygon;
       default:
         return null;

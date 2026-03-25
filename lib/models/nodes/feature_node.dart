@@ -91,14 +91,23 @@ abstract class FeatureNode extends LayerTreeNode {
   /// 複数座標データをpositionリストで取得
   List<List<double>> get positions {
     if (_isDisposed || parent.isDisposed) return [];
-    final geometry = turfFeature.geometry;
-    if (geometry is turf.LineString) {
+    final g = turfFeature.geometry;
+    if (g is turf.MultiLineString) {
+      final lines = TurfConverter.multiLineStringToLatlngs(g);
+      return lines.isNotEmpty
+          ? TurfConverter.latlngsToPositions(lines.first)
+          : [];
+    } else if (g is turf.LineString) {
       return TurfConverter.latlngsToPositions(
-        TurfConverter.lineStringToLatlngs(geometry),
+        TurfConverter.lineStringToLatlngs(g),
       );
-    } else if (geometry is turf.Polygon) {
-      // 外環のみを返す（最初のリング）
-      final rings = TurfConverter.polygonToLatlngs(geometry);
+    } else if (g is turf.MultiPolygon) {
+      final polys = TurfConverter.multiPolygonToLatlngs(g);
+      if (polys.isNotEmpty && polys.first.isNotEmpty) {
+        return TurfConverter.latlngsToPositions(polys.first.first);
+      }
+    } else if (g is turf.Polygon) {
+      final rings = TurfConverter.polygonToLatlngs(g);
       if (rings.isNotEmpty) {
         return TurfConverter.latlngsToPositions(rings.first);
       }
@@ -107,13 +116,20 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// ジオメトリデータ（レガシー互換用、turf_dartから変換して返す）
+  /// Multi型 → 最初のサブジオメトリのLatLngを返す（編集ツール互換）
   dynamic get geometry {
     if (_isDisposed || parent.isDisposed) return null;
     final geom = turfFeature.geometry;
     if (geom is turf.Point) {
       return [TurfConverter.pointToLatlng(geom)];
+    } else if (geom is turf.MultiLineString) {
+      final lines = TurfConverter.multiLineStringToLatlngs(geom);
+      return lines.isNotEmpty ? lines.first : <LatLng>[];
     } else if (geom is turf.LineString) {
       return TurfConverter.lineStringToLatlngs(geom);
+    } else if (geom is turf.MultiPolygon) {
+      final polys = TurfConverter.multiPolygonToLatlngs(geom);
+      return polys.isNotEmpty ? polys.first : <List<LatLng>>[];
     } else if (geom is turf.Polygon) {
       return TurfConverter.polygonToLatlngs(geom);
     }
@@ -673,9 +689,13 @@ class LineFeatureNode extends FeatureNode {
     _cachedLength = null;
   }
 
-  /// 単一の線分（頂点リスト）
+  /// 単一の線分（頂点リスト）。Multi の場合は最初のサブラインを返す
   List<LatLng> get line {
     final geometry = turfFeature.geometry;
+    if (geometry is turf.MultiLineString) {
+      final lines = TurfConverter.multiLineStringToLatlngs(geometry);
+      return lines.isNotEmpty ? lines.first : [];
+    }
     if (geometry is turf.LineString) {
       return TurfConverter.lineStringToLatlngs(geometry);
     }
@@ -893,9 +913,13 @@ class PolygonFeatureNode extends FeatureNode {
     _cachedArea = null;
   }
 
-  /// 単一のポリゴン（外環＋穴リスト）
+  /// 単一のポリゴン（外環＋穴リスト）。Multi の場合は最初のサブポリゴンを返す
   List<List<LatLng>> get polygon {
     final geometry = turfFeature.geometry;
+    if (geometry is turf.MultiPolygon) {
+      final polys = TurfConverter.multiPolygonToLatlngs(geometry);
+      return polys.isNotEmpty ? polys.first : [];
+    }
     if (geometry is turf.Polygon) {
       return TurfConverter.polygonToLatlngs(geometry);
     }

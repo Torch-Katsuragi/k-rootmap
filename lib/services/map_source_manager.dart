@@ -618,11 +618,11 @@ class MapSourceManager {
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
-        'icon-size': 1.2,
+        'icon-size': 0.7,
         'text-field': <Object>['get', 'name'],
-        'text-size': 10.0,
+        'text-size': 12.0,
         'text-anchor': 'left',
-        'text-offset': <Object>[1.2, 0],
+        'text-offset': <Object>[1.0, 0],
         'text-max-width': 100.0,
         'text-optional': true,
       },
@@ -644,11 +644,11 @@ class MapSourceManager {
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
-        'icon-size': 1.8,
+        'icon-size': 1.0,
         'text-field': <Object>['get', 'name'],
-        'text-size': 11.0,
+        'text-size': 13.0,
         'text-anchor': 'left',
-        'text-offset': <Object>[1.2, 0],
+        'text-offset': <Object>[1.0, 0],
         'text-max-width': 100.0,
         'text-optional': true,
       },
@@ -665,11 +665,25 @@ class MapSourceManager {
   // --------------------------------------------------
 
   /// GeoJSONソースを更新（変更がなければスキップ）
+  ///
+  /// WebView環境では maplibre_webview の WebSocket バイナリ転送が
+  /// 非ASCII文字を破損する(.codeUnits → setUint8 で上位バイト欠落)ため、
+  /// callAsyncJavaScript (Platform Channel) 経由で直接更新する。
   void _updateRaw(String sourceId, String geoJson) {
     if (!_initialized || _style == null) return;
     if (_lastData[sourceId] == geoJson) return;
     _lastData[sourceId] = geoJson;
-    _style!.updateGeoJsonSource(id: sourceId, data: geoJson);
+    final s = _style;
+    if (s is webview_style.StyleControllerWebView) {
+      // GeoJSON は有効な JS オブジェクトリテラルでもあるので直接埋め込み
+      s.webViewController.callAsyncJavaScript(
+        functionBody:
+            'const src = window.map.getSource("$sourceId");'
+            'if (src) src.setData($geoJson);',
+      );
+    } else {
+      s!.updateGeoJsonSource(id: sourceId, data: geoJson);
+    }
   }
 
   /// Feature リストからGeoJSONを生成して更新
@@ -951,17 +965,18 @@ class MapSourceManager {
       layout: {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
-        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.2,
-        'text-field': <Object>['get', 'name'], 'text-size': 10.0,
-        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
+        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 0.7,
+        'text-field': <Object>['get', 'name'], 'text-size': 12.0,
+        'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImagesSelSymbol, sourceId: kImagesSel,
       layout: {
-        'icon-image': _iconPhotoMarkerNoDirSel,
-        'icon-allow-overlap': true, 'icon-size': 1.8,
-        'text-field': '{name}', 'text-size': 11.0,
-        'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0, 'text-optional': true,
+        'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
+        'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
+        'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.0,
+        'text-field': <Object>['get', 'name'], 'text-size': 13.0,
+        'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
   }

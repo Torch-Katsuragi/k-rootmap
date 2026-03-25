@@ -1,4 +1,5 @@
 import 'package:k_maps/utils/app_logger.dart';
+import 'package:latlong2/latlong.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -1080,57 +1081,46 @@ class ShapefileWriter {
       }
 
       final wkbUint8List = Uint8List.fromList(wkbBytes);
+      final geom = parseGpkgGeometry(wkbUint8List);
+      if (geom == null) return null;
+      final latlngs = geobaseGeometryToLatLngs(geom);
 
       switch (geometryType) {
         case 'Point':
-          final pureWkb =
-              wkbUint8List.length > 8 &&
-                      wkbUint8List[0] == 0x47 &&
-                      wkbUint8List[1] == 0x50
-                  ? wkbUint8List.sublist(8)
-                  : wkbUint8List;
-
-          if (pureWkb.length >= 21) {
-            final lon = ByteData.sublistView(
-              pureWkb,
-              5,
-              13,
-            ).getFloat64(0, Endian.little);
-            final lat = ByteData.sublistView(
-              pureWkb,
-              13,
-              21,
-            ).getFloat64(0, Endian.little);
-            return [lon, lat];
+          if (latlngs is List<LatLng> && latlngs.isNotEmpty) {
+            final pt = latlngs.first;
+            return [pt.longitude, pt.latitude];
           }
-          break;
 
         case 'LineString':
-          final linePoints = parseWkbLineString(wkbUint8List);
-          if (linePoints.isNotEmpty) {
-            final coordinates =
-                linePoints
-                    .map((point) => [point.longitude, point.latitude])
-                    .toList();
-            return coordinates;
+          // MultiLineString → first sub, or LineString
+          List<LatLng>? line;
+          if (latlngs is List<List<LatLng>>) {
+            line = latlngs.isNotEmpty ? latlngs.first : null;
+          } else if (latlngs is List<LatLng>) {
+            line = latlngs;
           }
-          break;
+          if (line != null && line.isNotEmpty) {
+            return line
+                .map((p) => [p.longitude, p.latitude])
+                .toList();
+          }
 
         case 'Polygon':
-          final polygonRings = parseWkbPolygon(wkbUint8List);
-          if (polygonRings.isNotEmpty) {
-            final coordinates =
-                polygonRings.map((ring) {
-                  return ring
-                      .map((point) => [point.longitude, point.latitude])
-                      .toList();
-                }).toList();
-            return coordinates;
+          // MultiPolygon → first sub, or Polygon
+          List<List<LatLng>>? rings;
+          if (latlngs is List<List<List<LatLng>>>) {
+            rings = latlngs.isNotEmpty ? latlngs.first : null;
+          } else if (latlngs is List<List<LatLng>>) {
+            rings = latlngs;
           }
-          break;
-
-        default:
-          break;
+          if (rings != null && rings.isNotEmpty) {
+            return rings.map((ring) {
+              return ring
+                  .map((p) => [p.longitude, p.latitude])
+                  .toList();
+            }).toList();
+          }
       }
 
       return null;

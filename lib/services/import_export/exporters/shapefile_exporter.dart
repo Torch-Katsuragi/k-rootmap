@@ -167,9 +167,12 @@ class ShapefileExporter extends BaseExporter {
               wkbData = Uint8List.fromList(geom);
             }
             if (wkbData != null) {
-              final point = parseWkbPoint(wkbData);
-              if (point != null) {
-                points = [point];
+              final parsed = parseGpkgGeometry(wkbData);
+              if (parsed != null) {
+                final latlngs = geobaseGeometryToLatLngs(parsed);
+                if (latlngs is List<LatLng>) {
+                  points = latlngs;
+                }
               }
             }
           }
@@ -200,9 +203,14 @@ class ShapefileExporter extends BaseExporter {
               wkbData = Uint8List.fromList(geom);
             }
             if (wkbData != null) {
-              final linePoints = parseWkbLineString(wkbData);
-              if (linePoints.isNotEmpty) {
-                lines = [linePoints];
+              final parsed = parseGpkgGeometry(wkbData);
+              if (parsed != null) {
+                final latlngs = geobaseGeometryToLatLngs(parsed);
+                if (latlngs is List<List<LatLng>>) {
+                  lines = latlngs;
+                } else if (latlngs is List<LatLng>) {
+                  lines = [latlngs];
+                }
               }
             }
           }
@@ -232,7 +240,15 @@ class ShapefileExporter extends BaseExporter {
               wkbData = Uint8List.fromList(geom);
             }
             if (wkbData != null) {
-              polygons = parseWkbPolygon(wkbData);
+              final parsed = parseGpkgGeometry(wkbData);
+              if (parsed != null) {
+                final latlngs = geobaseGeometryToLatLngs(parsed);
+                if (latlngs is List<List<List<LatLng>>>) {
+                  polygons = latlngs.isNotEmpty ? latlngs.first : null;
+                } else if (latlngs is List<List<LatLng>>) {
+                  polygons = latlngs;
+                }
+              }
             }
           }
           

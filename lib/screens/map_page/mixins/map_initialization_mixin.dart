@@ -197,8 +197,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
 
   /// GPS管理サービス初期化
   Future<void> initializeGpsManager() async {
-    if (!PlatformCapabilities.supportsGpsTracking) {
-      AppLogger.debug('[Init] GPS: skipped (desktop)');
+    if (!PlatformCapabilities.supportsGpsLocation) {
+      AppLogger.debug('[Init] GPS: skipped (unsupported)');
       return;
     }
 
@@ -211,8 +211,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // GPS管理サービスの更新を監視
       gpsManager.addListener(onGpsManagerUpdate);
 
-      // 外部GNSS機器をスキャン（バックグラウンドで実行）
-      scanGnssDevicesBackground();
+      // 外部GNSS機器をスキャン（Bluetooth対応プラットフォームのみ）
+      if (PlatformCapabilities.supportsBluetoothGnss) {
+        scanGnssDevicesBackground();
+      }
 
       // GPS位置情報取得を開始（InternalGpsLocationStore経由）
       await gpsManager.startGps();

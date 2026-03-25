@@ -13,4 +13,10 @@ class PlatformCapabilities {
       Platform.isAndroid || Platform.isIOS;
 
   static bool get supportsGpsTracking => Platform.isAndroid || Platform.isIOS;
+
+  /// GPS位置取得（マーカー・初回ジャンプ）— 全プラットフォーム対応
+  static bool get supportsGpsLocation => true;
+
+  /// Bluetooth経由の外部GNSS機器 — モバイルのみ
+  static bool get supportsBluetoothGnss => Platform.isAndroid || Platform.isIOS;
 }

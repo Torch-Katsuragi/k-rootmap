@@ -1,0 +1,5 @@
+# GeoPandas + 高速I/O（Windowsでも利用しやすい PyOGRIO バックエンド）
+geopandas>=1.0.0
+pyogrio>=0.9.0
+pyproj>=3.6.0
+shapely>=2.0.0

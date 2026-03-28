@@ -31,12 +31,14 @@ import '../../utils/keyboard_handler.dart';
 import '../../tools/pen_tool.dart';
 import '../../tools/select_tool.dart';
 import '../../tools/gps_tool.dart';
+import '../../devices/base/device_tool.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../utils/global_drawing_state.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../providers/device_tool_providers.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -272,6 +274,13 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       }
     });
 
+    // DeviceTool の内部状態変更で地図オーバーレイを再描画
+    ref.listen<int>(deviceToolOverlayRefreshProvider, (prev, next) {
+      if (prev != null && prev != next) {
+        triggerSetState(() {});
+      }
+    });
+
     // 選択状態の変更をリッスンしてフィーチャソースを再同期
     ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, __) {
       _syncFeatureSources();
@@ -351,6 +360,12 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                 left: 60,
                 top: 20,
                 child: FeatureDetailPanel(feature: selectedFeatures.first),
+              ),
+            // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
+            if (currentTool is DeviceTool)
+              ListenableBuilder(
+                listenable: currentTool,
+                builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
               ),
             // Left bottom floating buttons
             Positioned(
@@ -468,10 +483,17 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           ),
         // 描画プレビュー: ライン
         ..._buildDrawingPreviewPolylines(currentTool, drawingState),
+        // 外部機器ツールのオーバーレイ（DeviceTool抽象経由）
+        if (currentTool is DeviceTool)
+          ...currentTool.buildOverlayLayers(),
       ],
       children: [
         // Widgetマーカー（現在位置、測量ポイント、頂点マーカー）
-        ml.WidgetLayer(markers: _buildOverlayWidgetMarkers(selectedSet)),
+        ml.WidgetLayer(markers: [
+          ..._buildOverlayWidgetMarkers(selectedSet),
+          if (currentTool is DeviceTool)
+            ...currentTool.buildOverlayMarkers(),
+        ]),
       ],
     );
   }

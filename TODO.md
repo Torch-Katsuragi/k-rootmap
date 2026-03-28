@@ -311,6 +311,19 @@
   - [x] WebSocketレースコンディション修正（map.on('load')がWS接続前に発火→onStyleLoaded未到達→ベースマップ追加されず灰色画面）
   - [x] ホーム画面RenderFlexオーバーフロー修正（Column→LayoutBuilder+SingleChildScrollView）
 
+### 外部計測機器 (TruPulse)
+
+- [x] TruPulseService: BT SPP接続、プロトコルパーサー
+- [x] TruPulseTool: BP選択、座標算出、レイ管理
+- [x] ExternalDeviceService / DeviceTool 抽象レイヤ (プラグインパターン)
+- [x] connectedDeviceToolsProvider: 接続済みデバイスツール集約
+- [x] MapToolbar / map_page へのDeviceTool汎用統合
+- [x] リアクティビティ修正: DeviceTool ChangeNotifier + deviceToolOverlayRefreshProvider
+- [x] connectedDeviceToolsProvider: addListener→invalidateSelf ブリッジ
+- [x] TruPulseStatusPanel: Save/Clearボタン、ListenableBuilder対応
+- [x] デバイス設定画面 (SettingsCategory.devices)
+- [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一 (将来課題)
+
 ### 未完了
 
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）

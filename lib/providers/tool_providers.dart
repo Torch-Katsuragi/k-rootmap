@@ -24,5 +24,10 @@ class CurrentTool extends _$CurrentTool {
   @override
   MapTool build() => ref.read(panToolProvider);
 
-  void set(MapTool tool) => state = tool;
+  void set(MapTool tool) {
+    if (state == tool) return;
+    state.onDeactivate();
+    state = tool;
+    tool.onActivate();
+  }
 }

@@ -2,8 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/tool_providers.dart';
+import '../providers/device_tool_providers.dart';
 
-/// 地図画面左側のツールバー（Pan, Pen, Select, GPSツールボタン）
+/// 地図画面左側のツールバー
+///
+/// 固定ツール（Pan, Pen, Select, GPS）に加え、
+/// 接続中の外部機器ツール（[DeviceTool]）を動的に表示する。
 class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
 
@@ -15,6 +19,7 @@ class MapToolbar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTool = ref.watch(currentToolProvider);
+    final deviceTools = ref.watch(connectedDeviceToolsProvider);
 
     return Positioned(
       left: 0,
@@ -66,6 +71,19 @@ class MapToolbar extends ConsumerWidget {
                 onToolChanged();
               },
             ),
+            // 接続中の外部機器ツールを動的に表示
+            for (final dt in deviceTools) ...[
+              const SizedBox(height: 8),
+              _ToolButton(
+                icon: dt.icon,
+                tooltip: dt.name,
+                isSelected: currentTool == dt,
+                onPressed: () {
+                  ref.read(currentToolProvider.notifier).set(dt);
+                  onToolChanged();
+                },
+              ),
+            ],
           ],
         ),
       ),

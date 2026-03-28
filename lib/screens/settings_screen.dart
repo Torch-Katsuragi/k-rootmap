@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'basemap_settings_screen.dart';
+import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
 import '../services/google_drive/auto_sync_service.dart';
@@ -25,6 +26,7 @@ enum SettingsCategory {
   general,
   basemap,
   gps,
+  devices,
   layerStyle,
   sync,
   feedback,
@@ -36,6 +38,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.general => '一般',
     SettingsCategory.basemap => '地図・タイル',
     SettingsCategory.gps => 'GPS・測位',
+    SettingsCategory.devices => '外部機器',
     SettingsCategory.layerStyle => 'レイヤ描画',
     SettingsCategory.sync => 'Drive同期',
     SettingsCategory.feedback => 'フィードバック',
@@ -46,6 +49,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.general => Icons.settings,
     SettingsCategory.basemap => Icons.map,
     SettingsCategory.gps => Icons.gps_fixed,
+    SettingsCategory.devices => Icons.bluetooth_connected,
     SettingsCategory.layerStyle => Icons.palette,
     SettingsCategory.sync => Icons.sync,
     SettingsCategory.feedback => Icons.feedback,
@@ -56,6 +60,7 @@ extension SettingsCategoryExt on SettingsCategory {
     SettingsCategory.general => 'グローバルフォルダ設定',
     SettingsCategory.basemap => '背景地図、オフライン地図、キャッシュ管理',
     SettingsCategory.gps => 'GPSソース選択、外部GNSS接続',
+    SettingsCategory.devices => 'レーザー距離計等の外部計測機器',
     SettingsCategory.layerStyle => '点・線・ポリゴンの描画スタイル',
     SettingsCategory.sync => 'WiFi自動同期、同期間隔',
     SettingsCategory.feedback => '要望・バグ報告をお送りください',
@@ -106,7 +111,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   List<SettingsCategory> get _visibleCategories => SettingsCategory.values
-      .where((c) => c != SettingsCategory.sync || _isMobile)
+      .where((c) =>
+          (c != SettingsCategory.sync && c != SettingsCategory.devices) ||
+          _isMobile)
       .toList();
 
   static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
@@ -229,6 +236,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return BaseMapSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.gps:
         return GpsSettingsScreen(key: key, isEmbedded: isEmbedded);
+      case SettingsCategory.devices:
+        return DeviceSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.layerStyle:
         return LayerStyleSettingsScreen(key: key, isEmbedded: isEmbedded);
       case SettingsCategory.sync:

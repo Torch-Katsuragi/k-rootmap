@@ -324,6 +324,26 @@
 - [x] デバイス設定画面 (SettingsCategory.devices)
 - [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一 (将来課題)
 
+### 測量機能の拡充
+
+- [ ] Point → Line/Polygon 変換（閉合処理込み）
+  - survey_stn チェーンを辿って順序付きポイント列を構築
+  - 変換ダイアログで処理オプションを提示:
+    - 閉合補正なし（生データのまま変換）
+    - コンパス法則（Bowditch法: 路線長比例で閉合差を配分）
+    - トランシット法則（緯距/経距比例で配分）
+  - 変換後の Line/Polygon フィーチャのプロパティに閉合比（1/N）を記録
+  - 元の測量データ（方位角・距離等）は sub_table に保存
+- [ ] 磁気偏角補正
+  - 地域・日付から磁気偏角を自動取得 or 手動入力
+  - survey_az に偏角オフセットを適用（TruPulse側の内蔵コンパス設定との整合に注意）
+- [ ] 器械高・目標高補正
+  - Station/ターゲットの高さオフセットを入力可能に
+  - 3D座標算出時にVD補正を適用
+- [ ] 測量精度表示
+  - ステータスパネルに累積路線長・現在の閉合差をリアルタイム表示
+  - 閉合比が閾値を超えた場合に警告
+
 ### 未完了
 
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）

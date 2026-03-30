@@ -16,8 +16,11 @@ import '../../../models/app_notification.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../widgets/dialog_manager.dart';
 import '../../../widgets/geometry_conversion_dialogs.dart';
+import '../../../widgets/survey_conversion_dialog.dart';
 import '../../../screens/layer_style_settings_screen.dart';
 import '../../../presentation/node_presenter.dart';
+import '../../../services/survey/survey_chain_resolver.dart';
+import '../../../utils/app_logger.dart';
 import '../common_dialogs.dart';
 import 'drag_feedback_card.dart';
 
@@ -257,6 +260,18 @@ class LayerTile extends ConsumerWidget {
       return;
     }
 
+    // survey_stnチェーンがあれば測量変換ダイアログに分岐
+    try {
+      final chains = SurveyChainResolver.resolveAll(sourceLayer);
+      if (chains.isNotEmpty) {
+        await _convertSurveyPointsImpl(context, ref, sourceLayer, chains, targetLayers);
+        return;
+      }
+    } catch (e) {
+      AppLogger.debug('[LayerTile] Survey chain resolution failed: $e');
+    }
+
+    // 通常のポイント→ライン/ポリゴン変換
     final targetLayer = await showDialog<LayerNode>(
       context: context,
       barrierDismissible: true,
@@ -304,6 +319,59 @@ class LayerTile extends ConsumerWidget {
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
             title: '変換処理中にエラーが発生しました: $e',
+            level: NotificationLevel.info,
+          );
+    }
+  }
+
+  /// 測量チェーン付きポイントの変換（_convertPointsToLineから分岐）
+  Future<void> _convertSurveyPointsImpl(
+    BuildContext context,
+    WidgetRef ref,
+    PointLayerNode sourceLayer,
+    List<TraverseChain> chains,
+    List<LayerNode> targetLayers,
+  ) async {
+    final result = await showDialog<SurveyConversionResult>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => SurveyConversionDialog(
+        sourceLayer: sourceLayer,
+        chains: chains,
+        availableLayers: targetLayers,
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      final created = await GeometryConversionService.convertSurveyPointsToGeometry(
+        sourceLayer: sourceLayer,
+        targetLayer: result.targetLayer,
+        chain: result.chain,
+        options: result.options,
+        name: result.featureName,
+        closePath: result.closePath,
+      );
+      if (created != null) {
+        await result.targetLayer.updateChildren();
+        ref.read(featureRefreshTriggerProvider.notifier).trigger();
+        final typeLabel = result.targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
+        final closureInfo = result.closePath
+            ? ', 閉合比: ${created.turfFeature.properties?['survey_closure_ratio'] ?? '不明'}'
+            : '';
+        ref.read(notificationCenterProvider.notifier).add(
+              title: '測量データを$typeLabel に変換しました (${result.chain.length}点$closureInfo)',
+              level: NotificationLevel.info,
+            );
+      } else {
+        ref.read(notificationCenterProvider.notifier).add(
+              title: 'フィーチャの作成に失敗しました',
+              level: NotificationLevel.info,
+            );
+      }
+    } catch (e) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: '測量変換中にエラーが発生しました: $e',
             level: NotificationLevel.info,
           );
     }

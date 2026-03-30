@@ -1,12 +1,22 @@
 /// TruPulse測量ステータスパネル
 ///
-/// 機器接続状態・計測値・Station情報を表示するパネル。
+/// 機器接続状態・計測値・Station情報・測量精度を表示するパネル。
 /// [TruPulseTool.buildStatusPanel] から返される。
 library;
 
 import 'package:flutter/material.dart';
+import '../../models/nodes/feature_node.dart';
 import 'trupulse_detail_screen.dart';
 import 'trupulse_tool.dart';
+
+/// 閉合比の警告閾値（1/N の N がこの値以下で警告）
+const double _closureWarningThreshold = 300;
+
+bool _isBacksightCorrected(PointFeatureNode? stn) {
+  if (stn == null) return false;
+  final v = stn.turfFeature.properties?['survey_backsight'];
+  return v == true || v == 'true';
+}
 
 class TruPulseStatusPanel extends StatelessWidget {
   final TruPulseTool tool;
@@ -18,6 +28,7 @@ class TruPulseStatusPanel extends StatelessWidget {
     final service = tool.service;
     final stn = tool.station;
     final lastM = service.lastMeasurement;
+    final chain = tool.currentChain;
 
     return Positioned(
       right: 8,
@@ -32,7 +43,7 @@ class TruPulseStatusPanel extends StatelessWidget {
         child: Card(
           elevation: 4,
           child: Container(
-            width: 240,
+            width: 260,
             padding: const EdgeInsets.all(8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -67,6 +78,11 @@ class TruPulseStatusPanel extends StatelessWidget {
                           '${stn.point.longitude.toStringAsFixed(5)})'
                       : 'Tap a point to set station',
                 ),
+                if (_isBacksightCorrected(stn))
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: _BacksightBadge(),
+                  ),
 
                 // Latest measurement
                 if (lastM != null) ...[
@@ -74,16 +90,73 @@ class TruPulseStatusPanel extends StatelessWidget {
                   Row(
                     children: [
                       _MeasChip('HD', '${lastM.hd.toStringAsFixed(1)}m'),
-                      _MeasChip('AZ', '${lastM.az.toStringAsFixed(1)}°'),
-                      _MeasChip('INC', '${lastM.inc.toStringAsFixed(1)}°'),
+                      _MeasChip('AZ', '${lastM.az.toStringAsFixed(1)}\u00b0'),
+                      _MeasChip('INC', '${lastM.inc.toStringAsFixed(1)}\u00b0'),
                     ],
                   ),
+                ],
+
+                // 測量精度情報
+                if (chain != null && chain.points.isNotEmpty) ...[
+                  const Divider(height: 8),
+                  _TraversePrecisionBar(chain: chain),
                 ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TraversePrecisionBar extends StatelessWidget {
+  final dynamic chain; // TraverseChain
+
+  const _TraversePrecisionBar({required this.chain});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDist = chain.totalDistance as double;
+    final closureErr = chain.closureError as double;
+    final ratioN = chain.closureRatioN as double;
+    final pointCount = chain.length as int;
+
+    final isWarning = !ratioN.isInfinite && ratioN < _closureWarningThreshold;
+    final ratioText = ratioN.isInfinite
+        ? '\u221e'
+        : '1/${ratioN.toStringAsFixed(0)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              isWarning ? Icons.warning_amber : Icons.straighten,
+              size: 12,
+              color: isWarning ? Colors.orange : Colors.grey,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '導線: ${pointCount}点',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            _MeasChip('路線長', '${totalDist.toStringAsFixed(1)}m'),
+            _MeasChip('閉合差', '${closureErr.toStringAsFixed(2)}m'),
+            _MeasChip(
+              '閉合比',
+              ratioText,
+              highlight: isWarning,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -120,7 +193,8 @@ class _InfoRow extends StatelessWidget {
 class _MeasChip extends StatelessWidget {
   final String label;
   final String value;
-  const _MeasChip(this.label, this.value);
+  final bool highlight;
+  const _MeasChip(this.label, this.value, {this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
@@ -129,15 +203,49 @@ class _MeasChip extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 1),
         padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+          color: highlight ? Colors.orange.shade100 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Column(
           children: [
             Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
-            Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: highlight ? Colors.orange.shade800 : null,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _BacksightBadge extends StatelessWidget {
+  const _BacksightBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.green.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 10, color: Colors.green.shade700),
+          const SizedBox(width: 3),
+          Text(
+            '後視補正済',
+            style: TextStyle(fontSize: 9, color: Colors.green.shade800),
+          ),
+        ],
       ),
     );
   }

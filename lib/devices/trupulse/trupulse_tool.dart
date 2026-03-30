@@ -8,6 +8,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,10 +24,13 @@ import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
 import '../../providers/device_tool_providers.dart';
 import '../../providers/ui_state_providers.dart';
+import '../../models/app_notification.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
+import '../../providers/notification_providers.dart';
 import '../../widgets/radial_action_menu.dart';
 import '../base/device_tool.dart';
+import '../../services/survey/survey_chain_resolver.dart';
 import 'trupulse_service.dart';
 import 'trupulse_measurement.dart';
 import 'trupulse_detail_screen.dart';
@@ -106,6 +110,10 @@ class TruPulseTool extends DeviceTool {
       final stnPos = stn.point;
       final target = const Distance().offset(stnPos, m.hd, m.az);
 
+      // --- バックサイト自動検出 ---
+      if (await _tryBacksightCorrection(stn, m, target)) return;
+
+      // --- 通常処理: 新規ポイント作成 ---
       AppLogger.debug('[TruPulseTool] Creating point in layer: ${stn.parent.layerName}');
 
       final newPoint = await PointFeatureNode.createIn(stn.parent, target, '', '');
@@ -131,7 +139,8 @@ class TruPulseTool extends DeviceTool {
       _ref.read(featureRefreshTriggerProvider.notifier).trigger();
       _mapState?.refreshFeatures();
       _notifyUI();
-      _player.play(AssetSource('sounds/point_created.wav'));
+      await _player.setPlaybackRate(1.0);
+      await _player.play(AssetSource('sounds/point_created.wav'));
 
       AppLogger.debug(
         '[TruPulseTool] Point created at '
@@ -140,6 +149,119 @@ class TruPulseTool extends DeviceTool {
     } catch (e, st) {
       AppLogger.debug('[TruPulseTool] _onMeasurement error: $e\n$st');
     }
+  }
+
+  // =========================================================
+  // Backsight auto-detection
+  // =========================================================
+
+  /// ターゲットが前測点の近傍であれば後視として補正を適用し true を返す。
+  Future<bool> _tryBacksightCorrection(
+    PointFeatureNode stn,
+    TruPulseMeasurement m,
+    LatLng target,
+  ) async {
+    final props = stn.turfFeature.properties;
+    if (props == null) return false;
+
+    // 起点（survey_stnなし）なら後視不可
+    final prevStnJson = props['survey_stn'];
+    if (prevStnJson == null) return false;
+
+    // 既に後視補正済みならスキップ
+    final backsightDone = props['survey_backsight'];
+    if (backsightDone == true || backsightDone == 'true') return false;
+
+    final prevStnCoords = _parseStnCoords(prevStnJson);
+    if (prevStnCoords == null) return false;
+
+    // 前視HDを取得して閾値を算出
+    final forwardHd = _toDouble(props['survey_hd']);
+    if (forwardHd <= 0) return false;
+    final threshold = (forwardHd * 0.15).clamp(1.0, 5.0);
+
+    // ターゲットと前測点の距離を比較
+    final distToPrev = const Distance(roundResult: false)
+        .as(LengthUnit.Meter, target, prevStnCoords);
+
+    if (distToPrev > threshold) return false;
+
+    // --- バックサイト検出! 平均化補正を適用 ---
+    AppLogger.debug(
+      '[TruPulseTool] Backsight detected! dist=${distToPrev.toStringAsFixed(2)}m '
+      '(threshold=${threshold.toStringAsFixed(1)}m)',
+    );
+
+    final forwardAz = _toDouble(props['survey_az']);
+    final forwardSd = _toDouble(props['survey_sd']);
+    final forwardInc = _toDouble(props['survey_inc']);
+
+    // 後視AZを前視方向に変換して円周平均
+    final backsightAzForward = (m.az + 180) % 360;
+    final correctedAz = _circularMeanDeg(forwardAz, backsightAzForward);
+    final correctedHd = (forwardHd + m.hd) / 2;
+    final correctedSd = (forwardSd + m.sd) / 2;
+    final correctedVd = correctedHd * _tanDeg(forwardInc);
+
+    // 座標を再計算
+    final newPos = const Distance().offset(prevStnCoords, correctedHd, correctedAz);
+
+    // 属性を上書き
+    await stn.setAttributeValues({
+      'survey_az': correctedAz,
+      'survey_hd': correctedHd,
+      'survey_sd': correctedSd,
+      'survey_vd': correctedVd,
+      'survey_backsight': true,
+    });
+
+    // ジオメトリを更新
+    await stn.updateGeometry(
+      name: stn.name,
+      newGeometry: newPos,
+    );
+
+    _ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    _mapState?.refreshFeatures();
+    _notifyUI();
+    await _player.setPlaybackRate(0.7);
+    await _player.play(AssetSource('sounds/point_created.wav'));
+
+    // 通知
+    final azDelta = (correctedAz - forwardAz).abs();
+    final hdDelta = (correctedHd - forwardHd).abs();
+    _ref.read(notificationCenterProvider.notifier).add(
+      title: '後視補正を適用',
+      detail: 'AZ ${azDelta.toStringAsFixed(1)}° / '
+          'HD ${hdDelta.toStringAsFixed(2)}m 修正',
+      level: NotificationLevel.success,
+    );
+
+    AppLogger.debug(
+      '[TruPulseTool] Backsight correction applied: '
+      'AZ ${forwardAz.toStringAsFixed(1)} -> ${correctedAz.toStringAsFixed(1)}, '
+      'HD ${forwardHd.toStringAsFixed(2)} -> ${correctedHd.toStringAsFixed(2)}',
+    );
+    return true;
+  }
+
+  /// 2つの角度（度）の円周平均を計算する。
+  static double _circularMeanDeg(double a, double b) {
+    final aRad = a * math.pi / 180;
+    final bRad = b * math.pi / 180;
+    final sinSum = math.sin(aRad) + math.sin(bRad);
+    final cosSum = math.cos(aRad) + math.cos(bRad);
+    final mean = math.atan2(sinSum, cosSum) * 180 / math.pi;
+    return mean < 0 ? mean + 360 : mean;
+  }
+
+  static double _tanDeg(double deg) => math.tan(deg * math.pi / 180);
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
   }
 
   // =========================================================
@@ -359,6 +481,20 @@ class TruPulseTool extends DeviceTool {
   void clearStation() {
     _station = null;
     _notifyUI();
+  }
+
+  /// 現在のStationが属するレイヤの測量チェーンを取得
+  TraverseChain? get currentChain {
+    final layer = _station?.parent;
+    if (layer is! PointLayerNode) return null;
+    final chains = SurveyChainResolver.resolveAll(layer);
+    if (chains.isEmpty) return null;
+    // Stationを含むチェーンを返す
+    for (final chain in chains) {
+      if (chain.origin == _station) return chain;
+      if (chain.points.any((p) => p.node == _station)) return chain;
+    }
+    return chains.first;
   }
 
   // =========================================================

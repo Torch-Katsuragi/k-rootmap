@@ -7,9 +7,74 @@ import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
+import 'survey/survey_chain_resolver.dart';
+import 'survey/traverse_adjuster.dart';
 
 /// ジオメトリ変換サービス
 class GeometryConversionService {
+  /// ポイントフィーチャ列をGeoJSON FeatureCollectionに変換する
+  static String _buildSubTableGeoJson(List<PointFeatureNode> features) {
+    final geoFeatures = <Map<String, dynamic>>[];
+    for (final f in features) {
+      final props = Map<String, dynamic>.from(f.turfFeature.properties ?? {});
+      props.remove('id');
+      geoFeatures.add({
+        'type': 'Feature',
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [f.point.longitude, f.point.latitude],
+        },
+        'properties': props,
+      });
+    }
+    return jsonEncode({
+      'type': 'FeatureCollection',
+      'features': geoFeatures,
+    });
+  }
+
+  /// sub_table GeoJSONからポイント座標と属性を復元する
+  ///
+  /// 旧フォーマット（2D配列）にも後方互換対応。
+  static List<({LatLng point, Map<String, dynamic> properties})>?
+      _parseSubTable(String json) {
+    try {
+      final decoded = jsonDecode(json);
+
+      // 新フォーマット: GeoJSON FeatureCollection
+      if (decoded is Map && decoded['type'] == 'FeatureCollection') {
+        final features = decoded['features'] as List;
+        return features.map((f) {
+          final geom = f['geometry'] as Map<String, dynamic>;
+          final coords = geom['coordinates'] as List;
+          final lon = (coords[0] as num).toDouble();
+          final lat = (coords[1] as num).toDouble();
+          final props = Map<String, dynamic>.from(
+            (f['properties'] as Map?) ?? {},
+          );
+          return (point: LatLng(lat, lon), properties: props);
+        }).toList();
+      }
+
+      // 旧フォーマット: [[headers], [row1], ...]
+      if (decoded is List && decoded.isNotEmpty && decoded.first is List) {
+        final headers = (decoded.first as List).cast<String>();
+        return decoded.skip(1).map((row) {
+          final r = row as List;
+          final props = <String, dynamic>{};
+          for (int i = 0; i < headers.length && i < r.length; i++) {
+            if (headers[i] == 'id' || headers[i] == 'geom') continue;
+            props[headers[i]] = r[i];
+          }
+          return (point: LatLng(0, 0), properties: props);
+        }).toList();
+      }
+    } catch (e) {
+      AppLogger.debug('[GeometryConversion] sub_table parse error: $e');
+    }
+    return null;
+  }
+
   /// ポリゴンリングを閉じる（最初と最後の座標を同じにする）
   static List<LatLng> closeRing(List<LatLng> pts) {
     if (pts.length < 3) return [];
@@ -102,28 +167,16 @@ class GeometryConversionService {
       return null;
     }
 
-    // ポイントレイヤーの属性テーブルを取得してJSON化
+    // ポイントレイヤーのフィーチャをGeoJSON FeatureCollectionに変換
     String? subTableJson;
     try {
-      // getAll=trueで全カラムを取得（組み込みカラムも含む）
-      final attributeTable = await sourceLayer.getAttributeTableData(getAll: true);
-      AppLogger.debug('[GeometryConversion] ポイントレイヤー「${sourceLayer.name}」の属性テーブル取得');
-      AppLogger.debug('[GeometryConversion] 行数: ${attributeTable.length}');
-      if (attributeTable.isNotEmpty) {
-        AppLogger.debug('[GeometryConversion] ヘッダー行（カラム名）: ${attributeTable.first}');
-        if (attributeTable.length > 1) {
-          AppLogger.debug('[GeometryConversion] データ行サンプル: ${attributeTable[1]}');
-        }
-      }
-      
-      if (attributeTable.length > 1) { // ヘッダー行 + 最低1データ行
-        subTableJson = jsonEncode(attributeTable);
-        AppLogger.debug('[GeometryConversion] 属性テーブルをJSON化: ${subTableJson.length}文字');
-      } else {
-        AppLogger.debug('[GeometryConversion] 属性テーブルが空（保存スキップ）');
+      final features = sourceLayer.features.whereType<PointFeatureNode>().toList();
+      if (features.isNotEmpty) {
+        subTableJson = _buildSubTableGeoJson(features);
+        AppLogger.debug('[GeometryConversion] sub_table GeoJSON生成: ${features.length}フィーチャ');
       }
     } catch (e) {
-      AppLogger.debug('[GeometryConversion] 属性テーブル取得エラー: $e');
+      AppLogger.debug('[GeometryConversion] sub_table生成エラー: $e');
     }
 
     // 変換先レイヤーにsub_tableカラムを追加（存在しない場合）
@@ -193,6 +246,115 @@ class GeometryConversionService {
     return createdFeature;
   }
 
+  /// 測量チェーンをライン/ポリゴンに変換（閉合補正対応）
+  ///
+  /// 生データから座標を再計算し、指定された補正を適用した上で
+  /// ライン/ポリゴンフィーチャを作成する。
+  static Future<FeatureNode?> convertSurveyPointsToGeometry({
+    required PointLayerNode sourceLayer,
+    required LayerNode targetLayer,
+    required TraverseChain chain,
+    required TraverseAdjustmentOptions options,
+    String? name,
+    bool closePath = false,
+  }) async {
+    if (chain.isEmpty) return null;
+
+    // 開放トラバースの場合は閉合補正を強制的に無効化
+    final effectiveOptions = closePath
+        ? options
+        : TraverseAdjustmentOptions(
+            method: AdjustmentMethod.none,
+            declination: options.declination,
+            instrumentHeight: options.instrumentHeight,
+            targetHeight: options.targetHeight,
+          );
+
+    // 補正を適用して座標を再計算
+    final result = TraverseAdjuster.adjust(chain, effectiveOptions);
+    var points = result.adjustedPositions;
+
+    if (points.length < 2) return null;
+
+    // sub_table: 元の測量データをGeoJSON FeatureCollectionで保存
+    String? subTableJson;
+    try {
+      final features = sourceLayer.features.whereType<PointFeatureNode>().toList();
+      if (features.isNotEmpty) {
+        subTableJson = _buildSubTableGeoJson(features);
+      }
+    } catch (e) {
+      AppLogger.debug('[SurveyConversion] sub_table生成エラー: $e');
+    }
+
+    // sub_tableカラムを追加
+    if (subTableJson != null) {
+      try {
+        await targetLayer.geoPackageFile.addAttributeColumn(
+          targetLayer.layerName, 'sub_table', 'TEXT',
+        );
+      } catch (_) {}
+    }
+
+    // メタデータ用カラムを追加
+    final metaCols = ['survey_total_distance', 'survey_declination'];
+    if (closePath) {
+      metaCols.addAll(['survey_closure_ratio', 'survey_closure_error',
+                       'survey_adjustment_method']);
+    }
+    for (final col in metaCols) {
+      try {
+        await targetLayer.geoPackageFile.addAttributeColumn(
+          targetLayer.layerName, col, 'TEXT',
+        );
+      } catch (_) {}
+    }
+
+    final featureName = name ?? 'Survey from ${sourceLayer.name}';
+
+    FeatureNode? createdFeature;
+    if (targetLayer is LineLayerNode) {
+      createdFeature = await LineFeatureNode.createIn(
+        targetLayer, points, featureName, null,
+      );
+    } else if (targetLayer is PolygonLayerNode) {
+      final closedPoints = closeRing(points);
+      if (closedPoints.isEmpty) return null;
+      createdFeature = await PolygonFeatureNode.createIn(
+        targetLayer, [closedPoints], featureName, null,
+      );
+    }
+
+    if (createdFeature == null) return null;
+
+    // 属性を設定
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    final attrs = <String, dynamic>{
+      'survey_total_distance': result.totalDistance.toStringAsFixed(2),
+      'survey_declination': options.declination.toString(),
+    };
+    if (closePath) {
+      attrs['survey_closure_ratio'] = result.closureRatioN.isInfinite
+          ? 'perfect'
+          : '1/${result.closureRatioN.toStringAsFixed(0)}';
+      attrs['survey_closure_error'] = result.closureError.toStringAsFixed(4);
+      attrs['survey_adjustment_method'] = effectiveOptions.method.name;
+    }
+    if (subTableJson != null) {
+      attrs['sub_table'] = subTableJson;
+    }
+
+    try {
+      await createdFeature.setAttributeValues(attrs);
+      await createdFeature.flushChanges();
+    } catch (e, stack) {
+      AppLogger.debug('[SurveyConversion] 属性設定エラー: $e\n$stack');
+    }
+
+    return createdFeature;
+  }
+
   /// ライン/ポリゴンフィーチャをポイントに変換
   static Future<List<PointFeatureNode>> convertGeometryToPoints({
     required FeatureNode sourceFeature,
@@ -230,135 +392,76 @@ class GeometryConversionService {
       return [];
     }
 
-    // sub_table属性から復元する属性テーブルを取得
-    List<List<dynamic>>? attributeTable;
+    // sub_table属性から復元データを取得（GeoJSON / 旧2D配列 両対応）
+    List<({LatLng point, Map<String, dynamic> properties})>? subTableRows;
     try {
       final subTableValue = await sourceFeature.getAttributeValue('sub_table');
       if (subTableValue != null && subTableValue is String && subTableValue.isNotEmpty) {
-        final decoded = jsonDecode(subTableValue);
-        if (decoded is List) {
-          attributeTable = decoded.map((row) => List<dynamic>.from(row as List)).toList();
-          AppLogger.debug('[GeometryConversion] 属性テーブルを復元: ${attributeTable.length}行');
+        subTableRows = _parseSubTable(subTableValue);
+        if (subTableRows != null) {
+          AppLogger.debug('[GeometryConversion] sub_table復元: ${subTableRows.length}行');
         }
       }
     } catch (e) {
       AppLogger.debug('[GeometryConversion] sub_table復元エラー: $e');
     }
 
-    // 属性テーブルからカラム名とデータ行を分離
-    List<String>? columnNames;
-    List<List<dynamic>>? dataRows;
-    if (attributeTable != null && attributeTable.isNotEmpty) {
-      columnNames = attributeTable.first.map((col) => col.toString()).toList();
-      dataRows = attributeTable.skip(1).toList();
-      
-      AppLogger.debug('[GeometryConversion] 復元対象カラム: $columnNames');
-      
-      // 必要に応じて変換先レイヤーに属性カラムを追加
-      int addedCount = 0;
-      int skippedCount = 0;
-      try {
-        for (final columnName in columnNames) {
-          // 組み込みカラム（id, geom）はスキップ
-          if (columnName == 'id' || columnName == 'geom') {
-            AppLogger.debug('[GeometryConversion] カラムをスキップ（組み込み）: $columnName');
-            skippedCount++;
-            continue;
-          }
-          
-          AppLogger.debug('[GeometryConversion] カラムを追加: $columnName');
+    // 復元データからカラム名を収集して、変換先レイヤーに追加
+    if (subTableRows != null && subTableRows.isNotEmpty) {
+      final allKeys = <String>{};
+      for (final row in subTableRows) {
+        allKeys.addAll(row.properties.keys);
+      }
+      for (final key in allKeys) {
+        try {
           await targetLayer.geoPackageFile.addAttributeColumn(
-            targetLayer.layerName,
-            columnName,
-            'TEXT', // 型情報がないのでTEXTにフォールバック
+            targetLayer.layerName, key, 'TEXT',
           );
-          addedCount++;
-        }
-        AppLogger.debug('[GeometryConversion] 属性カラムを復元: $addedCount個追加, $skippedCount個スキップ');
-      } catch (e) {
-        AppLogger.debug('[GeometryConversion] 属性カラム追加エラー: $e');
+        } catch (_) {}
       }
     }
 
-    // デフォルトのdescription値を準備（元のフィーチャのnameから）
     final sourceFeatureName = sourceFeature.name;
-    final defaultDescription = sourceFeatureName.isNotEmpty 
-        ? 'imported from $sourceFeatureName' 
+    final defaultDescription = sourceFeatureName.isNotEmpty
+        ? 'imported from $sourceFeatureName'
         : null;
-    
-    // 各座標をポイントフィーチャとして追加
+
     final createdFeatures = <PointFeatureNode>[];
     final totalPoints = points.length;
-    AppLogger.debug('[GeometryConversion] ポイント変換開始: $totalPoints個のポイントを作成');
-    
-    for (int i = 0; i < points.length; i++) {
-      // 進捗表示（10%ごと、または最初と最後）
-      if (i == 0 || i == totalPoints - 1 || (i + 1) % (totalPoints ~/ 10 + 1) == 0) {
-        AppLogger.debug('[GeometryConversion] 進捗: ${i + 1}/$totalPoints (${((i + 1) * 100 / totalPoints).toStringAsFixed(1)}%)');
-      }
-      
-      // nameは空文字列、descriptionはnullで作成
+
+    for (int i = 0; i < totalPoints; i++) {
       final pointFeature = await PointFeatureNode.createIn(
-        targetLayer,
-        points[i],
-        '', // nameは空文字列
-        null, // descriptionはnull（後で属性復元時に設定）
+        targetLayer, points[i], '', null,
       );
-      if (pointFeature != null) {
-        createdFeatures.add(pointFeature);
-        
-        // 属性テーブルがあれば、対応する行の属性を復元
-        if (dataRows != null && columnNames != null && i < dataRows.length) {
-          try {
-            final rowData = dataRows[i];
-            final attributes = <String, dynamic>{};
-            
-            for (int colIdx = 0; colIdx < columnNames.length && colIdx < rowData.length; colIdx++) {
-              final columnName = columnNames[colIdx];
-              // 組み込みカラムはスキップ
-              if (columnName == 'id' || columnName == 'geom') {
-                continue;
-              }
-              
-              final value = rowData[colIdx];
-              attributes[columnName] = value;
-            }
-            
-            // descriptionの処理：
-            // 復元データにdescriptionがあればそれを使い、なければデフォルト値を設定
-            if (!attributes.containsKey('description') || 
-                attributes['description'] == null || 
-                attributes['description'].toString().isEmpty) {
-              if (defaultDescription != null) {
-                attributes['description'] = defaultDescription;
-              }
-            }
-            
-            if (attributes.isNotEmpty) {
-              // setAttributeValuesで属性設定（カラムがなければ自動作成）
-              await pointFeature.setAttributeValues(attributes);
-              
-              // 即座にDBに保存（updateChildren()の前に確実に保存）
-              await pointFeature.flushChanges();
-            }
-          } catch (e) {
-            AppLogger.debug('[GeometryConversion] ポイント${i + 1}の属性復元エラー: $e');
+      if (pointFeature == null) continue;
+      createdFeatures.add(pointFeature);
+
+      // 属性を復元
+      if (subTableRows != null && i < subTableRows.length) {
+        try {
+          final attrs = Map<String, dynamic>.from(subTableRows[i].properties);
+          if ((!attrs.containsKey('description') ||
+                  attrs['description'] == null ||
+                  attrs['description'].toString().isEmpty) &&
+              defaultDescription != null) {
+            attrs['description'] = defaultDescription;
           }
-        } else if (defaultDescription != null) {
-          // 属性テーブルがない場合でも、デフォルトdescriptionを設定
-          try {
-            await pointFeature.setAttributeValues({
-              'description': defaultDescription,
-            });
+          if (attrs.isNotEmpty) {
+            await pointFeature.setAttributeValues(attrs);
             await pointFeature.flushChanges();
-          } catch (e) {
-            AppLogger.debug('[GeometryConversion] ポイント${i + 1}のdescription設定エラー: $e');
           }
+        } catch (e) {
+          AppLogger.debug('[GeometryConversion] ポイント${i + 1}の属性復元エラー: $e');
         }
+      } else if (defaultDescription != null) {
+        try {
+          await pointFeature.setAttributeValues({'description': defaultDescription});
+          await pointFeature.flushChanges();
+        } catch (_) {}
       }
     }
-    
-    AppLogger.debug('[GeometryConversion] ポイント変換完了: ${createdFeatures.length}個のポイントを作成');
+
+    AppLogger.debug('[GeometryConversion] ポイント変換完了: ${createdFeatures.length}個作成');
 
     return createdFeatures;
   }

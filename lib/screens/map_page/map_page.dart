@@ -664,40 +664,53 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   }
 
   /// フィーチャキャッシュを再構築し、MapSourceManager経由でGeoJSONソースを更新
-  /// データ変更時のみネイティブに送信（変更なしならスキップ）
+  /// オーバーレイ方式: 通常ソースは常に全フィーチャ、選択ソースは選択分だけ上乗せ
+  /// → 選択変更時に通常ソースのGeoJSONが不変のため送信スキップされ、チラつきが解消
   void _syncFeatureSources() {
     final currentSelection = ref.read(selectedFeaturesProvider);
     final selectionChanged = !identical(lastCacheSelection, currentSelection);
 
     if (!layerCacheDirty && !selectionChanged) return;
+    final dataChanged = layerCacheDirty;
     layerCacheDirty = false;
     lastCacheSelection = currentSelection;
 
     final selectedSet = currentSelection.toSet();
 
-    // ポリラインをmaplibre Feature型に変換（選択/非選択分離、Multi対応）
+    // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
+    if (!dataChanged && selectionChanged) {
+      _rebuildSelectionOnly(selectedSet);
+      _pushFeaturesToSources();
+      return;
+    }
+
+    // ポリラインをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
     cachedPolylines = [];
     cachedSelectedPolylines = [];
     for (final f in lineFeatures) {
       final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
       if (geoGeom == null) continue;
       final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
-      (selectedSet.contains(f) ? cachedSelectedPolylines : cachedPolylines)
-          .add(feature);
+      cachedPolylines.add(feature);
+      if (selectedSet.contains(f)) {
+        cachedSelectedPolylines.add(feature);
+      }
     }
 
-    // ポリゴンをmaplibre Feature型に変換（選択/非選択分離、Multi対応）
+    // ポリゴンをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
     cachedPolygons = [];
     cachedSelectedPolygons = [];
     for (final f in polygonFeatures) {
       final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
       if (geoGeom == null) continue;
       final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
-      (selectedSet.contains(f) ? cachedSelectedPolygons : cachedPolygons)
-          .add(feature);
+      cachedPolygons.add(feature);
+      if (selectedSet.contains(f)) {
+        cachedSelectedPolygons.add(feature);
+      }
     }
 
-    // ポイントをmaplibre Feature型に変換（選択/非選択分離）
+    // ポイントをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
     cachedMarkers = [];
     cachedSelectedMarkers = [];
     for (final f in pointFeatures) {
@@ -707,15 +720,14 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           geometry: geo.Point(pt.toGeographic()),
           properties: {'name': f.name},
         );
+        cachedMarkers.add(feature);
         if (selectedSet.contains(f)) {
           cachedSelectedMarkers.add(feature);
-        } else {
-          cachedMarkers.add(feature);
         }
       }
     }
 
-    // ImageNodeをGeoJSON Feature化（SymbolStyleLayerでGPU描画）
+    // ImageNodeをGeoJSON Feature化（通常=全件、選択=追加オーバーレイ）
     cachedImageFeatures = [];
     cachedSelectedImageFeatures = [];
     for (final photo in photoNodes.where((p) => p.hasLocation)) {
@@ -730,47 +742,120 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         geometry: geo.Point(photo.location!.toGeographic()),
         properties: props,
       );
+      cachedImageFeatures.add(feature);
       if (selectedSet.contains(photo)) {
         cachedSelectedImageFeatures.add(feature);
-      } else {
-        cachedImageFeatures.add(feature);
       }
     }
 
-    // ライン頂点データ生成（CircleStyleLayerでGPU描画）
+    // ライン頂点データ生成（通常=全件、選択=追加オーバーレイ）
     cachedLineVertices = [];
     cachedLineVerticesSel = [];
     if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
       for (final f in lineFeatures) {
         final allPts = _extractAllLineVertices(f.turfFeature.geometry);
-        final list =
-            selectedSet.contains(f)
-                ? cachedLineVerticesSel
-                : cachedLineVertices;
         for (final pt in allPts) {
-          list.add(geo.Feature(geometry: geo.Point(pt)));
+          cachedLineVertices.add(geo.Feature(geometry: geo.Point(pt)));
+        }
+        if (selectedSet.contains(f)) {
+          for (final pt in allPts) {
+            cachedLineVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
+          }
         }
       }
     }
 
-    // ポリゴン頂点データ生成
+    // ポリゴン頂点データ生成（通常=全件、選択=追加オーバーレイ）
     cachedPolyVertices = [];
     cachedPolyVerticesSel = [];
     if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
       for (final f in polygonFeatures) {
         final allPts = _extractAllPolyVertices(f.turfFeature.geometry);
-        final list =
-            selectedSet.contains(f)
-                ? cachedPolyVerticesSel
-                : cachedPolyVertices;
         for (final pt in allPts) {
-          list.add(geo.Feature(geometry: geo.Point(pt)));
+          cachedPolyVertices.add(geo.Feature(geometry: geo.Point(pt)));
+        }
+        if (selectedSet.contains(f)) {
+          for (final pt in allPts) {
+            cachedPolyVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
+          }
         }
       }
     }
 
     // MapSourceManager経由でGeoJSONソースを更新（変更時のみ送信）
     _pushFeaturesToSources();
+  }
+
+  /// 選択変更のみの場合の軽量パス: 選択リストだけを再構築
+  /// 通常リスト（cachedPolylines等）は前回のまま保持 → GeoJSON不変 → 送信スキップ
+  void _rebuildSelectionOnly(Set<LayerTreeNode> selectedSet) {
+    // ポリライン選択
+    cachedSelectedPolylines = [];
+    for (final f in lineFeatures) {
+      if (!selectedSet.contains(f)) continue;
+      final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
+      if (geoGeom == null) continue;
+      cachedSelectedPolylines.add(geo.Feature<geo.Geometry>(geometry: geoGeom));
+    }
+
+    // ポリゴン選択
+    cachedSelectedPolygons = [];
+    for (final f in polygonFeatures) {
+      if (!selectedSet.contains(f)) continue;
+      final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
+      if (geoGeom == null) continue;
+      cachedSelectedPolygons.add(geo.Feature<geo.Geometry>(geometry: geoGeom));
+    }
+
+    // ポイント選択
+    cachedSelectedMarkers = [];
+    for (final f in pointFeatures) {
+      if (!selectedSet.contains(f) || f.geometry == null) continue;
+      for (final pt in f.geometry as List<LatLng>) {
+        cachedSelectedMarkers.add(geo.Feature(
+          geometry: geo.Point(pt.toGeographic()),
+          properties: {'name': f.name},
+        ));
+      }
+    }
+
+    // ImageNode選択
+    cachedSelectedImageFeatures = [];
+    for (final photo in photoNodes.where((p) => p.hasLocation)) {
+      if (!selectedSet.contains(photo)) continue;
+      cachedSelectedImageFeatures.add(geo.Feature(
+        geometry: geo.Point(photo.location!.toGeographic()),
+        properties: <String, Object?>{
+          'name': photo.name,
+          'has_direction': photo.direction != null,
+          if (photo.direction != null) 'direction': photo.direction,
+          if (photo.takenAt != null)
+            'taken_at': photo.takenAt!.millisecondsSinceEpoch,
+        },
+      ));
+    }
+
+    // ライン頂点選択
+    cachedLineVerticesSel = [];
+    if (layerStyleSettings.getBool(lineVertexPointsEnabledDef)) {
+      for (final f in lineFeatures) {
+        if (!selectedSet.contains(f)) continue;
+        for (final pt in _extractAllLineVertices(f.turfFeature.geometry)) {
+          cachedLineVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
+        }
+      }
+    }
+
+    // ポリゴン頂点選択
+    cachedPolyVerticesSel = [];
+    if (layerStyleSettings.getBool(polygonVertexPointsEnabledDef)) {
+      for (final f in polygonFeatures) {
+        if (!selectedSet.contains(f)) continue;
+        for (final pt in _extractAllPolyVertices(f.turfFeature.geometry)) {
+          cachedPolyVerticesSel.add(geo.Feature(geometry: geo.Point(pt)));
+        }
+      }
+    }
   }
 
   // ============================================================

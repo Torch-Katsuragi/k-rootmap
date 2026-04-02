@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.5.0+4
+version: 0.5.1+5
 
 environment:
   sdk: ^3.7.2
@@ -66,7 +66,7 @@ dependencies:
   flutter_compass: ^0.8.0             # コンパス（磁気センサー）データ取得用
 
   # 属性テーブル表示・編集用パッケージ
-  pluto_grid: ^8.0.0                  # 高機能データグリッド（属性テーブル用）
+  trina_grid: ^1.0.0                  # 高機能データグリッド（属性テーブル用、TrinaGrid後継）
 
   # コレクション操作用パッケージ
   collection: ^1.18.0                 # 高度なコレクション操作用
@@ -101,7 +101,6 @@ dependencies:
 dependency_overrides:
   jni:
     path: third_party/jni
-  rxdart: ^0.28.0
 
 dev_dependencies:
   flutter_test:

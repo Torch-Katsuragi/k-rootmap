@@ -24,6 +24,8 @@ class AttributeTableToolbar extends ConsumerStatefulWidget {
   final VoidCallback? onToggleView;
   final bool isFormView;
   final Future<void> Function(String expression)? onDuplicateFiltered;
+  final VoidCallback? onBatchEdit;
+  final VoidCallback? onCsvExport;
 
   const AttributeTableToolbar({
     super.key,
@@ -39,6 +41,8 @@ class AttributeTableToolbar extends ConsumerStatefulWidget {
     this.onToggleView,
     this.isFormView = false,
     this.onDuplicateFiltered,
+    this.onBatchEdit,
+    this.onCsvExport,
   });
 
   @override
@@ -49,6 +53,7 @@ class AttributeTableToolbar extends ConsumerStatefulWidget {
 class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
   final _filterController = TextEditingController();
   bool _isFilterApplied = false;
+  bool _showFilter = false;
 
   // 検索・置換
   bool _showSearchReplace = false;
@@ -100,17 +105,18 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 上段: レイヤー名 + ボタン群
+          // 上段: レイヤー名（左） + アイコン群（右端）
           Row(
             children: [
+              // レイヤー名
               Text(
                 ctrl.isFiltered
                     ? '${ctrl.layer.layerName} (${ctrl.filteredCount}/${ctrl.totalCount})'
                     : '${ctrl.layer.layerName} (${ctrl.totalCount})',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w500,
-                  fontSize: 9,
-                  height: 1.0,
+                  fontSize: 13,
+                  height: 1.2,
                   color: ctrl.isFiltered ? Colors.orange.shade800 : null,
                 ),
               ),
@@ -122,58 +128,38 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                 _buildEpsgSelector(context),
               ],
 
-              const Spacer(),
+              // 右端に押し出す
+              const Expanded(child: SizedBox.shrink()),
 
+              // フィルタトグル
               _buildIconButton(
-                Icons.calculate,
-                Colors.deepPurple,
-                widget.onFieldCalculator,
-                'フィールド計算機',
+                Icons.filter_alt,
+                _isFilterApplied
+                    ? Colors.orange
+                    : (_showFilter ? Colors.blue : null),
+                () => setState(() => _showFilter = !_showFilter),
+                'フィルタ',
               ),
-              _buildColumnMenuButton(context),
-              _buildIconButton(
-                Icons.add_box,
-                Colors.blue,
-                widget.onAddColumn,
-                'カラム追加',
-              ),
-              _buildIconButton(Icons.refresh, null, widget.onRefresh, '更新'),
+              // 検索・置換トグル
               _buildIconButton(
                 Icons.find_replace,
                 _showSearchReplace ? Colors.orange : null,
                 () => setState(() => _showSearchReplace = !_showSearchReplace),
                 '検索・置換',
               ),
-              _buildIconButton(
-                Icons.copy,
-                null,
-                widget.onCopyTable,
-                'テーブルをコピー',
-              ),
-              if (widget.onAddFeature != null)
-                _buildIconButton(
-                  Icons.add,
-                  null,
-                  widget.onAddFeature,
-                  'フィーチャ追加',
-                ),
-              _buildIconButton(
-                Icons.delete,
-                Colors.red,
-                widget.onDeleteSelected,
-                '選択フィーチャ削除',
-              ),
-              _buildIconButton(Icons.save, null, widget.onSave, '即座に保存'),
+              // テーブル/フォーム切替
               _buildIconButton(
                 widget.isFormView ? Icons.table_chart : Icons.article,
                 widget.isFormView ? Colors.orange : null,
                 widget.onToggleView,
                 widget.isFormView ? 'テーブル表示' : 'フォーム表示',
               ),
+              // 操作メニュー（ドロップダウン）
+              _buildActionsMenu(context),
             ],
           ),
-          // 下段: フィルタバー
-          _buildFilterBar(context),
+          // フィルタバー（トグル表示）
+          if (_showFilter) _buildFilterBar(context),
           // 検索・置換バー
           if (_showSearchReplace) _buildSearchReplaceBar(context),
         ],
@@ -185,19 +171,19 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: SizedBox(
-        height: 28,
+        height: 32,
         child: Row(
           children: [
             Icon(
               Icons.filter_alt,
-              size: 14,
+              size: 16,
               color: _isFilterApplied ? Colors.orange : Colors.grey,
             ),
             const SizedBox(width: 4),
             Expanded(
               child: TextField(
                 controller: _filterController,
-                style: const TextStyle(fontSize: 12),
+                style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -573,6 +559,178 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         },
       ),
     );
+  }
+
+  /// 操作メニュー（ドロップダウン）
+  Widget _buildActionsMenu(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 18),
+      iconSize: 18,
+      padding: EdgeInsets.zero,
+      tooltip: '操作メニュー',
+      constraints: const BoxConstraints(),
+      style: const ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(28, 28)),
+        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case 'refresh':
+            widget.onRefresh?.call();
+          case 'copy':
+            widget.onCopyTable?.call();
+          case 'save':
+            widget.onSave?.call();
+          case 'add_feature':
+            widget.onAddFeature?.call();
+          case 'delete':
+            widget.onDeleteSelected?.call();
+          case 'add_column':
+            widget.onAddColumn?.call();
+          case 'field_calc':
+            widget.onFieldCalculator?.call();
+          case 'column_menu':
+            _showColumnMenu(context);
+          case 'batch_edit':
+            widget.onBatchEdit?.call();
+          case 'csv_export':
+            widget.onCsvExport?.call();
+        }
+      },
+      itemBuilder: (ctx) => [
+        _menuItem('refresh', Icons.refresh, '更新'),
+        _menuItem('save', Icons.save, '保存'),
+        const PopupMenuDivider(),
+        _menuItem('copy', Icons.copy, 'テーブルをコピー'),
+        _menuItem('csv_export', Icons.download, 'CSVエクスポート'),
+        const PopupMenuDivider(),
+        _menuItem('batch_edit', Icons.edit_note, '一括編集（チェック行）'),
+        _menuItem('field_calc', Icons.calculate, 'フィールド計算機'),
+        const PopupMenuDivider(),
+        _menuItem('add_column', Icons.add_box, 'カラム追加'),
+        _menuItem('column_menu', Icons.view_column, 'カラム表示/非表示'),
+        if (widget.onAddFeature != null) ...[
+          const PopupMenuDivider(),
+          _menuItem('add_feature', Icons.add, 'フィーチャ追加'),
+        ],
+        const PopupMenuDivider(),
+        _menuItem('delete', Icons.delete, '選択フィーチャ削除', iconColor: Colors.red),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _menuItem(
+    String value,
+    IconData icon,
+    String label, {
+    Color? iconColor,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 36,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: iconColor),
+          const SizedBox(width: 12),
+          Text(label, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  /// カラム表示/非表示メニューを表示
+  void _showColumnMenu(BuildContext context) {
+    // _buildColumnMenuButtonの中身を再利用
+    final ctrl = widget.controller;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 200,
+        100,
+        0,
+        0,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 32,
+          child: Text(
+            'カラム表示/非表示',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: '_show_all',
+          height: 32,
+          child: const Row(
+            children: [
+              Icon(Icons.visibility, size: 16),
+              SizedBox(width: 8),
+              Text('全て表示', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        ...ctrl.columnNames.map(
+          (col) => PopupMenuItem<String>(
+            value: col,
+            height: 28,
+            child: Row(
+              children: [
+                Icon(
+                  ctrl.hiddenColumns.contains(col)
+                      ? Icons.visibility_off
+                      : Icons.visibility,
+                  size: 14,
+                  color: ctrl.hiddenColumns.contains(col) ? Colors.grey : null,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    col,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: ctrl.hiddenColumns.contains(col)
+                          ? Colors.grey
+                          : null,
+                    ),
+                  ),
+                ),
+                if (widget.onColumnAction != null) ...[
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onColumnAction!(col, 'rename');
+                    },
+                    child: const Icon(Icons.edit, size: 14),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onColumnAction!(col, 'delete');
+                    },
+                    child: const Icon(Icons.delete, size: 14, color: Colors.red),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == '_show_all') {
+        ctrl.showAllColumns();
+      } else if (value != null) {
+        ctrl.toggleColumnVisibility(value);
+      }
+    });
   }
 
   Widget _buildIconButton(

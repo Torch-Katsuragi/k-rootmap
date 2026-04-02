@@ -1,9 +1,9 @@
 // K-MAPS: 属性テーブルコントローラ
-// PlutoGridの状態管理、フィーチャ操作、属性編集を担当
+// TrinaGridの状態管理、フィーチャ操作、属性編集を担当
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pluto_grid/pluto_grid.dart';
+import 'package:trina_grid/trina_grid.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../utils/app_logger.dart';
@@ -33,15 +33,17 @@ class AttributeTableSettings {
 }
 
 /// 属性テーブルコントローラ
-/// 状態管理とPlutoGridとの連携を担当
+/// 状態管理とTrinaGridとの連携を担当
 class AttributeTableController extends ChangeNotifier {
   final LayerNode layer;
   final WidgetRef _ref;
+  // dispose() 後も安全に使えるよう、コンストラクタ時点でキャッシュ
+  late final IsAttributeTableEditing _editingNotifier;
 
   // 状態
-  PlutoGridStateManager? _stateManager;
-  List<PlutoColumn> _columns = [];
-  List<PlutoRow> _rows = [];
+  TrinaGridStateManager? _stateManager;
+  List<TrinaColumn> _columns = [];
+  List<TrinaRow> _rows = [];
   List<String> _columnNames = [];
   Map<String, String> _columnTypeMap = {};
   List<FeatureNode> _features = [];
@@ -55,7 +57,7 @@ class AttributeTableController extends ChangeNotifier {
   bool _isFiltered = false;
   String? _filterError;
   List<FeatureNode> _displayFeatures = [];
-  List<PlutoRow> _displayRows = [];
+  List<TrinaRow> _displayRows = [];
 
   // ページング状態
   int _currentPageOffset = 0;
@@ -68,9 +70,9 @@ class AttributeTableController extends ChangeNotifier {
   final Set<String> _hiddenColumns = {};
 
   // ゲッター
-  PlutoGridStateManager? get stateManager => _stateManager;
-  List<PlutoColumn> get columns => _columns;
-  List<PlutoRow> get rows => _displayRows;
+  TrinaGridStateManager? get stateManager => _stateManager;
+  List<TrinaColumn> get columns => _columns;
+  List<TrinaRow> get rows => _displayRows;
   List<String> get columnNames => _columnNames;
   List<FeatureNode> get features => _displayFeatures;
   List<FeatureNode> get allFeatures => _features;
@@ -124,7 +126,9 @@ class AttributeTableController extends ChangeNotifier {
     notifyListeners();
   }
 
-  AttributeTableController(this.layer, this._ref);
+  AttributeTableController(this.layer, this._ref)
+      : _editingNotifier =
+            _ref.read(isAttributeTableEditingProvider.notifier);
 
   /// 初期化
   Future<void> initialize() async {
@@ -189,8 +193,8 @@ class AttributeTableController extends ChangeNotifier {
     }
   }
 
-  /// PlutoGridのStateManagerを設定
-  void setStateManager(PlutoGridStateManager manager) {
+  /// TrinaGridのStateManagerを設定
+  void setStateManager(TrinaGridStateManager manager) {
     _stateManager = manager;
 
     // 編集モードの監視
@@ -221,7 +225,7 @@ class AttributeTableController extends ChangeNotifier {
 
     AppLogger.debug('[AttributeTableController] 削除開始: $featureCount個');
 
-    // PlutoGridから行を削除
+    // TrinaGridから行を削除
     final rowIndicesToRemove = <int>[];
     for (final feature in selectedFeaturesToDelete) {
       final index = _features.indexOf(feature);
@@ -230,7 +234,7 @@ class AttributeTableController extends ChangeNotifier {
 
     if (_stateManager != null && rowIndicesToRemove.isNotEmpty) {
       rowIndicesToRemove.sort((a, b) => b.compareTo(a));
-      final rowsToRemove = <PlutoRow>[];
+      final rowsToRemove = <TrinaRow>[];
       for (final index in rowIndicesToRemove) {
         if (index < _rows.length) {
           rowsToRemove.add(_rows[index]);
@@ -412,6 +416,82 @@ class AttributeTableController extends ChangeNotifier {
     }
   }
 
+  // ========== Phase 3: 複数行操作 ==========
+
+  /// チェックされた行のフィーチャを取得
+  List<FeatureNode> getCheckedFeatures() {
+    if (_stateManager == null) return [];
+    final checkedRows = _stateManager!.checkedRows;
+    final result = <FeatureNode>[];
+    for (final row in checkedRows) {
+      final rowNum = row.cells['_row_num']?.value;
+      if (rowNum is int && rowNum > 0 && rowNum <= _displayFeatures.length) {
+        result.add(_displayFeatures[rowNum - 1]);
+      }
+    }
+    return result;
+  }
+
+  /// チェックされた行数を取得
+  int get checkedRowCount => _stateManager?.checkedRows.length ?? 0;
+
+  /// チェックされた行に対して一括値設定
+  Future<int> batchSetValue(String columnName, dynamic value) async {
+    final features = getCheckedFeatures();
+    if (features.isEmpty) return 0;
+
+    int count = 0;
+    for (final feature in features) {
+      try {
+        await feature.setAttributeValue(columnName, value);
+        count++;
+      } catch (e) {
+        AppLogger.debug('[AttributeTableController] 一括設定エラー: $e');
+      }
+    }
+
+    if (count > 0) {
+      await initialize(); // テーブル再構築
+    }
+
+    AppLogger.debug('[AttributeTableController] 一括設定完了: $count/${ features.length}件');
+    return count;
+  }
+
+
+  /// CSVエクスポート用のデータを非同期で生成
+  Future<String> exportToCsvAsync() async {
+    final buffer = StringBuffer();
+
+    // ヘッダー行
+    final escapedHeaders = _columnNames.map((c) => _escapeCsvField(c));
+    buffer.writeln(escapedHeaders.join(','));
+
+    // データ行
+    for (final feature in _displayFeatures) {
+      final values = <String>[];
+      for (final col in _columnNames) {
+        try {
+          final value = await feature.getAttributeValue(col);
+          values.add(_escapeCsvField(value?.toString() ?? ''));
+        } catch (e) {
+          values.add('');
+        }
+      }
+      buffer.writeln(values.join(','));
+    }
+
+    return buffer.toString();
+  }
+
+  /// CSV用フィールドエスケープ
+  String _escapeCsvField(String field) {
+    if (field.contains(',') || field.contains('"') || field.contains('\n')) {
+      return '"${field.replaceAll('"', '""')}"';
+    }
+    return field;
+  }
+
   // ========== 統計 ==========
 
   /// 指定カラムの統計情報を計算
@@ -446,18 +526,21 @@ class AttributeTableController extends ChangeNotifier {
 
   // ========== カラム構築 ==========
 
-  List<PlutoColumn> _createColumns() {
-    final tableColumns = <PlutoColumn>[];
+  List<TrinaColumn> _createColumns() {
+    final tableColumns = <TrinaColumn>[];
 
-    // 行番号カラム
+    // 行番号カラム（チェックボックス付き、ソート・ドラッグ無効）
     tableColumns.add(
-      PlutoColumn(
+      TrinaColumn(
         title: '#',
         field: '_row_num',
-        type: PlutoColumnType.number(),
+        type: TrinaColumnType.number(),
         enableEditingMode: false,
-        width: 50,
-        frozen: PlutoColumnFrozen.start,
+        enableSorting: false,
+        enableColumnDrag: false,
+        enableRowChecked: true, // Phase 3: 複数行選択チェックボックス
+        width: 100,
+        frozen: TrinaColumnFrozen.start,
       ),
     );
 
@@ -465,19 +548,19 @@ class AttributeTableController extends ChangeNotifier {
     if (isPointLayer) {
       if (_settings.showWgs84) {
         tableColumns.add(
-          PlutoColumn(
+          TrinaColumn(
             title: '_lat',
             field: '_lat',
-            type: PlutoColumnType.text(),
+            type: TrinaColumnType.text(),
             enableEditingMode: false,
             width: 100,
           ),
         );
         tableColumns.add(
-          PlutoColumn(
+          TrinaColumn(
             title: '_lon',
             field: '_lon',
-            type: PlutoColumnType.text(),
+            type: TrinaColumnType.text(),
             enableEditingMode: false,
             width: 100,
           ),
@@ -486,19 +569,19 @@ class AttributeTableController extends ChangeNotifier {
 
       if (_settings.additionalEpsg != null) {
         tableColumns.add(
-          PlutoColumn(
+          TrinaColumn(
             title: '_x',
             field: '_x',
-            type: PlutoColumnType.text(),
+            type: TrinaColumnType.text(),
             enableEditingMode: false,
             width: 110,
           ),
         );
         tableColumns.add(
-          PlutoColumn(
+          TrinaColumn(
             title: '_y',
             field: '_y',
-            type: PlutoColumnType.text(),
+            type: TrinaColumnType.text(),
             enableEditingMode: false,
             width: 110,
           ),
@@ -506,15 +589,19 @@ class AttributeTableController extends ChangeNotifier {
       }
     }
 
-    // 属性カラム
+    // 属性カラム（ソート・ドラッグ有効、NULLハイライト付き）
     for (final columnName in _columnNames) {
       tableColumns.add(
-        PlutoColumn(
+        TrinaColumn(
           title: columnName,
           field: columnName,
           type: _determineColumnType(columnName),
           enableEditingMode: _isColumnEditable(columnName),
+          enableSorting: true, // Phase 3: カラムヘッダーでソート
+          enableColumnDrag: true, // Phase 3: ドラッグで並替え
+          enableContextMenu: true, // Phase 3: 右クリックメニュー
           width: _getColumnWidth(columnName),
+          renderer: _nullHighlightRenderer(columnName), // Phase 3: NULL値ハイライト
         ),
       );
     }
@@ -522,22 +609,44 @@ class AttributeTableController extends ChangeNotifier {
     return tableColumns;
   }
 
-  /// SQLiteのカラム型からPlutoColumnTypeにマッピング
-  PlutoColumnType _determineColumnType(String columnName) {
+  /// Phase 3: NULL/空値ハイライト用セルレンダラー
+  TrinaColumnRenderer _nullHighlightRenderer(String columnName) {
+    return (TrinaColumnRendererContext ctx) {
+      final value = ctx.cell.value;
+      final isNull = value == null || value.toString().isEmpty;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          isNull ? '(NULL)' : value.toString(),
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.2,
+            color: isNull ? Colors.grey.shade400 : Colors.black87,
+            fontStyle: isNull ? FontStyle.italic : FontStyle.normal,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    };
+  }
+
+  /// SQLiteのカラム型からTrinaColumnTypeにマッピング
+  TrinaColumnType _determineColumnType(String columnName) {
     final sqlType = _columnTypeMap[columnName] ?? '';
     if (sqlType.contains('INT')) {
-      return PlutoColumnType.number();
+      return TrinaColumnType.number();
     } else if (sqlType.contains('REAL') ||
         sqlType.contains('DOUBLE') ||
         sqlType.contains('FLOAT') ||
         sqlType.contains('NUMERIC')) {
-      return PlutoColumnType.number(format: '#,##0.######');
+      return TrinaColumnType.number(format: '#,##0.######');
     } else if (sqlType.contains('DATE') || sqlType.contains('TIMESTAMP')) {
-      return PlutoColumnType.date();
+      return TrinaColumnType.date();
     } else if (sqlType.contains('BOOL')) {
-      return PlutoColumnType.text();
+      return TrinaColumnType.text();
     }
-    return PlutoColumnType.text();
+    return TrinaColumnType.text();
   }
 
   bool _isColumnEditable(String columnName) {
@@ -563,9 +672,9 @@ class AttributeTableController extends ChangeNotifier {
 
   // ========== ページング ==========
 
-  /// ページ取得（PlutoLazyPagination用）
-  Future<PlutoLazyPaginationResponse> fetchPage(
-    PlutoLazyPaginationRequest request,
+  /// ページ取得（TrinaLazyPagination用）
+  Future<TrinaLazyPaginationResponse> fetchPage(
+    TrinaLazyPaginationRequest request,
   ) async {
     final page = request.page;
     final pageSize = defaultPageSize;
@@ -577,33 +686,33 @@ class AttributeTableController extends ChangeNotifier {
     _currentPageOffset = start;
     final rows = await _createRowsForRange(start, pageSize);
 
-    return PlutoLazyPaginationResponse(totalPage: totalPages, rows: rows);
+    return TrinaLazyPaginationResponse(totalPage: totalPages, rows: rows);
   }
 
   // ========== 行データ構築 ==========
 
-  /// 指定範囲のフィーチャからPlutoRowを構築
-  Future<List<PlutoRow>> _createRowsForRange(int start, int count) async {
+  /// 指定範囲のフィーチャからTrinaRowを構築
+  Future<List<TrinaRow>> _createRowsForRange(int start, int count) async {
     if (_displayFeatures.isEmpty) return [];
 
     final end = (start + count).clamp(0, _displayFeatures.length);
     if (start >= end) return [];
 
-    final tableRows = <PlutoRow>[];
+    final tableRows = <TrinaRow>[];
     final coordService = CoordinateService.instance;
 
     for (int i = start; i < end; i++) {
       final feature = _displayFeatures[i];
-      final cells = <String, PlutoCell>{};
+      final cells = <String, TrinaCell>{};
 
-      cells['_row_num'] = PlutoCell(value: i + 1);
+      cells['_row_num'] = TrinaCell(value: i + 1);
 
       for (final columnName in _columnNames) {
         try {
           final value = await feature.getAttributeValue(columnName);
-          cells[columnName] = PlutoCell(value: value ?? '');
+          cells[columnName] = TrinaCell(value: value ?? '');
         } catch (e) {
-          cells[columnName] = PlutoCell(value: '');
+          cells[columnName] = TrinaCell(value: '');
         }
       }
 
@@ -611,8 +720,8 @@ class AttributeTableController extends ChangeNotifier {
         final point = feature.point;
 
         if (_settings.showWgs84) {
-          cells['_lat'] = PlutoCell(value: point.latitude.toStringAsFixed(6));
-          cells['_lon'] = PlutoCell(value: point.longitude.toStringAsFixed(6));
+          cells['_lat'] = TrinaCell(value: point.latitude.toStringAsFixed(6));
+          cells['_lon'] = TrinaCell(value: point.longitude.toStringAsFixed(6));
         }
 
         if (_settings.additionalEpsg != null) {
@@ -620,12 +729,12 @@ class AttributeTableController extends ChangeNotifier {
             point,
             _settings.additionalEpsg!,
           );
-          cells['_x'] = PlutoCell(value: xy['x'] ?? '');
-          cells['_y'] = PlutoCell(value: xy['y'] ?? '');
+          cells['_x'] = TrinaCell(value: xy['x'] ?? '');
+          cells['_y'] = TrinaCell(value: xy['y'] ?? '');
         }
       }
 
-      tableRows.add(PlutoRow(cells: cells));
+      tableRows.add(TrinaRow(cells: cells));
     }
 
     return tableRows;
@@ -633,17 +742,22 @@ class AttributeTableController extends ChangeNotifier {
 
   // ========== 内部コールバック ==========
 
+  bool _lastEditing = false;
+
   void _onStateChanged() {
     final isEditing = _stateManager?.isEditing ?? false;
-    if (_ref.read(isAttributeTableEditingProvider) != isEditing) {
-      _ref.read(isAttributeTableEditingProvider.notifier).set(isEditing);
+    if (_lastEditing != isEditing) {
+      _lastEditing = isEditing;
+      _editingNotifier.set(isEditing);
     }
   }
 
   @override
   void dispose() {
-    _ref.read(isAttributeTableEditingProvider.notifier).set(false);
     _stateManager?.removeListener(_onStateChanged);
+    // dispose中のプロバイダ変更はビルド中クラッシュの原因になるため遅延実行
+    final notifier = _editingNotifier;
+    Future.microtask(() => notifier.set(false));
     super.dispose();
   }
 }

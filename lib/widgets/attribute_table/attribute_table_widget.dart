@@ -1,9 +1,10 @@
 // K-MAPS: 属性テーブルウィジェット（リファクタリング版）
-// PlutoGridを使用した属性テーブル表示・編集
+// TrinaGridを使用した属性テーブル表示・編集
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pluto_grid/pluto_grid.dart';
+import 'package:trina_grid/trina_grid.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -53,12 +54,15 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   @override
   void didUpdateWidget(AttributeTableWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.layer != widget.layer) {
+    if (oldWidget.layer.layerName != widget.layer.layerName) {
       _controller.removeListener(_onControllerChanged);
-      _controller.dispose();
+      // dispose中のプロバイダ変更を遅延実行
+      final oldController = _controller;
+      Future.microtask(() => oldController.dispose());
       _controller = AttributeTableController(widget.layer, ref);
       _controller.addListener(_onControllerChanged);
       _controller.initialize();
+      _plutoGridKey = UniqueKey();
     }
   }
 
@@ -178,6 +182,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 _rebuildGrid,
                 ref: ref,
               ),
+          onBatchEdit: _handleBatchEdit,
+          onCsvExport: _handleCsvExport,
         ),
 
         // メインコンテンツ: テーブル or フォーム
@@ -185,15 +191,16 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           Expanded(child: AttributeFormView(controller: _controller))
         else ...[
           Expanded(
-            child: PlutoGrid(
+            child: TrinaGrid(
               key: _plutoGridKey,
               columns: List.of(_controller.columns),
               rows: List.of(_controller.rows),
-              mode: PlutoGridMode.normal,
+              mode: TrinaGridMode.normal,
               onLoaded: _onGridLoaded,
               onChanged: _onGridChanged,
+              onRowChecked: _onRowChecked,
               createFooter: (stateManager) {
-                return PlutoLazyPagination(
+                return TrinaLazyPagination(
                   initialPage: 1,
                   initialFetch: false,
                   fetchWithSorting: false,
@@ -213,9 +220,10 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     );
   }
 
-  void _onGridLoaded(PlutoGridOnLoadedEvent event) {
+  void _onGridLoaded(TrinaGridOnLoadedEvent event) {
     _controller.setStateManager(event.stateManager);
-    event.stateManager.setSelectingMode(PlutoGridSelectingMode.cell);
+    // 行選択モード（複数行のチェックボックス選択を許可）
+    event.stateManager.setSelectingMode(TrinaGridSelectingMode.row);
 
     // セル選択時のフィーチャ選択処理
     event.stateManager.addListener(() {
@@ -233,7 +241,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     });
   }
 
-  void _onGridChanged(PlutoGridOnChangedEvent event) async {
+  void _onGridChanged(TrinaGridOnChangedEvent event) async {
     final rowIndex = event.rowIdx;
     final field = event.column.field;
     final newValue = event.value;
@@ -279,12 +287,124 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     }
   }
 
+  /// Phase 3: 行チェック変更時
+  void _onRowChecked(TrinaGridOnRowCheckedEvent event) {
+    setState(() {});
+  }
+
+  /// Phase 3: 一括編集ダイアログ
+  Future<void> _handleBatchEdit() async {
+    final checkedCount = _controller.checkedRowCount;
+    if (checkedCount == 0) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title: '行をチェックしてください',
+        level: NotificationLevel.warning,
+      );
+      return;
+    }
+
+    final editableColumns = _controller.columnNames
+        .where((c) =>
+            !c.startsWith('_') &&
+            c.toLowerCase() != 'id' &&
+            c.toLowerCase() != 'fid')
+        .toList();
+
+    String? selectedColumn;
+    final valueController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('一括編集（$checkedCount行）'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedColumn,
+                decoration: const InputDecoration(
+                  labelText: '対象カラム',
+                  isDense: true,
+                ),
+                items: editableColumns
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => selectedColumn = v),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: valueController,
+                decoration: const InputDecoration(
+                  labelText: '設定する値',
+                  isDense: true,
+                  hintText: '空欄でNULL設定',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: selectedColumn != null
+                  ? () => Navigator.pop(ctx, true)
+                  : null,
+              child: const Text('適用'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && selectedColumn != null) {
+      final value = valueController.text.isEmpty ? null : valueController.text;
+      final count = await _controller.batchSetValue(selectedColumn!, value);
+      _rebuildGrid();
+      ref.read(notificationCenterProvider.notifier).add(
+        title: '$count件の値を更新しました',
+        level: NotificationLevel.success,
+      );
+    }
+    valueController.dispose();
+  }
+
+  /// Phase 3: CSVエクスポート
+  Future<void> _handleCsvExport() async {
+    try {
+      final csv = await _controller.exportToCsvAsync();
+      final layerName = widget.layer.layerName;
+      final timestamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .substring(0, 19);
+      final fileName = '${layerName}_$timestamp.csv';
+
+      final file = File(fileName);
+      await file.writeAsString(csv);
+
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'CSVエクスポート完了: $fileName',
+        level: NotificationLevel.success,
+      );
+    } catch (e) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title: 'CSVエクスポートエラー: $e',
+        level: NotificationLevel.error,
+      );
+    }
+  }
+
+
+
   Widget _buildStatisticsBar() {
     final editableColumns =
         _controller.columnNames.where((c) => !c.startsWith('_')).toList();
 
     return Container(
-      height: 24,
+      height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -295,8 +415,8 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       child: Row(
         children: [
           SizedBox(
-            width: 100,
-            height: 20,
+            width: 120,
+            height: 24,
             child: DropdownButtonFormField<String>(
               initialValue: _statsColumnName,
               isDense: true,
@@ -306,14 +426,14 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 border: InputBorder.none,
                 isDense: true,
               ),
-              style: const TextStyle(fontSize: 10, color: Colors.black87),
-              hint: const Text('統計カラム', style: TextStyle(fontSize: 10)),
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              hint: const Text('統計カラム', style: TextStyle(fontSize: 12)),
               items:
                   editableColumns
                       .map(
                         (c) => DropdownMenuItem(
                           value: c,
-                          child: Text(c, style: const TextStyle(fontSize: 10)),
+                          child: Text(c, style: const TextStyle(fontSize: 12)),
                         ),
                       )
                       .toList(),
@@ -349,7 +469,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       padding: const EdgeInsets.only(right: 8),
       child: Text(
         '$label: $value',
-        style: TextStyle(fontSize: 9, color: Colors.grey.shade700),
+        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
       ),
     );
   }
@@ -359,32 +479,31 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     return '$value';
   }
 
-  PlutoGridConfiguration _buildGridConfiguration() {
-    return PlutoGridConfiguration(
-      columnSize: const PlutoGridColumnSizeConfig(
-        autoSizeMode: PlutoAutoSizeMode.none,
-        resizeMode: PlutoResizeMode.normal,
+  TrinaGridConfiguration _buildGridConfiguration() {
+    return TrinaGridConfiguration(
+      columnSize: const TrinaGridColumnSizeConfig(
+        autoSizeMode: TrinaAutoSizeMode.none,
+        resizeMode: TrinaResizeMode.normal,
       ),
-      style: PlutoGridStyleConfig(
-        rowHeight: 20,
-        columnHeight: 22,
-        cellTextStyle: const TextStyle(fontSize: 10, height: 1.1),
+      style: TrinaGridStyleConfig(
+        rowHeight: 32,
+        columnHeight: 36,
+        cellTextStyle: const TextStyle(fontSize: 13, height: 1.2),
         columnTextStyle: const TextStyle(
-          fontSize: 10,
+          fontSize: 13,
           fontWeight: FontWeight.bold,
-          height: 1.1,
+          height: 1.2,
         ),
         borderColor: Colors.grey.shade300,
         activatedBorderColor: Colors.blue.shade300,
         evenRowColor: Colors.grey.shade50,
         oddRowColor: Colors.white,
       ),
-      scrollbar: const PlutoGridScrollbarConfig(
-        scrollbarThickness: 8,
-        scrollbarThicknessWhileDragging: 10,
+      scrollbar: const TrinaGridScrollbarConfig(
+        thickness: 8,
       ),
-      shortcut: const PlutoGridShortcut(actions: {}),
-      enterKeyAction: PlutoGridEnterKeyAction.none,
+      shortcut: const TrinaGridShortcut(actions: {}),
+      enterKeyAction: TrinaGridEnterKeyAction.none,
     );
   }
 }

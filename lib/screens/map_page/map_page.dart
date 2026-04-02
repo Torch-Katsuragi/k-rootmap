@@ -18,6 +18,7 @@ import '../../models/nodes/feature_node.dart';
 // gps_track.dart は不要に（GpsHistoryRecorder に統合）
 import '../../widgets/layer_drawer/layer_drawer.dart';
 import '../../widgets/resizable_side_panel.dart';
+import '../../widgets/resizable_bottom_panel.dart';
 import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/compass_fan_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
@@ -173,7 +174,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       triggerSetState(() {
         attributeTableLayer = layer;
         showAttributeTable = true;
-        drawerOpen = false;
       });
     } catch (e) {
       AppLogger.debug('[MAP] 属性テーブル表示エラー: $e');
@@ -286,6 +286,16 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       _syncFeatureSources();
     });
 
+    // 選択レイヤー変更 → 属性テーブルが開いていれば自動で切り替え
+    ref.listen<LayerNode?>(selectedLayerNodeProvider, (prev, next) {
+      if (showAttributeTable && next != null &&
+          next.layerName != attributeTableLayer?.layerName) {
+        triggerSetState(() {
+          attributeTableLayer = next;
+        });
+      }
+    });
+
     // 選択状態を監視（変更時に自動rebuild）
     final selectedFeatures = ref.watch(selectedFeaturesProvider);
 
@@ -319,8 +329,6 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
                   } else {
                     drawerOpen = true;
                     drawerWidth = 320;
-                    showAttributeTable = false;
-                    attributeTableLayer = null;
                   }
                 });
               },
@@ -334,59 +342,66 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
             ),
           ),
         ),
-        body: Stack(
+        body: Column(
           children: [
-            // 左側ツールバー
-            MapToolbar(onToolChanged: () => triggerSetState(() {})),
-            // 地図本体
-            Positioned.fill(
-              left: 44,
+            // 地図エリア（ボトムパネル表示時に縮む）
+            Expanded(
               child: Stack(
                 children: [
-                  _buildMapLibreMap(isPanTool),
-                  _buildGestureLayer(),
-                  _buildDrawingPreviewInfo(),
+                  // 左側ツールバー
+                  MapToolbar(onToolChanged: () => triggerSetState(() {})),
+                  // 地図本体
+                  Positioned.fill(
+                    left: 44,
+                    child: Stack(
+                      children: [
+                        _buildMapLibreMap(isPanTool),
+                        _buildGestureLayer(),
+                        _buildDrawingPreviewInfo(),
+                      ],
+                    ),
+                  ),
+                  // Layer Drawer Panel（右サイド — 属性テーブルとは独立）
+                  if (drawerOpen) _buildLayerDrawerPanel(),
+                  // Feature detail panel
+                  if (selectedFeatures.length == 1)
+                    Positioned(
+                      left: 60,
+                      top: 20,
+                      child: FeatureDetailPanel(feature: selectedFeatures.first),
+                    ),
+                  // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
+                  if (currentTool is DeviceTool)
+                    ListenableBuilder(
+                      listenable: currentTool,
+                      builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
+                    ),
+                  // Left bottom floating buttons
+                  Positioned(
+                    left: 56,
+                    bottom: 24,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (currentTool.name == 'GPS')
+                          GpsSurveyButtons(
+                            isLongPressing: isLongPressing,
+                            longPressGpsCount: longPressGpsCount,
+                            onRecordGpsPosition: recordGpsPosition,
+                            onStartLongPressGpsSurvey: startLongPressGpsSurvey,
+                            onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
+                            onOpenTrackExtraction: openTrackExtractionDialog,
+                          ),
+                        const LeftBottomFab(),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            // Layer Drawer Panel
-            if (drawerOpen) _buildLayerDrawerPanel(),
-            // Attribute Table Panel
+            // 属性テーブル（ボトムパネル — レイヤードロワーとは独立）
             if (showAttributeTable && attributeTableLayer != null)
               _buildAttributeTablePanel(),
-            // Feature detail panel
-            if (selectedFeatures.length == 1)
-              Positioned(
-                left: 60,
-                top: 20,
-                child: FeatureDetailPanel(feature: selectedFeatures.first),
-              ),
-            // 外部機器ツールのステータスパネル（DeviceTool抽象経由）
-            if (currentTool is DeviceTool)
-              ListenableBuilder(
-                listenable: currentTool,
-                builder: (ctx, _) => currentTool.buildStatusPanel(ctx),
-              ),
-            // Left bottom floating buttons
-            Positioned(
-              left: 56,
-              bottom: 24,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (currentTool.name == 'GPS')
-                    GpsSurveyButtons(
-                      isLongPressing: isLongPressing,
-                      longPressGpsCount: longPressGpsCount,
-                      onRecordGpsPosition: recordGpsPosition,
-                      onStartLongPressGpsSurvey: startLongPressGpsSurvey,
-                      onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
-                      onOpenTrackExtraction: openTrackExtractionDialog,
-                    ),
-                  const LeftBottomFab(),
-                ],
-              ),
-            ),
           ],
         ),
         floatingActionButton: DrawingActionButtons(
@@ -1142,55 +1157,65 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
   /// レイヤードロワーパネル構築
   Widget _buildLayerDrawerPanel() {
-    return ResizableSidePanel(
-      initialWidth: drawerWidth,
-      minWidth: minDrawerWidth,
-      maxWidthRatio: 0.67,
-      initiallyOpen: drawerOpen,
-      backgroundColor: Colors.white.withValues(alpha: 0.9),
-      handleColor: Colors.black.withValues(alpha: 0.08),
-      onOpenChanged: (isOpen) {
-        triggerSetState(() {
-          drawerOpen = isOpen;
-        });
-      },
-      onWidthChanged: (width) {
-        triggerSetState(() {
-          drawerWidth = width;
-        });
-      },
-      child: LayerDrawer(
-        currentNode: currentNode,
-        onDirChanged: (node) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxWidth = screenWidth * 0.67;
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: drawerWidth.clamp(minDrawerWidth, maxWidth),
+      child: ResizableSidePanel(
+        initialWidth: drawerWidth,
+        minWidth: minDrawerWidth,
+        maxWidth: maxWidth,
+        backgroundColor: Colors.white.withValues(alpha: 0.9),
+        handleColor: Colors.black.withValues(alpha: 0.08),
+        onOpenChanged: (isOpen) {
           triggerSetState(() {
-            currentNode = node;
+            drawerOpen = isOpen;
           });
         },
-        onJumpTo: (latLng) {
-          mapController.move(latLng, mapController.camera.zoom);
+        onWidthChanged: (width) {
+          triggerSetState(() {
+            drawerWidth = width;
+          });
         },
-        onStartAppendMode: (feature) {
-          startAppendMode(feature);
-        },
+        child: LayerDrawer(
+          currentNode: currentNode,
+          onDirChanged: (node) {
+            triggerSetState(() {
+              currentNode = node;
+            });
+          },
+          onJumpTo: (latLng) {
+            mapController.move(latLng, mapController.camera.zoom);
+          },
+          onStartAppendMode: (feature) {
+            startAppendMode(feature);
+          },
+        ),
       ),
     );
   }
 
-  /// 属性テーブルパネル構築
+  /// 属性テーブルパネル構築（ボトムパネル）
   Widget _buildAttributeTablePanel() {
-    return ResizableSidePanel(
-      initialWidth: attributeTableWidth,
-      minWidth: 300,
-      maxWidthRatio: 0.8,
-      initiallyOpen: showAttributeTable,
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.7;
+    return ResizableBottomPanel(
+      initialHeight: attributeTableHeight.clamp(120.0, maxHeight),
+      minHeight: 120,
+      maxHeight: maxHeight,
+      backgroundColor: Colors.white.withValues(alpha: 0.9),
+      handleColor: Colors.black.withValues(alpha: 0.08),
       onOpenChanged: (isOpen) {
         if (!isOpen) {
           _closeAttributeTable();
         }
       },
-      onWidthChanged: (width) {
+      onHeightChanged: (height) {
         triggerSetState(() {
-          attributeTableWidth = width;
+          attributeTableHeight = height;
         });
       },
       child: AttributeTableWidget(

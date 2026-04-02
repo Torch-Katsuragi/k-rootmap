@@ -133,8 +133,8 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 属性テーブル表示フラグ
   bool showAttributeTable = false;
 
-  /// 属性テーブル幅
-  double attributeTableWidth = 400;
+  /// 属性テーブル高さ
+  double attributeTableHeight = 350;
 
   /// 属性テーブル対象レイヤー
   LayerNode? attributeTableLayer;

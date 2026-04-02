@@ -52,3 +52,4 @@ KEYSTORE_HINT.txt
 
 # Native build cache
 **/.cxx/
+**/.gradle/

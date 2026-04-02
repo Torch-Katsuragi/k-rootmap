@@ -302,4 +302,3 @@ class FeatureDetailPanel extends ConsumerWidget {
   }
 }
 
-

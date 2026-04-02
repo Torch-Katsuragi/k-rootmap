@@ -51,5 +51,5 @@ tags: [index, navigation]
 
 - `README.md` - プロジェクト概要・機能一覧
 - `TODO.md` - タスク管理
-- `CLAUDE.md` - AI開発ガイドライン
+- `AGENTS.md` - AI開発ガイドライン
 

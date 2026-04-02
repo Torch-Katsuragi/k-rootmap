@@ -654,4 +654,3 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   }
 }
 
-

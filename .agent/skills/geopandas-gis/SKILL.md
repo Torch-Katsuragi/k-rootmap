@@ -18,7 +18,7 @@ upstream:
 
 ```powershell
 py -3 -m venv "$env:USERPROFILE\.venvs\geopandas-gis"
-& "$env:USERPROFILE\.venvs\geopandas-gis\Scripts\pip.exe" install -r ".claude/skills/geopandas-gis/scripts/requirements.txt"
+& "$env:USERPROFILE\.venvs\geopandas-gis\Scripts\pip.exe" install -r ".agent/skills/geopandas-gis/scripts/requirements.txt"
 ```
 
 Windows on ARM でホイールが不安定なら **x64 版 Python** で同様に作る（AGENTS.md）。
@@ -30,7 +30,7 @@ Windows on ARM でホイールが不安定なら **x64 版 Python** で同様に
 ```powershell
 $env:PYTHONUTF8 = "1"
 $py = "$env:USERPROFILE\.venvs\geopandas-gis\Scripts\python.exe"
-$script = ".claude/skills/geopandas-gis/scripts/gpd_tool.py"
+$script = ".agent/skills/geopandas-gis/scripts/gpd_tool.py"
 ```
 
 ### よく使う例

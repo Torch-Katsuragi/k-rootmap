@@ -27,12 +27,7 @@ class PhotoTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
       leading: NodeVisibilityIcon(node: node),
-      title: Text(
-        node.name,
-        style: node.hasLocation
-            ? null
-            : const TextStyle(fontStyle: FontStyle.italic),
-      ),
+      title: Text(node.name),
       subtitle: node.hasLocation
           ? null
           : const Text('位置情報なし', style: TextStyle(fontSize: 11)),

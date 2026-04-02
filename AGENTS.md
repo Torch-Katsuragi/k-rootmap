@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## 会話ルール
 
@@ -32,7 +32,7 @@ Flutter製の地図アプリ（k_maps）。Windows/Android対応。
 
 - `TODO.md` - タスク管理
 - `docs/` - 設計書・技術資料（[[docs/index|目次]]）
-- `.claude/skills/` - エージェントスキル
+- `.agent/skills/` - エージェントスキル
 
 ## よく使うパターン
 

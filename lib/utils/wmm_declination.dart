@@ -173,7 +173,7 @@ class _WmmCalculator {
       _snorm[0][n] = _snorm[0][n - 1] * (2 * n - 1) / n;
       var j = 2;
       var m = 0;
-      for (var D2 = (n - m + 1); D2 > 0; D2--, m++) {
+      for (var d2 = (n - m + 1); d2 > 0; d2--, m++) {
         _k[m][n] = (((n - 1) * (n - 1)) - (m * m)) /
             ((2 * n - 1) * (2 * n - 3));
         if (m > 0) {
@@ -240,7 +240,7 @@ class _WmmCalculator {
     for (var n = 1; n <= _maxord; n++) {
       ar *= _re / r;
       var m = 0;
-      for (var D4 = (n + m + 1); D4 > 0; D4--, m++) {
+      for (var d4 = (n + m + 1); d4 > 0; d4--, m++) {
         if (n == m) {
           p[m][n] = st * p[m - 1][n - 1];
           dp[m][n] = st * dp[m - 1][n - 1] + ct * p[m - 1][n - 1];

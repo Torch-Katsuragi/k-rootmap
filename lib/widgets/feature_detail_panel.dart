@@ -189,15 +189,18 @@ class FeatureDetailPanel extends ConsumerWidget {
 
       final children = <Widget>[
         for (final entry in filteredEntries)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${entry.key}: ',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Expanded(child: Text(entry.value)),
-            ],
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${entry.key}: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Expanded(child: Text(entry.value)),
+              ],
+            ),
           ),
       ];
 

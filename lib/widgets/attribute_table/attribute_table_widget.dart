@@ -322,6 +322,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
                 value: selectedColumn,
                 decoration: const InputDecoration(
                   labelText: '対象カラム',

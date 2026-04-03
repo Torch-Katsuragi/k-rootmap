@@ -139,7 +139,7 @@ class _TraversePrecisionBar extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              '導線: ${pointCount}点',
+              '導線: $pointCount点',
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
           ],

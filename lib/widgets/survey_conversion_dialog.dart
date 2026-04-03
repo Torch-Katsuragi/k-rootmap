@@ -119,6 +119,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               if (widget.chains.length > 1) ...[
                 const _SectionHeader('測量チェーン'),
                 DropdownButtonFormField<TraverseChain>(
+                  // ignore: deprecated_member_use
                   value: _selectedChain,
                   items: widget.chains.asMap().entries.map((e) {
                     final c = e.value;
@@ -191,9 +192,11 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                           title: Text(_methodLabel(m)),
                           subtitle: Text(_methodDescription(m), style: const TextStyle(fontSize: 11)),
                           value: m,
+                          // ignore: deprecated_member_use
                           groupValue: _method,
                           dense: true,
                           contentPadding: EdgeInsets.zero,
+                          // ignore: deprecated_member_use
                           onChanged: (v) {
                             if (v != null) setState(() => _method = v);
                           },

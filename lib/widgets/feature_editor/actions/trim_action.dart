@@ -14,6 +14,7 @@ import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../utils/app_logger.dart';
 import '../feature_edit_action.dart';
+import '../shared/sub_table_helper.dart';
 
 class TrimAction extends FeatureEditAction {
   @override
@@ -55,6 +56,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
   late RangeValues _range;
   List<LatLng> _trimmedLine = [];
   bool _isApplying = false;
+  String? _originalSubTableJson;
 
   @override
   void initState() {
@@ -62,9 +64,16 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
     _fullLine = widget.feature.line;
     _range = RangeValues(0, (_fullLine.length - 1).toDouble());
     _updateTrimmed();
+    _loadSubTable();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _notifyPreview();
     });
+  }
+
+  Future<void> _loadSubTable() async {
+    _originalSubTableJson = await SubTableHelper.getSubTableJson(
+      widget.feature,
+    );
   }
 
   void _updateTrimmed() {
@@ -90,6 +99,23 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
     try {
       final success = await widget.feature.updateLine(_trimmedLine);
       if (!success) throw Exception('ジオメトリの更新に失敗しました');
+
+      // sub_tableもトリム範囲に合わせて更新
+      if (_originalSubTableJson != null) {
+        final start = _range.start.round();
+        final end = _range.end.round();
+        final trimmedSubTable = SubTableHelper.trimSubTable(
+          _originalSubTableJson!,
+          start,
+          end,
+        );
+        if (trimmedSubTable != null) {
+          await SubTableHelper.setSubTableJson(
+            widget.feature,
+            trimmedSubTable,
+          );
+        }
+      }
 
       AppLogger.debug('[TrimAction] 適用完了: ${widget.feature.name}');
 

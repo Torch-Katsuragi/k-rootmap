@@ -219,6 +219,82 @@ abstract class FeatureNode extends LayerTreeNode {
     }
   }
 
+  /// sub_tableからタイムスタンプ範囲を取得する（同期）
+  ///
+  /// sub_tableが存在し、各エントリにtimestampフィールドがある場合、
+  /// 最初と最後のタイムスタンプ、および所要時間を返す。
+  /// GeoJSON FeatureCollection形式と旧2D配列形式の両方に対応。
+  String? _getSubTableTimeRange() {
+    try {
+      final subTableValue = turfFeature.properties?['sub_table'];
+      if (subTableValue == null || subTableValue is! String || subTableValue.isEmpty) {
+        return null;
+      }
+
+      final timestamps = <DateTime>[];
+      final decoded = jsonDecode(subTableValue);
+
+      // GeoJSON FeatureCollection形式
+      if (decoded is Map && decoded['type'] == 'FeatureCollection') {
+        final features = decoded['features'] as List;
+        for (final f in features) {
+          final props = f['properties'] as Map?;
+          if (props == null) continue;
+          final ts = props['timestamp'] ?? props['time'] ?? props['datetime'];
+          if (ts is String && ts.isNotEmpty) {
+            final dt = DateTime.tryParse(ts);
+            if (dt != null) timestamps.add(dt);
+          }
+        }
+      }
+      // 旧2D配列形式: [[headers], [row1], ...]
+      else if (decoded is List && decoded.isNotEmpty && decoded.first is List) {
+        final headers = (decoded.first as List).cast<String>();
+        final tsIndex = headers.indexWhere(
+          (h) => h == 'timestamp' || h == 'time' || h == 'datetime',
+        );
+        if (tsIndex >= 0) {
+          for (final row in decoded.skip(1)) {
+            if (row is List && tsIndex < row.length) {
+              final ts = row[tsIndex];
+              if (ts is String && ts.isNotEmpty) {
+                final dt = DateTime.tryParse(ts);
+                if (dt != null) timestamps.add(dt);
+              }
+            }
+          }
+        }
+      }
+
+      if (timestamps.length < 2) return null;
+
+      timestamps.sort();
+      final first = timestamps.first;
+      final last = timestamps.last;
+      final duration = last.difference(first);
+
+      // フォーマット
+      String fmt(DateTime dt) =>
+          '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}:'
+          '${dt.second.toString().padLeft(2, '0')}';
+
+      String fmtDuration(Duration d) {
+        if (d.inHours > 0) {
+          return '${d.inHours}時間${d.inMinutes % 60}分';
+        } else if (d.inMinutes > 0) {
+          return '${d.inMinutes}分${d.inSeconds % 60}秒';
+        }
+        return '${d.inSeconds}秒';
+      }
+
+      return '${fmt(first)} 〜 ${fmt(last)} (${fmtDuration(duration)})';
+    } catch (e) {
+      // パース失敗時は表示しない
+      return null;
+    }
+  }
+
   /// 属性値の取得（turf_dartのpropertiesから）
   Future<dynamic> getAttributeValue(String attributeName) async {
     if (_isDisposed) return null;
@@ -432,6 +508,7 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 親LayerNode
+  // ignore: overridden_fields
   @override
   final LayerNode parent;
 
@@ -751,6 +828,12 @@ class LineFeatureNode extends FeatureNode {
     // 頂点数情報
     details['vertex_count'] = '${line.length}';
 
+    // sub_tableタイムスタンプ範囲
+    final timeRange = _getSubTableTimeRange();
+    if (timeRange != null) {
+      details['timestamp'] = timeRange;
+    }
+
     return details;
   }
   
@@ -989,6 +1072,12 @@ class PolygonFeatureNode extends FeatureNode {
       return sum + (ring.length > 1 ? ring.length - 1 : ring.length);
     });
     details['vertex_count'] = '$totalVertices';
+
+    // sub_tableタイムスタンプ範囲
+    final timeRange = _getSubTableTimeRange();
+    if (timeRange != null) {
+      details['timestamp'] = timeRange;
+    }
 
     return details;
   }

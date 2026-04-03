@@ -15,6 +15,7 @@ import '../../../providers/ui_state_providers.dart';
 import '../../../utils/app_logger.dart';
 import '../feature_edit_action.dart';
 import '../shared/simplification_controls.dart';
+import '../shared/sub_table_helper.dart';
 
 class SimplifyAction extends FeatureEditAction {
   @override
@@ -53,11 +54,13 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
   List<LatLng> _originalLine = [];
   List<LatLng> _simplified = [];
   bool _isApplying = false;
+  String? _originalSubTableJson;
 
   @override
   void initState() {
     super.initState();
     _originalLine = _extractLine(widget.feature);
+    _loadSubTable();
     // 初期プレビューを設定（フレーム後に通知）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.previewLines.value = PreviewLines(
@@ -65,6 +68,12 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
         foregroundLine: _originalLine,
       );
     });
+  }
+
+  Future<void> _loadSubTable() async {
+    _originalSubTableJson = await SubTableHelper.getSubTableJson(
+      widget.feature,
+    );
   }
 
   List<LatLng> _extractLine(FeatureNode feature) {
@@ -101,6 +110,22 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
       }
 
       if (!success) throw Exception('ジオメトリの更新に失敗しました');
+
+      // sub_tableも簡略化後の頂点に合わせてフィルタ
+      if (_originalSubTableJson != null) {
+        final filteredSubTable =
+            SubTableHelper.filterSubTableBySimplification(
+          _originalSubTableJson!,
+          _originalLine,
+          _simplified,
+        );
+        if (filteredSubTable != null) {
+          await SubTableHelper.setSubTableJson(
+            widget.feature,
+            filteredSubTable,
+          );
+        }
+      }
 
       AppLogger.debug('[SimplifyAction] 適用完了: ${widget.feature.name}');
 

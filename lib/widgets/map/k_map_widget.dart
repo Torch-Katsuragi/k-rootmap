@@ -43,22 +43,32 @@ class KMapWidget extends StatefulWidget {
 class _KMapWidgetState extends State<KMapWidget> {
   final KMapController _controller = KMapController();
 
+  /// maplibre_webview の didUpdateWidget は webViewController（late フィールド）
+  /// が初期化される前でも呼ばれる。options/layers/children が前回と異なると
+  /// webViewController にアクセスして LateInitializationError が発生するため、
+  /// onMapCreated 完了まで全パラメータを初回値に固定する。
+  bool _isMapCreated = false;
+  late final ml.MapOptions _initialOptions = widget.options;
+
   @override
   Widget build(BuildContext context) {
     return ml.MapLibreMap(
-      options: widget.options,
+      options: _isMapCreated ? widget.options : _initialOptions,
       gestureRecognizers: widget.gestureRecognizers,
       onMapCreated: (controller) {
         _controller.attach(controller);
         widget.onMapCreated?.call(_controller);
+        if (!_isMapCreated) {
+          setState(() => _isMapCreated = true);
+        }
       },
       onStyleLoaded: (style) async {
         _controller.attachStyle(style);
         await widget.onStyleLoaded?.call(_controller, style);
       },
       onEvent: widget.onEvent,
-      layers: widget.layers,
-      children: widget.children,
+      layers: _isMapCreated ? widget.layers : const [],
+      children: _isMapCreated ? widget.children : const [],
     );
   }
 }

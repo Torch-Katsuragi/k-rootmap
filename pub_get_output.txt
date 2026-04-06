@@ -1,7 +1,0 @@
-Resolving dependencies...
-Because k_maps depends on shapefile ^0.0.7 which doesn't match any versions, version solving failed.
-
-
-You can try the following suggestion to make the pubspec resolve:
-* Try upgrading your constraint on shapefile: flutter pub add shapefile:^1.0.1
-Failed to update packages.

@@ -53,3 +53,9 @@ KEYSTORE_HINT.txt
 # Native build cache
 **/.cxx/
 **/.gradle/
+
+# Temporary output files
+.temp/
+
+# Code generation (build_runner)
+*.g.dart

@@ -10,6 +10,7 @@ import 'folder_node.dart';
 import '../../core/node_types.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
+import 'overlay_image_node.dart';
 
 // ExifParserからクラスを再エクスポート（後方互換性のため）
 export '../../utils/exif_parser.dart' show ExifImageData, ImageMetadata;
@@ -95,6 +96,7 @@ class ImageNode extends LayerTreeNode {
   bool get fileExists => File(filePath).existsSync();
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
+  /// KMetaにオーバーレイ設定がある画像はOverlayImageNodeとして生成
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
@@ -114,18 +116,39 @@ class ImageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
+    // KMetaからオーバーレイ設定を読み込み
+    final kmeta = await KMetaService.instance.getRawMeta(absPath);
+    final overlays = kmeta?.imageOverlays ?? {};
+
     for (var entity in imageFiles) {
       try {
+        final fileName = p.basename(entity.path);
         final exifData = await ExifParser.extractFromFile(entity.path);
-        nodes.add(ImageNode(
-          entity.path,
-          exifData?.location,
-          exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync()),
-          takenAt: exifData?.takenAt,
-          direction: exifData?.direction,
-          visible: true,
-          parent: parent,
-        ));
+        final meta = exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync());
+
+        if (overlays.containsKey(fileName)) {
+          // オーバーレイ設定があればOverlayImageNodeとして生成
+          nodes.add(OverlayImageNode(
+            entity.path,
+            exifData?.location,
+            meta,
+            overlayParams: overlays[fileName]!,
+            takenAt: exifData?.takenAt,
+            direction: exifData?.direction,
+            visible: true,
+            parent: parent,
+          ));
+        } else {
+          nodes.add(ImageNode(
+            entity.path,
+            exifData?.location,
+            meta,
+            takenAt: exifData?.takenAt,
+            direction: exifData?.direction,
+            visible: true,
+            parent: parent,
+          ));
+        }
       } catch (e) {
         AppLogger.debug('[ImageNode] failed: ${p.basename(entity.path)}: $e');
       }

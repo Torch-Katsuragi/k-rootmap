@@ -1,6 +1,8 @@
 // 地図画面の左側ツールバーウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/nodes/overlay_image_node.dart';
+import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
 import '../providers/device_tool_providers.dart';
 
@@ -8,6 +10,7 @@ import '../providers/device_tool_providers.dart';
 ///
 /// 固定ツール（Pan, Pen, Select, GPS）に加え、
 /// 接続中の外部機器ツール（[DeviceTool]）を動的に表示する。
+/// OverlayImageNode選択中はOverlay Transformツールも表示する。
 class MapToolbar extends ConsumerWidget {
   final VoidCallback onToolChanged;
 
@@ -20,6 +23,8 @@ class MapToolbar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTool = ref.watch(currentToolProvider);
     final deviceTools = ref.watch(connectedDeviceToolsProvider);
+    final selectedFeatures = ref.watch(selectedFeaturesProvider);
+    final hasOverlaySelected = selectedFeatures.any((n) => n is OverlayImageNode);
 
     return Positioned(
       left: 0,
@@ -71,6 +76,23 @@ class MapToolbar extends ConsumerWidget {
                 onToolChanged();
               },
             ),
+            // OverlayImageNode選択中のみ表示
+            if (hasOverlaySelected) ...[
+              const SizedBox(height: 8),
+              _ToolButton(
+                icon: Icons.transform,
+                tooltip: 'Overlay Transform',
+                isSelected: currentTool.name == 'Overlay Transform',
+                onPressed: () {
+                  final tool = ref.read(overlayTransformToolProvider);
+                  // 選択中のOverlayImageNodeをターゲットに設定
+                  final overlay = selectedFeatures.whereType<OverlayImageNode>().firstOrNull;
+                  tool.setTarget(overlay);
+                  ref.read(currentToolProvider.notifier).set(tool);
+                  onToolChanged();
+                },
+              ),
+            ],
             // 接続中の外部機器ツールを動的に表示
             for (final dt in deviceTools) ...[
               const SizedBox(height: 8),

@@ -352,4 +352,29 @@ class KMetaService {
     }
     return null;
   }
+
+  /// 画像オーバーレイ設定を保存
+  Future<bool> setImageOverlay(
+    String folderPath,
+    String imageName,
+    KMetaImageOverlay overlay,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
+    updatedOverlays[imageName] = overlay;
+    final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// 画像オーバーレイ設定を削除（通常のImageNodeに戻す）
+  Future<bool> removeImageOverlay(
+    String folderPath,
+    String imageName,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updatedOverlays = Map<String, KMetaImageOverlay>.from(rawMeta.imageOverlays);
+    updatedOverlays.remove(imageName);
+    final updatedMeta = rawMeta.copyWith(imageOverlays: updatedOverlays);
+    return saveMeta(folderPath, updatedMeta);
+  }
 }

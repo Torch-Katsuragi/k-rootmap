@@ -351,6 +351,15 @@
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）
 - [ ] 国土地理院DEMタイル → Terrain-RGB変換の実装・検証
 - [ ] Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）
+  - **Windows対応一時中断**（2026/04/07）: maplibre_webview の WebView2 実装に起因する問題（setMinZoom レースコンディション、灰色画面）のため、当面 Android 特化で開発。Windows 対応は maplibre_webview の安定化を待って再開。
+
+### OverlayImageNode（2026/04/07）
+
+- [x] ImageNode → OverlayImageNode変換後の即時マップ反映
+  - [x] addChildIfNotExists: runtimeType変更時にノード入れ替え（ImageNode→OverlayImageNode）
+  - [x] PhotoTile: 変換後にparent.updateChildren()で親フォルダを再スキャン
+- [ ] OverlayTransformTool: ハンドルベースの移動・拡縮・回転UI
+- [ ] オーバーレイ設定ダイアログ: 不透明度・位置パラメータの調整UI
 
 ## 内部テスト（Google Play）
 

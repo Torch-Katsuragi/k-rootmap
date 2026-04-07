@@ -68,6 +68,17 @@ class SelectTool extends MapTool {
       }
     }
 
+    // オーバーレイ画像: 矩形領域内のタップ判定
+    for (final overlay in mapState.overlayImageNodes) {
+      final corners = overlay.cornerCoordinates;
+      // 4頂点のリングで簡易ポイントインポリゴン判定
+      final ring = [...corners, corners[0]];
+      if (GeometryCalc.pointInPolygonWithHoles(tapLatLng, [ring])) {
+        final d = GeometryCalc.calcDistance(tapLatLng, overlay.location!);
+        candidates.add((priority: 0, distance: d, node: overlay));
+      }
+    }
+
     for (final f in mapState.lineFeatures) {
       if (f.isDisposed) continue;
       final d = FeatureSearch.calcPointToFeatureDistance(

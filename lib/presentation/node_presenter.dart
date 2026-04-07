@@ -7,6 +7,7 @@ import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/drive_folder_node.dart';
+import '../models/nodes/overlay_image_node.dart';
 
 /// Drive連携UIのテーマカラー（彩度控えめ・明度高めのモダンな青）
 const Color cloudColor = Color(0xFF7EB0D5);
@@ -58,6 +59,9 @@ class NodePresenter {
     if (node is LineFeatureNode) return Icons.timeline;
     if (node is PolygonFeatureNode) return Icons.crop_square;
     
+    // オーバーレイ画像ノードは地図画像アイコン
+    if (node is OverlayImageNode) return Icons.image;
+    
     // 基本タイプのアイコン
     return getIconForType(node.nodeType);
   }
@@ -103,6 +107,9 @@ class NodePresenter {
     if (node is PointFeatureNode) return Colors.red;
     if (node is LineFeatureNode) return Colors.blueGrey;
     if (node is PolygonFeatureNode) return Colors.orange;
+    
+    // オーバーレイ画像ノードはtealで差別化
+    if (node is OverlayImageNode) return Colors.teal;
     
     // 基本タイプの色
     return getColorForType(node.nodeType);

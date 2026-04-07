@@ -4,6 +4,7 @@ import '../tools/pan_tool.dart';
 import '../tools/pen_tool.dart';
 import '../tools/select_tool.dart';
 import '../tools/gps_tool.dart';
+import '../tools/overlay_transform_tool.dart';
 
 part 'tool_providers.g.dart';
 
@@ -18,6 +19,9 @@ SelectTool selectTool(Ref ref) => SelectTool(ref);
 
 @Riverpod(keepAlive: true)
 GpsTool gpsTool(Ref ref) => GpsTool(ref);
+
+@Riverpod(keepAlive: true)
+OverlayTransformTool overlayTransformTool(Ref ref) => OverlayTransformTool(ref);
 
 @Riverpod(keepAlive: true)
 class CurrentTool extends _$CurrentTool {

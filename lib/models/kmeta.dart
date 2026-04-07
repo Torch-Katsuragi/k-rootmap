@@ -497,6 +497,87 @@ class KMetaSync {
   }
 }
 
+/// 画像オーバーレイの変換パラメータ
+class KMetaImageOverlay {
+  /// 画像の中心座標（経度）
+  final double centerLng;
+
+  /// 画像の中心座標（緯度）
+  final double centerLat;
+
+  /// スケール（メートル/ピクセル）
+  final double scale;
+
+  /// 回転角度（度、時計回り）
+  final double rotation;
+
+  /// 不透明度（0.0〜1.0）
+  final double opacity;
+
+  /// 画像幅（ピクセル）
+  final int imageWidth;
+
+  /// 画像高さ（ピクセル）
+  final int imageHeight;
+
+  const KMetaImageOverlay({
+    required this.centerLng,
+    required this.centerLat,
+    this.scale = 1.0,
+    this.rotation = 0.0,
+    this.opacity = 0.7,
+    required this.imageWidth,
+    required this.imageHeight,
+  });
+
+  /// JSONからパース
+  factory KMetaImageOverlay.fromJson(Map<String, dynamic> json) {
+    return KMetaImageOverlay(
+      centerLng: (json['centerLng'] as num).toDouble(),
+      centerLat: (json['centerLat'] as num).toDouble(),
+      scale: (json['scale'] as num?)?.toDouble() ?? 1.0,
+      rotation: (json['rotation'] as num?)?.toDouble() ?? 0.0,
+      opacity: (json['opacity'] as num?)?.toDouble() ?? 0.7,
+      imageWidth: json['imageWidth'] as int,
+      imageHeight: json['imageHeight'] as int,
+    );
+  }
+
+  /// JSONへシリアライズ
+  Map<String, dynamic> toJson() {
+    return {
+      'centerLng': centerLng,
+      'centerLat': centerLat,
+      'scale': scale,
+      'rotation': rotation,
+      'opacity': opacity,
+      'imageWidth': imageWidth,
+      'imageHeight': imageHeight,
+    };
+  }
+
+  /// コピーを作成
+  KMetaImageOverlay copyWith({
+    double? centerLng,
+    double? centerLat,
+    double? scale,
+    double? rotation,
+    double? opacity,
+    int? imageWidth,
+    int? imageHeight,
+  }) {
+    return KMetaImageOverlay(
+      centerLng: centerLng ?? this.centerLng,
+      centerLat: centerLat ?? this.centerLat,
+      scale: scale ?? this.scale,
+      rotation: rotation ?? this.rotation,
+      opacity: opacity ?? this.opacity,
+      imageWidth: imageWidth ?? this.imageWidth,
+      imageHeight: imageHeight ?? this.imageHeight,
+    );
+  }
+}
+
 /// フォルダメタデータ（.kmeta.json）
 class KMeta {
   /// スキーマバージョン
@@ -514,12 +595,16 @@ class KMeta {
   /// 同期設定
   final KMetaSync sync;
 
+  /// 画像オーバーレイ設定（画像ファイル名 → 変換パラメータ）
+  final Map<String, KMetaImageOverlay> imageOverlays;
+
   const KMeta({
     this.version = kMetaSchemaVersion,
     this.visibility = const KMetaVisibility(),
     this.styles = const KMetaStyles(),
     this.layout = const KMetaLayout(),
     this.sync = const KMetaSync(),
+    this.imageOverlays = const {},
   });
 
   /// 空のメタデータ
@@ -527,6 +612,17 @@ class KMeta {
 
   /// JSONからパース
   factory KMeta.fromJson(Map<String, dynamic> json) {
+    // 画像オーバーレイをパース
+    final overlaysJson = json['imageOverlays'] as Map<String, dynamic>?;
+    final overlays = <String, KMetaImageOverlay>{};
+    if (overlaysJson != null) {
+      for (final entry in overlaysJson.entries) {
+        overlays[entry.key] = KMetaImageOverlay.fromJson(
+          entry.value as Map<String, dynamic>,
+        );
+      }
+    }
+
     return KMeta(
       version: json['version'] as int? ?? kMetaSchemaVersion,
       visibility: KMetaVisibility.fromJson(
@@ -535,6 +631,7 @@ class KMeta {
       styles: KMetaStyles.fromJson(json['styles'] as Map<String, dynamic>?),
       layout: KMetaLayout.fromJson(json['layout'] as Map<String, dynamic>?),
       sync: KMetaSync.fromJson(json['sync'] as Map<String, dynamic>?),
+      imageOverlays: overlays,
     );
   }
 
@@ -545,6 +642,11 @@ class KMeta {
     if (!styles.isEmpty) json['styles'] = styles.toJson();
     if (!layout.isEmpty) json['layout'] = layout.toJson();
     if (!sync.isEmpty) json['sync'] = sync.toJson();
+    if (imageOverlays.isNotEmpty) {
+      json['imageOverlays'] = imageOverlays.map(
+        (k, v) => MapEntry(k, v.toJson()),
+      );
+    }
     return json;
   }
 
@@ -557,6 +659,7 @@ class KMeta {
       styles: styles.mergeWith(parent.styles),
       layout: layout.mergeWith(parent.layout),
       sync: sync.mergeWith(parent.sync),
+      imageOverlays: imageOverlays, // 継承しない（各フォルダ独立管理）
     );
   }
 
@@ -593,7 +696,8 @@ class KMeta {
 
   /// 空かどうか
   bool get isEmpty =>
-      visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty;
+      visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
+      imageOverlays.isEmpty;
 
   /// 特定レイヤーのスタイルを取得（デフォルト適用済み）
   /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
@@ -619,6 +723,7 @@ class KMeta {
     KMetaStyles? styles,
     KMetaLayout? layout,
     KMetaSync? sync,
+    Map<String, KMetaImageOverlay>? imageOverlays,
   }) {
     return KMeta(
       version: version ?? this.version,
@@ -626,6 +731,7 @@ class KMeta {
       styles: styles ?? this.styles,
       layout: layout ?? this.layout,
       sync: sync ?? this.sync,
+      imageOverlays: imageOverlays ?? this.imageOverlays,
     );
   }
 }

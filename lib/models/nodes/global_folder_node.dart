@@ -12,8 +12,11 @@ import 'layer_tree_node.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
+import 'overlay_image_node.dart';
 import '../geopackage/geopackage_file.dart';
+import '../kmeta.dart';
 import '../../core/path_resolver.dart';
+import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
 
 /// グローバルフォルダ内サブフォルダのDrive連携チェック
@@ -197,10 +200,20 @@ class GlobalFolderNode extends FolderNode {
     }
     imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
+    // KMetaからオーバーレイ設定を読み込み
+    final kmeta = await KMetaService.instance.getRawMeta(globalPath);
+    final overlays = kmeta?.imageOverlays ?? {};
+
     for (final entity in imageFiles) {
-      final node = await GlobalImageNode.fromPath(entity.path, parent: this);
-      if (node != null) {
-        nodes.add(node);
+      final fileName = p.basename(entity.path);
+      if (overlays.containsKey(fileName)) {
+        final node = await GlobalOverlayImageNode._fromPath(
+          entity.path, overlays[fileName]!, parent: this,
+        );
+        if (node != null) nodes.add(node);
+      } else {
+        final node = await GlobalImageNode.fromPath(entity.path, parent: this);
+        if (node != null) nodes.add(node);
       }
     }
     return nodes;
@@ -378,10 +391,20 @@ class GlobalSubFolderNode extends FolderNode {
     }
     imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
+    // KMetaからオーバーレイ設定を読み込み
+    final kmeta = await KMetaService.instance.getRawMeta(absPath);
+    final overlays = kmeta?.imageOverlays ?? {};
+
     for (final entity in imageFiles) {
-      final node = await GlobalImageNode.fromPath(entity.path, parent: this);
-      if (node != null) {
-        nodes.add(node);
+      final fileName = p.basename(entity.path);
+      if (overlays.containsKey(fileName)) {
+        final node = await GlobalOverlayImageNode._fromPath(
+          entity.path, overlays[fileName]!, parent: this,
+        );
+        if (node != null) nodes.add(node);
+      } else {
+        final node = await GlobalImageNode.fromPath(entity.path, parent: this);
+        if (node != null) nodes.add(node);
       }
     }
     return nodes;
@@ -461,6 +484,47 @@ class GlobalImageNode extends ImageNode {
       );
     } catch (e) {
       AppLogger.debug('[GlobalImageNode] Error loading image: $e');
+      return null;
+    }
+  }
+}
+
+/// グローバルフォルダ用のオーバーレイ画像ノード
+class GlobalOverlayImageNode extends OverlayImageNode {
+  GlobalOverlayImageNode._(
+    super.filePath,
+    super.location,
+    super.metadata, {
+    required super.overlayParams,
+    super.takenAt,
+    super.direction,
+    super.visible,
+    super.parent,
+  });
+
+  /// 絶対パスからGlobalOverlayImageNodeを作成
+  static Future<GlobalOverlayImageNode?> _fromPath(
+    String absolutePath,
+    KMetaImageOverlay overlayParams, {
+    LayerTreeNode? parent,
+  }) async {
+    final file = File(absolutePath);
+    if (!file.existsSync()) return null;
+
+    try {
+      final exifData = await ExifParser.extractFromFile(absolutePath);
+      return GlobalOverlayImageNode._(
+        absolutePath,
+        exifData?.location,
+        exifData?.metadata ?? ImageMetadata(fileSize: file.lengthSync()),
+        overlayParams: overlayParams,
+        takenAt: exifData?.takenAt,
+        direction: exifData?.direction,
+        visible: true,
+        parent: parent,
+      );
+    } catch (e) {
+      AppLogger.debug('[GlobalOverlayImageNode] Error loading image: $e');
       return null;
     }
   }

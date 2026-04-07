@@ -7,6 +7,7 @@ import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../models/nodes/image_node.dart';
+import '../../../models/nodes/overlay_image_node.dart';
 import '../map_page_state_base.dart';
 
 /// フィーチャキャッシュMixin
@@ -25,8 +26,9 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
         folderTree != null ? folderTree.getVisibleLayerNodes() : <LayerNode>[];
 
     final newPhotoNodes = <ImageNode>[];
+    final newOverlayNodes = <OverlayImageNode>[];
     if (folderTree != null) {
-      collectImageNodesRecursive(folderTree, newPhotoNodes);
+      collectImageNodesRecursive(folderTree, newPhotoNodes, newOverlayNodes);
     }
     
     // LayerNodeのみ抽出
@@ -74,7 +76,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     }
     
     AppLogger.debug(
-      '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length}',
+      '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length} Ov:${newOverlayNodes.length}',
     );
 
     if (mounted) {
@@ -83,24 +85,31 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
         lineFeatures = newLineFeatures;
         polygonFeatures = newPolygonFeatures;
         photoNodes = newPhotoNodes;
+        overlayImageNodes = newOverlayNodes;
       });
       invalidateLayerCache();
     }
   }
   
   /// ImageNodeを再帰的に収集する補助メソッド
+  /// OverlayImageNodeは別リストに分離
   void collectImageNodesRecursive(
     LayerTreeNode node,
     List<ImageNode> photos,
+    List<OverlayImageNode> overlays,
   ) {
-    // 現在のノードがImageNodeなら追加
-    if (node is ImageNode && node.visible && node.isVisibleRecursive()) {
+    // 現在のノードがOverlayImageNodeならオーバーレイリストに追加
+    if (node is OverlayImageNode && node.visible && node.isVisibleRecursive()) {
+      overlays.add(node);
+    }
+    // 通常のImageNodeなら写真リストに追加
+    else if (node is ImageNode && node.visible && node.isVisibleRecursive()) {
       photos.add(node);
     }
     
     // 子ノードを再帰的に処理
     for (final child in node.children) {
-      collectImageNodesRecursive(child, photos);
+      collectImageNodesRecursive(child, photos, overlays);
     }
   }
   
@@ -135,6 +144,7 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     lineFeatures.clear();
     polygonFeatures.clear();
     photoNodes.clear();
+    overlayImageNodes.clear();
     invalidateLayerCache();
     
     // 2. 【重要】LayerNodeのchildrenはクリアしない（メモリ上のインスタンスを維持）

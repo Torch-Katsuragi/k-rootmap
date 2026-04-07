@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../core/k_map_controller.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/nodes/overlay_image_node.dart';
 
 /// 地図状態の抽象インターフェース
 /// 
@@ -51,4 +52,17 @@ abstract class IMapState {
 
   /// キャッシュ済み写真ノード（全可視ImageNode）
   List<ImageNode> get photoNodes;
+
+  /// キャッシュ済みオーバーレイ画像ノード
+  List<OverlayImageNode> get overlayImageNodes;
+
+  /// MapLibreに登録済みのオーバーレイソースID
+  Set<String> get activeOverlaySourceIds;
+  set activeOverlaySourceIds(Set<String> value);
+
+  /// レイヤキャッシュを無効化
+  void invalidateLayerCache();
+
+  /// オーバーレイ画像の変形をリアルタイム更新（ドラッグ中の軽量パス）
+  void updateOverlayTransform(OverlayImageNode node);
 }

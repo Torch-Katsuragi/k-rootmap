@@ -189,6 +189,16 @@ abstract class LayerTreeNode {
   LayerTreeNode addChildIfNotExists(LayerTreeNode newChild) {
     final existing = getChild(newChild.name, type: newChild.nodeType);
     if (existing != null) {
+      if (existing.runtimeType != newChild.runtimeType) {
+        // 型が変わった場合（例: ImageNode -> OverlayImageNode）は入れ替える
+        final index = children.indexOf(existing);
+        if (index != -1) {
+          children[index] = newChild;
+          newChild.parent = this;
+          existing.parent = null;
+          return newChild;
+        }
+      }
       // 既存ノードを返す（重複を避ける）
       return existing;
     }

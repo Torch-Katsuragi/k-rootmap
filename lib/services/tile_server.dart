@@ -80,7 +80,14 @@ class TileServer {
   String get currentUrlTemplate =>
       urlTemplate(_baseMapService.currentProvider.id);
 
-  /// リクエスト処理: GET /tiles/{providerId}/{z}/{x}/{y}.{ext}
+  /// オーバーレイ画像のHTTP URLを生成
+  /// ローカルファイルパスをHTTP経由で配信するためのURL
+  String imageUrlForPath(String absolutePath) {
+    final encoded = Uri.encodeComponent(absolutePath);
+    return 'http://127.0.0.1:$port/overlay?path=$encoded';
+  }
+
+  /// リクエスト処理
   Future<void> _handleRequest(HttpRequest request) async {
     // CORSヘッダー（Windows WebView対応）
     request.response.headers
@@ -103,7 +110,14 @@ class TileServer {
 
     try {
       final segments = request.uri.pathSegments;
-      // /tiles/{providerId}/{z}/{x}/{y}.ext → 5セグメント
+
+      // /overlay?path=... → オーバーレイ画像配信
+      if (segments.length == 1 && segments[0] == 'overlay') {
+        await _handleOverlayRequest(request);
+        return;
+      }
+
+      // /tiles/{providerId}/{z}/{x}/{y}.ext → タイル配信
       if (segments.length != 5 || segments[0] != 'tiles') {
         request.response
           ..statusCode = HttpStatus.notFound
@@ -151,4 +165,49 @@ class TileServer {
       await request.response.close();
     }
   }
+
+  /// オーバーレイ画像リクエスト処理: GET /overlay?path=<encoded_path>
+  Future<void> _handleOverlayRequest(HttpRequest request) async {
+    try {
+      final filePath = request.uri.queryParameters['path'];
+      if (filePath == null || filePath.isEmpty) {
+        request.response
+          ..statusCode = HttpStatus.badRequest
+          ..close();
+        return;
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        AppLogger.debug('[TileServer] overlay file not found: $filePath');
+        request.response
+          ..statusCode = HttpStatus.notFound
+          ..close();
+        return;
+      }
+
+      // Content-Typeを拡張子から判定
+      final ext = filePath.toLowerCase();
+      String contentType;
+      if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+        contentType = 'image/jpeg';
+      } else if (ext.endsWith('.png')) {
+        contentType = 'image/png';
+      } else if (ext.endsWith('.tiff') || ext.endsWith('.tif')) {
+        contentType = 'image/tiff';
+      } else {
+        contentType = 'application/octet-stream';
+      }
+
+      final bytes = await file.readAsBytes();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.parse(contentType)
+        ..add(bytes);
+    } catch (e) {
+      AppLogger.debug('[TileServer] overlay error: $e');
+      request.response.statusCode = HttpStatus.internalServerError;
+    }
+  }
 }
+

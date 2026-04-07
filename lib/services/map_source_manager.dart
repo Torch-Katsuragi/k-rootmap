@@ -989,6 +989,137 @@ class MapSourceManager {
   }
 
   // --------------------------------------------------
+  // オーバーレイ画像管理
+  // --------------------------------------------------
+
+  /// 管理中のオーバーレイ画像ソースID
+  final Set<String> _overlaySourceIds = {};
+
+  /// オーバーレイ画像を追加
+  /// basemap-layerの直上、k-polygons-fillの直下に配置
+  Future<void> addOverlayImage({
+    required String sourceId,
+    required String layerId,
+    required String imageUrl,
+    required ml.LngLatQuad coordinates,
+    required double opacity,
+  }) async {
+    final s = _style;
+    if (s == null) return;
+
+    try {
+      await s.addSource(ml.ImageSource(
+        id: sourceId,
+        url: imageUrl,
+        coordinates: coordinates,
+      ));
+      await s.addLayer(
+        ml.RasterStyleLayer(id: layerId, sourceId: sourceId),
+        belowLayerId: kPolygonsFill,
+      );
+      _overlaySourceIds.add(sourceId);
+
+      // 不透明度を設定
+      _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
+
+      AppLogger.debug('[MapSourceManager] addOverlayImage: $sourceId');
+    } catch (e) {
+      AppLogger.debug('[MapSourceManager] addOverlayImage error: $e');
+    }
+  }
+
+  /// オーバーレイ画像の座標を更新
+  ///
+  /// WebView: JS経由でsetCoordinates呼び出し
+  /// Native: StyleControllerにsetCoordinates相当がないためremove+addで更新
+  Future<void> updateOverlayCoordinates(
+    String sourceId,
+    ml.LngLatQuad coords, {
+    String? imageUrl,
+    String? layerId,
+    double opacity = 1.0,
+  }) async {
+    final s = _style;
+    if (s == null) return;
+
+    if (s is webview_style.StyleControllerWebView) {
+      // WebView: JS経由でsetCoordinates呼び出し
+      final tl = coords.topLeft;
+      final tr = coords.topRight;
+      final br = coords.bottomRight;
+      final bl = coords.bottomLeft;
+      s.webViewController.callAsyncJavaScript(
+        functionBody:
+            'const src = window.map.getSource("$sourceId");'
+            'if (src) src.setCoordinates(['
+            '  [${tl.lon},${tl.lat}],[${tr.lon},${tr.lat}],'
+            '  [${br.lon},${br.lat}],[${bl.lon},${bl.lat}]]);',
+      );
+    } else if (imageUrl != null && layerId != null) {
+      // Native: remove + add で座標を更新
+      try {
+        await s.removeLayer(layerId);
+        await s.removeSource(sourceId);
+      } catch (_) {
+        // 初回やすでに削除済みの場合は無視
+      }
+      try {
+        await s.addSource(ml.ImageSource(
+          id: sourceId,
+          url: imageUrl,
+          coordinates: coords,
+        ));
+        await s.addLayer(
+          ml.RasterStyleLayer(id: layerId, sourceId: sourceId),
+          belowLayerId: kPolygonsFill,
+        );
+        _overlaySourceIds.add(sourceId);
+        _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
+      } catch (e) {
+        AppLogger.debug(
+          '[MapSourceManager] updateOverlayCoordinates native error: $e',
+        );
+      }
+    }
+  }
+
+  /// オーバーレイ画像の不透明度を更新
+  void updateOverlayOpacity(String layerId, double opacity) {
+    _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
+  }
+
+  /// オーバーレイ画像を削除
+  Future<void> removeOverlayImage(String sourceId, String layerId) async {
+    final s = _style;
+    if (s == null) return;
+    try {
+      await s.removeLayer(layerId);
+    } catch (_) {}
+    try {
+      await s.removeSource(sourceId);
+    } catch (_) {}
+    _overlaySourceIds.remove(sourceId);
+    AppLogger.debug('[MapSourceManager] removeOverlayImage: $sourceId');
+  }
+
+  /// 管理中のオーバーレイソースIDを取得
+  Set<String> get activeOverlaySourceIds => Set.unmodifiable(_overlaySourceIds);
+
+  /// オーバーレイのpaintプロパティを設定
+  void _setOverlayPaintProperty(String layerId, String property, dynamic value) {
+    final s = _style;
+    if (s == null) return;
+
+    if (s is webview_style.StyleControllerWebView) {
+      final valueStr = value is String ? '"$value"' : value.toString();
+      s.webViewController.callAsyncJavaScript(
+        functionBody:
+            'window.map.setPaintProperty("$layerId","$property",$valueStr);',
+      );
+    }
+  }
+
+  // --------------------------------------------------
   // ユーティリティ
   // --------------------------------------------------
 

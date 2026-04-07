@@ -32,6 +32,8 @@ import '../../utils/keyboard_handler.dart';
 import '../../tools/pen_tool.dart';
 import '../../tools/select_tool.dart';
 import '../../tools/gps_tool.dart';
+import '../../tools/overlay_transform_tool.dart';
+import '../../models/nodes/overlay_image_node.dart';
 import '../../devices/base/device_tool.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/tool_providers.dart';
@@ -151,6 +153,30 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   @override
   Future<void> updateFeatures() async {
     await updateFeaturesImpl();
+  }
+
+  @override
+  void updateOverlayTransform(OverlayImageNode node) {
+    if (!sourceManager.isInitialized) return;
+    final corners = node.cornerCoordinates;
+    // 画像URLを解決（TileServer経由 or file://）
+    final absPath = node.getAbsoluteFilePath();
+    final imageUrl = absPath != null && tileServer.isRunning
+        ? tileServer.imageUrlForPath(absPath)
+        : node.imageUrl;
+    sourceManager.updateOverlayCoordinates(
+      node.overlaySourceId,
+      ml.LngLatQuad(
+        topLeft: corners[0].toGeographic(),
+        topRight: corners[1].toGeographic(),
+        bottomRight: corners[2].toGeographic(),
+        bottomLeft: corners[3].toGeographic(),
+      ),
+      imageUrl: imageUrl,
+      layerId: node.overlayLayerId,
+      opacity: node.overlayParams.opacity,
+    );
+    triggerSetState(() {});
   }
 
   // =============================================
@@ -501,6 +527,8 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         // 外部機器ツールのオーバーレイ（DeviceTool抽象経由）
         if (currentTool is DeviceTool)
           ...currentTool.buildOverlayLayers(),
+        // 選択中オーバーレイの枠線 + 変形ハンドル接続線
+        ..._buildOverlaySelectionLayers(selectedSet, currentTool),
       ],
       children: [
         // Widgetマーカー（現在位置、測量ポイント、頂点マーカー）
@@ -508,6 +536,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
           ..._buildOverlayWidgetMarkers(selectedSet),
           if (currentTool is DeviceTool)
             ...currentTool.buildOverlayMarkers(),
+          // オーバーレイ変形ハンドル
+          if (currentTool is OverlayTransformTool)
+            ..._buildTransformHandleMarkers(currentTool),
         ]),
       ],
     );
@@ -784,6 +815,9 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
 
     // MapSourceManager経由でGeoJSONソースを更新（変更時のみ送信）
     _pushFeaturesToSources();
+
+    // オーバーレイ画像の同期
+    _syncOverlayImages();
   }
 
   /// 選択変更のみの場合の軽量パス: 選択リストだけを再構築
@@ -1009,6 +1043,59 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     _refreshPointClusters();
   }
 
+  /// オーバーレイ画像をMapLibre ImageSourceとして同期
+  /// 追加・削除の差分管理を行う
+  void _syncOverlayImages() {
+    if (!sourceManager.isInitialized) return;
+
+    final currentIds = <String>{};
+    for (final node in overlayImageNodes) {
+      currentIds.add(node.overlaySourceId);
+    }
+
+    // 削除: 前回あったが今回ないソースを削除
+    final toRemove = activeOverlaySourceIds.difference(currentIds);
+    for (final id in toRemove) {
+      final layerId = id.replaceFirst('overlay-src-', 'overlay-lyr-');
+      sourceManager.removeOverlayImage(id, layerId);
+    }
+
+    // 追加: 今回あるが前回なかったソースを追加
+    final toAdd = currentIds.difference(activeOverlaySourceIds);
+    for (final node in overlayImageNodes) {
+      if (toAdd.contains(node.overlaySourceId)) {
+        final corners = node.cornerCoordinates;
+        // 画像URLをHTTPサーバ経由で配信（WebView2はfile://非対応）
+        final absPath = node.getAbsoluteFilePath();
+        final httpUrl = absPath != null && tileServer.isRunning
+            ? tileServer.imageUrlForPath(absPath)
+            : node.imageUrl;
+        sourceManager.addOverlayImage(
+          sourceId: node.overlaySourceId,
+          layerId: node.overlayLayerId,
+          imageUrl: httpUrl,
+          coordinates: ml.LngLatQuad(
+            topLeft: geo.Geographic(
+              lon: corners[0].longitude, lat: corners[0].latitude,
+            ),
+            topRight: geo.Geographic(
+              lon: corners[1].longitude, lat: corners[1].latitude,
+            ),
+            bottomRight: geo.Geographic(
+              lon: corners[2].longitude, lat: corners[2].latitude,
+            ),
+            bottomLeft: geo.Geographic(
+              lon: corners[3].longitude, lat: corners[3].latitude,
+            ),
+          ),
+          opacity: node.overlayParams.opacity,
+        );
+      }
+    }
+
+    activeOverlaySourceIds = currentIds;
+  }
+
   /// 現在のズームレベルでクラスタ表示を更新
   void _refreshPointClusters() {
     if (!sourceManager.isInitialized) return;
@@ -1042,6 +1129,121 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       polygonVertexEnabled: style.getBool(polygonVertexPointsEnabledDef),
       polygonVertexSizeFactor: style.getDouble(polygonVertexPointSizeFactorDef),
     );
+  }
+
+  /// 選択中オーバーレイの枠線レイヤーを構築
+  /// - 選択中: 青い矩形枠（常時表示）
+  /// - 変形ツール時: 回転ハンドルの接続線も追加
+  List<ml.Layer> _buildOverlaySelectionLayers(
+    Set<LayerTreeNode> selectedSet,
+    dynamic currentTool,
+  ) {
+    final layers = <ml.Layer>[];
+
+    // 選択されたOverlayImageNodeの枠線
+    for (final node in selectedSet) {
+      if (node is! OverlayImageNode) continue;
+      final corners = node.cornerCoordinates;
+      layers.add(ml.PolylineLayer(
+        polylines: [
+          geo.Feature(
+            geometry: geo.LineString.from([
+              ...corners.map((c) => c.toGeographic()),
+              corners[0].toGeographic(), // リングを閉じる
+            ]),
+          ),
+        ],
+        color: Colors.blue,
+        width: 2,
+      ));
+    }
+
+    // 変形ツール時: 回転ハンドルの接続線（上辺中点→回転ハンドル）
+    if (currentTool is OverlayTransformTool && currentTool.target != null) {
+      final target = currentTool.target!;
+      final corners = target.cornerCoordinates;
+      final topMid = LatLng(
+        (corners[0].latitude + corners[1].latitude) / 2,
+        (corners[0].longitude + corners[1].longitude) / 2,
+      );
+      final rotatePos = currentTool.rotationHandlePosition;
+      if (rotatePos != null) {
+        layers.add(ml.PolylineLayer(
+          polylines: [
+            geo.Feature(
+              geometry: geo.LineString.from([
+                topMid.toGeographic(),
+                rotatePos.toGeographic(),
+              ]),
+            ),
+          ],
+          color: Colors.blue.withValues(alpha: 0.5),
+          width: 1,
+        ));
+      }
+    }
+
+    return layers;
+  }
+
+  /// オーバーレイ変形ハンドルマーカーを構築（Photoshop風: 四隅+回転）
+  List<ml.Marker> _buildTransformHandleMarkers(OverlayTransformTool tool) {
+    if (tool.target == null) return [];
+    final target = tool.target!;
+    final corners = target.cornerCoordinates;
+    final markers = <ml.Marker>[];
+
+    // 四隅のリサイズハンドル（白丸+青ボーダー）
+    for (final corner in corners) {
+      markers.add(ml.Marker(
+        point: corner.toGeographic(),
+        size: const Size.square(24),
+        child: Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.blue, width: 2.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+        ),
+      ));
+    }
+
+    // 回転ハンドル（緑丸+回転アイコン）
+    final rotatePos = tool.rotationHandlePosition;
+    if (rotatePos != null) {
+      markers.add(ml.Marker(
+        point: rotatePos.toGeographic(),
+        size: const Size.square(28),
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.green.shade600,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 4),
+            ],
+          ),
+          child: const Icon(
+            Icons.rotate_right,
+            size: 16,
+            color: Colors.white,
+          ),
+        ),
+      ));
+    }
+
+    return markers;
   }
 
   /// オーバーレイWidgetマーカーを構築（現在位置、測量ポイント等の少数マーカーのみ）

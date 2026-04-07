@@ -12,6 +12,7 @@ import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../models/nodes/image_node.dart';
+import '../../models/nodes/overlay_image_node.dart';
 import '../../models/gps_position_record.dart';
 import '../../services/gps_manager_service.dart';
 import '../../services/basemap_service.dart';
@@ -154,6 +155,12 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
 
   @override
   List<ImageNode> photoNodes = [];
+
+  @override
+  List<OverlayImageNode> overlayImageNodes = [];
+
+  /// MapLibreに登録済みのオーバーレイソースID
+  Set<String> activeOverlaySourceIds = {};
 
   // =============================================
   // レンダリングキャッシュ（パン/ズーム時の再構築を防止）

@@ -995,6 +995,12 @@ class MapSourceManager {
   /// 管理中のオーバーレイ画像ソースID
   final Set<String> _overlaySourceIds = {};
 
+  /// Native パスの排他制御: ソースIDごとの処理中フラグ
+  final Map<String, bool> _overlayUpdateLocks = {};
+
+  /// Native パスの pending キュー: 処理中に来た最新リクエストを保持
+  final Map<String, _OverlayUpdateRequest> _pendingOverlayUpdates = {};
+
   /// オーバーレイ画像を追加
   /// basemap-layerの直上、k-polygons-fillの直下に配置
   Future<void> addOverlayImage({
@@ -1030,8 +1036,8 @@ class MapSourceManager {
 
   /// オーバーレイ画像の座標を更新
   ///
-  /// WebView: JS経由でsetCoordinates呼び出し
-  /// Native: StyleControllerにsetCoordinates相当がないためremove+addで更新
+  /// WebView: JS経由でsetCoordinates呼び出し（同期的、競合なし）
+  /// Native: remove+addが非同期のため、排他制御+最新値drain loopで競合を防止
   Future<void> updateOverlayCoordinates(
     String sourceId,
     ml.LngLatQuad coords, {
@@ -1043,7 +1049,7 @@ class MapSourceManager {
     if (s == null) return;
 
     if (s is webview_style.StyleControllerWebView) {
-      // WebView: JS経由でsetCoordinates呼び出し
+      // WebView: JS経由でsetCoordinates呼び出し（同期的）
       final tl = coords.topLeft;
       final tr = coords.topRight;
       final br = coords.bottomRight;
@@ -1056,29 +1062,54 @@ class MapSourceManager {
             '  [${br.lon},${br.lat}],[${bl.lon},${bl.lat}]]);',
       );
     } else if (imageUrl != null && layerId != null) {
-      // Native: remove + add で座標を更新
+      // Native: 排他制御付き drain loop で競合を防止
+      // pending に最新値を保存（前の pending は上書き＝最新値のみ保持）
+      _pendingOverlayUpdates[sourceId] = _OverlayUpdateRequest(
+        coords: coords,
+        imageUrl: imageUrl,
+        layerId: layerId,
+        opacity: opacity,
+      );
+
+      // 既に drain loop が動いていればスキップ（最新値は pending に保存済み）
+      if (_overlayUpdateLocks[sourceId] == true) return;
+      _overlayUpdateLocks[sourceId] = true;
+
       try {
-        await s.removeLayer(layerId);
-        await s.removeSource(sourceId);
-      } catch (_) {
-        // 初回やすでに削除済みの場合は無視
-      }
-      try {
-        await s.addSource(ml.ImageSource(
-          id: sourceId,
-          url: imageUrl,
-          coordinates: coords,
-        ));
-        await s.addLayer(
-          ml.RasterStyleLayer(id: layerId, sourceId: sourceId),
-          belowLayerId: kPolygonsFill,
-        );
-        _overlaySourceIds.add(sourceId);
-        _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
-      } catch (e) {
-        AppLogger.debug(
-          '[MapSourceManager] updateOverlayCoordinates native error: $e',
-        );
+        // pending が空になるまで最新値を消化し続ける
+        while (_pendingOverlayUpdates.containsKey(sourceId)) {
+          final req = _pendingOverlayUpdates.remove(sourceId)!;
+          try {
+            await s.removeLayer(req.layerId);
+            await s.removeSource(sourceId);
+          } catch (_) {
+            // 初回やすでに削除済みの場合は無視
+          }
+          // drain loop 中に新しいリクエストが来ていたら、add をスキップして
+          // 次のイテレーションで最新値を使う（無駄な add を避ける）
+          if (_pendingOverlayUpdates.containsKey(sourceId)) continue;
+          try {
+            await s.addSource(ml.ImageSource(
+              id: sourceId,
+              url: req.imageUrl,
+              coordinates: req.coords,
+            ));
+            await s.addLayer(
+              ml.RasterStyleLayer(id: req.layerId, sourceId: sourceId),
+              belowLayerId: kPolygonsFill,
+            );
+            _overlaySourceIds.add(sourceId);
+            _setOverlayPaintProperty(
+              req.layerId, 'raster-opacity', req.opacity,
+            );
+          } catch (e) {
+            AppLogger.debug(
+              '[MapSourceManager] updateOverlayCoordinates native error: $e',
+            );
+          }
+        }
+      } finally {
+        _overlayUpdateLocks[sourceId] = false;
       }
     }
   }
@@ -1153,5 +1184,20 @@ class _IndexedPoint {
     required this.index,
     required this.longitude,
     required this.latitude,
+  });
+}
+
+/// オーバーレイ座標更新リクエスト（drain loop の pending キュー用）
+class _OverlayUpdateRequest {
+  final ml.LngLatQuad coords;
+  final String imageUrl;
+  final String layerId;
+  final double opacity;
+
+  const _OverlayUpdateRequest({
+    required this.coords,
+    required this.imageUrl,
+    required this.layerId,
+    required this.opacity,
   });
 }

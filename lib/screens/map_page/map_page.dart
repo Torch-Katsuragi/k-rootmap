@@ -176,7 +176,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       layerId: node.overlayLayerId,
       opacity: node.overlayParams.opacity,
     );
-    triggerSetState(() {});
+    // triggerSetStateは呼ばない—ハンドルマーカーは​transformNotifier経由で局所rebuild
   }
 
   // =============================================
@@ -531,15 +531,22 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         ..._buildOverlaySelectionLayers(selectedSet, currentTool),
       ],
       children: [
-        // Widgetマーカー（現在位置、測量ポイント、頂点マーカー）
+        // Widgetマーカー（現在位置、測量ポイント等）
         ml.WidgetLayer(markers: [
           ..._buildOverlayWidgetMarkers(selectedSet),
           if (currentTool is DeviceTool)
             ...currentTool.buildOverlayMarkers(),
-          // オーバーレイ変形ハンドル
-          if (currentTool is OverlayTransformTool)
-            ..._buildTransformHandleMarkers(currentTool),
         ]),
+        // オーバーレイ変形ハンドル（transformNotifier経由で局所rebuild）
+        if (currentTool is OverlayTransformTool)
+          ListenableBuilder(
+            listenable: currentTool.transformNotifier,
+            builder: (_, __) {
+              return ml.WidgetLayer(
+                markers: _buildTransformHandleMarkers(currentTool),
+              );
+            },
+          ),
       ],
     );
   }

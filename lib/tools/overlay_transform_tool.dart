@@ -30,6 +30,9 @@ class OverlayTransformTool extends MapTool {
 
   OverlayTransformTool(this._ref);
 
+  /// 変形更新通知（ハンドルマーカーの局所rebuild用）
+  final ValueNotifier<int> transformNotifier = ValueNotifier<int>(0);
+
   /// 操作対象のオーバーレイノード
   OverlayImageNode? _target;
 
@@ -227,20 +230,25 @@ class OverlayTransformTool extends MapTool {
       }
     }
 
-    // 中央領域（バウンディングボックス内）
-    final center = Offset(
-      screenCorners.map((o) => o.dx).reduce(math.min) +
-          (screenCorners.map((o) => o.dx).reduce(math.max) -
-                  screenCorners.map((o) => o.dx).reduce(math.min)) / 2,
-      screenCorners.map((o) => o.dy).reduce(math.min) +
-          (screenCorners.map((o) => o.dy).reduce(math.max) -
-                  screenCorners.map((o) => o.dy).reduce(math.min)) / 2,
-    );
-    if ((screenPoint - center).distance < 100) {
+    // 中央領域（回転矩形の内部判定）
+    if (_isInsideQuad(screenPoint, screenCorners)) {
       return _HandleType.center;
     }
 
     return _HandleType.none;
+  }
+
+  /// 凸四角形の内部判定（クロス積方式）
+  /// 頂点が時計回りに並んでいる前提で、全辺の外積が同符号ならば内部
+  bool _isInsideQuad(Offset p, List<Offset> corners) {
+    for (int i = 0; i < corners.length; i++) {
+      final a = corners[i];
+      final b = corners[(i + 1) % corners.length];
+      final cross =
+          (b.dx - a.dx) * (p.dy - a.dy) - (b.dy - a.dy) * (p.dx - a.dx);
+      if (cross < 0) return false;
+    }
+    return true;
   }
 
   // --------------------------------------------------
@@ -308,6 +316,7 @@ class OverlayTransformTool extends MapTool {
   void _notifyOverlayChanged(IMapState mapState) {
     if (_target != null) {
       mapState.updateOverlayTransform(_target!);
+      transformNotifier.value++; // ハンドル位置の局所更新を通知
     }
   }
 }

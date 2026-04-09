@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import '../i18n/strings.g.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/bluetooth_gnss_service.dart';
@@ -26,13 +27,17 @@ import 'internal_gps_location_store.dart';
 
 /// GPS データソースの種類
 enum GpsSourceType {
-  internal('内蔵GPS', 'GPS'),
-  external('外部GNSS', 'GNSS');
+  internal('GPS'),
+  external('GNSS');
 
-  const GpsSourceType(this.displayName, this.sourceCode);
+  const GpsSourceType(this.sourceCode);
 
-  final String displayName;
   final String sourceCode;
+
+  String get displayName => switch (this) {
+    GpsSourceType.internal => t.gps.internalGpsName,
+    GpsSourceType.external => t.gps.externalGnssName,
+  };
 }
 
 /// GPS記録オプション設定
@@ -184,7 +189,7 @@ class GpsManagerService extends ChangeNotifier {
     sources.add({
       'type': GpsSourceType.internal,
       'name': GpsSourceType.internal.displayName,
-      'description': 'デバイス内蔵のGPS受信機',
+      'description': t.gps.internalDescription,
       'isAvailable': true,
       'isSelected': _currentSource == GpsSourceType.internal,
     });
@@ -193,7 +198,7 @@ class GpsManagerService extends ChangeNotifier {
     for (final device in _availableGnssDevices) {
       sources.add({
         'type': GpsSourceType.external,
-        'name': device.name ?? '不明なデバイス',
+        'name': device.name ?? t.gps.unknownDevice,
         'description': 'Bluetooth GNSS機器 (${device.address})',
         'device': device,
         'isAvailable': true,
@@ -391,7 +396,7 @@ class GpsManagerService extends ChangeNotifier {
     BluetoothDevice? device,
   ]) async {
     if (_isRecording) {
-      throw Exception('記録中はGPSソースを変更できません。記録を停止してから変更してください。');
+      throw Exception(t.gps.cannotChangeWhileRecording);
     }
 
     try {
@@ -408,7 +413,7 @@ class GpsManagerService extends ChangeNotifier {
           break;
         case GpsSourceType.external:
           if (device == null) {
-            throw ArgumentError('外部GNSS機器の指定が必要です');
+            throw ArgumentError(t.gps.externalDeviceRequired);
           }
           _selectedGnssDevice = device;
           await _startExternalGnss(device);
@@ -708,11 +713,11 @@ class GpsManagerService extends ChangeNotifier {
   /// GPS記録を開始
   Future<void> startRecording([GpsRecordingOptions? options]) async {
     if (_isRecording) {
-      throw Exception('既に記録中です');
+      throw Exception(t.gps.alreadyRecording);
     }
 
     if (_latitude == null || _longitude == null) {
-      throw Exception('GPS位置情報が取得できていません。GPSソースを確認してください。');
+      throw Exception(t.gps.noGpsPosition);
     }
 
     _recordingOptions = options ?? GpsRecordingOptions.defaultOptions;
@@ -933,7 +938,7 @@ class GpsManagerService extends ChangeNotifier {
 
         final targetDevice = _availableGnssDevices.firstWhere(
           (device) => device.address == savedAddress,
-          orElse: () => throw Exception('保存されたGNSS機器が見つかりません'),
+          orElse: () => throw Exception(t.gps.savedDeviceNotFound),
         );
 
         await switchGpsSource(GpsSourceType.external, targetDevice);
@@ -953,7 +958,7 @@ class GpsManagerService extends ChangeNotifier {
   /// 記録履歴をクリア
   void clearHistory() {
     if (_isRecording) {
-      throw Exception('記録中は履歴をクリアできません');
+      throw Exception(t.gps.cannotClearWhileRecording);
     }
 
     _gpsHistory.clear();

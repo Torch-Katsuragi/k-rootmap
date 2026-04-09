@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/geometry_type.dart';
@@ -32,11 +33,11 @@ Future<void> showAddColumnDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.add_box, color: Colors.blue),
-                SizedBox(width: 8),
-                Text('カラム追加'),
+                const Icon(Icons.add_box, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(t.attributeTable.addColumn),
               ],
             ),
             content: Column(
@@ -44,28 +45,28 @@ Future<void> showAddColumnDialog(
               children: [
                 TextField(
                   controller: columnNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'カラム名',
-                    hintText: '例: 備考, 数量, 日付',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: t.attributeTable.columnName,
+                    hintText: t.attributeTable.columnNameHint,
+                    border: const OutlineInputBorder(),
                   ),
                   autofocus: true,
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: selectedType,
-                  decoration: const InputDecoration(
-                    labelText: 'データ型',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: t.attributeTable.dataType,
+                    border: const OutlineInputBorder(),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'TEXT', child: Text('テキスト (TEXT)')),
+                  items: [
+                    DropdownMenuItem(value: 'TEXT', child: Text(t.attributeTable.textType)),
                     DropdownMenuItem(
                       value: 'INTEGER',
-                      child: Text('整数 (INTEGER)'),
+                      child: Text(t.attributeTable.integerType),
                     ),
-                    DropdownMenuItem(value: 'REAL', child: Text('小数 (REAL)')),
-                    DropdownMenuItem(value: 'BLOB', child: Text('バイナリ (BLOB)')),
+                    DropdownMenuItem(value: 'REAL', child: Text(t.attributeTable.realType)),
+                    DropdownMenuItem(value: 'BLOB', child: Text(t.attributeTable.blobType)),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -78,13 +79,13 @@ Future<void> showAddColumnDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('キャンセル'),
+                child: Text(t.common.cancel),
               ),
               ElevatedButton.icon(
                 onPressed: () {
                   final columnName = columnNameController.text.trim();
                   if (columnName.isEmpty) {
-                    _notify(ref, 'カラム名を入力してください', NotificationLevel.warning);
+                    _notify(ref, t.attributeTable.enterColumnName, NotificationLevel.warning);
                     return;
                   }
                   Navigator.of(
@@ -92,7 +93,7 @@ Future<void> showAddColumnDialog(
                   ).pop({'name': columnName, 'type': selectedType});
                 },
                 icon: const Icon(Icons.check),
-                label: const Text('追加'),
+                label: Text(t.attributeTable.add),
               ),
             ],
           );
@@ -113,10 +114,10 @@ Future<void> showAddColumnDialog(
       );
       layer.clearColumnNamesCache();
       onColumnAdded();
-      _notify(ref, 'カラム「$columnName」を追加しました', NotificationLevel.success);
+      _notify(ref, t.attributeTable.columnAdded(name: columnName), NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[AttributeTableDialogs] カラム追加エラー: $e');
-      _notify(ref, 'カラム追加に失敗しました: $e', NotificationLevel.error);
+      _notify(ref, t.attributeTable.columnAddError(error: '$e'), NotificationLevel.error);
     }
   }
 }
@@ -144,11 +145,11 @@ Future<void> showDuplicateFilteredDialog(
     context: context,
     builder: (BuildContext dialogContext) {
       return AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.copy_all, color: Colors.green),
-            SizedBox(width: 8),
-            Text('フィルタ結果を複製'),
+            const Icon(Icons.copy_all, color: Colors.green),
+            const SizedBox(width: 8),
+            Text(t.attributeTable.duplicateFiltered),
           ],
         ),
         content: Column(
@@ -156,12 +157,12 @@ Future<void> showDuplicateFilteredDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$matchCount件のフィーチャを新しいレイヤにコピーします。',
+              t.attributeTable.featuresCopyCount(count: '$matchCount'),
               style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 4),
             Text(
-              'フィルタ: $filterSql',
+              t.attributeTable.filter(sql: filterSql),
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -169,9 +170,9 @@ Future<void> showDuplicateFilteredDialog(
             const SizedBox(height: 16),
             TextField(
               controller: layerNameController,
-              decoration: const InputDecoration(
-                labelText: '新しいレイヤ名',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t.attributeTable.newLayerName,
+                border: const OutlineInputBorder(),
               ),
               autofocus: true,
             ),
@@ -180,19 +181,19 @@ Future<void> showDuplicateFilteredDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
           ElevatedButton.icon(
             onPressed: () {
               final name = layerNameController.text.trim();
               if (name.isEmpty) {
-                _notify(ref, 'レイヤ名を入力してください', NotificationLevel.warning);
+                _notify(ref, t.attributeTable.enterLayerName, NotificationLevel.warning);
                 return;
               }
               Navigator.of(dialogContext).pop(name);
             },
             icon: const Icon(Icons.copy_all),
-            label: const Text('複製'),
+            label: Text(t.attributeTable.duplicate),
           ),
         ],
       );
@@ -229,12 +230,12 @@ Future<void> showDuplicateFilteredDialog(
       onDuplicated();
       _notify(
         ref,
-        '$copiedCount件を「$result」にコピーしました',
+        t.attributeTable.copiedToLayer(count: '$copiedCount', name: result),
         NotificationLevel.success,
       );
     } catch (e) {
       AppLogger.debug('[AttributeTableDialogs] フィルタ複製エラー: $e');
-      _notify(ref, '複製に失敗しました: $e', NotificationLevel.error);
+      _notify(ref, t.attributeTable.duplicateError(error: '$e'), NotificationLevel.error);
     }
   }
 }
@@ -259,11 +260,11 @@ Future<void> showFieldCalculatorDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.calculate, color: Colors.deepPurple),
-                SizedBox(width: 8),
-                Text('フィールド計算機'),
+                const Icon(Icons.calculate, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                Text(t.attributeTable.fieldCalculator),
               ],
             ),
             content: SizedBox(
@@ -279,7 +280,7 @@ Future<void> showFieldCalculatorDialog(
                         onChanged:
                             (v) => setState(() => createNew = v ?? false),
                       ),
-                      const Text('新規カラムを作成', style: TextStyle(fontSize: 13)),
+                      Text(t.attributeTable.createNewColumn, style: const TextStyle(fontSize: 13)),
                     ],
                   ),
                   if (createNew) ...[
@@ -289,9 +290,9 @@ Future<void> showFieldCalculatorDialog(
                         Expanded(
                           child: TextField(
                             controller: newColumnController,
-                            decoration: const InputDecoration(
-                              labelText: '新規カラム名',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: t.attributeTable.newColumnName,
+                              border: const OutlineInputBorder(),
                               isDense: true,
                             ),
                           ),
@@ -330,9 +331,9 @@ Future<void> showFieldCalculatorDialog(
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       initialValue: selectedColumn,
-                      decoration: const InputDecoration(
-                        labelText: '更新対象カラム',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: t.attributeTable.targetColumn,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       items:
@@ -350,16 +351,15 @@ Future<void> showFieldCalculatorDialog(
                   TextField(
                     controller: expressionController,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'SQL式',
-                      hintText: '例: upper("name")  |  "qty" * 2  |  \'固定値\'',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: t.attributeTable.sqlExpression,
+                      hintText: t.attributeTable.sqlExpressionHint,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'カラム参照は "カラム名"、文字列は \'値\' で囲んでください。\n'
-                    'SQLite関数が使えます: upper, lower, length, round, substr, etc.',
+                    t.attributeTable.sqlHelp,
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ],
@@ -368,7 +368,7 @@ Future<void> showFieldCalculatorDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('キャンセル'),
+                child: Text(t.common.cancel),
               ),
               ElevatedButton.icon(
                 onPressed: () {
@@ -389,7 +389,7 @@ Future<void> showFieldCalculatorDialog(
                   });
                 },
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('実行'),
+                label: Text(t.attributeTable.execute),
               ),
             ],
           );
@@ -406,7 +406,7 @@ Future<void> showFieldCalculatorDialog(
 
       final validation = QgisExpressionFilter.toSqlWhere(expression);
       if (validation is FilterResultError) {
-        _notify(ref, '式エラー: ${validation.message}', NotificationLevel.error);
+        _notify(ref, t.attributeTable.expressionError(message: validation.message), NotificationLevel.error);
         return;
       }
 
@@ -424,10 +424,10 @@ Future<void> showFieldCalculatorDialog(
           .updateColumnWithExpression(layer.layerName, target, expression);
 
       onUpdated();
-      _notify(ref, '$updatedCount件を更新しました（$target）', NotificationLevel.success);
+      _notify(ref, t.attributeTable.updatedRows(count: '$updatedCount', column: target), NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[FieldCalculator] エラー: $e');
-      _notify(ref, 'フィールド計算エラー: $e', NotificationLevel.error);
+      _notify(ref, t.attributeTable.fieldCalcError(error: '$e'), NotificationLevel.error);
     }
   }
 }
@@ -446,19 +446,19 @@ Future<void> showRenameColumnDialog(
     context: context,
     builder:
         (ctx) => AlertDialog(
-          title: const Text('カラム名変更'),
+          title: Text(t.attributeTable.renameColumn),
           content: TextField(
             controller: controller,
-            decoration: const InputDecoration(
-              labelText: '新しいカラム名',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: t.attributeTable.newColumnNameLabel,
+              border: const OutlineInputBorder(),
             ),
             autofocus: true,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             ElevatedButton(
               onPressed: () {
@@ -467,7 +467,7 @@ Future<void> showRenameColumnDialog(
                   Navigator.of(ctx).pop(name);
                 }
               },
-              child: const Text('変更'),
+              child: Text(t.common.change),
             ),
           ],
         ),
@@ -484,12 +484,12 @@ Future<void> showRenameColumnDialog(
       onRenamed();
       _notify(
         ref,
-        'カラム名を「$currentName」→「$newName」に変更しました',
+        t.attributeTable.columnRenamed(from: currentName, to: newName),
         NotificationLevel.success,
       );
     } catch (e) {
       AppLogger.debug('[RenameColumn] エラー: $e');
-      _notify(ref, 'カラム名変更エラー: $e', NotificationLevel.error);
+      _notify(ref, t.attributeTable.renameColumnError(error: '$e'), NotificationLevel.error);
     }
   }
 }
@@ -506,17 +506,17 @@ Future<void> showDeleteColumnDialog(
     context: context,
     builder:
         (ctx) => AlertDialog(
-          title: const Text('カラム削除'),
-          content: Text('カラム「$columnName」を削除しますか？\nこの操作は元に戻せません。'),
+          title: Text(t.attributeTable.deleteColumn),
+          content: Text(t.attributeTable.deleteColumnConfirm(name: columnName)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('削除', style: TextStyle(color: Colors.white)),
+              child: Text(t.common.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -527,10 +527,10 @@ Future<void> showDeleteColumnDialog(
       await layer.geoPackageFile.dropColumn(layer.layerName, columnName);
       layer.clearColumnNamesCache();
       onDeleted();
-      _notify(ref, 'カラム「$columnName」を削除しました', NotificationLevel.success);
+      _notify(ref, t.attributeTable.columnDeleted(name: columnName), NotificationLevel.success);
     } catch (e) {
       AppLogger.debug('[DeleteColumn] エラー: $e');
-      _notify(ref, 'カラム削除エラー: $e', NotificationLevel.error);
+      _notify(ref, t.attributeTable.deleteColumnError(error: '$e'), NotificationLevel.error);
     }
   }
 }

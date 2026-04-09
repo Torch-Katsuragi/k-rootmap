@@ -11,6 +11,7 @@ import '../kmeta.dart';
 import 'folder_node.dart';
 import '../../services/kmeta_service.dart';
 import '../../core/node_types.dart';
+import '../../i18n/strings.g.dart';
 
 /// GeoPackageファイルノード（GeoPackageFile参照型）
 /// LayerTreeNodeの共通機能はoverrideせず、GeoPackageFile参照のみ追加
@@ -147,7 +148,7 @@ class GeoPackageNode extends LayerTreeNode {
       
       final file = File(currentPath);
       if (!file.existsSync()) {
-        throw Exception('ファイルが存在しません: $currentPath');
+        throw Exception(t.services.fileNotFound(path: currentPath));
       }
 
       final directory = p.dirname(currentPath);
@@ -157,7 +158,7 @@ class GeoPackageNode extends LayerTreeNode {
       final newPath = p.join(directory, newFileName);
 
       if (File(newPath).existsSync()) {
-        throw Exception('同名のファイルが既に存在します: $newFileName');
+        throw Exception(t.services.fileAlreadyExists(name: newFileName));
       }
 
       // リネーム実行

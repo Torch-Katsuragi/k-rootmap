@@ -4,6 +4,7 @@ library;
 import 'dart:io' show Directory, Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/drive_folder_node.dart';
 import '../../../providers/ui_state_providers.dart';
@@ -57,9 +58,9 @@ class FolderTile extends ConsumerWidget {
       return ListTile(
         leading: Icon(Icons.cloud, color: Colors.blue.shade600),
         title: Text(node.name),
-        subtitle: const Text(
-          'PC版では同期不可（Google Drive Desktop使用）',
-          style: TextStyle(fontSize: 10, color: Colors.grey),
+        subtitle: Text(
+          t.layerDrawer.folder.pcSyncDisabled,
+          style: const TextStyle(fontSize: 10, color: Colors.grey),
         ),
         onTap: onTap,
       );
@@ -83,9 +84,9 @@ class FolderTile extends ConsumerWidget {
             await _handleDelete(context, ref);
         }
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'rename', child: Text('Rename')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.folder.rename)),
+        PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.folder.delete)),
       ],
     );
   }
@@ -95,10 +96,10 @@ class FolderTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: 'Delete Folder',
-      content: Text('Delete "${node.name}" and all its contents?'),
-      confirmLabel: 'Delete',
-      successMessage: '${node.name} deleted',
+      title: t.layerDrawer.folder.deleteTitle,
+      content: Text(t.layerDrawer.folder.deleteConfirm(name: node.name)),
+      confirmLabel: t.common.delete,
+      successMessage: t.layerDrawer.folder.deleted(name: node.name),
       execute: () async {
         if (absPath != null) {
           final dir = Directory(absPath);
@@ -112,13 +113,13 @@ class FolderTile extends ConsumerWidget {
 
   Widget _buildSyncSubtitle(BuildContext context, DriveFolderNode driveNode) {
     final (text, color, icon) = switch (driveNode.syncStatus) {
-      SyncStatus.synced => ('Synced', Colors.green, null),
-      SyncStatus.localChanges => ('Local changes pending', Colors.orange, null),
-      SyncStatus.remoteChanges => ('Drive changes available', Colors.blue, null),
-      SyncStatus.conflict => ('Conflict — tap to resolve', Colors.red, Icons.warning_amber_rounded),
-      SyncStatus.syncing => ('Syncing...', Colors.blue, null),
-      SyncStatus.error => ('Error', Colors.red, null),
-      SyncStatus.unknown => (driveNode.isReadOnly ? 'Read-only' : 'Drive linked', Colors.grey, null),
+      SyncStatus.synced => (t.layerDrawer.folder.synced, Colors.green, null),
+      SyncStatus.localChanges => (t.layerDrawer.folder.localChanges, Colors.orange, null),
+      SyncStatus.remoteChanges => (t.layerDrawer.folder.remoteChanges, Colors.blue, null),
+      SyncStatus.conflict => (t.layerDrawer.folder.conflict, Colors.red, Icons.warning_amber_rounded),
+      SyncStatus.syncing => (t.layerDrawer.folder.syncing, Colors.blue, null),
+      SyncStatus.error => (t.layerDrawer.folder.syncError, Colors.red, null),
+      SyncStatus.unknown => (driveNode.isReadOnly ? t.layerDrawer.folder.readOnly : t.layerDrawer.folder.driveLinked, Colors.grey, null),
     };
     final child = Row(
       mainAxisSize: MainAxisSize.min,
@@ -154,44 +155,44 @@ class FolderTile extends ConsumerWidget {
       },
       itemBuilder: (context) => [
         if (!driveNode.isReadOnly)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'upload',
             child: ListTile(
-              leading: Icon(Icons.cloud_upload, color: Colors.orange),
-              title: Text('アップロード'),
+              leading: const Icon(Icons.cloud_upload, color: Colors.orange),
+              title: Text(t.layerDrawer.folder.upload),
               contentPadding: EdgeInsets.zero,
             ),
           ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'download',
           child: ListTile(
-            leading: Icon(Icons.cloud_download, color: Colors.green),
-            title: Text('ダウンロード'),
+            leading: const Icon(Icons.cloud_download, color: Colors.green),
+            title: Text(t.layerDrawer.folder.download),
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'refresh',
           child: ListTile(
-            leading: Icon(Icons.refresh, color: Colors.blue),
-            title: Text('状態を更新'),
+            leading: const Icon(Icons.refresh, color: Colors.blue),
+            title: Text(t.layerDrawer.folder.refreshStatus),
             contentPadding: EdgeInsets.zero,
           ),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'unlink',
           child: ListTile(
-            leading: Icon(Icons.link_off, color: Colors.red),
-            title: Text('Drive連携を解除'),
+            leading: const Icon(Icons.link_off, color: Colors.red),
+            title: Text(t.layerDrawer.folder.unlinkDrive),
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: ListTile(
-            leading: Icon(Icons.delete_forever, color: Colors.red),
-            title: Text('フォルダごと削除'),
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: Text(t.layerDrawer.folder.deleteFolderAll),
             contentPadding: EdgeInsets.zero,
           ),
         ),

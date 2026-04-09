@@ -8,6 +8,7 @@ import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/qgis_expression_filter.dart';
+import '../../i18n/strings.g.dart';
 import '../../providers/selection_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../services/coordinate/index.dart';
@@ -178,7 +179,7 @@ class AttributeTableController extends ChangeNotifier {
 
       AppLogger.debug('[AttributeTableController] 初期化完了');
     } catch (e) {
-      final msg = '属性テーブル初期化エラー: $e';
+      final msg = t.attributeTable.initError(error: e.toString());
       AppLogger.debug('[AttributeTableController] $msg');
       _lastError = msg;
       _columnNames = [];
@@ -280,7 +281,7 @@ class AttributeTableController extends ChangeNotifier {
       AppLogger.debug('[AttributeTableController] 属性保存: $field = $value');
       return null;
     } catch (e) {
-      final msg = '属性保存エラー ($field): $e';
+      final msg = t.attributeTable.saveError(field: field, error: e.toString());
       _lastError = msg;
       AppLogger.debug('[AttributeTableController] $msg');
       notifyListeners();
@@ -329,7 +330,7 @@ class AttributeTableController extends ChangeNotifier {
     if (ids.isEmpty &&
         await layer.geoPackageFile.countFilteredFeatures(layer.layerName, sql) <
             0) {
-      _filterError = 'SQL実行エラー（式の構文を確認してください）';
+      _filterError = t.attributeTable.sqlError;
       notifyListeners();
       return _filterError;
     }

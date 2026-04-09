@@ -13,6 +13,8 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../i18n/strings.g.dart';
+
 import '../models/app_notification.dart';
 import '../models/gps_track.dart';
 import '../models/nodes/layer_tree_node.dart';
@@ -151,11 +153,11 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
   /// 時間差を表示用にフォーマット
   String _formatDuration(Duration d) {
     if (d.inHours > 0) {
-      return '${d.inHours}時間${d.inMinutes % 60}分';
+      return t.track.hours(h: '${d.inHours}', m: '${d.inMinutes % 60}');
     } else if (d.inMinutes > 0) {
-      return '${d.inMinutes}分${d.inSeconds % 60}秒';
+      return t.track.minutes(m: '${d.inMinutes}', s: '${d.inSeconds % 60}');
     }
-    return '${d.inSeconds}秒';
+    return t.track.secondsOnly(s: '${d.inSeconds}');
   }
 
   /// 選択ポイントからsub_table JSON文字列を構築
@@ -197,8 +199,8 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       final feature = await LineFeatureNode.createIn(
         lineLayer,
         _simplifiedLine,
-        'GPS軌跡 $dateLabel',
-        '${_selectedPoints.length}点から抽出、${_simplifiedLine.length}点に簡略化',
+        t.track.trackLabel(date: dateLabel),
+        t.track.trackDesc(total: '${_selectedPoints.length}', simplified: '${_simplifiedLine.length}'),
       );
 
       // sub_table JSON をフィーチャに付与
@@ -222,7 +224,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
         Navigator.of(context).pop(true);
       } else if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '軌跡の保存に失敗しました',
+          title: t.track.saveFailed,
           level: NotificationLevel.error,
         );
       }
@@ -230,7 +232,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
       AppLogger.debug('[TrackExtractionDialog] 保存エラー: $e');
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '保存エラー: $e',
+          title: t.track.saveError(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -261,7 +263,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
     if (lineLayers.isEmpty) {
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '保存先のラインレイヤがありません。先にラインレイヤを作成してください。',
+          title: t.track.noLineLayer,
           level: NotificationLevel.warning,
         );
       }
@@ -271,7 +273,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
     return await showDialog<LineLayerNode>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('保存先ラインレイヤを選択'),
+        title: Text(t.track.selectLineLayer),
         content: SizedBox(
           width: 300,
           child: ListView.builder(
@@ -291,7 +293,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
         ],
       ),
@@ -309,16 +311,16 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // タイトル
-            const Text(
-              'GPS軌跡の抽出',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              t.track.extractTitle,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             // 日付選択
             Row(
               children: [
-                const Text('日付: '),
+                Text(t.track.dateLabel),
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButton<String>(
@@ -340,7 +342,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${_allPoints.length}点',
+                  t.track.pointsCount(count: '${_allPoints.length}'),
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
               ],
@@ -355,11 +357,11 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
               )
             // データなし
             else if (_allPoints.isEmpty)
-              const Expanded(
+              Expanded(
                 child: Center(
                   child: Text(
-                    'この日付のGPS軌跡データがありません',
-                    style: TextStyle(color: Colors.grey),
+                    t.track.noTrackData,
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
               )
@@ -370,12 +372,12 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                 Row(
                   children: [
                     Text(
-                      '開始: ${_formatTime(_allPoints[_timeRange!.start.round().clamp(0, _allPoints.length - 1)].timestamp)}',
+                      t.track.startLabel(time: _formatTime(_allPoints[_timeRange!.start.round().clamp(0, _allPoints.length - 1)].timestamp)),
                       style: const TextStyle(fontSize: 12),
                     ),
                     const Spacer(),
                     Text(
-                      '終了: ${_formatTime(_allPoints[_timeRange!.end.round().clamp(0, _allPoints.length - 1)].timestamp)}',
+                      t.track.endLabel(time: _formatTime(_allPoints[_timeRange!.end.round().clamp(0, _allPoints.length - 1)].timestamp)),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
@@ -432,14 +434,14 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                       children: [
                         Expanded(
                           child: Text(
-                            '選択範囲: ${_selectedPoints.length}点 / 全体: ${_allPoints.length}点',
+                            t.track.selectionRange(selected: '${_selectedPoints.length}', total: '${_allPoints.length}'),
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
                         if (_selectedPoints.length >= 2)
                           Expanded(
                             child: Text(
-                              '時間: ${_formatDuration(_selectedPoints.last.timestamp.difference(_selectedPoints.first.timestamp))}',
+                              t.track.duration(value: _formatDuration(_selectedPoints.last.timestamp.difference(_selectedPoints.first.timestamp))),
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -450,7 +452,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                         children: [
                           Expanded(
                             child: Text(
-                              '距離: ${(_calculateDistance(_selectedPoints.map((p) => p.toLatLng()).toList()) / 1000).toStringAsFixed(2)}km',
+                              t.track.distance(value: (_calculateDistance(_selectedPoints.map((p) => p.toLatLng()).toList()) / 1000).toStringAsFixed(2)),
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
@@ -477,11 +479,11 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                 children: [
                   Container(width: 16, height: 2, color: Colors.grey.shade400),
                   const SizedBox(width: 4),
-                  const Text('全軌跡', style: TextStyle(fontSize: 11)),
+                  Text(t.track.allTrack, style: const TextStyle(fontSize: 11)),
                   const SizedBox(width: 16),
                   Container(width: 16, height: 2, color: Colors.black),
                   const SizedBox(width: 4),
-                  const Text('選択範囲', style: TextStyle(fontSize: 11)),
+                  Text(t.track.selectedRange, style: const TextStyle(fontSize: 11)),
                   const SizedBox(width: 16),
                   Container(
                     width: 6,
@@ -492,7 +494,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Text('頂点', style: TextStyle(fontSize: 11)),
+                  Text(t.track.vertices, style: const TextStyle(fontSize: 11)),
                 ],
               ),
             ],
@@ -505,7 +507,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(null),
-                  child: const Text('キャンセル'),
+                  child: Text(t.common.cancel),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton(
@@ -518,7 +520,7 @@ class _TrackExtractionDialogState extends ConsumerState<TrackExtractionDialog> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('保存先を選択して保存'),
+                      : Text(t.track.saveToLayer),
                 ),
               ],
             ),

@@ -2,6 +2,7 @@
 // 変換パラメータ（位置・スケール・回転・透明度）を数値入力で設定
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/overlay_image_node.dart';
 import '../../models/kmeta.dart';
 
@@ -66,7 +67,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('オーバーレイ設定'),
+      title: Text(t.overlaySettings.title),
       content: SizedBox(
         width: 340,
         child: Column(
@@ -77,8 +78,8 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
                 Expanded(
                   child: TextField(
                     controller: _latController,
-                    decoration: const InputDecoration(
-                      labelText: '緯度',
+                    decoration: InputDecoration(
+                      labelText: t.overlaySettings.latitude,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -89,8 +90,8 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
                 Expanded(
                   child: TextField(
                     controller: _lngController,
-                    decoration: const InputDecoration(
-                      labelText: '経度',
+                    decoration: InputDecoration(
+                      labelText: t.overlaySettings.longitude,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -105,8 +106,8 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
                 Expanded(
                   child: TextField(
                     controller: _scaleController,
-                    decoration: const InputDecoration(
-                      labelText: 'スケール (m/px)',
+                    decoration: InputDecoration(
+                      labelText: t.overlaySettings.scale,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -117,8 +118,8 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
                 Expanded(
                   child: TextField(
                     controller: _rotationController,
-                    decoration: const InputDecoration(
-                      labelText: '回転 (°)',
+                    decoration: InputDecoration(
+                      labelText: t.overlaySettings.rotation,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -130,7 +131,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('不透明度'),
+                Text(t.overlaySettings.opacity),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Slider(
@@ -154,7 +155,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              '画像サイズ: ${widget.node.overlayParams.imageWidth} x ${widget.node.overlayParams.imageHeight}',
+              t.overlaySettings.imageSize(width: '${widget.node.overlayParams.imageWidth}', height: '${widget.node.overlayParams.imageHeight}'),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -163,11 +164,11 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         FilledButton(
           onPressed: _onApply,
-          child: const Text('適用'),
+          child: Text(t.overlaySettings.apply),
         ),
       ],
     );

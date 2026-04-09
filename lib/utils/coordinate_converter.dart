@@ -2,6 +2,7 @@ import 'package:k_maps/utils/app_logger.dart';
 import 'package:proj4dart/proj4dart.dart';
 import 'package:latlong2/latlong.dart';
 import 'address_converter.dart';
+import '../i18n/strings.g.dart';
 
 /// 緯度経度の範囲を表すクラス
 class LatLngBounds {
@@ -665,7 +666,7 @@ class CoordinateConverter {
       }
 
       if (target == null) {
-        throw Exception('目標座標系の初期化に失敗: ${coordinateSystem.epsgCode}');
+        throw Exception(t.services.coordSystemInitFailed(code: coordinateSystem.epsgCode));
       }
 
       // WGS84から目標座標系への変換
@@ -717,7 +718,7 @@ class CoordinateConverter {
       }
 
       if (source == null) {
-        throw Exception('座標系の初期化に失敗: ${coordinateSystem.epsgCode}');
+        throw Exception(t.services.coordSystemInitFailed(code: coordinateSystem.epsgCode));
       }
 
       final target = Projection.get('EPSG:4326'); // WGS84

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/geopackage_node.dart';
@@ -260,7 +261,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     ref.watch(featureRefreshTriggerProvider);
 
     if (widget.currentNode == null) {
-      return const Center(child: Text('ディレクトリが見つかりません'));
+      return Center(child: Text(t.layerDrawer.directoryNotFound));
     }
 
     final parent = widget.currentNode!.parent;
@@ -446,21 +447,21 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final currentName = p.basenameWithoutExtension(node.name);
     final result = await RenameDialog.show(
       context,
-      title: '写真のリネーム',
+      title: t.layerDrawer.renamePhoto,
       currentName: currentName,
-      label: '新しいファイル名',
+      label: t.layerDrawer.newFileName,
     );
     if (result == null || result.isEmpty || result == currentName) return;
     try {
       await LayerDrawerService.renamePhoto(node, result);
       triggerMapRefresh();
       ref.read(notificationCenterProvider.notifier).add(
-            title: '写真をリネームしました: $result',
+            title: t.layerDrawer.photoRenamed(name: result),
             level: NotificationLevel.info,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'リネームに失敗しました: $e',
+            title: t.layerDrawer.renameFailed(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -472,7 +473,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       context,
       title: 'GeoPackageのリネーム',
       currentName: currentName,
-      label: '新しいファイル名',
+      label: t.layerDrawer.newFileName,
     );
     if (result == null || result.isEmpty || result == currentName) return;
     try {
@@ -507,7 +508,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'リネームに失敗しました: $e',
+            title: t.layerDrawer.renameFailed(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -541,19 +542,19 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Drive連携を解除'),
+        title: Text(t.layerDrawer.folder.unlinkDrive),
         content: Text(
           '${driveRoot.name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('解除'),
+            child: Text(t.layerDrawer.unlink),
           ),
         ],
       ),
@@ -580,7 +581,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     widget.onDirChanged(replacement);
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Drive連携を解除しました',
+          title: t.layerDrawer.driveUnlinked,
           level: NotificationLevel.info,
         );
   }
@@ -628,14 +629,14 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
             );
       } else {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'クローンに失敗しました',
+              title: t.layerDrawer.cloneFailed,
               level: NotificationLevel.error,
             );
       }
     } catch (e) {
       AppLogger.error('[LayerDrawer] Driveフォルダクローンエラー: $e');
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'エラー: $e',
+            title: t.common.errorOccurred(error: '$e'),
             level: NotificationLevel.error,
           );
     }
@@ -644,10 +645,10 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   Future<void> _addGeoPackage(BuildContext context) async {
     final result = await RenameDialog.show(
       context,
-      title: '新規GeoPackageファイル',
+      title: t.layerDrawer.newGeoPackage,
       currentName: '',
-      label: 'ファイル名（.gpkg）',
-      submitLabel: '作成',
+      label: t.layerDrawer.gpkgFileName,
+      submitLabel: t.layerDrawer.layer.create,
     );
     if (result == null || result.isEmpty) return;
 

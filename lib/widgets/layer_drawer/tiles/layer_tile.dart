@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -142,32 +143,32 @@ class LayerTile extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'rename',
-          child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Rename')]),
+          child: Row(children: [const Icon(Icons.edit, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.rename)]),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'style',
-          child: Row(children: [Icon(Icons.palette, size: 16), SizedBox(width: 8), Text('Style')]),
+          child: Row(children: [const Icon(Icons.palette, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.style)]),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'export',
-          child: Row(children: [Icon(Icons.file_download, size: 16), SizedBox(width: 8), Text('Export Layer')]),
+          child: Row(children: [const Icon(Icons.file_download, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.exportLayer)]),
         ),
         if (node is PointLayerNode)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'convert_to_line',
-            child: Row(children: [Icon(Icons.transform, size: 16), SizedBox(width: 8), Text('ライン/ポリゴンに変換')]),
+            child: Row(children: [const Icon(Icons.transform, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.convertToLinePolygon)]),
           ),
         if (node is PolygonLayerNode)
-          const PopupMenuItem(value: 'merge', child: Text('合成')),
-        const PopupMenuItem(
+          PopupMenuItem(value: 'merge', child: Text(t.layerDrawer.layer.merge)),
+        PopupMenuItem(
           value: 'absorb',
-          child: Row(children: [Icon(Icons.merge_type, size: 16), SizedBox(width: 8), Text('同構造レイヤを吸収')]),
+          child: Row(children: [const Icon(Icons.merge_type, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.absorbMatchingLayers)]),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'delete', child: Text('削除')),
+        PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.layer.delete)),
       ],
     );
   }
@@ -177,11 +178,11 @@ class LayerTile extends ConsumerWidget {
   Future<void> _showRenameDialog(BuildContext context, WidgetRef ref) async {
     final newName = await RenameDialog.show(
       context,
-      title: 'Rename Layer',
+      title: t.layerDrawer.layer.renameTitle,
       currentName: node.layerName,
-      label: 'Layer Name',
-      hint: 'Enter new layer name',
-      submitLabel: 'Rename',
+      label: t.layerDrawer.layer.layerName,
+      hint: t.layerDrawer.layer.enterNewName,
+      submitLabel: t.layerDrawer.rename,
     );
     if (newName == null || newName == node.layerName) return;
     try {
@@ -190,7 +191,7 @@ class LayerTile extends ConsumerWidget {
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Rename failed: $e',
+            title: t.layerDrawer.layer.renameFailed(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -200,7 +201,7 @@ class LayerTile extends ConsumerWidget {
     final folderPath = node.folderNode?.getAbsoluteFilePath();
     if (folderPath == null) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Could not determine folder path',
+            title: t.layerDrawer.layer.couldNotDetermineFolder,
             level: NotificationLevel.info,
           );
       return;
@@ -216,9 +217,9 @@ class LayerTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: 'レイヤ削除',
-      content: Text('${node.name} を本当に削除しますか？'),
-      confirmLabel: '削除',
+      title: t.layerDrawer.layer.deleteLayer,
+      content: Text(t.layerDrawer.layer.deleteLayerConfirm(name: node.name)),
+      confirmLabel: t.layerDrawer.layer.delete,
       execute: () async {
         if (ref.read(selectedLayerNodeProvider) == node) {
           ref.read(selectedLayerNodeProvider.notifier).select(null);
@@ -245,7 +246,7 @@ class LayerTile extends ConsumerWidget {
     final features = sourceLayer.features;
     if (features.isEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'ポイントが存在しないため変換できません',
+            title: t.layerDrawer.layer.noPointsToConvert,
             level: NotificationLevel.info,
           );
       return;
@@ -254,7 +255,7 @@ class LayerTile extends ConsumerWidget {
     final targetLayers = GeometryConversionService.findTargetLayersForPoints(currentDir);
     if (targetLayers.isEmpty) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'カレントディレクトリ直下にライン/ポリゴンレイヤーが見つかりません。\n先にレイヤーを作成してください。',
+            title: t.layerDrawer.layer.noTargetLayersFound,
             level: NotificationLevel.info,
           );
       return;
@@ -280,17 +281,17 @@ class LayerTile extends ConsumerWidget {
     if (targetLayer == null) return;
     if (!context.mounted) return;
 
-    final typeLabel = targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
+    final typeLabel = targetLayer is LineLayerNode ? 'Line' : 'Polygon';
     String? featureName = await showDialog<String>(
       context: context,
       builder: (context) {
         final ctrl = TextEditingController(text: sourceLayer.name);
         return AlertDialog(
-          title: Text('$typeLabel フィーチャ名の入力'),
-          content: TextField(autofocus: true, controller: ctrl, decoration: const InputDecoration(labelText: '名前（任意）')),
+          title: Text(t.layerDrawer.layer.featureNameInput(type: typeLabel)),
+          content: TextField(autofocus: true, controller: ctrl, decoration: InputDecoration(labelText: t.layerDrawer.layer.nameOptional)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('キャンセル')),
-            TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('OK')),
+            TextButton(onPressed: () => Navigator.pop(context, null), child: Text(t.common.cancel)),
+            TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: Text(t.common.ok)),
           ],
         );
       },
@@ -307,18 +308,18 @@ class LayerTile extends ConsumerWidget {
         await targetLayer.updateChildren();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'ポイントを$typeLabel に変換しました (${features.length}個の点)',
+              title: t.layerDrawer.layer.convertedToType(type: typeLabel, count: '${features.length}'),
               level: NotificationLevel.info,
             );
       } else {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'フィーチャの作成に失敗しました',
+              title: t.layerDrawer.layer.featureCreateFailed,
               level: NotificationLevel.info,
             );
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '変換処理中にエラーが発生しました: $e',
+            title: t.layerDrawer.layer.conversionError(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -355,23 +356,23 @@ class LayerTile extends ConsumerWidget {
       if (created != null) {
         await result.targetLayer.updateChildren();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
-        final typeLabel = result.targetLayer is LineLayerNode ? 'ライン' : 'ポリゴン';
+        final typeLabel = result.targetLayer is LineLayerNode ? 'Line' : 'Polygon';
         final closureInfo = result.closePath
-            ? ', 閉合比: ${created.turfFeature.properties?['survey_closure_ratio'] ?? '不明'}'
+            ? t.layerDrawer.layer.closureRatio(ratio: '${created.turfFeature.properties?['survey_closure_ratio'] ?? '?'}')
             : '';
         ref.read(notificationCenterProvider.notifier).add(
-              title: '測量データを$typeLabel に変換しました (${result.chain.length}点$closureInfo)',
+              title: t.layerDrawer.layer.surveyConvertedToType(type: typeLabel, count: '${result.chain.length}', closureInfo: closureInfo),
               level: NotificationLevel.info,
             );
       } else {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'フィーチャの作成に失敗しました',
+              title: t.layerDrawer.layer.featureCreateFailed,
               level: NotificationLevel.info,
             );
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '測量変換中にエラーが発生しました: $e',
+            title: t.layerDrawer.layer.surveyConversionError(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -386,7 +387,7 @@ class LayerTile extends ConsumerWidget {
     final mergeableCount = PolygonMerge.countMergeablePolygons(features);
     if (mergeableCount < 2) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '合成するには2つ以上の有効なポリゴンが必要です',
+            title: t.layerDrawer.layer.mergeNeedTwo,
             level: NotificationLevel.info,
           );
       return;
@@ -395,15 +396,13 @@ class LayerTile extends ConsumerWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ポリゴン合成'),
+        title: Text(t.layerDrawer.layer.mergeTitle),
         content: Text(
-          '${layerNode.name} 内の $mergeableCount 個のポリゴンを合成しますか？\n\n'
-          '最も面積の大きいポリゴンを外形とし、それ以外を穴として扱います。\n'
-          '合成後は新しいレイヤー「${layerNode.name}_merged」に保存されます。',
+          t.layerDrawer.layer.mergeConfirm(name: layerNode.name, count: '$mergeableCount'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('合成')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.layerDrawer.layer.merge)),
         ],
       ),
     );
@@ -413,7 +412,7 @@ class LayerTile extends ConsumerWidget {
       final merged = PolygonMerge.mergePolygonFeatures(features);
       if (merged.isEmpty) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'ポリゴンの合成に失敗しました',
+              title: t.layerDrawer.layer.mergeFailed,
               level: NotificationLevel.info,
             );
         return;
@@ -424,7 +423,7 @@ class LayerTile extends ConsumerWidget {
       final newLayer = await PolygonLayerNode.createIn(parentGpkg, newLayerName);
       if (newLayer == null) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: '新しいレイヤーの作成に失敗しました',
+              title: t.layerDrawer.layer.newLayerFailed,
               level: NotificationLevel.info,
             );
         return;
@@ -434,7 +433,7 @@ class LayerTile extends ConsumerWidget {
         newLayer,
         merged,
         'merged_polygon',
-        '${layerNode.name}の$mergeableCount個のポリゴンを合成',
+        t.layerDrawer.layer.mergedDescription(name: layerNode.name, count: '$mergeableCount'),
         metadata: {
           'source_layer': layerNode.name,
           'merged_count': mergeableCount,
@@ -444,18 +443,18 @@ class LayerTile extends ConsumerWidget {
       if (mergedFeature != null) {
         ref.read(featureRefreshTriggerProvider.notifier).trigger();
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'ポリゴンを合成しました。新しいレイヤー「$newLayerName」に保存されました。',
+              title: t.layerDrawer.layer.mergeSuccess(name: newLayerName),
               level: NotificationLevel.info,
             );
       } else {
         ref.read(notificationCenterProvider.notifier).add(
-              title: '合成ポリゴンの保存に失敗しました',
+              title: t.layerDrawer.layer.saveMergedFailed,
               level: NotificationLevel.info,
             );
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '合成処理中にエラーが発生しました: $e',
+            title: t.layerDrawer.layer.mergeError(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -465,7 +464,7 @@ class LayerTile extends ConsumerWidget {
     final parentGpkg = node.parent;
     if (parentGpkg is! GeoPackageNode) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'GeoPackage内のレイヤーではありません',
+            title: t.layerDrawer.layer.notInGeoPackage,
             level: NotificationLevel.info,
           );
       return;
@@ -476,7 +475,7 @@ class LayerTile extends ConsumerWidget {
       if (!context.mounted) return;
       if (targetColumns.isEmpty) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'レイヤーのカラム情報を取得できませんでした',
+              title: t.layerDrawer.layer.columnInfoFailed,
               level: NotificationLevel.info,
             );
         return;
@@ -488,7 +487,7 @@ class LayerTile extends ConsumerWidget {
           .toList();
       if (siblings.isEmpty) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: '同じ型の他のレイヤーがありません',
+              title: t.layerDrawer.layer.noSameTypeLayers,
               level: NotificationLevel.info,
             );
         return;
@@ -509,7 +508,7 @@ class LayerTile extends ConsumerWidget {
       if (!context.mounted) return;
       if (matching.isEmpty) {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'カラム構造が一致するレイヤーが見つかりません',
+              title: t.layerDrawer.layer.noMatchingColumns,
               level: NotificationLevel.info,
             );
         return;
@@ -518,20 +517,20 @@ class LayerTile extends ConsumerWidget {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('レイヤー吸収'),
+          title: Text(t.layerDrawer.layer.absorbTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('以下の ${matching.length} 件のレイヤーを「${node.name}」に吸収しますか？\n'),
+              Text(t.layerDrawer.layer.absorbConfirm(count: '${matching.length}', name: node.name)),
               ...matching.map((l) => Text('  • ${l.name}')),
               const SizedBox(height: 12),
-              const Text('※吸収されたレイヤーは削除されます', style: TextStyle(color: Colors.red)),
+              Text(t.layerDrawer.layer.absorbWarning, style: const TextStyle(color: Colors.red)),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('吸収')),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
           ],
         ),
       );
@@ -550,12 +549,12 @@ class LayerTile extends ConsumerWidget {
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
 
       ref.read(notificationCenterProvider.notifier).add(
-            title: '$count 件のフィーチャを吸収しました',
+            title: t.layerDrawer.layer.absorbedFeatures(count: '$count'),
             level: NotificationLevel.info,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '吸収処理中にエラーが発生しました: $e',
+            title: t.layerDrawer.layer.absorbError(error: '$e'),
             level: NotificationLevel.info,
           );
     }
@@ -591,12 +590,12 @@ class AddLayerButton extends ConsumerWidget {
           }
         } catch (_) {}
       },
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.add, size: 24),
-          SizedBox(width: 8),
-          Text('Add Layer', style: TextStyle(fontSize: 16, color: Colors.black87)),
+          const Icon(Icons.add, size: 24),
+          const SizedBox(width: 8),
+          Text(t.layerDrawer.layer.addLayer, style: const TextStyle(fontSize: 16, color: Colors.black87)),
         ],
       ),
     );
@@ -650,7 +649,7 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('新規レイヤ'),
+      title: Text(t.layerDrawer.layer.newLayer),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -658,7 +657,7 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
             controller: _controller,
             focusNode: _focusNode,
             autofocus: true,
-            decoration: InputDecoration(labelText: 'レイヤ名', hintText: _geomType.defaultLayerName),
+            decoration: InputDecoration(labelText: t.layerDrawer.layer.layerNameLabel, hintText: _geomType.defaultLayerName),
             onTap: _selectAll,
             onChanged: (v) => _isUserInput = v.isNotEmpty && v != _geomType.defaultLayerName,
             onSubmitted: (_) => _create(),
@@ -666,7 +665,7 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
           const SizedBox(height: 16),
           DropdownButtonFormField<GeometryType>(
             initialValue: _geomType,
-            decoration: const InputDecoration(labelText: 'ジオメトリタイプ'),
+            decoration: InputDecoration(labelText: t.layerDrawer.layer.geometryType),
             items: [
               DropdownMenuItem(value: GeometryType.point, child: Text(GeometryType.point.displayName)),
               DropdownMenuItem(value: GeometryType.linestring, child: Text(GeometryType.linestring.displayName)),
@@ -686,8 +685,8 @@ class _NewLayerDialogState extends State<_NewLayerDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('キャンセル')),
-        TextButton(onPressed: _create, child: const Text('作成')),
+        TextButton(onPressed: () => Navigator.pop(context, null), child: Text(t.common.cancel)),
+        TextButton(onPressed: _create, child: Text(t.layerDrawer.layer.create)),
       ],
     );
   }

@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
+import '../../../i18n/strings.g.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:turf/turf.dart' as turf;
@@ -48,7 +49,7 @@ class GeoJSONImporter extends BaseImporter {
 
       final turfFeatures = geoJson.features;
       if (turfFeatures.isEmpty) {
-        return ImportExportResult.error('フィーチャが含まれていません');
+        return ImportExportResult.error(t.importExport.noFeatures);
       }
 
       AppLogger.debug('[GeoJSONImporter] フィーチャ数: ${turfFeatures.length}');
@@ -56,7 +57,7 @@ class GeoJSONImporter extends BaseImporter {
       // フィーチャをジオメトリ型ごとにグループ化
       final grouped = _groupByGeometryType(turfFeatures);
       if (grouped.isEmpty) {
-        return ImportExportResult.error('サポートされているジオメトリタイプのフィーチャがありません');
+        return ImportExportResult.error(t.importExport.noSupportedGeometry);
       }
 
       AppLogger.debug('[GeoJSONImporter] ジオメトリ型数: ${grouped.length} (${grouped.keys.map((t) => t.value).join(", ")})');

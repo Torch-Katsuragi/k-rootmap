@@ -2,6 +2,7 @@
 // Google Driveの共有URLを入力してプロジェクトをダウンロード
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 
 import '../../services/google_drive/index.dart';
 
@@ -129,7 +130,7 @@ class _OpenFromUrlDialogState extends State<OpenFromUrlDialog> {
     // URLからフォルダIDを抽出
     final folderId = GoogleDriveService.extractFolderIdFromUrl(url);
     if (folderId == null) {
-      setState(() => _errorMessage = '無効なGoogle Drive URLです');
+      setState(() => _errorMessage = t.drive.invalidUrl);
       return;
     }
 
@@ -143,7 +144,7 @@ class _OpenFromUrlDialogState extends State<OpenFromUrlDialog> {
     if (folderInfo == null) {
       setState(() {
         _currentStep = _DialogStep.inputUrl;
-        _errorMessage = 'フォルダにアクセスできません。共有設定を確認してください。';
+        _errorMessage = t.drive.accessDenied;
       });
       return;
     }
@@ -223,12 +224,12 @@ class _OpenFromUrlDialogState extends State<OpenFromUrlDialog> {
   Widget _buildContent() {
     switch (_currentStep) {
       case _DialogStep.checkAuth:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('認証状態を確認しています...'),
+            Text(t.drive.checkingAuth),
           ],
         );
 
@@ -282,12 +283,12 @@ class _OpenFromUrlDialogState extends State<OpenFromUrlDialog> {
         );
 
       case _DialogStep.fetching:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('フォルダ情報を取得しています...'),
+            Text(t.drive.fetchingInfo),
           ],
         );
 
@@ -334,7 +335,7 @@ class _OpenFromUrlDialogState extends State<OpenFromUrlDialog> {
             ),
             const SizedBox(height: 16),
             Text(
-              '保存先: ${widget.downloadDirectory}/$_folderName',
+              t.drive.saveTo(path: '${widget.downloadDirectory}/$_folderName'),
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (_errorMessage != null) ...[

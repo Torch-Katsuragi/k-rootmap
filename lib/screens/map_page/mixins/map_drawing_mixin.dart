@@ -8,6 +8,7 @@ import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/tool_providers.dart';
+import '../../../i18n/strings.g.dart';
 import '../map_page_state_base.dart';
 
 /// 描画確定Mixin
@@ -61,7 +62,7 @@ mixin MapDrawingMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T> {
     // GlobalDrawingStateの統一確定処理を使用
     final success = await drawingState.confirmCurrentFeature(
       layerNode: selected,
-      name: name.isNotEmpty ? name : '新規フィーチャ',
+      name: name.isNotEmpty ? name : t.editor.newFeature,
       description: '',
       closeRing: closeRing,
       refreshCallback: () {

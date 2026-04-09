@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
@@ -37,7 +38,7 @@ class SyncPullHandler {
     void Function(SyncProgress progress)? onProgress,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
-      return SyncResult.failure('Google Driveに接続されていません');
+      return SyncResult.failure(t.drive.driveNotConnected);
     }
 
     try {
@@ -48,7 +49,7 @@ class SyncPullHandler {
 
       final folderInfo = await _driveService.getFolderInfo(driveFolderId);
       if (folderInfo == null) {
-        return SyncResult.failure('Driveフォルダの情報を取得できません');
+        return SyncResult.failure(t.drive.driveFolderNotFound);
       }
 
       final driveResult =
@@ -99,7 +100,7 @@ class SyncPullHandler {
       }
 
       onProgress?.call(SyncProgress(
-        currentFile: '開始',
+        currentFile: t.drive.syncProgressStart,
         processedCount: 0,
         totalCount: filesToDownload.length,
         processedBytes: 0,
@@ -186,7 +187,7 @@ class SyncPullHandler {
       }
 
       onProgress?.call(SyncProgress(
-        currentFile: '完了',
+        currentFile: t.drive.syncProgressComplete,
         processedCount: filesToDownload.length,
         totalCount: filesToDownload.length,
         processedBytes: totalBytes,
@@ -199,7 +200,7 @@ class SyncPullHandler {
 
       if (downloadedCount == 0 && filesToDownload.isNotEmpty) {
         return SyncResult.failure(
-          'ファイルのダウンロードに失敗しました（$skippedCount件スキップ）',
+          t.services.downloadFailed(count: skippedCount.toString()),
         );
       }
 
@@ -218,7 +219,7 @@ class SyncPullHandler {
       );
     } catch (e, stack) {
       AppLogger.debug('[SyncEngine] Pullエラー: $e\n$stack');
-      return SyncResult.failure('ダウンロード中にエラーが発生しました: $e');
+      return SyncResult.failure(t.services.downloadError(error: e.toString()));
     }
   }
 
@@ -233,7 +234,7 @@ class SyncPullHandler {
   }) async {
     final folderId = GoogleDriveService.extractFolderIdFromUrl(shareUrl);
     if (folderId == null) {
-      return SyncResult.failure('無効な共有URLです');
+      return SyncResult.failure(t.drive.invalidShareUrl);
     }
 
     return pull(folderId, localPath, onProgress: onProgress);
@@ -289,7 +290,7 @@ class SyncPullHandler {
     final driveId = meta.sync.driveId;
 
     if (driveId == null) {
-      return SyncResult.failure('Drive連携されていません');
+      return SyncResult.failure(t.drive.driveNotLinked);
     }
 
     return pull(driveId, localPath);

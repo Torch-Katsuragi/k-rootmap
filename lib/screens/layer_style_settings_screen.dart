@@ -7,6 +7,7 @@ library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import '../core/settings_schema.dart';
 import '../widgets/settings_widgets.dart';
 import '../utils/app_logger.dart';
@@ -312,7 +313,7 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   bool get _isGlobalMode => !widget.isLayerMode;
 
   String get _title =>
-      _isGlobalMode ? 'レイヤ描画' : 'Style: ${widget.targetLayer!.layerName}';
+      _isGlobalMode ? t.settingsWidget.layerDrawingTitle : t.settingsWidget.styleTitle(name: widget.targetLayer!.layerName);
 
   /// レイヤータイプに応じてセクションをフィルタ
   bool _sectionFilter(SettingSectionDef section) {
@@ -383,20 +384,20 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('設定をリセット'),
+        title: Text(t.settingsWidget.resetSettings),
         content: Text(
           _isGlobalMode
-              ? 'すべての描画設定をデフォルト値に戻しますか？'
-              : 'このレイヤーの設定をグローバル設定に戻しますか？',
+              ? t.settingsWidget.resetAllConfirm
+              : t.settingsWidget.resetLayerConfirm,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('リセット'),
+            child: Text(t.common.reset),
           ),
         ],
       ),

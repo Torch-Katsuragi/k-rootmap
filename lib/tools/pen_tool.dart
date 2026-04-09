@@ -3,6 +3,7 @@
 import 'map_tool.dart';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_notification.dart';
@@ -86,7 +87,7 @@ class PenTool extends MapTool {
     if (!selected.isVisibleRecursive()) {
       AppLogger.debug('[DEBUG] PenTool.onTap: レイヤーが不可視のため処理中止');
       _ref.read(notificationCenterProvider.notifier).add(
-        title: 'このレイヤは不可視のため編集できません',
+        title: t.editor.layerInvisible,
         level: NotificationLevel.warning,
       );
       return;
@@ -159,7 +160,7 @@ class PenTool extends MapTool {
     if (selected == null || !selected.isVisibleRecursive()) {
       if (selected != null && !selected.isVisibleRecursive()) {
         _ref.read(notificationCenterProvider.notifier).add(
-          title: 'このレイヤは不可視のため編集できません',
+          title: t.editor.layerInvisible,
           level: NotificationLevel.warning,
         );
       }

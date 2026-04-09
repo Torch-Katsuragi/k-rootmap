@@ -2,6 +2,7 @@
 // プロジェクトとDriveフォルダの連携・同期を行うダイアログ
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 
 import '../../services/google_drive/index.dart';
@@ -184,12 +185,12 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
   Widget _buildContent() {
     switch (_currentStep) {
       case _DialogStep.checkAuth:
-        return const Column(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('認証状態を確認しています...'),
+            Text(t.drive.checkingAuth),
           ],
         );
 
@@ -262,7 +263,7 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
               ),
 
             // フォルダ選択
-            const Text('保存先フォルダ:'),
+            Text(t.drive.targetFolder),
             const SizedBox(height: 8),
 
             // フォルダ作成オプション
@@ -277,7 +278,7 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
               child: Column(
                 children: [
                   RadioListTile<bool>(
-                    title: Text('新規フォルダ "${widget.projectName}"'),
+                    title: Text(t.drive.newFolder(name: widget.projectName)),
                     subtitle: const Text('K-MAPS Projectsフォルダ内に作成'),
                     value: true,
                   ),
@@ -285,7 +286,7 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
                   // 既存フォルダ選択オプション
                   if (_existingFolders.isNotEmpty)
                     RadioListTile<bool>(
-                      title: const Text('既存フォルダを選択'),
+                      title: Text(t.drive.selectExisting),
                       value: false,
                     ),
                 ],
@@ -299,7 +300,7 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
                   child: DropdownButton<String>(
                     isExpanded: true,
                     value: _selectedFolderId,
-                    hint: const Text('フォルダを選択...'),
+                    hint: Text(t.drive.selectFolderHint),
                     items: _existingFolders.map((folder) {
                       return DropdownMenuItem<String>(
                         value: folder.id,

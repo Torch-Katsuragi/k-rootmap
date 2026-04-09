@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+import '../../../i18n/strings.g.dart';
 import '../../../models/app_notification.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/project_providers.dart';
@@ -57,7 +58,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
     } catch (e) {
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '座標系の変更に失敗しました: $e',
+          title: t.metadata.coordinateChangeFailed(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -71,7 +72,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
       final projectRoot = ref.read(projectRootDirProvider);
       if (projectRoot == null) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'プロジェクトルートディレクトリが見つかりません',
+          title: t.metadata.projectRootNotFound,
           level: NotificationLevel.error,
         );
         return;
@@ -113,12 +114,12 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
       await sink.close();
 
       ref.read(notificationCenterProvider.notifier).add(
-        title: 'メタデータTSVファイルを出力しました: $tsvFileName',
+        title: t.metadata.tsvExported(name: tsvFileName),
         level: NotificationLevel.success,
       );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-        title: 'メタデータTSVエクスポートに失敗しました: $e',
+        title: t.metadata.tsvExportFailed(error: '$e'),
         level: NotificationLevel.error,
       );
     }
@@ -146,7 +147,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
               padding: const EdgeInsets.only(right: 8.0),
               child: DropdownButton<String>(
                 value: currentTableData.selectedCoordinateSystem,
-                hint: const Text('座標系'),
+                hint: Text(t.metadata.coordinateSystem),
                 items:
                     currentTableData.coordinateSystemOptions!.entries
                         .map(
@@ -169,7 +170,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
             ),
           IconButton(
             icon: const Icon(Icons.file_download),
-            tooltip: 'TSVエクスポート',
+            tooltip: t.metadata.tsvExport,
             onPressed: () => _exportMetadataToTSV(context),
           ),
         ],
@@ -212,7 +213,7 @@ class _MetadataTableDialogState extends ConsumerState<MetadataTableDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('閉じる'),
+          child: Text(t.common.close),
         ),
       ],
     );

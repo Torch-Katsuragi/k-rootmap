@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import '../../services/google_drive/sync_engine.dart';
 
 /// 同期モード
@@ -76,19 +77,17 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
 
   String get _title {
     if (widget.mode == SyncMode.upload) {
-      return 'アップロード: ${widget.folderName}';
+      return t.layerDrawer.folder.uploadTitle(name: widget.folderName);
     } else {
-      return 'ダウンロード: ${widget.folderName}';
+      return t.layerDrawer.folder.downloadTitle(name: widget.folderName);
     }
   }
 
   String get _description {
     if (widget.mode == SyncMode.upload) {
-      return 'チェックしたファイルをクラウドに反映します\n'
-             '※クラウド側のチェックを外すと端末の状態に復元します';
+      return t.layerDrawer.folder.uploadDesc;
     } else {
-      return 'チェックしたファイルを端末に反映します\n'
-             '※端末側のチェックを外すとクラウドの状態に復元します';
+      return t.layerDrawer.folder.downloadDesc;
     }
   }
 
@@ -99,7 +98,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
       content: SizedBox(
         width: double.maxFinite,
         child: widget.entries.isEmpty
-            ? const Center(child: Text('変更はありません'))
+            ? Center(child: Text(t.layerDrawer.folder.noChanges))
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -121,7 +120,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                       children: [
                         Expanded(
                           child: Text(
-                            '端末',
+                            t.layerDrawer.folder.localLabel,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
@@ -131,7 +130,7 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
                         ),
                         Expanded(
                           child: Text(
-                            'クラウド',
+                            t.layerDrawer.folder.cloudLabel,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
@@ -160,12 +159,12 @@ class _SyncMergeDialogState extends State<SyncMergeDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         if (widget.entries.isNotEmpty)
           FilledButton(
             onPressed: _onSync,
-            child: const Text('同期実行'),
+            child: Text(t.layerDrawer.folder.syncExecute),
           ),
       ],
     );

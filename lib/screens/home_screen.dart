@@ -1,5 +1,6 @@
 // K-MAPS: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
+import '../i18n/strings.g.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -185,7 +186,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       AppLogger.debug('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
       // Bluetooth権限がなくてもアプリは動作可能なので、警告のみ表示してストレージ権限で起動許可
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'Bluetooth GNSS機能を使用するには、Bluetooth権限が必要です',
+            title: t.permissions.bluetoothRequired,
             level: NotificationLevel.warning,
           );
       
@@ -202,22 +203,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('ストレージ権限が必要です'),
-            content: const Text(
-              'ファイルの作成・編集を行うには、ストレージアクセス権限が必要です。\n'
-              '設定から権限を有効にしてください。',
+            title: Text(t.permissions.storageRequired),
+            content: Text(
+              t.permissions.storageRequiredDesc,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('キャンセル'),
+                child: Text(t.common.cancel),
               ),
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
                   openAppSettings();
                 },
-                child: const Text('設定を開く'),
+                child: Text(t.common.openSettings),
               ),
             ],
           ),
@@ -281,7 +281,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (!_permissionsGranted) {
       AppLogger.debug('[HomeScreen] 権限が許可されていません');
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'まずストレージ権限を許可してください',
+            title: t.permissions.storageNotGranted,
             level: NotificationLevel.error,
           );
       return;
@@ -296,7 +296,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       setState(() {
         _projectDir = dir;
         _isOpeningProject = true;
-        _openingProjectStatus = 'プロジェクトを初期化しています...';
+        _openingProjectStatus = t.home.initializingProject;
       });
       AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
       ref.read(projectRootDirProvider.notifier).set(dir);
@@ -306,7 +306,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
 
       setState(() {
-        _openingProjectStatus = '共有フォルダを準備しています...';
+        _openingProjectStatus = t.home.preparingSharedFolder;
       });
       await _initializeGlobalFolder();
       AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
@@ -372,9 +372,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'GeoPackageベースの地理情報管理・編集アプリケーション',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+            Text(
+              t.home.subtitle,
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 48),
@@ -390,17 +390,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       color: Colors.orange,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'プロジェクトを開始',
-                      style: TextStyle(
+                    Text(
+                      t.home.startProject,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'プロジェクトフォルダを選択して地図編集を開始してください',
-                      style: TextStyle(color: Colors.grey),
+                    Text(
+                      t.home.selectProjectFolder,
+                      style: const TextStyle(color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -416,8 +416,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       ),
                       label: Text(
                         _isOpeningProject
-                            ? '起動中...'
-                            : (_permissionsGranted ? 'フォルダを選択' : '権限が必要です'),
+                            ? t.home.launching
+                            : (_permissionsGranted ? t.home.selectFolder : t.home.permissionRequired),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
@@ -447,7 +447,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                       TextButton.icon(
                         onPressed: _checkPermissions,
                         icon: const Icon(Icons.refresh),
-                        label: const Text('権限を再確認'),
+                        label: Text(t.home.recheckPermission),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.blue,
                         ),
@@ -471,9 +471,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         size: 24,
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        '選択されたフォルダ:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      Text(
+                        t.common.selectedFolder,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(

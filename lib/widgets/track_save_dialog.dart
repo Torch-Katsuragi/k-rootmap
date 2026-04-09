@@ -2,6 +2,7 @@
 // GPS軌跡保存ダイアログ
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../i18n/strings.g.dart';
 import '../models/app_notification.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';
@@ -67,11 +68,11 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
     final stats = widget.track.getStatistics();
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.directions_walk, color: Colors.green),
-          SizedBox(width: 8),
-          Text('GPS軌跡を保存'),
+          const Icon(Icons.directions_walk, color: Colors.green),
+          const SizedBox(width: 8),
+          Text(t.trackSave.title),
         ],
       ),
       content: SizedBox(
@@ -91,21 +92,21 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('軌跡情報', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(t.trackSave.trackInfo, style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  _buildStatRow('ポイント数', '${stats['pointCount']}個'),
+                  _buildStatRow(t.trackSave.pointCount, t.trackSave.points(count: '${stats['pointCount']}')),
                   _buildStatRow(
-                    '距離',
+                    t.trackSave.distance,
                     '${(stats['totalDistance'] / 1000).toStringAsFixed(2)}km',
                   ),
-                  _buildStatRow('時間', _formatDuration(stats['duration'])),
+                  _buildStatRow(t.trackSave.duration, _formatDuration(stats['duration'])),
                   _buildStatRow(
-                    'GPS/GNSS',
-                    '${stats['gpsPoints']}/${stats['gnssPoints']}ポイント',
+                    t.trackSave.gpsGnss,
+                    t.trackSave.gpsGnssPoints(gps: '${stats['gpsPoints']}', gnss: '${stats['gnssPoints']}'),
                   ),
                   if (stats['averageSpeed'] > 0)
                     _buildStatRow(
-                      '平均速度',
+                      t.trackSave.avgSpeed,
                       '${(stats['averageSpeed'] * 3.6).toStringAsFixed(1)}km/h',
                     ),
                 ],
@@ -115,8 +116,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
 
             TextField(
               controller: _trackNameController,
-              decoration: const InputDecoration(
-                labelText: '軌跡名',
+              decoration: InputDecoration(
+                labelText: t.trackSave.trackName,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.edit),
               ),
@@ -124,8 +125,8 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
             const SizedBox(height: 16),
 
             // GeoPackage選択
-            const Text(
-              '保存先GeoPackage:',
+            Text(
+              t.trackSave.targetGpkg,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -143,7 +144,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'GeoPackageファイルが見つかりません。\n先にGeoPackageを作成してください。',
+                        t.trackSave.noGpkgFound,
                         style: TextStyle(color: Colors.orange[800]),
                       ),
                     ),
@@ -193,7 +194,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed:
@@ -204,7 +205,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                     if (trackName.isEmpty) {
                       if (widget.ref != null) {
                         widget.ref!.read(notificationCenterProvider.notifier).add(
-                          title: '軌跡名を入力してください',
+                          title: t.trackSave.enterTrackName,
                           level: NotificationLevel.info,
                         );
                       }
@@ -213,7 +214,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                     if (_selectedGeoPackage == null) {
                       if (widget.ref != null) {
                         widget.ref!.read(notificationCenterProvider.notifier).add(
-                          title: '保存先GeoPackageを選択してください',
+                          title: t.trackSave.selectGpkg,
                           level: NotificationLevel.info,
                         );
                       }
@@ -228,7 +229,7 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
                     });
                   },
           icon: const Icon(Icons.save),
-          label: const Text('保存'),
+          label: Text(t.trackSave.save),
         ),
       ],
     );
@@ -255,11 +256,11 @@ class _TrackSaveDialogState extends State<TrackSaveDialog> {
     final seconds = duration.inSeconds % 60;
 
     if (hours > 0) {
-      return '$hours時間$minutes分';
+      return t.trackSave.hoursMinutes(hours: '$hours', minutes: '$minutes');
     } else if (minutes > 0) {
-      return '$minutes分$seconds秒';
+      return t.trackSave.minutesSeconds(minutes: '$minutes', seconds: '$seconds');
     } else {
-      return '$seconds秒';
+      return t.trackSave.secondsOnly(seconds: '$seconds');
     }
   }
 }

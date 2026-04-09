@@ -3,6 +3,7 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 
 /// フォルダ追加の種類
 enum AddFolderType {
@@ -62,15 +63,15 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('新規フォルダ'),
+      title: Text(t.addFolder.title),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_showDriveOption) ...[
-              const Text(
-                'フォルダの種類',
+              Text(
+                t.addFolder.folderType,
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
@@ -81,16 +82,16 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                 type: AddFolderType.local,
                 icon: Icons.folder,
                 iconColor: Colors.amber,
-                title: '通常フォルダ',
-                subtitle: 'ローカルに保存',
+                title: t.addFolder.localFolder,
+                subtitle: t.addFolder.localFolderDesc,
               ),
               const SizedBox(height: 8),
               _buildTypeOption(
                 type: AddFolderType.drive,
                 icon: Icons.cloud,
                 iconColor: Colors.blue,
-                title: 'Google Driveフォルダ',
-                subtitle: '共有URLからクローン',
+                title: t.addFolder.driveClone,
+                subtitle: t.addFolder.driveCloneDesc,
               ),
               const SizedBox(height: 16),
             ],
@@ -100,8 +101,8 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
               TextField(
                 controller: _nameController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'フォルダ名',
+                decoration: InputDecoration(
+                  labelText: t.addFolder.folderName,
                   border: OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _onSubmit(),
@@ -116,13 +117,13 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
                   color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                    SizedBox(width: 8),
+                    const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '次の画面でDriveフォルダのURLを入力するか、QRコードをスキャンします。',
+                        t.addFolder.driveUrlHint,
                         style: TextStyle(fontSize: 13),
                       ),
                     ),
@@ -136,11 +137,11 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         TextButton(
           onPressed: _canSubmit() ? _onSubmit : null,
-          child: Text(_selectedType == AddFolderType.local ? '作成' : '次へ'),
+          child: Text(_selectedType == AddFolderType.local ? t.addFolder.create : t.addFolder.next),
         ),
       ],
     );

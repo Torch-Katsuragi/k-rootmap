@@ -17,6 +17,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/gps_position_record.dart';
 import '../utils/app_logger.dart';
+import '../i18n/strings.g.dart';
 import 'foreground_service.dart';
 
 /// 内蔵GPS位置情報ストア（シングルトン）
@@ -142,7 +143,7 @@ class InternalGpsLocationStore {
     if (!Platform.isWindows) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        throw Exception('位置情報サービスが無効です');
+        throw Exception(t.gps.locationServiceDisabled);
       }
 
       var permission = await Geolocator.checkPermission();
@@ -153,12 +154,12 @@ class InternalGpsLocationStore {
           await Future.delayed(const Duration(milliseconds: 500));
           permission = await Geolocator.checkPermission();
           if (permission == LocationPermission.denied) {
-            throw Exception('位置情報許可が拒否されました');
+            throw Exception(t.gps.locationPermissionDenied);
           }
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        throw Exception('位置情報許可が永続的に拒否されています');
+        throw Exception(t.gps.locationPermissionPermanentlyDenied);
       }
     }
 

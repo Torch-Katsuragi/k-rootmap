@@ -4,6 +4,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../i18n/strings.g.dart';
 import 'package:trina_grid/trina_grid.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/layer_node.dart';
@@ -115,7 +116,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 _controller.clearError();
                 _rebuildGrid();
               },
-              child: const Text('再試行'),
+              child: Text(t.attributeTable.retryButton),
             ),
           ],
         ),
@@ -123,7 +124,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     }
 
     if (_controller.columns.isEmpty) {
-      return const Center(child: Text('カラム定義がありません'));
+      return Center(child: Text(t.attributeTable.noColumns));
     }
 
     return Column(
@@ -266,7 +267,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   Future<void> _handleDeleteSelected() async {
     await _controller.deleteSelectedFeatures();
     ref.read(notificationCenterProvider.notifier).add(
-      title: 'フィーチャを削除しました',
+      title: t.attributeTable.featureDeleted,
       level: NotificationLevel.success,
     );
   }
@@ -275,13 +276,13 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     try {
       await widget.layer.geoPackageFile.flushChanges();
       ref.read(notificationCenterProvider.notifier).add(
-        title: '保存完了',
+        title: t.attributeTable.saved,
         level: NotificationLevel.info,
       );
     } catch (e) {
       AppLogger.debug('[AttributeTableWidget] 保存エラー: $e');
       ref.read(notificationCenterProvider.notifier).add(
-        title: '保存エラー: $e',
+        title: t.attributeTable.saveError(field: '', error: e.toString()),
         level: NotificationLevel.error,
       );
     }
@@ -297,7 +298,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
     final checkedCount = _controller.checkedRowCount;
     if (checkedCount == 0) {
       ref.read(notificationCenterProvider.notifier).add(
-        title: '行をチェックしてください',
+        title: t.attributeTable.checkRows,
         level: NotificationLevel.warning,
       );
       return;
@@ -317,15 +318,15 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('一括編集（$checkedCount行）'),
+          title: Text(t.attributeTable.batchEditTitle(count: '$checkedCount')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 // ignore: deprecated_member_use
                 value: selectedColumn,
-                decoration: const InputDecoration(
-                  labelText: '対象カラム',
+                decoration: InputDecoration(
+                  labelText: t.attributeTable.targetColumn,
                   isDense: true,
                 ),
                 items: editableColumns
@@ -336,10 +337,10 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
               const SizedBox(height: 8),
               TextField(
                 controller: valueController,
-                decoration: const InputDecoration(
-                  labelText: '設定する値',
+                decoration: InputDecoration(
+                  labelText: t.attributeTable.setValue,
                   isDense: true,
-                  hintText: '空欄でNULL設定',
+                  hintText: t.attributeTable.setValueHint,
                 ),
               ),
             ],
@@ -347,13 +348,13 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             FilledButton(
               onPressed: selectedColumn != null
                   ? () => Navigator.pop(ctx, true)
                   : null,
-              child: const Text('適用'),
+              child: Text(t.attributeTable.apply),
             ),
           ],
         ),
@@ -365,7 +366,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       final count = await _controller.batchSetValue(selectedColumn!, value);
       _rebuildGrid();
       ref.read(notificationCenterProvider.notifier).add(
-        title: '$count件の値を更新しました',
+        title: t.attributeTable.batchUpdated(count: '$count'),
         level: NotificationLevel.success,
       );
     }
@@ -387,12 +388,12 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
       await file.writeAsString(csv);
 
       ref.read(notificationCenterProvider.notifier).add(
-        title: 'CSVエクスポート完了: $fileName',
+        title: t.attributeTable.csvExported(name: fileName),
         level: NotificationLevel.success,
       );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-        title: 'CSVエクスポートエラー: $e',
+        title: t.attributeTable.csvExportError(error: e.toString()),
         level: NotificationLevel.error,
       );
     }
@@ -428,7 +429,7 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 12, color: Colors.black87),
-              hint: const Text('統計カラム', style: TextStyle(fontSize: 12)),
+              hint: Text(t.attributeTable.statsColumn, style: const TextStyle(fontSize: 12)),
               items:
                   editableColumns
                       .map(
@@ -451,14 +452,14 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
           ),
           if (_columnStats != null) ...[
             const SizedBox(width: 8),
-            _buildStatChip('件数', '${_columnStats!['count']}'),
-            _buildStatChip('ユニーク', '${_columnStats!['unique']}'),
+            _buildStatChip(t.attributeTable.statCount, '${_columnStats!['count']}'),
+            _buildStatChip(t.attributeTable.statUnique, '${_columnStats!['unique']}'),
             if (_columnStats!['sum'] != null)
-              _buildStatChip('合計', _formatStat(_columnStats!['sum'])),
+              _buildStatChip(t.attributeTable.statSum, _formatStat(_columnStats!['sum'])),
             if (_columnStats!['avg'] != null)
-              _buildStatChip('平均', _formatStat(_columnStats!['avg'])),
-            _buildStatChip('最小', '${_columnStats!['min'] ?? '-'}'),
-            _buildStatChip('最大', '${_columnStats!['max'] ?? '-'}'),
+              _buildStatChip(t.attributeTable.statAvg, _formatStat(_columnStats!['avg'])),
+            _buildStatChip(t.attributeTable.statMin, '${_columnStats!['min'] ?? '-'}'),
+            _buildStatChip(t.attributeTable.statMax, '${_columnStats!['max'] ?? '-'}'),
           ],
         ],
       ),

@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/drive_folder_node.dart';
@@ -45,13 +46,13 @@ class LayerDrawerTitleBar extends StatelessWidget {
   }
 
   (String, Color) get _syncLabel => switch (syncStatus) {
-        SyncStatus.synced => ('同期済み', Colors.greenAccent),
-        SyncStatus.localChanges => ('ローカル変更あり', Colors.orangeAccent),
-        SyncStatus.remoteChanges => ('Drive変更あり', Colors.lightBlueAccent),
-        SyncStatus.conflict => ('競合あり', Colors.redAccent),
-        SyncStatus.syncing => ('同期中...', Colors.lightBlueAccent),
-        SyncStatus.error => ('エラー', Colors.redAccent),
-        SyncStatus.unknown => ('Drive連携中', Colors.white70),
+        SyncStatus.synced => (t.layerDrawer.titleBar.syncedLabel, Colors.greenAccent),
+        SyncStatus.localChanges => (t.layerDrawer.titleBar.localChangesLabel, Colors.orangeAccent),
+        SyncStatus.remoteChanges => (t.layerDrawer.titleBar.remoteChangesLabel, Colors.lightBlueAccent),
+        SyncStatus.conflict => (t.layerDrawer.titleBar.conflictLabel, Colors.redAccent),
+        SyncStatus.syncing => (t.layerDrawer.titleBar.syncingLabel, Colors.lightBlueAccent),
+        SyncStatus.error => (t.layerDrawer.titleBar.errorLabel, Colors.redAccent),
+        SyncStatus.unknown => (t.layerDrawer.titleBar.driveLinkedLabel, Colors.white70),
         null => ('', Colors.white70),
       };
 
@@ -80,7 +81,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
                   color: Colors.white,
                   size: 20,
                 ),
-                tooltip: '一つ上の階層に戻る',
+                tooltip: t.layerDrawer.titleBar.goUp,
                 onPressed: onBack,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -139,7 +140,7 @@ class LayerDrawerTitleBar extends StatelessWidget {
     };
 
     return PopupMenuButton<String>(
-      tooltip: 'Drive同期',
+      tooltip: t.layerDrawer.titleBar.driveSync,
       onSelected: onCloudAction,
       offset: const Offset(0, 40),
       child: Container(
@@ -150,37 +151,37 @@ class LayerDrawerTitleBar extends StatelessWidget {
       ),
       itemBuilder: (_) => [
         if (!isReadOnly)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'upload',
             child: Row(children: [
-              Icon(Icons.cloud_upload, color: Colors.orange),
-              SizedBox(width: 12),
-              Text('アップロード'),
+              const Icon(Icons.cloud_upload, color: Colors.orange),
+              const SizedBox(width: 12),
+              Text(t.layerDrawer.folder.upload),
             ]),
           ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'download',
           child: Row(children: [
-            Icon(Icons.cloud_download, color: Colors.green),
-            SizedBox(width: 12),
-            Text('ダウンロード'),
+            const Icon(Icons.cloud_download, color: Colors.green),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.folder.download),
           ]),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'refresh',
           child: Row(children: [
-            Icon(Icons.refresh, color: Colors.blue),
-            SizedBox(width: 12),
-            Text('状態を更新'),
+            const Icon(Icons.refresh, color: Colors.blue),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.folder.refreshStatus),
           ]),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'unlink',
           child: Row(children: [
-            Icon(Icons.link_off, color: Colors.red),
-            SizedBox(width: 12),
-            Text('Drive連携を解除'),
+            const Icon(Icons.link_off, color: Colors.red),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.folder.unlinkDrive),
           ]),
         ),
       ],
@@ -198,29 +199,29 @@ class LayerDrawerTitleBar extends StatelessWidget {
         decoration: _buttonDecoration,
         child: const Icon(Icons.add, color: Colors.black, size: 22),
       ),
-      itemBuilder: (_) => const [
+      itemBuilder: (_) => [
         PopupMenuItem(
           value: AddAction.folder,
           child: Row(children: [
-            Icon(Icons.folder, color: Colors.amber),
-            SizedBox(width: 12),
-            Text('Folder'),
+            const Icon(Icons.folder, color: Colors.amber),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.titleBar.addFolder),
           ]),
         ),
         PopupMenuItem(
           value: AddAction.geoPackage,
           child: Row(children: [
-            Icon(Icons.storage, color: Color(0xFF90A4AE)),
-            SizedBox(width: 12),
-            Text('GeoPackage'),
+            const Icon(Icons.storage, color: Color(0xFF90A4AE)),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.titleBar.addGeoPackage),
           ]),
         ),
         PopupMenuItem(
           value: AddAction.photo,
           child: Row(children: [
-            Icon(Icons.photo_library, color: Colors.blue),
-            SizedBox(width: 12),
-            Text('Photos'),
+            const Icon(Icons.photo_library, color: Colors.blue),
+            const SizedBox(width: 12),
+            Text(t.layerDrawer.titleBar.addPhotos),
           ]),
         ),
       ],

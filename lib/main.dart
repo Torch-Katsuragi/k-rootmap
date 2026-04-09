@@ -1,9 +1,11 @@
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
+import 'i18n/strings.g.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
 import 'core/path_resolver.dart';
@@ -15,17 +17,49 @@ import 'models/nodes/feature_node.dart';
 import 'services/internal_gps_location_store.dart';
 import 'utils/background_save_manager.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _setupErrorHandlers();
   _setupDebugPrintFilter();
+
+  // 言語設定: 保存値があればそれを使用、なければ端末の言語設定を自動検出
+  await _initLocale();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
-  runApp(const ProviderScope(child: KMapsApp()));
+  runApp(
+    TranslationProvider(
+      child: const ProviderScope(child: KMapsApp()),
+    ),
+  );
+}
+/// 言語設定のSharedPreferencesキー
+const kAppLocaleKey = 'app_locale';
+
+/// 言語設定を初期化
+/// 保存値がなければ端末から自動検出して初期値を設定
+Future<void> _initLocale() async {
+  final prefs = await SharedPreferences.getInstance();
+  final savedLocale = prefs.getString(kAppLocaleKey);
+
+  if (savedLocale != null) {
+    // 保存済みの言語設定を使用
+    final locale = AppLocale.values.where((l) => l.languageCode == savedLocale).firstOrNull;
+    if (locale != null) {
+      LocaleSettings.instance.setLocale(locale);
+      return;
+    }
+  }
+
+  // 保存値がない場合は端末の言語設定を自動検出して初期値に設定
+  LocaleSettings.useDeviceLocaleSync();
+  // 検出結果を保存（次回起動時に使用）
+  await prefs.setString(kAppLocaleKey, LocaleSettings.currentLocale.languageCode);
 }
 
 void _setupErrorHandlers() {
@@ -154,6 +188,9 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'K-MAPS',
+      locale: TranslationProvider.of(context).flutterLocale,
+      supportedLocales: AppLocaleUtils.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,

@@ -1,5 +1,6 @@
 // 地図画面のAppBarアクションボタン群
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import '../screens/settings_screen.dart';
 import 'notification/notification_bell.dart';
 
@@ -15,7 +16,7 @@ List<Widget> buildMapAppBarActions({
     const NotificationBell(),
     IconButton(
       icon: const Icon(Icons.settings),
-      tooltip: '設定',
+      tooltip: t.common.settings,
       onPressed: () {
         Navigator.push(
           context,
@@ -29,7 +30,7 @@ List<Widget> buildMapAppBarActions({
         Icons.table_view,
         color: showAttributeTable ? Colors.blue : null,
       ),
-      tooltip: showAttributeTable ? '属性テーブルを閉じる' : '属性テーブルを開く',
+      tooltip: showAttributeTable ? t.attributeTable.closeTable : t.attributeTable.openTable,
       onPressed: onAttributeTableToggle,
     ),
     // レイヤードロワーボタン

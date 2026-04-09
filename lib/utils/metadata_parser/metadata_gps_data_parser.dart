@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:k_maps/utils/app_logger.dart';
 
 import 'metadata_table_data.dart';
+import '../../i18n/strings.g.dart';
 
 /// GPSデータ文字列のパースと抽出を扱うクラス
 class MetadataGpsDataParser {
@@ -153,15 +154,15 @@ class MetadataGpsDataParser {
 
     if (baseData.type == 'measurement_log') {
       if (baseData.headers.length == 2 &&
-          baseData.headers[0] == 'キー' &&
-          baseData.headers[1] == '値') {
+          baseData.headers[0] == t.metadata.key &&
+          baseData.headers[1] == t.metadata.value) {
         for (int i = 0; i < baseData.rows.length; i++) {
           final row = baseData.rows[i];
           AppLogger.debug(
             '[MetadataParser] キー・値形式 行${i + 1}: 列数=${row.length}, キー="${row.isNotEmpty ? row[0] : "空"}"',
           );
 
-          if (row.length >= 2 && row[0] == '元データ') {
+          if (row.length >= 2 && row[0] == t.metadata.rawData) {
             final usedGpsDataString = row[1];
             AppLogger.debug(
               '[MetadataParser] 元データ発見! 文字列長=${usedGpsDataString.length}',
@@ -180,7 +181,7 @@ class MetadataGpsDataParser {
       } else {
         int? dataColumnIndex;
         for (int i = 0; i < baseData.headers.length; i++) {
-          if (baseData.headers[i] == '元データ') {
+          if (baseData.headers[i] == t.metadata.rawData) {
             dataColumnIndex = i;
             break;
           }

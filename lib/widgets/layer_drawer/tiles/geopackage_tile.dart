@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -53,9 +54,9 @@ class GeoPackageTile extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12)),
-              child: const Text(
-                'DROP LAYER HERE',
-                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              child: Text(
+                t.layerDrawer.geopackage.dropLayerHere,
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
               ),
             ),
         ],
@@ -74,9 +75,9 @@ class GeoPackageTile extends ConsumerWidget {
                 await _handleDelete(context, ref);
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'rename', child: Text('名前の変更')),
-              PopupMenuItem(value: 'delete', child: Text('削除')),
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.geopackage.changeName)),
+              PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.geopackage.deleteGpkg)),
             ],
           ),
         ],
@@ -189,14 +190,13 @@ class GeoPackageTile extends ConsumerWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('レイヤ移植'),
+        title: Text(t.layerDrawer.geopackage.migrateTitle),
         content: Text(
-          '「${sourceLayer.name}」を「${targetGpkg.name}」に移植しますか？\n\n'
-          '移植により、元のGeoPackageからこのレイヤは削除されます。',
+          t.layerDrawer.geopackage.migrateConfirm(source: sourceLayer.name, target: targetGpkg.name),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('移植')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.common.cancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(t.common.confirm)),
         ],
       ),
     );
@@ -207,12 +207,12 @@ class GeoPackageTile extends ConsumerWidget {
       ref.read(featureRefreshTriggerProvider.notifier).trigger();
       ref.read(selectedLayerNodeProvider.notifier).select(migrated);
       ref.read(notificationCenterProvider.notifier).add(
-            title: '「${sourceLayer.name}」を「${targetGpkg.name}」に移植しました',
+            title: t.layerDrawer.geopackage.migrateSuccess(source: sourceLayer.name, target: targetGpkg.name),
             level: NotificationLevel.success,
           );
     } else {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'レイヤ移植に失敗しました',
+            title: t.layerDrawer.geopackage.migrateFailed,
             level: NotificationLevel.error,
           );
     }
@@ -222,10 +222,10 @@ class GeoPackageTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: 'GeoPackage削除',
-      content: Text('${node.name} を本当に削除しますか？\nファイルも完全に削除されます。'),
-      confirmLabel: '削除',
-      successMessage: '${node.name} を削除しました',
+      title: t.layerDrawer.geopackage.deleteTitle,
+      content: Text(t.layerDrawer.geopackage.deleteConfirm(name: node.name)),
+      confirmLabel: t.layerDrawer.geopackage.deleteGpkg,
+      successMessage: t.layerDrawer.geopackage.deleted(name: node.name),
       execute: () async {
         for (final layer in node.children.whereType<LayerNode>()) {
           if (ref.read(selectedLayerNodeProvider) == layer) {

@@ -3,6 +3,7 @@
 /// ペアリング済み Bluetooth デバイスを一覧表示し、
 /// 対応する [ExternalDeviceService] への接続/切断を行う。
 library;
+import '../i18n/strings.g.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,8 +63,8 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
     final ok = (statuses[Permission.bluetoothScan]?.isGranted ?? false) &&
         (statuses[Permission.bluetoothConnect]?.isGranted ?? false);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Bluetooth permission required'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t.devices.bluetoothPermission),
       ));
     }
     return ok;
@@ -78,8 +79,8 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
           await FlutterBluetoothSerial.instance.isEnabled ?? false;
       if (!isEnabled) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Enable Bluetooth in system settings'),
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(t.devices.enableBluetooth),
           ));
         }
         return;
@@ -95,7 +96,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       AppLogger.debug('[DeviceSettings] scan error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Scan error: $e')),
+          SnackBar(content: Text(t.devices.scanError(error: e.toString()))),
         );
       }
     } finally {
@@ -125,7 +126,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       AppLogger.debug('[DeviceSettings] connection failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection failed: $e')),
+          SnackBar(content: Text(t.devices.connectionFailed(error: e.toString()))),
         );
       }
     }
@@ -139,7 +140,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
         _services.where((s) => s.isConnecting).toList();
 
     return SettingsScaffold(
-      title: '外部機器',
+      title: t.devices.title,
       isEmbedded: widget.isEmbedded,
       actions: [
         IconButton(
@@ -148,7 +149,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                   dimension: 20,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.refresh),
-          tooltip: 'Scan',
+          tooltip: t.devices.scan,
           onPressed: _isScanning ? null : _scan,
         ),
       ],
@@ -157,7 +158,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
           // Connected devices
           if (connectedServices.isNotEmpty || connectingServices.isNotEmpty)
             SettingsSection(
-              title: 'Connected',
+              title: t.devices.connected,
               icon: Icons.bluetooth_connected,
               iconColor: Colors.blue,
               children: [
@@ -169,12 +170,12 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                     ),
                     title: Text(s.deviceTypeName),
                     subtitle: Text(s.isConnecting
-                        ? 'Connecting...'
-                        : 'Connected'),
+                        ? t.devices.connecting
+                        : t.devices.connected),
                     trailing: s.isConnected
                         ? TextButton(
                             onPressed: () => s.disconnect(),
-                            child: const Text('Disconnect'),
+                            child: Text(t.devices.disconnect),
                           )
                         : const SizedBox.square(
                             dimension: 16,
@@ -186,17 +187,16 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
 
           // Paired devices
           SettingsSection(
-            title: 'Paired Devices',
+            title: t.devices.pairedDevices,
             icon: Icons.bluetooth,
             iconColor: Colors.blueGrey,
               children: _bondedDevices.isEmpty
                 ? [
-                    const Padding(
-                      padding: EdgeInsets.all(16),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Text(
-                        'No paired Bluetooth devices found.\n'
-                        'Pair your device in system Bluetooth settings first.',
-                        style: TextStyle(color: Colors.grey),
+                        t.devices.noPairedDevices,
+                        style: const TextStyle(color: Colors.grey),
                       ),
                     ),
                   ]
@@ -216,16 +216,12 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
             title: 'Info',
             icon: Icons.info_outline,
             iconColor: Colors.grey,
-            children: const [
+            children: [
               Padding(
-                padding: EdgeInsets.all(12),
+                padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Supported devices:\n'
-                  '  - Laser Technology TruPulse 360R\n\n'
-                  'Pair the device in Android Bluetooth settings, '
-                  'then connect here. Once connected, the Compass '
-                  'tool will appear in the map toolbar.',
-                  style: TextStyle(height: 1.5, color: Colors.grey),
+                  t.devices.supportedInfo,
+                  style: const TextStyle(height: 1.5, color: Colors.grey),
                 ),
               ),
             ],
@@ -264,12 +260,12 @@ class _DeviceTile extends StatelessWidget {
                 ? Colors.green
                 : Colors.grey,
       ),
-      title: Text(device.name ?? 'Unknown'),
+      title: Text(device.name ?? t.common.unknown),
       subtitle: Text(
         isConnected
-            ? 'Connected (${service!.deviceTypeName})'
+            ? t.devices.connectedType(type: service!.deviceTypeName)
             : isCompatible
-                ? 'Compatible (${service!.deviceTypeName})'
+                ? t.devices.compatible(type: service!.deviceTypeName)
                 : device.address,
       ),
       trailing: isConnected
@@ -281,7 +277,7 @@ class _DeviceTile extends StatelessWidget {
               : isCompatible
                   ? TextButton(
                       onPressed: () => onConnect(service!),
-                      child: const Text('Connect'),
+                      child: Text(t.devices.connect),
                     )
                   : _buildManualConnectMenu(context),
     );
@@ -292,16 +288,16 @@ class _DeviceTile extends StatelessWidget {
     if (allServices.length == 1) {
       return TextButton(
         onPressed: () => onConnect(allServices.first),
-        child: const Text('Try', style: TextStyle(fontSize: 12)),
+        child: Text(t.devices.tryConnect, style: const TextStyle(fontSize: 12)),
       );
     }
     return PopupMenuButton<ExternalDeviceService>(
       itemBuilder: (_) => [
         for (final s in allServices)
-          PopupMenuItem(value: s, child: Text('Connect as ${s.deviceTypeName}')),
+          PopupMenuItem(value: s, child: Text(t.devices.connectAs(type: s.deviceTypeName))),
       ],
       onSelected: onConnect,
-      child: const Text('Try', style: TextStyle(fontSize: 12, color: Colors.blue)),
+      child: Text(t.devices.tryConnect, style: const TextStyle(fontSize: 12, color: Colors.blue)),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import '../i18n/strings.g.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:location/location.dart';
 
@@ -143,9 +144,9 @@ class BluetoothGnssService extends ChangeNotifier {
   String get correctionSource {
     switch (_gpsQuality) {
       case 0:
-        return '補正なし';
+        return t.gps.noCorrection;
       case 1:
-        return '単独測位（補正なし）';
+        return t.gps.standalone;
       case 2:
       case 9:
         // SBAS/DGPS補正
@@ -155,15 +156,15 @@ class BluetoothGnssService extends ChangeNotifier {
         } else if (_detectedSbasSystem != null) {
           return _detectedSbasSystem!;
         } else if (_dgpsStationId != null && _dgpsStationId!.isNotEmpty) {
-          return 'DGPS基準局 ID:$_dgpsStationId';
+          return t.gps.dgpsStation(id: _dgpsStationId!);
         }
-        return 'DGPS（詳細不明）';
+        return t.gps.dgpsUnknown;
       case 4:
-        return 'RTK Fixed（基準局情報なし）'; // NTRIP接続時に拡張可能
+        return t.gps.rtkFixedNoBase; // NTRIP接続時に拡張可能
       case 5:
-        return 'RTK Float（基準局情報なし）';
+        return t.gps.rtkFloatNoBase;
       default:
-        return '不明';
+        return t.gps.unknown;
     }
   }
 
@@ -201,7 +202,7 @@ class BluetoothGnssService extends ChangeNotifier {
     if (actualPrn != prn) {
       return _getSbasSatelliteName(actualPrn);
     }
-    return '衛星名不明';
+    return t.gps.satelliteUnknown;
   }
 
   /// SBAS衛星のPRN番号からシステム名を判定
@@ -246,7 +247,7 @@ class BluetoothGnssService extends ChangeNotifier {
       bool isEnabled = await FlutterBluetoothSerial.instance.isEnabled ?? false;
       if (!isEnabled) {
         AppLogger.debug('$_logTag: Bluetoothが無効です');
-        throw Exception('Bluetoothが無効です。設定でBluetoothを有効にしてください。');
+        throw Exception(t.gps.bluetoothDisabled);
       }
 
       // ペアリング済みデバイスを取得
@@ -341,7 +342,7 @@ class BluetoothGnssService extends ChangeNotifier {
       if (!serviceEnabled) {
         serviceEnabled = await _location.requestService();
         if (!serviceEnabled) {
-          throw Exception('位置情報サービスが無効です');
+          throw Exception(t.gps.locationServiceDisabled);
         }
       }
 
@@ -349,7 +350,7 @@ class BluetoothGnssService extends ChangeNotifier {
       if (permissionGranted == PermissionStatus.denied) {
         permissionGranted = await _location.requestPermission();
         if (permissionGranted != PermissionStatus.granted) {
-          throw Exception('位置情報許可が必要です');
+          throw Exception(t.gps.locationPermissionRequired);
         }
       }
 

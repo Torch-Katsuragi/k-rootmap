@@ -4,6 +4,7 @@ library;
 
 import 'dart:io' show Directory;
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/app_notification.dart';
 import '../../models/nodes/layer_tree_node.dart';
@@ -75,12 +76,12 @@ class DriveSyncOperations {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const AlertDialog(
+        builder: (_) => AlertDialog(
           content: Row(
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text('変更を確認しています...'),
+              Text(t.drive.checkingChanges),
             ],
           ),
         ),
@@ -104,8 +105,8 @@ class DriveSyncOperations {
         }
         ref.read(notificationCenterProvider.notifier).add(
               title: foldersCreated > 0
-                  ? '$foldersCreatedフォルダを作成しました'
-                  : '変更はありません',
+                  ? t.drive.foldersCreated(count: foldersCreated.toString())
+                  : t.drive.noChanges,
               level: NotificationLevel.success,
             );
         return;
@@ -140,23 +141,25 @@ class DriveSyncOperations {
         }
 
         ref.read(notificationCenterProvider.notifier).add(
-              title: '同期完了: ${result.uploadedCount}アップロード, '
-                  '${result.downloadedCount}ダウンロード, '
-                  '${result.deletedCount}削除, '
-                  '${result.movedCount}移動',
+              title: t.drive.syncComplete(
+                  uploaded: result.uploadedCount.toString(),
+                  downloaded: result.downloadedCount.toString(),
+                  deleted: result.deletedCount.toString(),
+                  moved: result.movedCount.toString(),
+                ),
               level: NotificationLevel.success,
             );
       } else {
         node.syncStatus = SyncStatus.error;
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'エラー: ${result.errorMessage}',
+              title: t.drive.syncError(error: result.errorMessage ?? ''),
               level: NotificationLevel.error,
             );
       }
     } catch (e) {
       node.syncStatus = SyncStatus.error;
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'エラー: $e',
+            title: t.drive.syncError(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -172,19 +175,19 @@ class DriveSyncOperations {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Drive連携を解除'),
+        title: Text(t.drive.unlinkDrive),
         content: Text(
-          '${node.name} のDrive連携を解除しますか？\n\nローカルファイルは削除されません。',
+          t.drive.unlinkConfirm(name: node.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('解除'),
+            child: Text(t.drive.unlink),
           ),
         ],
       ),
@@ -234,7 +237,7 @@ class DriveSyncOperations {
     onStateChanged();
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Drive連携を解除しました',
+          title: t.drive.unlinkSuccess,
           level: NotificationLevel.info,
         );
   }
@@ -247,21 +250,19 @@ class DriveSyncOperations {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('フォルダ削除'),
+        title: Text(t.drive.deleteFolder),
         content: Text(
-          '${node.name} をローカルから完全に削除しますか？\n\n'
-          'フォルダ内のすべてのファイルが削除されます。\n'
-          'Drive上のデータには影響しません。',
+          t.drive.deleteFolderConfirm(name: node.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
+            child: Text(t.common.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('削除'),
+            child: Text(t.common.delete),
           ),
         ],
       ),
@@ -281,13 +282,13 @@ class DriveSyncOperations {
       onStateChanged();
 
       ref.read(notificationCenterProvider.notifier).add(
-            title: '${node.name} を削除しました',
+            title: t.drive.deleteFolderSuccess(name: node.name),
             level: NotificationLevel.info,
           );
     } catch (e) {
       AppLogger.error('[DriveSyncOps] フォルダ削除エラー: $e');
       ref.read(notificationCenterProvider.notifier).add(
-            title: '削除に失敗しました: $e',
+            title: t.drive.deleteFolderError(error: e.toString()),
             level: NotificationLevel.info,
           );
     }
@@ -308,7 +309,7 @@ class DriveSyncOperations {
     }
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Google Driveにログインしています...',
+          title: t.drive.signingIn,
           level: NotificationLevel.info,
         );
 
@@ -319,7 +320,7 @@ class DriveSyncOperations {
     }
 
     ref.read(notificationCenterProvider.notifier).add(
-          title: 'Google Driveへのログインに失敗しました',
+          title: t.drive.signInFailed,
           level: NotificationLevel.error,
         );
     return false;

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import '../i18n/strings.g.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -687,7 +688,7 @@ class BaseMapService extends ChangeNotifier {
     required int maxZoom,
   }) async* {
     if (_isDownloading) {
-      yield {'status': 'error', 'message': 'すでにダウンロードが実行中です'};
+      yield {'status': 'error', 'message': t.services.downloadInProgress};
       return;
     }
 

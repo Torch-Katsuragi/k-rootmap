@@ -2,6 +2,7 @@
 // 共通のダイアログパターンを一元化して重複コードを削減
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 
 /// 共通ダイアログヘルパークラス
 /// リネームダイアログ、確認ダイアログなどの汎用パターンを提供
@@ -38,13 +39,13 @@ class DialogHelpers {
               controller: controller,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: labelText ?? 'Name',
+                labelText: labelText ?? t.common.name,
                 hintText: hintText,
                 border: const OutlineInputBorder(),
               ),
               validator: validator ?? (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Name cannot be empty';
+                  return t.common.nameCannotBeEmpty;
                 }
                 return null;
               },
@@ -58,7 +59,7 @@ class DialogHelpers {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: const Text('Cancel'),
+              child: Text(t.common.cancel),
             ),
             TextButton(
               onPressed: () {
@@ -66,7 +67,7 @@ class DialogHelpers {
                   Navigator.of(dialogContext).pop(controller.text.trim());
                 }
               },
-              child: const Text('OK'),
+              child: Text(t.common.ok),
             ),
           ],
         );
@@ -132,9 +133,9 @@ class DialogHelpers {
   }) async {
     return showConfirmDialog(
       context,
-      title: 'Delete $itemType',
-      content: 'Are you sure you want to delete "$itemName"?\nThis action cannot be undone.',
-      confirmText: 'Delete',
+      title: t.dialog.deleteTitle(type: itemType),
+      content: t.dialog.deleteConfirm(name: itemName),
+      confirmText: t.common.delete,
       isDangerous: true,
     );
   }
@@ -187,8 +188,9 @@ class DialogHelpers {
   /// [message] 表示メッセージ
   static void showLoadingDialog(
     BuildContext context, {
-    String message = 'Processing...',
+    String message = '',
   }) {
+    final displayMessage = message.isEmpty ? t.common.processing : message;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -198,7 +200,7 @@ class DialogHelpers {
             children: [
               const CircularProgressIndicator(),
               const SizedBox(width: 16),
-              Expanded(child: Text(message)),
+              Expanded(child: Text(displayMessage)),
             ],
           ),
         );

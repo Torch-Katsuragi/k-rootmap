@@ -1,6 +1,7 @@
 // K-MAPS: GeoPackage スキーマ管理クラス
 // PRIMARY KEY検出、カラム追加・取得などのスキーマ操作を担当
 import '../../utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 import 'geopackage_connection.dart';
 
 /// GeoPackage スキーマを管理するクラス
@@ -184,7 +185,7 @@ class GeoPackageSchema {
       // カラム名の安全性チェック（QGIS準拠）
       final sanitizedName = sanitizeColumnName(columnName);
       if (sanitizedName.isEmpty) {
-        throw Exception('無効なカラム名です: $columnName');
+        throw Exception(t.services.invalidColumnName(name: columnName));
       }
 
       // 既存カラムのチェック

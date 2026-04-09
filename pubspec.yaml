@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.5.1+5
+version: 0.5.2+7
 
 environment:
   sdk: ^3.7.2
@@ -30,6 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:                # 標準ウィジェットのローカライズ（戻るボタン等）
+    sdk: flutter
+  slang: ^4.5.0                         # i18n: 型安全な翻訳コード生成
+  slang_flutter: ^4.5.0                 # i18n: Flutter統合（TranslationProvider等）
   flutter_riverpod: ^3.0.3 # 状態管理 (v3 + code generation)
   riverpod_annotation: ^3.0.3 # @riverpod アノテーション
   flutter_map: ^8.1.1 # 地図表示用（最新版にアップデート）
@@ -115,6 +119,7 @@ dev_dependencies:
   test: ^1.25.15
   flutter_launcher_icons: ^0.14.4
   riverpod_generator: ^3.0.3 # @riverpod コード生成
+  slang_build_runner: ^4.5.0 # i18n: slangコード生成用
   build_runner: ^2.4.0 # コード生成実行用
 
 # For information on the generic Dart part of this file, see the

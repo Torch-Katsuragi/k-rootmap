@@ -8,6 +8,7 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 
 import '../../utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 import 'drive_auth_state.dart';
 
 /// Driveファイルのメタデータ
@@ -112,7 +113,7 @@ class GoogleDriveService {
       return true;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] サインインエラー: $e');
-      authState.setError('サインインに失敗しました: $e');
+      authState.setError(t.services.signInFailed(error: e.toString()));
       return false;
     }
   }
@@ -133,7 +134,7 @@ class GoogleDriveService {
   Future<void> _initializeDriveApi(GoogleSignInAccount account) async {
     final httpClient = await _googleSignIn!.authenticatedClient();
     if (httpClient == null) {
-      throw Exception('認証クライアントの取得に失敗しました');
+      throw Exception(t.services.authClientFailed);
     }
     _driveApi = drive.DriveApi(httpClient);
   }

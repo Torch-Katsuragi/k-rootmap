@@ -3,6 +3,7 @@
 // GeoPackage間のレイヤ・フィーチャの移動/複製を担当
 
 import 'package:latlong2/latlong.dart';
+import '../i18n/strings.g.dart';
 import '../utils/app_logger.dart';
 import '../models/nodes/geopackage_node.dart';
 import '../models/nodes/layer_node.dart';
@@ -90,7 +91,7 @@ class LayerMigrationService {
           await targetGeoPackage.geoPackageFile.getLayerNames();
       if (existingLayers.contains(targetLayerName)) {
         return LayerMigrationResult.failure(
-          'レイヤ名 "$targetLayerName" は既に存在します',
+          t.layerMigration.nameExists(name: targetLayerName),
         );
       }
 
@@ -99,7 +100,7 @@ class LayerMigrationService {
         sourceLayer.layerName,
       );
       if (geometryType == null) {
-        return LayerMigrationResult.failure('ジオメトリタイプを取得できません');
+        return LayerMigrationResult.failure(t.layerMigration.cannotGetGeomType);
       }
 
       // 移植先に新しいレイヤを作成
@@ -142,7 +143,7 @@ class LayerMigrationService {
           .firstOrNull;
 
       if (migratedLayerNode == null) {
-        return LayerMigrationResult.failure('移植先レイヤノードが見つかりません');
+        return LayerMigrationResult.failure(t.layerMigration.migratedLayerNotFound);
       }
 
       // 移植されたレイヤのフィーチャを読み込み

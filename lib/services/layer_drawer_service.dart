@@ -13,6 +13,7 @@ import '../models/nodes/drive_folder_node.dart';
 import '../models/geopackage/geopackage_file.dart';
 import '../services/google_drive/index.dart';
 import '../services/kmeta_service.dart';
+import '../i18n/strings.g.dart';
 
 class LayerDrawerService {
   const LayerDrawerService._();
@@ -24,7 +25,7 @@ class LayerDrawerService {
     final dir = parent.getAbsoluteFilePath();
     final path = p.join(dir ?? '', name);
     if (Directory(path).existsSync()) {
-      throw StateError('同名のフォルダが既に存在します');
+      throw StateError(t.services.folderAlreadyExists);
     }
     Directory(path).createSync();
 
@@ -50,7 +51,7 @@ class LayerDrawerService {
 
     final localPath = p.join(parentDir, folderName);
     if (Directory(localPath).existsSync()) {
-      throw StateError('同名のフォルダが既に存在します');
+      throw StateError(t.services.folderAlreadyExists);
     }
 
     final success = await SyncEngine().cloneFromDrive(
@@ -84,7 +85,7 @@ class LayerDrawerService {
     final path = p.join(dir ?? '', fileName);
 
     if (File(path).existsSync()) {
-      throw StateError('同名のGeoPackageファイルが既に存在します');
+      throw StateError(t.services.gpkgAlreadyExists);
     }
 
     final gpkgFile = GeoPackageFile([fileName], absolutePath: path);

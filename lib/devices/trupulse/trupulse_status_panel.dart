@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/feature_node.dart';
 import 'trupulse_detail_screen.dart';
 import 'trupulse_tool.dart';
@@ -139,7 +140,7 @@ class _TraversePrecisionBar extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              '導線: $pointCount点',
+              t.trupulse.traverse(count: '$pointCount'),
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
           ],
@@ -147,10 +148,10 @@ class _TraversePrecisionBar extends StatelessWidget {
         const SizedBox(height: 2),
         Row(
           children: [
-            _MeasChip('路線長', '${totalDist.toStringAsFixed(1)}m'),
-            _MeasChip('閉合差', '${closureErr.toStringAsFixed(2)}m'),
+            _MeasChip(t.trupulse.pathLength, '${totalDist.toStringAsFixed(1)}m'),
+            _MeasChip(t.trupulse.closureError, '${closureErr.toStringAsFixed(2)}m'),
             _MeasChip(
-              '閉合比',
+              t.trupulse.closureRatio,
               ratioText,
               highlight: isWarning,
             ),
@@ -242,7 +243,7 @@ class _BacksightBadge extends StatelessWidget {
           Icon(Icons.check_circle, size: 10, color: Colors.green.shade700),
           const SizedBox(width: 3),
           Text(
-            '後視補正済',
+            t.trupulse.backsightCorrected,
             style: TextStyle(fontSize: 9, color: Colors.green.shade800),
           ),
         ],

@@ -2,6 +2,7 @@
 // シェープファイルインポートクラス
 import 'dart:io';
 import 'package:k_maps/utils/app_logger.dart';
+import '../../../i18n/strings.g.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import '../import_export_models.dart';
@@ -79,7 +80,7 @@ class ShapefileImporter extends BaseImporter {
       // SHP基本情報読み込み
       final shapeInfo = await ShapefileBinaryParser.readInfo(filePath);
       if (shapeInfo == null) {
-        return ImportExportResult.error('シェープファイルの読み込みに失敗しました');
+        return ImportExportResult.error(t.importExport.shapefileReadError);
       }
 
       // レイヤ名決定
@@ -162,7 +163,7 @@ class ShapefileImporter extends BaseImporter {
           .firstOrNull;
 
       if (createdLayer == null) {
-        return ImportExportResult.error('レイヤー作成後の取得に失敗しました: $actualLayerName');
+        return ImportExportResult.error(t.importExport.layerFetchError(name: actualLayerName));
       }
 
       AppLogger.debug('[ShapefileImporter] インポート完了: $featureCount個のフィーチャ');
@@ -180,7 +181,7 @@ class ShapefileImporter extends BaseImporter {
     } catch (e, stack) {
       AppLogger.debug('[ShapefileImporter] インポートエラー: $e');
       AppLogger.debug('スタックトレース: $stack');
-      return ImportExportResult.error('シェープファイルの読み込みでエラーが発生しました: $e');
+      return ImportExportResult.error(t.importExport.shapefileError(error: e.toString()));
     }
   }
 

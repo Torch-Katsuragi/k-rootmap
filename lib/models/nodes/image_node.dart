@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
 import '../../core/node_types.dart';
+import '../../i18n/strings.g.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
 import 'overlay_image_node.dart';
@@ -73,7 +74,7 @@ class ImageNode extends LayerTreeNode {
       MapEntry('latitude', location!.latitude.toStringAsFixed(6)),
       MapEntry('longitude', location!.longitude.toStringAsFixed(6)),
     ] else
-      const MapEntry('location', '位置情報なし'),
+      MapEntry('location', t.gps.noLocation),
     if (direction != null) MapEntry('direction', '${direction!.toStringAsFixed(1)}°'),
     if (takenAt != null) MapEntry('taken_at', takenAt!.toLocal().toString()),
     MapEntry('file_size', _formatFileSize(metadata.fileSize)),
@@ -166,7 +167,7 @@ class ImageNode extends LayerTreeNode {
     try {
       final file = File(filePath);
       if (!file.existsSync()) {
-        throw Exception('ファイルが存在しません: $filePath');
+        throw Exception(t.services.fileNotFound(path: filePath));
       }
 
       final directory = p.dirname(filePath);
@@ -177,7 +178,7 @@ class ImageNode extends LayerTreeNode {
       AppLogger.debug('[DEBUG] ImageNode.rename: $filePath → $newPath');
 
       if (File(newPath).existsSync()) {
-        throw Exception('同名のファイルが既に存在します: $newFileName');
+        throw Exception(t.services.fileAlreadyExists(name: newFileName));
       }
 
       await file.rename(newPath);

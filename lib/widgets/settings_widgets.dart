@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
+import '../i18n/strings.g.dart';
 import '../core/settings_schema.dart';
 
 /// 設定セクション（カード形式）
@@ -576,7 +577,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.restore),
-          tooltip: 'デフォルトに戻す',
+          tooltip: t.settingsWidget.resetToDefault,
           onPressed: () async {
             if (widget.onReset != null) {
               await widget.onReset!();
@@ -793,7 +794,7 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
     final result = await showColorPickerDialog(
       context,
       currentColor,
-      title: const Text('色を選択', style: TextStyle(fontWeight: FontWeight.bold)),
+      title: Text(t.settingsWidget.pickColor, style: const TextStyle(fontWeight: FontWeight.bold)),
       width: 44,
       height: 44,
       spacing: 6,
@@ -812,13 +813,13 @@ class _DataDrivenSettingsScreenState extends State<DataDrivenSettingsScreen> {
         ColorPickerType.custom: false,
         ColorPickerType.wheel: true,
       },
-      actionButtons: const ColorPickerActionButtons(
+      actionButtons: ColorPickerActionButtons(
         okButton: true,
         closeButton: true,
         dialogActionButtons: true,
         dialogOkButtonType: ColorPickerActionButtonType.elevated,
         dialogOkButtonLabel: 'OK',
-        dialogCancelButtonLabel: 'キャンセル',
+        dialogCancelButtonLabel: t.common.cancel,
       ),
     );
     if (result != currentColor) {

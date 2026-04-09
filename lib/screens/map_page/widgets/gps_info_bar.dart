@@ -3,6 +3,7 @@
 // GPS待機タイマーを内部管理し、MapPage全体のsetStateを回避
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../i18n/strings.g.dart';
 
 /// GPS情報バーウィジェット
 /// 現在のGPS位置情報、精度、ソースを表示
@@ -88,14 +89,14 @@ class _GpsInfoBarState extends State<GpsInfoBar> {
           children: [
             const Icon(Icons.gps_off, size: 18, color: Colors.grey),
             const SizedBox(width: 8),
-            const Text('GPS: 取得中...'),
+            Text(t.gps.acquiring),
             const SizedBox(width: 12),
             Text(
-              '($_waitSeconds秒経過)',
+              t.gps.waitElapsed(count: '$_waitSeconds'),
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(width: 16),
-            Text('ソース: ${widget.gpsInfo?['sourceName'] ?? '不明'}'),
+            Text(t.gps.sourceLabel(name: widget.gpsInfo?['sourceName'] ?? t.gps.unknownDevice)),
           ],
         ),
       ),
@@ -130,17 +131,17 @@ class _GpsInfoBarState extends State<GpsInfoBar> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Lat: ${latitude?.toStringAsFixed(6) ?? "取得中"} Lon: ${longitude?.toStringAsFixed(6) ?? "取得中"}',
+              'Lat: ${latitude?.toStringAsFixed(6) ?? t.common.acquiring} Lon: ${longitude?.toStringAsFixed(6) ?? t.common.acquiring}',
               style: const TextStyle(fontSize: 14),
             ),
             if (accuracy != null) ...[
               const SizedBox(width: 16),
-              Text('精度: ±${accuracy.toStringAsFixed(1)}m'),
+              Text(t.gps.accuracyLabel(value: accuracy.toStringAsFixed(1))),
             ],
             if (isExternalGnss) ...[
               if (satelliteCount != null) ...[
                 const SizedBox(width: 16),
-                Text('衛星数: $satelliteCount基'),
+                Text(t.gps.satellites(count: '$satelliteCount')),
               ],
               if (hdop != null) ...[
                 const SizedBox(width: 16),
@@ -148,7 +149,7 @@ class _GpsInfoBarState extends State<GpsInfoBar> {
               ],
             ],
             const SizedBox(width: 16),
-            Text('ソース: $sourceName'),
+            Text(t.gps.sourceLabel(name: sourceName)),
             // コンパス情報（ValueListenableBuilderで局所再描画）
             ValueListenableBuilder<double?>(
               valueListenable: widget.headingNotifier,
@@ -156,7 +157,7 @@ class _GpsInfoBarState extends State<GpsInfoBar> {
                 if (heading == null) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(left: 16),
-                  child: Text('方角: ${heading.toStringAsFixed(0)}°'),
+                  child: Text(t.gps.heading(value: heading.toStringAsFixed(0))),
                 );
               },
             ),

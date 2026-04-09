@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 
@@ -15,8 +16,9 @@ class RenameDialog {
     required String currentName,
     String? label,
     String? hint,
-    String submitLabel = '変更',
+    String submitLabel = '',
   }) {
+    final effectiveSubmitLabel = submitLabel.isEmpty ? t.layerDrawer.submitRename : submitLabel;
     final controller = TextEditingController(text: currentName);
     final formKey = GlobalKey<FormState>();
 
@@ -34,7 +36,7 @@ class RenameDialog {
                 validator:
                     (v) =>
                         (v == null || v.trim().isEmpty)
-                            ? 'Name cannot be empty'
+                            ? t.common.nameCannotBeEmpty
                             : null,
                 onFieldSubmitted: (_) {
                   if (formKey.currentState?.validate() ?? false) {
@@ -46,7 +48,7 @@ class RenameDialog {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('キャンセル'),
+                child: Text(t.common.cancel),
               ),
               TextButton(
                 onPressed: () {
@@ -54,7 +56,7 @@ class RenameDialog {
                     Navigator.pop(context, controller.text.trim());
                   }
                 },
-                child: Text(submitLabel),
+                child: Text(effectiveSubmitLabel),
               ),
             ],
           ),
@@ -70,7 +72,7 @@ Future<bool> confirmAndExecute(
   required Widget content,
   required Future<void> Function() execute,
   String? successMessage,
-  String confirmLabel = '実行',
+  String confirmLabel = '',
   Color? confirmColor,
   WidgetRef? ref,
 }) async {
@@ -83,7 +85,7 @@ Future<bool> confirmAndExecute(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
@@ -91,7 +93,7 @@ Future<bool> confirmAndExecute(
                   confirmColor != null
                       ? TextButton.styleFrom(foregroundColor: confirmColor)
                       : null,
-              child: Text(confirmLabel),
+              child: Text(confirmLabel.isEmpty ? t.common.execute : confirmLabel),
             ),
           ],
         ),
@@ -110,7 +112,7 @@ Future<bool> confirmAndExecute(
     if (ref != null) {
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: 'エラー: $e', level: NotificationLevel.error);
+          .add(title: t.layerDrawer.errorPrefix(error: e.toString()), level: NotificationLevel.error);
     }
     return false;
   }

@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../i18n/strings.g.dart';
 import '../../../utils/app_logger.dart';
 import '../../../tools/gps_tool.dart';
 import '../../../providers/selection_providers.dart';
@@ -33,7 +34,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       if (selected == null) {
         if (mounted) {
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'レイヤーが選択されていません',
+            title: t.gps.noLayerSelected,
             level: NotificationLevel.warning,
           );
         }
@@ -43,7 +44,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       if (!selected.isVisibleRecursive()) {
         if (mounted) {
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'このレイヤは不可視のため編集できません',
+            title: t.gps.layerInvisible,
             level: NotificationLevel.warning,
           );
         }
@@ -52,7 +53,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS位置情報を取得中...',
+          title: t.gps.acquiringGps,
           level: NotificationLevel.info,
         );
       }
@@ -68,14 +69,14 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
               drawState.drawingLine.length +
               drawState.drawingPolygon.length;
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS位置を記録しました ($totalPointsポイント目)',
+            title: t.gps.gpsRecorded(count: '$totalPoints'),
             level: NotificationLevel.success,
           );
         }
       } else {
         if (mounted) {
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS位置情報が取得できません。位置情報の許可と設定を確認してください。',
+            title: t.gps.gpsUnavailable,
             level: NotificationLevel.error,
           );
         }
@@ -84,7 +85,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量エラー: $e');
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS測量エラー: $e',
+          title: t.gps.gpsSurveyError(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -127,7 +128,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS長押し測量中... 離すと平均位置を記録します',
+          title: t.gps.longPressSurveying,
           level: NotificationLevel.info,
         );
       }
@@ -141,7 +142,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       });
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS長押し測量開始エラー: $e',
+          title: t.gps.longPressSurveyStartError(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -161,7 +162,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       final success = await currentTool.stopLongPressGpsSurvey();
       
       if (!success) {
-        throw Exception('GPS長押し測量データが不十分です');
+        throw Exception(t.gps.insufficientData);
       }
       
       triggerSetState(() {
@@ -175,7 +176,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS長押し測量完了 - 平均位置でポイントを作成しました',
+          title: t.gps.longPressSurveyDone,
           level: NotificationLevel.success,
         );
       }
@@ -189,7 +190,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       });
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS長押し測量エラー: $e',
+          title: t.gps.longPressSurveyStopError(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -216,24 +217,24 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
           String name = '';
           String description = '';
           return AlertDialog(
-            title: const Text('GPS測量フィーチャの属性入力'),
+            title: Text(t.gps.surveyAttributeInput),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   autofocus: true,
-                  decoration: const InputDecoration(labelText: '名前'),
+                  decoration: InputDecoration(labelText: t.gps.nameLabel),
                   onChanged: (v) => name = v,
                 ),
                 const SizedBox(height: 12),
                 TextField(
-                  decoration: const InputDecoration(labelText: '説明（任意）'),
+                  decoration: InputDecoration(labelText: t.gps.descriptionLabel),
                   maxLines: 3,
                   onChanged: (v) => description = v,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'GPS測量データ（${GlobalDrawingState.instance.drawingLine.length + GlobalDrawingState.instance.drawingPolygon.length}ポイント）が自動的に記録されます',
+                  t.gps.surveyDataInfo(count: '${GlobalDrawingState.instance.drawingLine.length + GlobalDrawingState.instance.drawingPolygon.length}'),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -241,14 +242,14 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, null),
-                child: const Text('キャンセル'),
+                child: Text(t.common.cancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, {
                   'name': name,
                   'description': description,
                 }),
-                child: const Text('作成'),
+                child: Text(t.gps.create),
               ),
             ],
           );
@@ -273,7 +274,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       
       final success = await drawingState.confirmCurrentFeature(
         layerNode: selected,
-        name: result['name']?.isNotEmpty == true ? result['name']! : 'GPS測量フィーチャ',
+        name: result['name']?.isNotEmpty == true ? result['name']! : t.gps.defaultFeatureName,
         description: result['description'] ?? '',
         closeRing: closeRing,
         additionalMetadata: additionalMetadata,
@@ -289,14 +290,14 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
         
         if (mounted) {
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS測量フィーチャを作成しました',
+            title: t.gps.surveyFeatureCreated,
             level: NotificationLevel.success,
           );
         }
       } else {
         if (mounted) {
           ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS測量フィーチャの作成に失敗しました',
+            title: t.gps.surveyFeatureCreateFailed,
             level: NotificationLevel.error,
           );
         }
@@ -305,7 +306,7 @@ mixin MapGpsSurveyMixin<T extends ConsumerStatefulWidget> on MapPageStateBase<T>
       AppLogger.debug('[MapGpsSurveyMixin] GPS測量確定エラー: $e');
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: 'GPS測量確定エラー: $e',
+          title: t.gps.surveyConfirmError(error: '$e'),
           level: NotificationLevel.error,
         );
       }

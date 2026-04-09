@@ -2,6 +2,7 @@
 // 個別フィーチャの属性をフォーム形式で表示・編集
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
@@ -103,7 +104,7 @@ class _AttributeFormViewState extends ConsumerState<AttributeFormView> {
   @override
   Widget build(BuildContext context) {
     if (ctrl.features.isEmpty) {
-      return const Center(child: Text('フィーチャがありません'));
+      return Center(child: Text(t.attributeTable.noFeatures));
     }
 
     final feature = ctrl.features[_currentIndex];

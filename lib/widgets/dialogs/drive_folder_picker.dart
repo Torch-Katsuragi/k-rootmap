@@ -2,6 +2,7 @@
 // Google Driveからプロジェクトフォルダを選択してダウンロード
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 
 import '../../services/google_drive/index.dart';
@@ -110,7 +111,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
     } catch (e) {
       setState(() {
         _currentStep = _DialogStep.selectFolder;
-        _errorMessage = 'フォルダ一覧の取得に失敗しました: $e';
+        _errorMessage = t.drive.listError(error: e.toString());
       });
     }
   }
@@ -203,13 +204,13 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
     switch (_currentStep) {
       case _DialogStep.checkAuth:
       case _DialogStep.loading:
-        return const Center(
+        return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('読み込み中...'),
+              Text(t.drive.loading),
             ],
           ),
         );
@@ -273,7 +274,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'プロジェクトフォルダがありません',
+                            t.drive.noProjectFolders,
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
                         ],

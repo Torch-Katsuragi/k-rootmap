@@ -2,6 +2,7 @@
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre/maplibre.dart' as ml;
@@ -191,7 +192,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       if (layer == null) {
         ref
             .read(notificationCenterProvider.notifier)
-            .add(title: 'レイヤーが選択されていません', level: NotificationLevel.warning);
+            .add(title: t.editor.noLayerSelected, level: NotificationLevel.warning);
         return;
       }
 
@@ -206,7 +207,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
       ref
           .read(notificationCenterProvider.notifier)
           .add(
-            title: '属性テーブルの表示に失敗しました',
+            title: t.attributeTable.error,
             detail: '$e',
             level: NotificationLevel.error,
           );
@@ -1518,7 +1519,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
         onAddFeature: () {
           ref
               .read(notificationCenterProvider.notifier)
-              .add(title: '新規フィーチャ追加機能は開発中です', level: NotificationLevel.info);
+              .add(title: t.editor.addFeatureWip, level: NotificationLevel.info);
         },
       ),
     );

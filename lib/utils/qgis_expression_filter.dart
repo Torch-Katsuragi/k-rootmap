@@ -10,6 +10,7 @@
 library;
 
 import 'app_logger.dart';
+import '../i18n/strings.g.dart';
 
 class QgisExpressionFilter {
   QgisExpressionFilter._();
@@ -35,13 +36,13 @@ class QgisExpressionFilter {
   static FilterResult toSqlWhere(String expression) {
     final trimmed = expression.trim();
     if (trimmed.isEmpty) {
-      return const FilterResult.error('式が空です');
+      return FilterResult.error(t.qgisFilter.emptyExpression);
     }
 
     final upper = trimmed.toUpperCase();
     for (final pattern in _dangerousPatterns) {
       if (upper.contains(pattern)) {
-        return FilterResult.error('禁止キーワードが含まれています: $pattern');
+        return FilterResult.error(t.qgisFilter.forbiddenKeyword(pattern: pattern));
       }
     }
 
@@ -65,15 +66,15 @@ class QgisExpressionFilter {
         if (c == '(') depth++;
         if (c == ')') depth--;
         if (depth < 0) {
-          return const FilterResult.error('括弧の対応が不正です');
+          return FilterResult.error(t.qgisFilter.unmatchedParens);
         }
       }
     }
     if (depth != 0) {
-      return const FilterResult.error('括弧が閉じられていません');
+      return FilterResult.error(t.qgisFilter.unclosedParens);
     }
     if (inSingleQuote || inDoubleQuote) {
-      return const FilterResult.error('引用符が閉じられていません');
+      return FilterResult.error(t.qgisFilter.unclosedQuotes);
     }
 
     AppLogger.debug('[QgisExpressionFilter] 変換結果: $sql');
@@ -89,7 +90,7 @@ class QgisExpressionFilter {
     for (final match in fieldPattern.allMatches(expression)) {
       final fieldName = match.group(1)!;
       if (!validColumns.contains(fieldName)) {
-        return 'カラム "$fieldName" は存在しません';
+        return t.gps.columnNotExists(name: fieldName);
       }
     }
     return null;

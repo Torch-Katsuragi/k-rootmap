@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../providers/selection_providers.dart';
+import '../i18n/strings.g.dart';
 import 'dart:async';
 
 /// グローバルな描画状態とメタデータを管理するクラス
@@ -219,7 +220,7 @@ class GlobalDrawingState {
         await LineFeatureNode.createIn(
           layerNode,
           List<LatLng>.from(_drawingLine),
-          name.isNotEmpty ? name : '線フィーチャ',
+          name.isNotEmpty ? name : t.editor.lineFeature,
           description,
           metadata: metadata.isNotEmpty ? metadata : null,
         );
@@ -313,7 +314,7 @@ class GlobalDrawingState {
         await PolygonFeatureNode.createIn(
           layerNode,
           [closedPolygon],
-          name.isNotEmpty ? name : 'ポリゴンフィーチャ',
+          name.isNotEmpty ? name : t.editor.polygonFeature,
           description,
           metadata: metadata.isNotEmpty ? metadata : null,
         );
@@ -619,8 +620,8 @@ class GlobalDrawingState {
 
     _autoSaveCounter++;
     final autoSaveName =
-        '自動保存_${_autoSaveCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final autoSaveDescription = '自動保存により作成されたフィーチャ';
+        '${t.editor.autoSavePrefix}_${_autoSaveCounter}_${DateTime.now().millisecondsSinceEpoch}';
+    final autoSaveDescription = t.editor.autoSaveDescription;
 
     AppLogger.debug('[GlobalDrawingState] 自動保存実行: $autoSaveName');
     AppLogger.debug(

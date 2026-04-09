@@ -27,6 +27,7 @@ import '../../providers/ui_state_providers.dart';
 import '../../models/app_notification.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/geo_converter.dart';
+import '../../i18n/strings.g.dart';
 import '../../providers/notification_providers.dart';
 import '../../widgets/radial_action_menu.dart';
 import '../base/device_tool.dart';
@@ -231,9 +232,10 @@ class TruPulseTool extends DeviceTool {
     final azDelta = (correctedAz - forwardAz).abs();
     final hdDelta = (correctedHd - forwardHd).abs();
     _ref.read(notificationCenterProvider.notifier).add(
-      title: '後視補正を適用',
-      detail: 'AZ ${azDelta.toStringAsFixed(1)}° / '
-          'HD ${hdDelta.toStringAsFixed(2)}m 修正',
+      title: t.trupulse.backsightApplied,
+      detail: t.trupulse.backsightDetail(
+          azDelta: azDelta.toStringAsFixed(1),
+          hdDelta: hdDelta.toStringAsFixed(2)),
       level: NotificationLevel.success,
     );
 

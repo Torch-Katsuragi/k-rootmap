@@ -10,6 +10,7 @@
 /// - GPS記録オプションの設定
 /// - リアルタイム位置情報監視
 library;
+import '../i18n/strings.g.dart';
 
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
@@ -72,7 +73,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'GPS設定初期化エラー: $e';
+        _errorMessage = t.gps.initError(error: e.toString());
       });
     }
   }
@@ -102,7 +103,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       // Android 12以降のBluetooth権限確認・要求
       if (!await _checkBluetoothPermissions()) {
         setState(() {
-          _errorMessage = 'Bluetooth権限が必要です。設定から権限を許可してください。';
+          _errorMessage = t.gps.bluetoothPermRequired;
         });
         return;
       }
@@ -168,25 +169,21 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Bluetooth権限が必要です'),
-          content: const Text(
-            '外部GNSS機器の検出・接続には以下の権限が必要です：\n\n'
-            '• Bluetoothスキャン権限\n'
-            '• Bluetooth接続権限\n'
-            '• 位置情報権限\n\n'
-            '設定から権限を有効にしてください。',
+          title: Text(t.permissions.bluetoothPermissionTitle),
+          content: Text(
+            t.permissions.bluetoothPermissionDesc,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 openAppSettings();
               },
-              child: const Text('設定を開く'),
+              child: Text(t.common.openSettings),
             ),
           ],
         );
@@ -205,30 +202,29 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Bluetooth権限状態'),
+          title: Text(t.permissions.bluetoothPermissionStatus),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '外部GNSS機器の使用に必要な権限の状態：\n',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              Text(
+                t.permissions.bluetoothPermissionStatusDesc,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              _buildPermissionRow('Bluetoothスキャン', bluetoothScanGranted),
-              _buildPermissionRow('Bluetooth接続', bluetoothConnectGranted),
-              _buildPermissionRow('位置情報', locationGranted),
+              _buildPermissionRow(t.permissions.bluetoothScan, bluetoothScanGranted),
+              _buildPermissionRow(t.permissions.bluetoothConnect, bluetoothConnectGranted),
+              _buildPermissionRow(t.permissions.location, locationGranted),
               const SizedBox(height: 16),
-              const Text(
-                '権限が拒否されている場合は、「設定を開く」ボタンから '
-                'アプリ設定で権限を有効にしてください。',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              Text(
+                t.permissions.bluetoothPermissionDeniedHelp,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('閉じる'),
+              child: Text(t.common.close),
             ),
             if (!bluetoothScanGranted ||
                 !bluetoothConnectGranted ||
@@ -238,7 +234,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                   Navigator.of(context).pop();
                   openAppSettings();
                 },
-                child: const Text('設定を開く'),
+                child: Text(t.common.openSettings),
               ),
           ],
         );
@@ -264,7 +260,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           ),
           const Spacer(),
           Text(
-            isGranted ? '許可済み' : '拒否',
+            isGranted ? t.permissions.granted : t.permissions.denied,
             style: TextStyle(
               fontSize: 12,
               color: isGranted ? Colors.green : Colors.red,
@@ -283,15 +279,15 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('GPSソース選択'),
+          title: Text(t.gps.sourceDialog.title),
           content: SizedBox(
             height: 300,
             width: double.maxFinite,
             child: Column(
               children: [
-                const Text(
-                  '位置情報の取得に使用するGPSソースを選択してください',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                Text(
+                  t.gps.sourceDialog.description,
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
@@ -342,7 +338,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             if (_gpsManager.availableGnssDevices.isEmpty)
               TextButton(
@@ -350,7 +346,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                   Navigator.of(context).pop();
                   _scanGnssDevices();
                 },
-                child: const Text('再スキャン'),
+                child: Text(t.gps.sourceDialog.rescan),
               ),
           ],
         );
@@ -377,12 +373,12 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       }
 
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPSソースを「${source['name']}」に切り替えました',
+            title: t.gps.switchedTo(name: source['name']),
             level: NotificationLevel.success,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS切り替えエラー: $e',
+            title: t.gps.switchError(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -394,15 +390,14 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('GPS記録中'),
-              content: const Text(
-                'GPS記録中はソースを変更できません。\n'
-                '記録を停止してから再試行してください。',
+              title: Text(t.gps.recording.title),
+              content: Text(
+                t.gps.recording.cannotSwitchDesc,
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('キャンセル'),
+                  child: Text(t.common.cancel),
                 ),
               ],
             );
@@ -429,16 +424,16 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '緯度: ${gpsInfo['latitude']?.toStringAsFixed(6) ?? '不明'}',
+                    '${t.gps.position.latitude}: ${gpsInfo['latitude']?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    '経度: ${gpsInfo['longitude']?.toStringAsFixed(6) ?? '不明'}',
+                    '${t.gps.position.longitude}: ${gpsInfo['longitude']?.toStringAsFixed(6) ?? t.common.unknown}',
                   ),
                   Text(
-                    '精度: ${gpsInfo['accuracy']?.toStringAsFixed(1) ?? '不明'}m',
+                    t.gps.accuracyLabel(value: '${gpsInfo['accuracy']?.toStringAsFixed(1) ?? t.common.unknown}'),
                   ),
-                  Text('ソース: ${gpsInfo['sourceName'] ?? '不明'}'),
-                  Text('時刻: ${gpsInfo['timestamp'] ?? '不明'}'),
+                  Text(t.gps.sourceLabel(name: gpsInfo['sourceName'] ?? t.common.unknown)),
+                  Text('${t.gps.timestamp.lastUpdate}: ${gpsInfo['timestamp'] ?? t.common.unknown}'),
                 ],
               ),
               actions: [
@@ -458,7 +453,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'GPS位置取得テストエラー: $e',
+            title: t.gps.testResult.error(error: e.toString()),
             level: NotificationLevel.error,
           );
     } finally {
@@ -470,18 +465,18 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return SettingsScaffold(
-      title: 'GPS設定',
+      title: t.gps.title,
       isEmbedded: widget.isEmbedded,
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: _isScanning ? null : _scanGnssDevices,
-          tooltip: 'GNSS機器再スキャン',
+          tooltip: t.gps.rescanGnss,
         ),
         IconButton(
           icon: const Icon(Icons.info_outline),
           onPressed: _showBluetoothPermissionInfo,
-          tooltip: 'Bluetooth権限情報',
+          tooltip: t.gps.bluetoothPermInfo,
         ),
       ],
       body: SettingsBody(
@@ -511,11 +506,11 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     final selectedDevice = _gpsManager.selectedGnssDevice;
 
     final deviceInfo = selectedDevice != null
-        ? 'デバイス: ${selectedDevice.name ?? '不明'}\nアドレス: ${selectedDevice.address}'
+        ? t.gps.deviceInfoLabel(name: selectedDevice.name ?? t.gps.unknownDevice, address: selectedDevice.address)
         : null;
 
     return SettingsSection(
-      title: '現在のGPSソース',
+      title: t.gps.currentSource,
       icon: currentSource == GpsSourceType.internal
           ? Icons.gps_fixed
           : Icons.bluetooth,
@@ -547,7 +542,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   /// GPS操作ボタン群
   Widget _buildGpsControlButtons() {
     return SettingsSection(
-      title: 'GPS操作',
+      title: t.gps.controls,
       icon: Icons.settings_remote,
       iconColor: Colors.blue,
       children: [
@@ -560,7 +555,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _showGpsSourceDialog,
                   icon: const Icon(Icons.swap_horiz),
-                  label: const Text('GPSソース切り替え'),
+                  label: Text(t.gps.switchSource),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -574,7 +569,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _testGpsPosition,
                   icon: const Icon(Icons.location_searching),
-                  label: const Text('GPS位置取得テスト'),
+                  label: Text(t.gps.positionTest),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -592,7 +587,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
   /// GPS情報表示カード
   Widget _buildGpsInfoCard(Map<String, dynamic> gpsInfo) {
     return SettingsSection(
-      title: 'GPS情報',
+      title: t.gps.info,
       icon: Icons.satellite_alt,
       iconColor: Colors.green,
       children: [
@@ -609,7 +604,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
     final sources = _gpsManager.getAvailableGpsSources();
 
     return SettingsSection(
-      title: '利用可能なGPSソース',
+      title: t.gps.availableSources,
       icon: Icons.list,
       iconColor: Colors.blue,
       trailing: _isScanning
@@ -621,11 +616,11 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
           : null,
       children: [
         if (sources.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'GPSソースが見つかりませんでした。\n外部GNSS機器の電源を入れて再スキャンしてください。',
-              style: TextStyle(color: Colors.grey),
+              t.gps.noSourcesFound,
+              style: const TextStyle(color: Colors.grey),
             ),
           )
         else
@@ -645,7 +640,7 @@ class _GpsSettingsScreenState extends ConsumerState<GpsSettingsScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            '外部GNSS機器: ${_gpsManager.availableGnssDevices.length}件',
+            t.gps.externalDevices(count: _gpsManager.availableGnssDevices.length.toString()),
             style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
         ),

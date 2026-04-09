@@ -4,6 +4,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../i18n/strings.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../services/google_drive/index.dart';
@@ -100,10 +101,10 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       if (success) {
         _isSignedIn = true;
       } else {
-        _errorMessage = 'サインインに失敗しました';
+        _errorMessage = t.drive.signInFailed;
       }
     } catch (e) {
-      _errorMessage = 'サインインエラー: $e';
+      _errorMessage = t.drive.signInError(error: e.toString());
       AppLogger.error('[DriveUrlInputDialog] サインインエラー: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -136,7 +137,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     final folderId = GoogleDriveService.extractFolderIdFromUrl(url);
     if (folderId == null) {
       setState(() {
-        _errorMessage = '無効なGoogle Drive URLです';
+        _errorMessage = t.drive.invalidUrl;
         _folderName = null;
         _folderId = null;
         _isReadOnly = null;
@@ -154,7 +155,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       final folderInfo = await _driveService.getFolderInfo(folderId);
       if (folderInfo == null) {
         setState(() {
-          _errorMessage = 'フォルダにアクセスできません。共有設定を確認してください。';
+          _errorMessage = t.drive.accessDenied;
           _folderName = null;
           _folderId = null;
           _isReadOnly = null;
@@ -175,7 +176,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     } catch (e) {
       AppLogger.error('[DriveUrlInputDialog] フォルダ情報取得エラー: $e');
       setState(() {
-        _errorMessage = 'フォルダ情報の取得に失敗しました: $e';
+        _errorMessage = t.drive.fetchError(error: e.toString());
         _folderName = null;
         _folderId = null;
         _isReadOnly = null;
@@ -242,11 +243,11 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         TextButton(
           onPressed: _canClone() ? _onClone : null,
-          child: const Text('クローン'),
+          child: Text(t.drive.clone),
         ),
       ],
     );
@@ -294,7 +295,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
               suffixIcon: IconButton(
                 icon: const Icon(Icons.paste),
                 onPressed: _pasteFromClipboard,
-                tooltip: '貼り付け',
+                tooltip: t.drive.paste,
               ),
             ),
             onChanged: (_) => _validateUrl(),
@@ -348,8 +349,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                     children: [
                       const Icon(Icons.check_circle, color: Colors.green, size: 20),
                       const SizedBox(width: 8),
-                      const Text(
-                        'フォルダを検出しました',
+                      Text(
+                        t.drive.folderDetected,
                         style: TextStyle(
                           color: Colors.green,
                           fontWeight: FontWeight.bold,
@@ -384,7 +385,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isReadOnly == true ? '読み取り専用' : '編集可能',
+                        _isReadOnly == true ? t.drive.readOnly : t.drive.editable,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -480,7 +481,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        _isReadOnly == true ? '読み取り専用' : '編集可能',
+                        _isReadOnly == true ? t.drive.readOnly : t.drive.editable,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,

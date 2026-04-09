@@ -5,8 +5,10 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+
 
 import '../../../models/app_notification.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -18,7 +20,7 @@ import '../shared/sub_table_helper.dart';
 
 class TrimAction extends FeatureEditAction {
   @override
-  String get label => '切り取り';
+  String get label => t.trim.label;
 
   @override
   IconData get icon => Icons.content_cut;
@@ -98,7 +100,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
 
     try {
       final success = await widget.feature.updateLine(_trimmedLine);
-      if (!success) throw Exception('ジオメトリの更新に失敗しました');
+      if (!success) throw Exception(t.featureEditorActions.geometryUpdateFailed);
 
       // sub_tableもトリム範囲に合わせて更新
       if (_originalSubTableJson != null) {
@@ -123,7 +125,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
 
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '切り取りが適用されました',
+          title: t.trim.applied,
           level: NotificationLevel.success,
         );
         Navigator.of(context).pop(true);
@@ -132,7 +134,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
       AppLogger.debug('[TrimAction] 適用失敗: $e');
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '切り取りの適用に失敗しました: $e',
+          title: t.trim.applyFailed(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -144,7 +146,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
   @override
   Widget build(BuildContext context) {
     if (_fullLine.length < 3) {
-      return const Center(child: Text('切り取りには3点以上必要です'));
+      return Center(child: Text(t.trim.minPoints));
     }
 
     final maxIdx = (_fullLine.length - 1).toDouble();
@@ -156,12 +158,12 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
         Row(
           children: [
             Text(
-              '開始: ${_range.start.round()}',
+              t.trim.startIndex(value: '${_range.start.round()}'),
               style: const TextStyle(fontSize: 12),
             ),
             const Spacer(),
             Text(
-              '終了: ${_range.end.round()}',
+              t.trim.endIndex(value: '${_range.end.round()}'),
               style: const TextStyle(fontSize: 12),
             ),
           ],
@@ -185,7 +187,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            '選択: ${_trimmedLine.length}点 / 全体: ${_fullLine.length}点',
+            t.trim.result(trimmed: '${_trimmedLine.length}', total: '${_fullLine.length}'),
             style: const TextStyle(fontSize: 12),
           ),
         ),
@@ -195,7 +197,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
           children: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             const SizedBox(width: 16),
             ElevatedButton(
@@ -207,7 +209,7 @@ class _TrimControlsState extends ConsumerState<_TrimControls> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('適用'),
+                  : Text(t.trim.apply),
             ),
           ],
         ),

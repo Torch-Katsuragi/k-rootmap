@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 
 /// GeoPackage DB接続を管理するクラス
 /// 責務: DB接続の初期化、クローズ、構造検証
@@ -39,7 +40,7 @@ class GeoPackageConnection {
   Future<Database> getDatabase() async {
     await _initializeDatabase();
     if (_database == null) {
-      throw Exception('データベースの初期化に失敗しました');
+      throw Exception(t.services.dbInitFailed);
     }
     return _database!;
   }

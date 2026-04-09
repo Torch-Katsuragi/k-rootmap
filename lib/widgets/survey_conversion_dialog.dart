@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/layer_node.dart';
 import '../presentation/node_presenter.dart';
 import '../services/survey/survey_chain_resolver.dart';
@@ -87,9 +88,9 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
   }
 
   String _layerTypeLabel(LayerNode layer) {
-    if (layer is LineLayerNode) return 'ライン';
-    if (layer is PolygonLayerNode) return 'ポリゴン';
-    return '不明';
+    if (layer is LineLayerNode) return t.surveyConversion.lineType;
+    if (layer is PolygonLayerNode) return t.surveyConversion.polygonType;
+    return t.surveyConversion.unknownType;
   }
 
   @override
@@ -101,11 +102,11 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
     final typeLabel = _layerTypeLabel(_selectedLayer);
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.straighten, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('測量データ変換'),
+          const Icon(Icons.straighten, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(t.surveyConversion.title),
         ],
       ),
       content: SizedBox(
@@ -117,7 +118,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
             children: [
               // チェーン選択（複数チェーンがある場合）
               if (widget.chains.length > 1) ...[
-                const _SectionHeader('測量チェーン'),
+                _SectionHeader(t.surveyConversion.surveyChain),
                 DropdownButtonFormField<TraverseChain>(
                   // ignore: deprecated_member_use
                   value: _selectedChain,
@@ -125,7 +126,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                     final c = e.value;
                     return DropdownMenuItem(
                       value: c,
-                      child: Text('チェーン ${e.key + 1} (${c.length}点, ${c.totalDistance.toStringAsFixed(1)}m)'),
+                      child: Text(t.surveyConversion.chainInfo(index: '${e.key + 1}', count: '${c.length}', distance: c.totalDistance.toStringAsFixed(1))),
                     );
                   }).toList(),
                   onChanged: (v) {
@@ -148,7 +149,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               const SizedBox(height: 16),
 
               // 変換先レイヤー
-              const _SectionHeader('変換先レイヤー'),
+              _SectionHeader(t.surveyConversion.targetLayer),
               _LayerDropdown(
                 layers: widget.availableLayers,
                 selected: _selectedLayer,
@@ -160,8 +161,8 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
               // フィーチャ名
               TextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'フィーチャ名（任意）',
+                decoration: InputDecoration(
+                  labelText: t.surveyConversion.featureNameOpt,
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -170,9 +171,9 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
               // 閉合オプション
               SwitchListTile(
-                title: const Text('閉合トラバース（起点に接続）'),
-                subtitle: const Text(
-                  'ONにすると閉合差を計算し、補正を適用できます',
+                title: Text(t.surveyConversion.closeTraverse),
+                subtitle: Text(
+                  t.surveyConversion.closeTraverseDesc,
                   style: TextStyle(fontSize: 11),
                 ),
                 value: _closePath,
@@ -186,7 +187,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
               // 閉合補正方式（閉合ON時のみ: Bowditch / Transit の2択）
               if (_closePath) ...[
-                const _SectionHeader('閉合補正'),
+                _SectionHeader(t.surveyConversion.closureAdjustment),
                 ...[AdjustmentMethod.bowditch, AdjustmentMethod.transit]
                     .map((m) => RadioListTile<AdjustmentMethod>(
                           title: Text(_methodLabel(m)),
@@ -206,9 +207,9 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
               // 磁気偏角トグル
               SwitchListTile(
-                title: const Text('磁気偏角補正'),
-                subtitle: const Text(
-                  'TruPulse本体で偏角を設定済みの場合はOFFにしてください',
+                title: Text(t.surveyConversion.declinationCorrection),
+                subtitle: Text(
+                  t.surveyConversion.declinationDesc,
                   style: TextStyle(fontSize: 11),
                 ),
                 value: _useDeclination,
@@ -233,10 +234,10 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'WMM2025から自動算出。東偏: +, 西偏: -',
-                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                        t.surveyConversion.declinationAutoDesc,
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ),
                   ],
@@ -246,9 +247,9 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
 
               // 器械高・目標高トグル
               SwitchListTile(
-                title: const Text('高さ補正（器械高・目標高）'),
-                subtitle: const Text(
-                  '三脚・ターゲットポール使用時に設定',
+                title: Text(t.surveyConversion.heightCorrection),
+                subtitle: Text(
+                  t.surveyConversion.heightCorrectionDesc,
                   style: TextStyle(fontSize: 11),
                 ),
                 value: _useHeightCorrection,
@@ -263,8 +264,8 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                       child: TextField(
                         controller: _instrumentHeightCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: '器械高 (m)',
+                        decoration: InputDecoration(
+                          labelText: t.surveyConversion.instrumentHeight,
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -275,8 +276,8 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
                       child: TextField(
                         controller: _targetHeightCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: '目標高 (m)',
+                        decoration: InputDecoration(
+                          labelText: t.surveyConversion.targetHeight,
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -291,7 +292,7 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed: () {
@@ -319,22 +320,22 @@ class _SurveyConversionDialogState extends State<SurveyConversionDialog> {
             );
           },
           icon: Icon(_selectedLayer is PolygonLayerNode ? Icons.pentagon_outlined : Icons.show_chart),
-          label: Text('$typeLabel に変換'),
+          label: Text(t.surveyConversion.convertTo(type: typeLabel)),
         ),
       ],
     );
   }
 
   String _methodLabel(AdjustmentMethod m) => switch (m) {
-        AdjustmentMethod.none => '補正なし',
-        AdjustmentMethod.bowditch => 'コンパス法則（Bowditch法）',
-        AdjustmentMethod.transit => 'トランシット法則',
+        AdjustmentMethod.none => t.surveyConversion.noAdjustment,
+        AdjustmentMethod.bowditch => t.surveyConversion.bowditch,
+        AdjustmentMethod.transit => t.surveyConversion.transit,
       };
 
   String _methodDescription(AdjustmentMethod m) => switch (m) {
-        AdjustmentMethod.none => '生データのまま変換',
-        AdjustmentMethod.bowditch => '路線長に比例して閉合差を配分',
-        AdjustmentMethod.transit => '緯距・経距の絶対値に比例して配分',
+        AdjustmentMethod.none => t.surveyConversion.noAdjustmentDesc,
+        AdjustmentMethod.bowditch => t.surveyConversion.bowditchDesc,
+        AdjustmentMethod.transit => t.surveyConversion.transitDesc,
       };
 }
 
@@ -372,7 +373,7 @@ class _ClosureInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isGoodClosure = closureRatioN > 500;
     final ratioText = closureRatioN.isInfinite
-        ? '完全閉合'
+        ? t.surveyConversion.perfectClosure
         : '1/${closureRatioN.toStringAsFixed(0)}';
 
     return Card(
@@ -391,7 +392,7 @@ class _ClosureInfoCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '測量チェーン: ${chain.length}点',
+                  t.surveyConversion.chainPoints(count: '${chain.length}'),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ],
@@ -399,9 +400,9 @@ class _ClosureInfoCard extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                _StatChip('路線長', '${totalDistance.toStringAsFixed(1)}m'),
-                _StatChip('閉合差', '${closureError.toStringAsFixed(3)}m'),
-                _StatChip('閉合比', ratioText),
+                _StatChip(t.surveyConversion.pathLength, '${totalDistance.toStringAsFixed(1)}m'),
+                _StatChip(t.surveyConversion.closureError, '${closureError.toStringAsFixed(3)}m'),
+                _StatChip(t.surveyConversion.closureRatio, ratioText),
               ],
             ),
           ],

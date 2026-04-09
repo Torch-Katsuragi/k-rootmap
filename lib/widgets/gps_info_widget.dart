@@ -11,6 +11,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 
 /// GPS情報表示ウィジェット
 class GpsInfoWidget extends StatelessWidget {
@@ -101,13 +102,13 @@ class GpsInfoWidget extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 )
               else
-                const Text(
-                  '位置情報取得中...',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                Text(
+                  t.common.acquiring,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               if (accuracy != null)
                 Text(
-                  '精度: ±${accuracy.toStringAsFixed(1)}m',
+                  '${t.gps.accuracy.positionAccuracy}: ±${accuracy.toStringAsFixed(1)}m',
                   style: const TextStyle(fontSize: 10, color: Colors.grey),
                 ),
             ],
@@ -127,7 +128,7 @@ class GpsInfoWidget extends StatelessWidget {
   Widget _buildGpsStatusRow() {
     final isActive = gpsInfo['isActive'] == true;
     final isInitialized = gpsInfo['isInitialized'] == true;
-    final sourceName = gpsInfo['sourceName'] ?? '不明';
+    final sourceName = gpsInfo['sourceName'] ?? t.common.unknown;
 
     Color statusColor;
     String statusText;
@@ -135,15 +136,15 @@ class GpsInfoWidget extends StatelessWidget {
 
     if (!isInitialized) {
       statusColor = Colors.orange;
-      statusText = 'GPS初期化中...';
+      statusText = t.gps.status.initializing;
       statusIcon = Icons.gps_not_fixed;
     } else if (isActive) {
       statusColor = Colors.green;
-      statusText = 'GPS受信中 ($sourceName)';
+      statusText = t.gps.status.receiving(source: sourceName);
       statusIcon = Icons.gps_fixed;
     } else {
       statusColor = Colors.grey;
-      statusText = 'GPS停止中 ($sourceName)';
+      statusText = t.gps.status.stopped(source: sourceName);
       statusIcon = Icons.gps_off;
     }
 
@@ -164,9 +165,9 @@ class GpsInfoWidget extends StatelessWidget {
                 ),
               ),
               if (gpsInfo['usesForegroundService'] == true)
-                const Text(
-                  'フォアグラウンドサービス経由',
-                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                Text(
+                  t.gps.status.foregroundService,
+                  style: const TextStyle(fontSize: 12, color: Colors.blue),
                 ),
             ],
           ),
@@ -184,21 +185,21 @@ class GpsInfoWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '位置情報',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        Text(
+          t.gps.position.title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         _buildInfoRow(
-          '緯度',
-          latitude != null ? '${latitude.toStringAsFixed(6)}°' : '取得中...',
+          t.gps.position.latitude,
+          latitude != null ? '${latitude.toStringAsFixed(6)}\u00b0' : t.common.acquiring,
         ),
         _buildInfoRow(
-          '経度',
-          longitude != null ? '${longitude.toStringAsFixed(6)}°' : '取得中...',
+          t.gps.position.longitude,
+          longitude != null ? '${longitude.toStringAsFixed(6)}\u00b0' : t.common.acquiring,
         ),
         if (altitude != null)
-          _buildInfoRow('標高', '${altitude.toStringAsFixed(1)}m'),
+          _buildInfoRow(t.gps.position.altitude, '${altitude.toStringAsFixed(1)}m'),
       ],
     );
   }
@@ -217,16 +218,16 @@ class GpsInfoWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '精度・移動情報',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        Text(
+          t.gps.accuracy.title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         if (accuracy != null) ...[
-          _buildInfoRow('位置精度', '±${accuracy.toStringAsFixed(1)}m'),
+          _buildInfoRow(t.gps.accuracy.positionAccuracy, '\u00b1${accuracy.toStringAsFixed(1)}m'),
           _buildAccuracyIndicator(accuracy),
         ] else
-          _buildInfoRow('位置精度', '取得中...'),
+          _buildInfoRow(t.gps.accuracy.positionAccuracy, t.common.acquiring),
 
         // 外部GNSS機器の場合のみ衛星情報を表示
         if (isExternalGnss) ...[
@@ -235,10 +236,10 @@ class GpsInfoWidget extends StatelessWidget {
         ],
 
         if (speed != null && speed > 0)
-          _buildInfoRow('移動速度', '${(speed * 3.6).toStringAsFixed(1)} km/h'),
+          _buildInfoRow(t.gps.accuracy.speed, '${(speed * 3.6).toStringAsFixed(1)} km/h'),
 
         if (bearing != null)
-          _buildInfoRow('移動方向', '${bearing.toStringAsFixed(0)}°'),
+          _buildInfoRow(t.gps.accuracy.bearing, '${bearing.toStringAsFixed(0)}\u00b0'),
       ],
     );
   }
@@ -250,13 +251,13 @@ class GpsInfoWidget extends StatelessWidget {
 
     if (accuracy <= 3.0) {
       accuracyColor = Colors.green;
-      accuracyLabel = '高精度';
+      accuracyLabel = t.gps.accuracy.high;
     } else if (accuracy <= 10.0) {
       accuracyColor = Colors.orange;
-      accuracyLabel = '中精度';
+      accuracyLabel = t.gps.accuracy.medium;
     } else {
       accuracyColor = Colors.red;
-      accuracyLabel = '低精度';
+      accuracyLabel = t.gps.accuracy.low;
     }
 
     return Padding(
@@ -287,21 +288,21 @@ class GpsInfoWidget extends StatelessWidget {
 
   /// ソース情報セクション
   Widget _buildSourceSection() {
-    final sourceType = gpsInfo['sourceType'] ?? '不明';
-    final sourceName = gpsInfo['sourceName'] ?? '不明';
+    final sourceType = gpsInfo['sourceType'] ?? t.common.unknown;
+    final sourceName = gpsInfo['sourceName'] ?? t.common.unknown;
     final selectedDevice = gpsInfo['selectedDevice'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'GPS ソース',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        Text(
+          t.gps.source.title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        _buildInfoRow('ソース種別', sourceType),
-        _buildInfoRow('ソース名', sourceName),
-        if (selectedDevice != null) _buildInfoRow('デバイス', selectedDevice),
+        _buildInfoRow(t.gps.source.type, sourceType),
+        _buildInfoRow(t.gps.source.name, sourceName),
+        if (selectedDevice != null) _buildInfoRow(t.gps.source.device, selectedDevice),
       ],
     );
   }
@@ -314,25 +315,25 @@ class GpsInfoWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '時刻情報',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        Text(
+          t.gps.timestamp.title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         _buildInfoRow(
-          '最終更新',
-          timestamp != null ? _formatTimestamp(timestamp) : '未取得',
+          t.gps.timestamp.lastUpdate,
+          timestamp != null ? _formatTimestamp(timestamp) : t.gps.timestamp.notAcquired,
         ),
         if (isSurveyMode)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                Icon(Icons.engineering, size: 16, color: Colors.blue),
-                SizedBox(width: 4),
+                const Icon(Icons.engineering, size: 16, color: Colors.blue),
+                const SizedBox(width: 4),
                 Text(
-                  'GPS測量モード',
-                  style: TextStyle(
+                  t.gps.status.surveyMode,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: Colors.blue,
                     fontWeight: FontWeight.bold,
@@ -392,7 +393,7 @@ class GpsInfoWidget extends StatelessWidget {
               Icon(Icons.satellite_alt, size: 16, color: Colors.blue.shade700),
               const SizedBox(width: 4),
               Text(
-                'GNSS衛星情報',
+                t.gps.gnss.title,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -404,7 +405,7 @@ class GpsInfoWidget extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _buildSatelliteInfo('衛星数', satelliteCount)),
+              Expanded(child: _buildSatelliteInfo(t.gps.gnss.satellites, satelliteCount)),
               const SizedBox(width: 16),
               Expanded(child: _buildSatelliteInfo('HDOP', hdop)),
             ],
@@ -421,9 +422,9 @@ class GpsInfoWidget extends StatelessWidget {
     String displayValue;
 
     if (value == null) {
-      displayValue = '未取得';
+      displayValue = t.gps.timestamp.notAcquired;
     } else if (value is int) {
-      displayValue = '$value基';
+      displayValue = t.gps.gnss.satelliteUnit(count: value.toString());
     } else if (value is double) {
       displayValue = value.toStringAsFixed(2);
     } else {
@@ -455,31 +456,31 @@ class GpsInfoWidget extends StatelessWidget {
 
     switch (quality) {
       case 0:
-        qualityText = '無効';
+        qualityText = t.gps.gnss.qualityInvalid;
         qualityColor = Colors.red;
         break;
       case 1:
-        qualityText = '標準GPS';
+        qualityText = t.gps.gnss.qualityStandard;
         qualityColor = Colors.orange;
         break;
       case 2:
-        qualityText = 'DGPS';
+        qualityText = t.gps.gnss.qualityDgps;
         qualityColor = Colors.blue;
         break;
       case 3:
-        qualityText = 'RTK固定解';
+        qualityText = t.gps.gnss.qualityRtkFixed;
         qualityColor = Colors.green;
         break;
       case 4:
-        qualityText = 'RTK浮動解';
+        qualityText = t.gps.gnss.qualityRtkFloat;
         qualityColor = Colors.lightGreen;
         break;
       case 5:
-        qualityText = '推測航法';
+        qualityText = t.gps.gnss.qualityDeadReckoning;
         qualityColor = Colors.purple;
         break;
       default:
-        qualityText = '品質$quality';
+        qualityText = t.gps.gnss.qualityN(n: quality.toString());
         qualityColor = Colors.grey;
     }
 
@@ -514,9 +515,9 @@ class GpsInfoWidget extends StatelessWidget {
       final difference = now.difference(dateTime);
 
       if (difference.inSeconds < 60) {
-        return '${difference.inSeconds}秒前';
+        return t.common.seconds(count: difference.inSeconds.toString());
       } else if (difference.inMinutes < 60) {
-        return '${difference.inMinutes}分前';
+        return t.common.minutes(count: difference.inMinutes.toString());
       } else {
         return '${dateTime.hour.toString().padLeft(2, '0')}:'
             '${dateTime.minute.toString().padLeft(2, '0')}:'

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'metadata_coordinate_utils.dart';
 import 'metadata_gps_data_parser.dart';
 import 'metadata_table_data.dart';
+import '../../i18n/strings.g.dart';
 
 /// XY座標の計算・集約を扱うクラス
 class MetadataXYCalculator {
@@ -19,7 +20,7 @@ class MetadataXYCalculator {
       if (baseData.type == 'measurement_log') {
         int? originalDataColumnIndex;
         for (int i = 0; i < baseData.headers.length; i++) {
-          if (baseData.headers[i] == '元データ') {
+          if (baseData.headers[i] == t.metadata.rawData) {
             originalDataColumnIndex = i;
             break;
           }
@@ -127,7 +128,7 @@ class MetadataXYCalculator {
       if (usedGpsData == null || usedGpsData.isEmpty) {
         String? usedGpsDataString;
         for (final row in baseData.rows) {
-          if (row.length >= 2 && row[0] == '元データ') {
+          if (row.length >= 2 && row[0] == t.metadata.rawData) {
             usedGpsDataString = row[1];
             break;
           }
@@ -243,9 +244,9 @@ class MetadataXYCalculator {
     int latitudeIndex = -1;
     int longitudeIndex = -1;
     for (int i = 0; i < baseData.rows.length; i++) {
-      if (baseData.rows[i][0] == '緯度') {
+      if (baseData.rows[i][0] == t.metadata.latitude) {
         latitudeIndex = i;
-      } else if (baseData.rows[i][0] == '経度') {
+      } else if (baseData.rows[i][0] == t.metadata.longitude) {
         longitudeIndex = i;
       }
     }

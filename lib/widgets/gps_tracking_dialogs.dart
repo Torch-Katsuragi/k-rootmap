@@ -1,6 +1,7 @@
 // GPS追跡関連のダイアログウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/geopackage_node.dart';
@@ -79,27 +80,27 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const AlertDialog(
+      return AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('レイヤーを検索中...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(t.gps.searchingLayers),
           ],
         ),
       );
     }
 
     return AlertDialog(
-      title: const Text('GPS追跡を停止しました'),
+      title: Text(t.gps.trackingStopped),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${widget.pointCount} ポイントが「${widget.pointLayer.name}」に保存されました'),
+          Text(t.gps.pointsSaved(count: '${widget.pointCount}', layer: widget.pointLayer.name)),
           const SizedBox(height: 16),
-          const Text('保存先', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(t.gps.destination, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           DropdownButtonHideUnderline(
             child: Container(
@@ -112,13 +113,13 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
                 value: _selectedTarget,
                 isExpanded: true,
                 items: [
-                  const DropdownMenuItem<LayerNode?>(
+                  DropdownMenuItem<LayerNode?>(
                     value: null,
-                    child: Text('ポイントレイヤーにのみ保持'),
+                    child: Text(t.gps.keepPointOnly),
                   ),
                   ..._availableLayers.map((layer) {
                     final typeLabel =
-                        layer is LineLayerNode ? '(ライン)' : '(ポリゴン)';
+                        layer is LineLayerNode ? t.gps.lineType : t.gps.polygonType;
                     return DropdownMenuItem<LayerNode?>(
                       value: layer,
                       child: Text('${layer.name} $typeLabel'),
@@ -147,7 +148,7 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
                   _deletePointLayer = value ?? false;
                 });
               },
-              title: const Text('ポイントレイヤーを削除'),
+              title: Text(t.gps.deletePointLayer),
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
             ),
@@ -157,7 +158,7 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, null),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed:
@@ -166,7 +167,7 @@ class _TrackingStopDialogState extends State<TrackingStopDialog> {
                 'deletePoint': _deletePointLayer,
               }),
           icon: const Icon(Icons.check),
-          label: const Text('決定'),
+          label: Text(t.gps.confirm),
         ),
       ],
     );
@@ -221,13 +222,13 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('GPS追跡の保存先と設定'),
+      title: Text(t.gps.trackSettings),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('保存先', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(t.gps.destination, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             DropdownButtonHideUnderline(
               child: Container(
@@ -243,9 +244,9 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
                   value: _selectedLayer,
                   isExpanded: true,
                   items: [
-                    const DropdownMenuItem<PointLayerNode?>(
+                    DropdownMenuItem<PointLayerNode?>(
                       value: null,
-                      child: Text('新しいレイヤを作成'),
+                      child: Text(t.gps.createNewLayer),
                     ),
                     ...widget.pointLayers.map((layer) {
                       return DropdownMenuItem<PointLayerNode?>(
@@ -268,10 +269,10 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               TextField(
                 controller: _newLayerNameController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '新規レイヤ名',
+                decoration: InputDecoration(
+                  labelText: t.gps.newLayerName,
                   hintText: 'gps_track',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 onTap: () {
                   // タップ時に全選択
@@ -283,18 +284,18 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               ),
             ],
             const SizedBox(height: 24),
-            const Text(
-              '保存オプション',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              t.gps.saveOptions,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _intervalController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: '保存間隔（秒）',
-                hintText: '1以上の整数',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t.gps.saveInterval,
+                hintText: t.gps.intervalHint,
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 final parsed = int.tryParse(value);
@@ -307,10 +308,10 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
             TextField(
               controller: _distanceController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: '最小移動距離（cm）',
-                hintText: '0以上の整数',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t.gps.minDistance,
+                hintText: t.gps.distanceHint,
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 final parsed = int.tryParse(value);
@@ -320,7 +321,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               },
             ),
             const SizedBox(height: 24),
-            const Text('GPS設定', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(t.gps.gpsSettings, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             _buildExternalGnssOption(),
           ],
@@ -329,14 +330,14 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, null),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed: () async {
             // バリデーション
             if (_intervalSeconds < 1) {
               ref.read(notificationCenterProvider.notifier).add(
-                title: '保存間隔は1秒以上に設定してください',
+                title: t.gps.intervalMinWarning,
                 level: NotificationLevel.warning,
               );
               return;
@@ -355,7 +356,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               final rootNode = ref.read(folderTreeProvider);
               if (rootNode == null) {
                 ref.read(notificationCenterProvider.notifier).add(
-                  title: 'GeoPackageが見つかりません',
+                  title: t.gps.geopackageNotFound,
                   level: NotificationLevel.error,
                 );
                 return;
@@ -377,7 +378,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
 
               if (geoPackageNode == null) {
                 ref.read(notificationCenterProvider.notifier).add(
-                  title: 'GeoPackageが見つかりません',
+                  title: t.gps.geopackageNotFound,
                   level: NotificationLevel.error,
                 );
                 return;
@@ -390,7 +391,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               );
               if (targetLayer == null) {
                 ref.read(notificationCenterProvider.notifier).add(
-                  title: 'レイヤーの作成に失敗しました',
+                  title: t.gps.layerCreateFailed,
                   level: NotificationLevel.error,
                 );
                 return;
@@ -407,7 +408,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
             }
           },
           icon: const Icon(Icons.check),
-          label: const Text('決定'),
+          label: Text(t.gps.confirm),
         ),
       ],
     );
@@ -437,15 +438,15 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
                   _useExternalGnss = value ?? false;
                 });
               },
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.bluetooth_connected, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('外部GNSS機器を使用'),
+                  const Icon(Icons.bluetooth_connected, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(t.gps.useExternalGnss),
                 ],
               ),
               subtitle: Text(
-                '接続済み: ${connectedDeviceName ?? "不明"}',
+                t.gps.connected(name: connectedDeviceName ?? t.gps.unknownDevice),
                 style: const TextStyle(color: Colors.green),
               ),
               contentPadding: EdgeInsets.zero,
@@ -455,7 +456,7 @@ class _SelectPointLayerDialogState extends ConsumerState<SelectPointLayerDialog>
               Padding(
                 padding: const EdgeInsets.only(left: 16, top: 8),
                 child: Text(
-                  'GPS追跡時に外部GNSS機器「${connectedDeviceName ?? "不明"}」を使用します。',
+                  t.gps.externalGnssDesc(name: connectedDeviceName ?? t.gps.unknownDevice),
                   style: TextStyle(color: Colors.blue[700], fontSize: 12),
                 ),
               ),

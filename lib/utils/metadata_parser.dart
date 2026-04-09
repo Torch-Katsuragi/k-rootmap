@@ -16,6 +16,7 @@ import 'metadata_parser/metadata_coordinate_utils.dart';
 import 'metadata_parser/metadata_table_data.dart';
 import 'metadata_parser/metadata_xy_calculator.dart';
 import 'metadata_parser/metadata_xy_table_handler.dart';
+import '../i18n/strings.g.dart';
 
 /// メタデータパーサークラス
 class MetadataParser {
@@ -52,8 +53,8 @@ class MetadataParser {
       );
 
       if (baseData.headers.length == 2 &&
-          baseData.headers[0] == 'キー' &&
-          baseData.headers[1] == '値') {
+          baseData.headers[0] == t.metadata.key &&
+          baseData.headers[1] == t.metadata.value) {
         return await MetadataXYCalculator.addXYCoordinatesToKeyValueFormat(
           baseData,
           xyCoordinates,
@@ -115,8 +116,8 @@ class MetadataParser {
 
     List<List<String>> updatedRows;
     if (originalData.headers.length == 2 &&
-        originalData.headers[0] == 'キー' &&
-        originalData.headers[1] == '値') {
+        originalData.headers[0] == t.metadata.key &&
+        originalData.headers[1] == t.metadata.value) {
       updatedRows = MetadataXYCalculator.updateXYInKeyValueRows(
         originalData.rows,
         allNewXYCoordinates,
@@ -135,7 +136,7 @@ class MetadataParser {
 
     final updatedData = MetadataTableData(
       title:
-          '${originalData.type == 'measurement_log' ? 'GPS測量ログ' : 'メタデータ'} ($newCoordinateSystemName)',
+          '${originalData.type == 'measurement_log' ? t.metadata.surveyLog : t.metadata.title(type: originalData.type)} ($newCoordinateSystemName)',
       headers: originalData.headers,
       rows: updatedRows,
       type: originalData.type,

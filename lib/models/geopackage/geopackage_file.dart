@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../../utils/background_save_manager.dart';
+import '../../i18n/strings.g.dart';
 import '../geometry_type.dart';
 import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
@@ -487,7 +488,7 @@ class GeoPackageFile {
     final db = await _connection.getDatabase();
     final sanitizedCol = _schema.sanitizeColumnName(targetColumn);
     if (sanitizedCol.isEmpty) {
-      throw Exception('無効なカラム名: $targetColumn');
+      throw Exception(t.services.invalidColumnName(name: targetColumn));
     }
 
     final result = await db.rawUpdate(
@@ -508,7 +509,7 @@ class GeoPackageFile {
   ) async {
     final db = await _connection.getDatabase();
     final sanitizedNew = _schema.sanitizeColumnName(newName);
-    if (sanitizedNew.isEmpty) throw Exception('無効なカラム名: $newName');
+    if (sanitizedNew.isEmpty) throw Exception(t.services.invalidColumnName(name: newName));
     await db.execute(
       'ALTER TABLE "$tableName" RENAME COLUMN "$oldName" TO "$sanitizedNew"',
     );
@@ -582,7 +583,7 @@ class GeoPackageFile {
     if (searchText.isEmpty) return 0;
     final db = await _connection.getDatabase();
     final sanitized = _schema.sanitizeColumnName(columnName);
-    if (sanitized.isEmpty) throw Exception('無効なカラム名: $columnName');
+    if (sanitized.isEmpty) throw Exception(t.services.invalidColumnName(name: columnName));
     final result = await db.rawUpdate(
       'UPDATE "$tableName" SET "$sanitized" = REPLACE(CAST("$sanitized" AS TEXT), ?, ?) '
       'WHERE CAST("$sanitized" AS TEXT) LIKE ?',

@@ -1,6 +1,7 @@
 /// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 library;
+import '../i18n/strings.g.dart';
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,12 +66,12 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       await _baseMapService.setProvider(provider);
 
       ref.read(notificationCenterProvider.notifier).add(
-            title: '背景地図を「${provider.name}」に変更しました',
+            title: t.basemap.notifications.changed(name: provider.name),
             level: NotificationLevel.success,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: '背景地図の変更に失敗しました: $e',
+            title: t.basemap.notifications.changeFailed(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -82,12 +83,12 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       await _baseMapService.setOfflineMode(value);
 
       ref.read(notificationCenterProvider.notifier).add(
-            title: value ? 'オフラインモードを有効にしました' : 'オフラインモードを無効にしました',
+            title: value ? t.basemap.notifications.offlineEnabled : t.basemap.notifications.offlineDisabled,
             level: value ? NotificationLevel.warning : NotificationLevel.info,
           );
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'オフラインモードの変更に失敗しました: $e',
+            title: t.basemap.notifications.offlineChangeFailed(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -101,21 +102,21 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         context: context,
         builder:
             (context) => AlertDialog(
-              title: const Text('キャッシュクリア'),
+              title: Text(t.basemap.cacheDialog.title),
               content: Text(
                 providerId != null
-                    ? '選択したプロバイダーのキャッシュをクリアしますか？'
-                    : '全ての地図キャッシュをクリアしますか？',
+                    ? t.basemap.cacheDialog.confirmProvider
+                    : t.basemap.cacheDialog.confirmAll,
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('キャンセル'),
+                  child: Text(t.common.cancel),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('クリア'),
+                  child: Text(t.common.clear),
                 ),
               ],
             ),
@@ -126,13 +127,13 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         await _loadCacheInfo(); // キャッシュ情報を再読み込み
 
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'キャッシュをクリアしました',
+              title: t.basemap.cacheDialog.cleared,
               level: NotificationLevel.success,
             );
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'キャッシュクリアに失敗しました: $e',
+            title: t.basemap.cacheDialog.clearFailed(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -147,12 +148,12 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
+        builder: (context) => AlertDialog(
           content: Row(
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Expanded(child: Text('キャッシュを検証しています...')),
+              Expanded(child: Text(t.basemap.cacheValidation.validating)),
             ],
           ),
         ),
@@ -171,33 +172,33 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('キャッシュ検証結果'),
+            title: Text(t.basemap.cacheValidation.resultTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('総タイル数: ${result['totalTiles']}'),
+                Text(t.basemap.cacheValidation.totalTiles(count: result['totalTiles'].toString())),
                 Text(
-                  '有効: ${result['validTiles']}',
+                  t.basemap.cacheValidation.validTiles(count: result['validTiles'].toString()),
                   style: const TextStyle(color: Colors.green),
                 ),
                 Text(
-                  '無効: ${result['invalidTiles']}',
+                  t.basemap.cacheValidation.invalidTiles(count: result['invalidTiles'].toString()),
                   style: const TextStyle(color: Colors.orange),
                 ),
                 Text(
-                  '削除: ${result['removedTiles']}',
+                  t.basemap.cacheValidation.removedTiles(count: result['removedTiles'].toString()),
                   style: const TextStyle(color: Colors.red),
                 ),
                 const SizedBox(height: 8),
                 if (result['removedTiles'] > 0)
-                  const Text(
-                    '破損したキャッシュファイルを削除しました',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  Text(
+                    t.basemap.cacheValidation.corruptedRemoved,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   )
                 else
-                  const Text(
-                    '問題は検出されませんでした',
+                  Text(
+                    t.basemap.cacheValidation.noIssues,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.green,
@@ -208,7 +209,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('閉じる'),
+                child: Text(t.common.close),
               ),
             ],
           ),
@@ -218,7 +219,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         await _loadCacheInfo();
 
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'キャッシュ検証完了: ${result['removedTiles']}個のファイルを修復',
+              title: t.basemap.cacheValidation.complete(count: result['removedTiles'].toString()),
               level: NotificationLevel.info,
             );
       }
@@ -228,7 +229,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         Navigator.pop(context);
       }
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'キャッシュ検証に失敗しました: $e',
+            title: t.basemap.cacheValidation.failed(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -307,13 +308,13 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return SettingsScaffold(
-      title: '背景地図設定',
+      title: t.basemap.title,
       isEmbedded: widget.isEmbedded,
       isLoading: _isLoading,
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
-          tooltip: 'キャッシュ情報を更新',
+          tooltip: t.basemap.refreshCache,
           onPressed: _loadCacheInfo,
         ),
       ],
@@ -333,16 +334,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   /// 一括ダウンロードセクション
   Widget _buildDownloadSection() {
     return SettingsHighlightSection(
-      title: '地図の一括ダウンロード',
+      title: t.basemap.download.title,
       icon: Icons.download_for_offline,
       iconColor: Colors.blue,
       backgroundColor: Colors.blue[50]!,
-      description:
-          '現在表示している場所を中心に、指定した範囲の地図データを一括で保存します。オフライン環境に行く前に実行してください。',
+      description: t.basemap.download.description,
       actionButton: ElevatedButton.icon(
         onPressed: _showDownloadDialog,
         icon: const Icon(Icons.download),
-        label: const Text('ダウンロード設定を開く'),
+        label: Text(t.basemap.download.openSettings),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
@@ -357,7 +357,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     final currentProvider = _baseMapService.currentProvider;
 
     return SettingsSection(
-      title: '現在の設定',
+      title: t.basemap.currentSettings,
       children: [
         SettingsTile(
           leadingIcon: currentProvider.icon,
@@ -365,12 +365,12 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
           title: currentProvider.name,
           subtitle: currentProvider.description,
           trailing: _baseMapService.isOfflineMode
-              ? const Chip(
-                  label: Text('オフライン'),
+              ? Chip(
+                  label: Text(t.basemap.offline),
                   backgroundColor: Colors.orange,
                 )
-              : const Chip(
-                  label: Text('オンライン'),
+              : Chip(
+                  label: Text(t.basemap.online),
                   backgroundColor: Colors.green,
                 ),
         ),
@@ -383,12 +383,12 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
     final currentProvider = _baseMapService.currentProvider;
 
     return SettingsSection(
-      title: '背景地図の選択',
+      title: t.basemap.selectBasemap,
       children: BaseMapProvider.availableProviders.map((provider) {
         final isSelected = provider.id == currentProvider.id;
         final cachedTileCount = _cacheStats[provider.id] ?? 0;
         final subtitleText = cachedTileCount > 0
-            ? '${provider.description}\nキャッシュ: $cachedTileCountタイル'
+            ? '${provider.description}\n${t.basemap.cacheCount(count: cachedTileCount.toString())}'
             : provider.description;
 
         return SettingsSelectionTile(
@@ -406,15 +406,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   /// オフライン設定セクション
   Widget _buildOfflineSettingsSection() {
     return SettingsSection(
-      title: 'オフライン設定',
+      title: t.basemap.offlineSettings,
       children: [
         SettingsSwitchTile(
           leadingIcon:
               _baseMapService.isOfflineMode ? Icons.wifi_off : Icons.wifi,
           activeIconColor: Colors.orange,
           inactiveIconColor: Colors.green,
-          title: 'オフラインモード',
-          subtitle: 'ネットワークを使用せず、キャッシュされた地図のみを表示',
+          title: t.basemap.offlineMode,
+          subtitle: t.basemap.offlineModeDesc,
           value: _baseMapService.isOfflineMode,
           onChanged: _toggleOfflineMode,
         ),
@@ -425,9 +425,9 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   /// キャッシュ管理セクション
   Widget _buildCacheManagementSection() {
     return SettingsSection(
-      title: 'キャッシュ管理',
+      title: t.basemap.cacheManagement,
       trailing: Text(
-        '合計: ${_cacheSizeMB.toStringAsFixed(1)} MB',
+        t.basemapExtra.totalSize(size: _cacheSizeMB.toStringAsFixed(1)),
         style: const TextStyle(fontSize: 14, color: Colors.grey),
       ),
       children: [
@@ -435,9 +435,9 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         SettingsActionTile(
           leadingIcon: Icons.build,
           leadingIconColor: Colors.blue,
-          title: 'キャッシュを検証・修復',
-          subtitle: '破損したキャッシュを自動検出して削除',
-          buttonLabel: '検証',
+          title: t.basemap.validateRepair,
+          subtitle: t.basemap.validateRepairDesc,
+          buttonLabel: t.basemap.validate,
           buttonColor: Colors.blue,
           onPressed: _cacheStats.isNotEmpty ? _validateAndRepairCache : null,
           enabled: _cacheStats.isNotEmpty,
@@ -448,10 +448,10 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         SettingsActionTile(
           leadingIcon: Icons.delete_sweep,
           leadingIconColor: Colors.red,
-          title: '全キャッシュをクリア',
+          title: t.basemap.clearAll,
           subtitle:
               '${_cacheStats.values.fold(0, (sum, count) => sum + count)}タイル',
-          buttonLabel: 'クリア',
+          buttonLabel: t.common.clear,
           buttonColor: Colors.red,
           onPressed: _cacheStats.isNotEmpty ? () => _clearCache() : null,
           enabled: _cacheStats.isNotEmpty,
@@ -459,19 +459,19 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
         const Divider(),
 
         // プロバイダー別キャッシュ情報
-        const Padding(
-          padding: EdgeInsets.only(left: 16, top: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 8),
           child: Text(
-            'プロバイダー別キャッシュ',
+            t.basemap.perProviderCache,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(height: 8),
         if (_cacheStats.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'キャッシュされた地図データはありません',
+              t.basemap.noCacheData,
               style: TextStyle(color: Colors.grey),
             ),
           )
@@ -487,7 +487,7 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
               subtitle: '${entry.value}タイル',
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
-                tooltip: 'このプロバイダーのキャッシュをクリア',
+                tooltip: t.basemap.clearProviderCache,
                 onPressed: () => _clearCache(providerId: entry.key),
               ),
             );
@@ -547,18 +547,18 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('ダウンロード設定'),
+      title: Text(t.basemap.download.settingsTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('地図: ${widget.provider.name}'),
+            Text(t.basemapExtra.mapName(name: widget.provider.name)),
             const SizedBox(height: 4),
-            Text('中心: ${widget.center.latitude.toStringAsFixed(4)}, ${widget.center.longitude.toStringAsFixed(4)}'),
+            Text(t.basemapExtra.center(lat: widget.center.latitude.toStringAsFixed(4), lng: widget.center.longitude.toStringAsFixed(4))),
             const Divider(),
             
-            const Text('範囲 (半径)', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(t.basemap.download.range, style: const TextStyle(fontWeight: FontWeight.bold)),
             Row(
               children: [
                 Expanded(
@@ -580,7 +580,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
               ],
             ),
             
-            const Text('ズームレベル範囲', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(t.basemap.download.zoomRange, style: const TextStyle(fontWeight: FontWeight.bold)),
             RangeSlider(
               values: _zoomRange,
               min: widget.provider.minZoom.toDouble(),
@@ -607,7 +607,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
                 const Icon(Icons.image, size: 20, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  '推定タイル数: $_estimatedTiles 枚',
+                  t.basemap.download.estimatedTiles(count: _estimatedTiles.toString()),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: _estimatedTiles > 1000 ? Colors.red : Colors.black,
@@ -616,11 +616,11 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
               ],
             ),
             if (_estimatedTiles > 1000)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '注意: タイル数が多すぎます。時間がかかり、サーバー負荷の原因となります。範囲かズームレベルを絞ってください。',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
+                  t.basemap.download.tooManyTiles,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
                 ),
               ),
           ],
@@ -629,7 +629,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton(
           onPressed: _estimatedTiles > 0 && _estimatedTiles < 5000 
@@ -640,7 +640,7 @@ class _DownloadSettingsDialogState extends State<_DownloadSettingsDialog> {
               ) 
             : null,
           style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-          child: const Text('ダウンロード開始', style: TextStyle(color: Colors.white)),
+          child: Text(t.basemap.download.startDownload, style: const TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -720,7 +720,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
     final statusStr = _status['status'] as String? ?? 'init';
 
     return AlertDialog(
-      title: const Text('ダウンロード中...'),
+      title: Text(t.basemap.download.downloading),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -728,34 +728,34 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
           if (!_isFinished) ...[
             LinearProgressIndicator(value: percent, minHeight: 10),
             const SizedBox(height: 8),
-            Text('${(percent * 100).toStringAsFixed(1)}% 完了 ($processed / $total)'),
+            Text(t.basemap.download.progress(percent: (percent * 100).toStringAsFixed(1), processed: processed.toString(), total: total.toString())),
           ],
           const SizedBox(height: 16),
           
           if (statusStr == 'completed')
-            const Center(
+            Center(
               child: Text(
-                'ダウンロード完了！', 
-                style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
+                t.basemap.download.complete, 
+                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
               ),
             )
           else if (statusStr == 'cancelled')
-            const Center(
+            Center(
               child: Text(
-                'キャンセルされました', 
-                style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 18),
+                t.basemap.download.cancelled, 
+                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 18),
               ),
             )
           else if (statusStr == 'error')
              Text(
-                'エラーが発生しました: ${_status['message']}', 
+                t.common.errorOccurred(error: _status['message'].toString()), 
                 style: const TextStyle(color: Colors.red),
               ),
               
           const Divider(),
-          _buildStatRow('成功 (ダウンロード)', downloaded.toString(), Colors.blue),
-          _buildStatRow('済み (スキップ)', skipped.toString(), Colors.grey),
-          _buildStatRow('エラー', errors.toString(), Colors.red),
+          _buildStatRow(t.basemap.download.successDownloaded, downloaded.toString(), Colors.blue),
+          _buildStatRow(t.basemap.download.skipped, skipped.toString(), Colors.grey),
+          _buildStatRow(t.basemap.download.errors, errors.toString(), Colors.red),
         ],
       ),
       actions: [
@@ -764,12 +764,12 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
             onPressed: () {
               widget.baseMapService.cancelDownload();
             },
-            child: const Text('キャンセル', style: TextStyle(color: Colors.red)),
+            child: Text(t.common.cancel, style: const TextStyle(color: Colors.red)),
           )
         else
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('閉じる'),
+            child: Text(t.common.close),
           ),
       ],
     );

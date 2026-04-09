@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 import '../../services/coordinate/index.dart';
@@ -81,7 +82,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     if (error != null) {
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: 'フィルタエラー: $error', level: NotificationLevel.error);
+          .add(title: t.attributeTable.filterError(error: error), level: NotificationLevel.error);
     }
   }
 
@@ -138,21 +139,21 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                     ? Colors.orange
                     : (_showFilter ? Colors.blue : null),
                 () => setState(() => _showFilter = !_showFilter),
-                'フィルタ',
+                t.attributeTable.filterLabel,
               ),
               // 検索・置換トグル
               _buildIconButton(
                 Icons.find_replace,
                 _showSearchReplace ? Colors.orange : null,
                 () => setState(() => _showSearchReplace = !_showSearchReplace),
-                '検索・置換',
+                t.attributeTable.searchReplace,
               ),
               // テーブル/フォーム切替
               _buildIconButton(
                 widget.isFormView ? Icons.table_chart : Icons.article,
                 widget.isFormView ? Colors.orange : null,
                 widget.onToggleView,
-                widget.isFormView ? 'テーブル表示' : 'フォーム表示',
+                widget.isFormView ? t.attributeTable.tableView : t.attributeTable.formView,
               ),
               // 操作メニュー（ドロップダウン）
               _buildActionsMenu(context),
@@ -222,7 +223,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   foregroundColor: Colors.blue,
                 ),
                 onPressed: _applyFilter,
-                child: const Text('適用', style: TextStyle(fontSize: 11)),
+                child: Text(t.attributeTable.apply, style: const TextStyle(fontSize: 11)),
               ),
             ),
             if (_isFilterApplied && widget.onDuplicateFiltered != null) ...[
@@ -237,7 +238,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                     foregroundColor: Colors.green.shade700,
                   ),
                   icon: const Icon(Icons.copy_all, size: 14),
-                  label: const Text('複製', style: TextStyle(fontSize: 11)),
+                  label: Text(t.attributeTable.duplicate, style: const TextStyle(fontSize: 11)),
                   onPressed: () {
                     widget.onDuplicateFiltered?.call(
                       widget.controller.filterSql,
@@ -277,7 +278,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   ),
                   border: const OutlineInputBorder(),
                   isDense: true,
-                  hintText: '検索...',
+                  hintText: t.attributeTable.search,
                   hintStyle: TextStyle(
                     fontSize: 10,
                     color: Colors.grey.shade400,
@@ -299,7 +300,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   ),
                   border: const OutlineInputBorder(),
                   isDense: true,
-                  hintText: '置換...',
+                  hintText: t.attributeTable.replace,
                   hintStyle: TextStyle(
                     fontSize: 10,
                     color: Colors.grey.shade400,
@@ -321,7 +322,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   isDense: true,
                 ),
                 style: const TextStyle(fontSize: 10, color: Colors.black87),
-                hint: const Text('カラム', style: TextStyle(fontSize: 10)),
+                hint: Text(t.attributeTable.column, style: const TextStyle(fontSize: 10)),
                 items:
                     editableColumns
                         .map(
@@ -347,7 +348,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 onPressed: _doSearch,
-                child: const Text('検索', style: TextStyle(fontSize: 10)),
+                child: Text(t.attributeTable.searchButton, style: const TextStyle(fontSize: 10)),
               ),
             ),
             SizedBox(
@@ -360,14 +361,14 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
                   foregroundColor: Colors.orange.shade800,
                 ),
                 onPressed: _doReplace,
-                child: const Text('置換', style: TextStyle(fontSize: 10)),
+                child: Text(t.attributeTable.replaceButton, style: const TextStyle(fontSize: 10)),
               ),
             ),
             if (_searchResultCount > 0)
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Text(
-                  '$_searchResultCount件',
+                  t.attributeTable.resultCount(count: '$_searchResultCount'),
                   style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                 ),
               ),
@@ -385,7 +386,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
     if (results.isEmpty) {
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: '該当なし', level: NotificationLevel.info);
+          .add(title: t.attributeTable.noResults, level: NotificationLevel.info);
     }
   }
 
@@ -397,7 +398,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       ref
           .read(notificationCenterProvider.notifier)
           .add(
-            title: '検索テキストと対象カラムを指定してください',
+            title: t.attributeTable.specifySearchAndColumn,
             level: NotificationLevel.warning,
           );
       return;
@@ -411,12 +412,12 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       setState(() => _searchResultCount = 0);
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: '$count件を置換しました', level: NotificationLevel.success);
+          .add(title: t.attributeTable.replacedCount(count: '$count'), level: NotificationLevel.success);
       widget.onRefresh?.call();
     } catch (e) {
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: '置換エラー: $e', level: NotificationLevel.error);
+          .add(title: t.attributeTable.replaceError(error: '$e'), level: NotificationLevel.error);
     }
   }
 
@@ -473,7 +474,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
       icon: const Icon(Icons.more_vert, size: 18),
       iconSize: 18,
       padding: EdgeInsets.zero,
-      tooltip: '操作メニュー',
+      tooltip: t.attributeTable.actionsMenu,
       constraints: const BoxConstraints(),
       style: const ButtonStyle(
         minimumSize: WidgetStatePropertyAll(Size(28, 28)),
@@ -504,23 +505,23 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         }
       },
       itemBuilder: (ctx) => [
-        _menuItem('refresh', Icons.refresh, '更新'),
-        _menuItem('save', Icons.save, '保存'),
+        _menuItem('refresh', Icons.refresh, t.attributeTable.refresh),
+        _menuItem('save', Icons.save, t.attributeTable.save),
         const PopupMenuDivider(),
-        _menuItem('copy', Icons.copy, 'テーブルをコピー'),
-        _menuItem('csv_export', Icons.download, 'CSVエクスポート'),
+        _menuItem('copy', Icons.copy, t.attributeTable.copyTable),
+        _menuItem('csv_export', Icons.download, t.attributeTable.csvExport),
         const PopupMenuDivider(),
-        _menuItem('batch_edit', Icons.edit_note, '一括編集（チェック行）'),
-        _menuItem('field_calc', Icons.calculate, 'フィールド計算機'),
+        _menuItem('batch_edit', Icons.edit_note, t.attributeTable.batchEdit),
+        _menuItem('field_calc', Icons.calculate, t.attributeTable.fieldCalculator),
         const PopupMenuDivider(),
-        _menuItem('add_column', Icons.add_box, 'カラム追加'),
-        _menuItem('column_menu', Icons.view_column, 'カラム表示/非表示'),
+        _menuItem('add_column', Icons.add_box, t.attributeTable.addColumnMenu),
+        _menuItem('column_menu', Icons.view_column, t.attributeTable.columnVisibility),
         if (widget.onAddFeature != null) ...[
           const PopupMenuDivider(),
-          _menuItem('add_feature', Icons.add, 'フィーチャ追加'),
+          _menuItem('add_feature', Icons.add, t.attributeTable.addFeature),
         ],
         const PopupMenuDivider(),
-        _menuItem('delete', Icons.delete, '選択フィーチャ削除', iconColor: Colors.red),
+        _menuItem('delete', Icons.delete, t.attributeTable.deleteSelectedFeatures, iconColor: Colors.red),
       ],
     );
   }
@@ -562,7 +563,7 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
           enabled: false,
           height: 32,
           child: Text(
-            'カラム表示/非表示',
+            t.attributeTable.columnVisibility,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -574,11 +575,11 @@ class _AttributeTableToolbarState extends ConsumerState<AttributeTableToolbar> {
         PopupMenuItem<String>(
           value: '_show_all',
           height: 32,
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.visibility, size: 16),
-              SizedBox(width: 8),
-              Text('全て表示', style: TextStyle(fontSize: 12)),
+              const Icon(Icons.visibility, size: 16),
+              const SizedBox(width: 8),
+              Text(t.attributeTable.showAll, style: const TextStyle(fontSize: 12)),
             ],
           ),
         ),
@@ -719,7 +720,7 @@ class _EpsgAutocompleteState extends State<_EpsgAutocomplete> {
             ),
             border: const OutlineInputBorder(),
             isDense: true,
-            hintText: 'EPSG (例: 6677, IX系)',
+            hintText: t.attributeTable.epsgHint,
             hintStyle: const TextStyle(fontSize: 8),
             suffixIcon:
                 widget.initialValue != null
@@ -816,7 +817,7 @@ Future<void> copyTableToClipboard(
       ref
           .read(notificationCenterProvider.notifier)
           .add(
-            title: '${controller.rows.length}行をクリップボードにコピーしました',
+            title: t.attributeTable.copiedToClipboard(count: '${controller.rows.length}'),
             level: NotificationLevel.success,
           );
     }
@@ -825,7 +826,7 @@ Future<void> copyTableToClipboard(
     if (ref != null) {
       ref
           .read(notificationCenterProvider.notifier)
-          .add(title: 'コピーエラー: $e', level: NotificationLevel.error);
+          .add(title: t.attributeTable.copyError(error: '$e'), level: NotificationLevel.error);
     }
   }
 }

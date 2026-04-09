@@ -1,6 +1,7 @@
 // lib/widgets/geometry_conversion_dialogs.dart
 // ジオメトリ変換ダイアログウィジェット
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/layer_node.dart';
 import '../models/nodes/feature_node.dart';
 import '../presentation/node_presenter.dart';
@@ -31,11 +32,11 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
 
   String _getLayerTypeLabel(LayerNode layer) {
     if (layer is LineLayerNode) {
-      return 'ライン';
+      return t.geometryConversion.lineType;
     } else if (layer is PolygonLayerNode) {
-      return 'ポリゴン';
+      return t.geometryConversion.polygonType;
     }
-    return '不明';
+    return t.geometryConversion.unknownType;
   }
 
   @override
@@ -43,11 +44,11 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
     final selectedTypeLabel = _getLayerTypeLabel(_selectedLayer);
     
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.transform, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('ポイント変換'),
+          const Icon(Icons.transform, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(t.geometryConversion.pointConversion),
         ],
       ),
       content: SizedBox(
@@ -57,14 +58,14 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${widget.sourceLayer.name} のポイント (${widget.sourceLayer.features.length}個) を$selectedTypeLabel に変換します。',
+              t.geometryConversion.convertDesc(count: '${widget.sourceLayer.features.length}', layer: widget.sourceLayer.name, type: selectedTypeLabel),
               style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
             
             // レイヤー選択
-            const Text(
-              '変換先のレイヤー:',
+            Text(
+              t.geometryConversion.targetLayerLabel,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -112,12 +113,12 @@ class _ConvertPointsToGeometryDialogState extends State<ConvertPointsToGeometryD
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.of(context).pop(_selectedLayer),
           icon: const Icon(Icons.check),
-          label: const Text('変換'),
+          label: Text(t.geometryConversion.convert),
         ),
       ],
     );
@@ -152,11 +153,11 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
 
   String _getFeatureTypeLabel() {
     if (widget.sourceFeature is LineFeatureNode) {
-      return 'ライン';
+      return t.geometryConversion.lineType;
     } else if (widget.sourceFeature is PolygonFeatureNode) {
-      return 'ポリゴン';
+      return t.geometryConversion.polygonType;
     }
-    return '不明';
+    return t.geometryConversion.unknownType;
   }
 
   @override
@@ -164,11 +165,11 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
     final typeLabel = _getFeatureTypeLabel();
     
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.scatter_plot, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('ポイントに変換'),
+          const Icon(Icons.scatter_plot, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(t.geometryConversion.convertToPoints),
         ],
       ),
       content: SizedBox(
@@ -178,14 +179,14 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$typeLabel「${widget.sourceFeature.name}」の頂点 (${widget.pointCount}個) をポイントに変換します。',
+              t.geometryConversion.toPointsDesc(type: typeLabel, name: widget.sourceFeature.name, count: '${widget.pointCount}'),
               style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
             
             // レイヤー選択
-            const Text(
-              '追加先のポイントレイヤー:',
+            Text(
+              t.geometryConversion.targetPointLayer,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -232,12 +233,12 @@ class _ConvertGeometryToPointsDialogState extends State<ConvertGeometryToPointsD
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         ElevatedButton.icon(
           onPressed: () => Navigator.of(context).pop(_selectedLayer),
           icon: const Icon(Icons.check),
-          label: const Text('変換'),
+          label: Text(t.geometryConversion.convert),
         ),
       ],
     );

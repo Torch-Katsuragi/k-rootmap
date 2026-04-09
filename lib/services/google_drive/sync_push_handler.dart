@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
 import 'sync_engine.dart';
@@ -39,7 +40,7 @@ class SyncPushHandler {
     void Function(SyncProgress progress)? onProgress,
   }) async {
     if (!_driveService.isDriveApiAvailable) {
-      return SyncResult.failure('Google Driveに接続されていません');
+      return SyncResult.failure(t.drive.driveNotConnected);
     }
 
     try {
@@ -48,7 +49,7 @@ class SyncPushHandler {
 
       final projectDir = Directory(projectPath);
       if (!await projectDir.exists()) {
-        return SyncResult.failure('プロジェクトフォルダが見つかりません');
+        return SyncResult.failure(t.services.projectNotFound);
       }
 
       String targetFolderId;
@@ -62,7 +63,7 @@ class SyncPushHandler {
         final projectName = p.basename(projectPath);
         final created = await _driveService.createProjectFolder(projectName);
         if (created == null) {
-          return SyncResult.failure('Driveフォルダの作成に失敗しました');
+          return SyncResult.failure(t.drive.driveFolderCreateFailed);
         }
         targetFolderId = created.id!;
         targetFolderName = created.name!;
@@ -298,7 +299,7 @@ class SyncPushHandler {
 
       if (uploadedCount == 0 && filesToSync.isNotEmpty) {
         return SyncResult.failure(
-          'ファイルのアップロードに失敗しました（$skippedCount件スキップ）',
+          t.services.uploadFailed(count: skippedCount.toString()),
         );
       }
 
@@ -317,7 +318,7 @@ class SyncPushHandler {
       );
     } catch (e, stack) {
       AppLogger.debug('[SyncEngine] Pushエラー: $e\n$stack');
-      return SyncResult.failure('同期中にエラーが発生しました: $e');
+      return SyncResult.failure(t.services.syncError(error: e.toString()));
     }
   }
 
@@ -327,7 +328,7 @@ class SyncPushHandler {
     final driveId = meta.sync.driveId;
 
     if (driveId == null) {
-      return SyncResult.failure('Drive連携されていません');
+      return SyncResult.failure(t.drive.driveNotLinked);
     }
 
     return push(localPath, driveFolder: driveId);

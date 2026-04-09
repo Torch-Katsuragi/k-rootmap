@@ -7,6 +7,7 @@ import 'metadata_coordinate_utils.dart';
 import 'metadata_gps_data_parser.dart';
 import 'metadata_table_data.dart';
 import 'metadata_xy_calculator.dart';
+import '../../i18n/strings.g.dart';
 
 /// テーブル形式データへのXY座標追加・更新を扱うクラス
 class MetadataXYTableHandler {
@@ -21,9 +22,9 @@ class MetadataXYTableHandler {
 
     int? latIndex, lngIndex;
     for (int i = 0; i < baseData.headers.length; i++) {
-      if (baseData.headers[i] == '緯度') {
+      if (baseData.headers[i] == t.metadata.latitude) {
         latIndex = i;
-      } else if (baseData.headers[i] == '経度') {
+      } else if (baseData.headers[i] == t.metadata.longitude) {
         lngIndex = i;
       }
     }
@@ -34,7 +35,7 @@ class MetadataXYTableHandler {
     for (int i = 0; i < baseData.headers.length; i++) {
       newHeaders.add(baseData.headers[i]);
 
-      if (baseData.headers[i] == '経度') {
+      if (baseData.headers[i] == t.metadata.longitude) {
         newHeaders.addAll([
           'X座標（最初）',
           'Y座標（最初）',
@@ -84,7 +85,7 @@ class MetadataXYTableHandler {
 
     int? originalDataColumnIndex;
     for (int i = 0; i < baseData.headers.length; i++) {
-      if (baseData.headers[i] == '元データ') {
+      if (baseData.headers[i] == t.metadata.rawData) {
         originalDataColumnIndex = i;
         break;
       }
@@ -228,9 +229,9 @@ class MetadataXYTableHandler {
     int? latIndex, lngIndex;
 
     for (int i = 0; i < headers.length; i++) {
-      if (headers[i] == '緯度') {
+      if (headers[i] == t.metadata.latitude) {
         latIndex = i;
-      } else if (headers[i] == '経度') {
+      } else if (headers[i] == t.metadata.longitude) {
         lngIndex = i;
       }
     }

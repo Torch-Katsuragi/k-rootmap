@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'dart:io';
+import '../i18n/strings.g.dart';
 
 /// フルスクリーン写真ビューワーウィジェット
 /// photo_viewパッケージを使用した高機能な画像表示
@@ -37,7 +38,7 @@ class PhotoViewer extends StatelessWidget {
             errorBuilder: (context, error, stackTrace) {
               return Container(
                 color: Colors.grey.shade900,
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -48,7 +49,7 @@ class PhotoViewer extends StatelessWidget {
                       ),
                       SizedBox(height: 16),
                       Text(
-                        '画像を読み込めません',
+                        t.photoViewer.loadError,
                         style: TextStyle(
                           color: Colors.white54,
                           fontSize: 16,
@@ -72,7 +73,7 @@ class PhotoViewer extends StatelessWidget {
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: () => Navigator.of(context).pop(),
-                tooltip: '閉じる',
+                tooltip: t.photoViewer.close,
               ),
             ),
           ),
@@ -98,8 +99,8 @@ class PhotoViewer extends StatelessWidget {
                 right: 16,
                 top: 16,
               ),
-              child: const Text(
-                'ダブルタップでズーム・ピンチで拡大縮小',
+              child: Text(
+                t.photoViewer.zoomHint,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white70,

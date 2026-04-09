@@ -2,6 +2,7 @@
 // インポート/エクスポート処理のファサード（軽量なエントリポイント）
 import 'package:path/path.dart' as p;
 import 'package:k_maps/utils/app_logger.dart';
+import '../../i18n/strings.g.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';
 import 'import_export_models.dart';
@@ -75,7 +76,7 @@ class ImportExportService {
       final importer = _importers.firstWhere(
         (i) => i.canHandle(extension),
         orElse: () => throw UnsupportedError(
-          'サポートされていないファイル形式です: $extension',
+          t.importExport.unsupportedFormat(ext: extension),
         ),
       );
 
@@ -88,7 +89,7 @@ class ImportExportService {
       );
     } catch (e) {
       AppLogger.debug('[ImportExportService] インポートエラー: $e');
-      return ImportExportResult.error('インポートに失敗しました: $e');
+      return ImportExportResult.error(t.importExport.importFailed(error: e.toString()));
     }
   }
 
@@ -112,7 +113,7 @@ class ImportExportService {
       
       if (!targetFormat.isExportSupported) {
         return ImportExportResult.error(
-          'エクスポートがサポートされていない形式です: ${targetFormat.value}',
+          t.importExport.exportUnsupported(format: targetFormat.value),
         );
       }
 
@@ -120,7 +121,7 @@ class ImportExportService {
       final exporter = _exporters.firstWhere(
         (e) => e.format == targetFormat,
         orElse: () => throw UnsupportedError(
-          'サポートされていないエクスポート形式です: ${targetFormat.value}',
+          t.importExport.unsupportedExportFormat(format: targetFormat.value),
         ),
       );
 
@@ -129,7 +130,7 @@ class ImportExportService {
       return await exporter.export(layer, outputPath, options: options);
     } catch (e) {
       AppLogger.debug('[ImportExportService] エクスポートエラー: $e');
-      return ImportExportResult.error('エクスポートに失敗しました: $e');
+      return ImportExportResult.error(t.importExport.exportFailed(error: e.toString()));
     }
   }
 

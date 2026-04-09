@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:k_maps/utils/app_logger.dart';
 
+import '../../i18n/strings.g.dart';
 import 'metadata_table_data.dart';
 
 /// メタデータの内容をパースして表形式に変換するクラス
@@ -38,21 +39,21 @@ class MetadataContentParser {
         }
 
         return MetadataTableData(
-          headers: ['内容'],
+          headers: [t.metadata.content],
           rows: [
             [contents],
           ],
           type: 'measurement_log',
-          title: 'GPS測量ログ（文字列形式）',
+          title: t.metadata.surveyLogString,
         );
       } catch (e) {
         return MetadataTableData(
-          headers: ['内容'],
+          headers: [t.metadata.content],
           rows: [
             [contents],
           ],
           type: 'measurement_log',
-          title: 'GPS測量ログ（文字列形式）',
+          title: t.metadata.surveyLogString,
         );
       }
     }
@@ -76,66 +77,66 @@ class MetadataContentParser {
     final rows = <List<String>>[];
 
     if (data.containsKey('pointNumber')) {
-      headers.add('測量点番号');
+      headers.add(t.metadata.pointNumber);
       rows.add(['${data['pointNumber']}']);
     }
 
     if (data.containsKey('sampleCount')) {
-      headers.add('サンプル数');
+      headers.add(t.metadata.sampleCount);
       rows.add(['${data['sampleCount']}']);
     }
 
     if (data.containsKey('averagingDuration')) {
-      headers.add('測量時間');
+      headers.add(t.metadata.surveyDuration);
       rows.add(['${data['averagingDuration']}']);
     }
 
     if (data.containsKey('recordedAt')) {
-      headers.add('記録日時');
+      headers.add(t.metadata.recordedAt);
       rows.add(['${data['recordedAt']}']);
     }
 
     if (data.containsKey('calculatedPosition')) {
       final pos = data['calculatedPosition'] as Map<String, dynamic>;
       if (pos.containsKey('latitude')) {
-        headers.add('緯度');
+        headers.add(t.metadata.latitude);
         rows.add(['${pos['latitude']}']);
       }
       if (pos.containsKey('longitude')) {
-        headers.add('経度');
+        headers.add(t.metadata.longitude);
         rows.add(['${pos['longitude']}']);
       }
       if (pos.containsKey('altitude')) {
-        headers.add('標高');
+        headers.add(t.metadata.altitude);
         rows.add(['${pos['altitude'] ?? 'N/A'}']);
       }
       if (pos.containsKey('averagedAccuracy')) {
-        headers.add('平均精度');
+        headers.add(t.metadata.averageAccuracy);
         rows.add(['${pos['averagedAccuracy'] ?? 'N/A'}']);
       }
     }
 
     if (data.containsKey('usedGpsData')) {
-      headers.add('元データ');
+      headers.add(t.metadata.rawData);
       rows.add(['${data['usedGpsData']}']);
     }
 
     if (headers.isNotEmpty && rows.isNotEmpty) {
       return MetadataTableData(
-        headers: ['項目', '値'],
+        headers: [t.metadata.item, t.metadata.value],
         rows: List.generate(headers.length, (i) => [headers[i], rows[i][0]]),
         type: 'measurement_log',
-        title: 'GPS測量ログ',
+        title: t.metadata.surveyLog,
       );
     }
 
     return MetadataTableData(
-      headers: ['情報'],
+      headers: [t.metadata.info],
       rows: [
-        ['データが見つかりません'],
+        [t.metadata.noData],
       ],
       type: 'measurement_log',
-      title: 'GPS測量ログ',
+      title: t.metadata.surveyLog,
     );
   }
 
@@ -143,30 +144,30 @@ class MetadataContentParser {
   static MetadataTableData _parseMeasurementLogList(List<dynamic> dataList) {
     if (dataList.isEmpty) {
       return MetadataTableData(
-        headers: ['情報'],
+        headers: [t.metadata.info],
         rows: [
-          ['データが空です'],
+          [t.metadata.emptyData],
         ],
         type: 'measurement_log',
-        title: 'GPS測量ログ（複数点）',
+        title: t.metadata.surveyLogMultiLabel,
       );
     }
 
-    final headers = <String>['点番号'];
+    final headers = <String>[t.metadata.pointNumber];
     final firstItem = dataList.first;
 
     if (firstItem is Map<String, dynamic>) {
       if (firstItem.containsKey('calculatedPosition')) {
-        headers.addAll(['緯度', '経度', '標高', '精度']);
+        headers.addAll([t.metadata.latitude, t.metadata.longitude, t.metadata.altitude, t.metadata.accuracy]);
       }
       if (firstItem.containsKey('sampleCount')) {
-        headers.add('サンプル数');
+        headers.add(t.metadata.sampleCount);
       }
       if (firstItem.containsKey('averagingDuration')) {
-        headers.add('測量時間');
+        headers.add(t.metadata.surveyDuration);
       }
       if (firstItem.containsKey('usedGpsData')) {
-        headers.add('元データ');
+        headers.add(t.metadata.rawData);
       }
     }
 
@@ -206,7 +207,7 @@ class MetadataContentParser {
       headers: headers,
       rows: rows,
       type: 'measurement_log',
-      title: 'GPS測量ログ（${dataList.length}点）',
+      title: t.metadata.surveyLogMulti(count: dataList.length.toString()),
     );
   }
 
@@ -238,12 +239,12 @@ class MetadataContentParser {
     }
 
     return MetadataTableData(
-      headers: ['内容'],
+      headers: [t.metadata.content],
       rows: [
         ['$contents'],
       ],
       type: type,
-      title: 'メタデータ ($type)',
+      title: t.metadata.title(type: type),
     );
   }
 
@@ -254,12 +255,12 @@ class MetadataContentParser {
   ) {
     if (list.isEmpty) {
       return MetadataTableData(
-        headers: ['情報'],
+        headers: [t.metadata.info],
         rows: [
-          ['データが空です'],
+          [t.metadata.emptyData],
         ],
         type: type,
-        title: 'メタデータ ($type)',
+        title: t.metadata.title(type: type),
       );
     }
 
@@ -293,15 +294,15 @@ class MetadataContentParser {
         headers: headers,
         rows: rows,
         type: type,
-        title: 'メタデータ ($type) - ${list.length}件',
+        title: t.metadata.titleWithCount(type: type, count: list.length.toString()),
       );
     }
 
     return MetadataTableData(
-      headers: ['値'],
+      headers: [t.metadata.value],
       rows: list.map((item) => ['$item']).toList(),
       type: type,
-      title: 'メタデータ ($type) - リスト',
+      title: t.metadata.titleList(type: type),
     );
   }
 
@@ -310,7 +311,7 @@ class MetadataContentParser {
     Map<String, dynamic> map,
     String type,
   ) {
-    final headers = ['キー', '値'];
+    final headers = [t.metadata.key, t.metadata.value];
     final rows =
         map.entries.map((entry) => [entry.key, '${entry.value}']).toList();
 
@@ -318,7 +319,7 @@ class MetadataContentParser {
       headers: headers,
       rows: rows,
       type: type,
-      title: 'メタデータ ($type)',
+      title: t.metadata.title(type: type),
     );
   }
 }

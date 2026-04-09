@@ -16,6 +16,7 @@ import 'package:latlong2/latlong.dart';
 import '../interfaces/map_state_interface.dart';
 import '../providers/tool_providers.dart';
 import '../providers/selection_providers.dart';
+import '../i18n/strings.g.dart';
 /// GPS関連機能を扱うツール
 ///
 /// GPS測量機能を提供し、現在位置を記録してフィーチャを作成します:
@@ -530,7 +531,7 @@ class GpsTool extends MapTool {
       'sampleCount': rawGpsDataList.length,
       'point_count': rawGpsDataList.length, // マーカー表示用の点数
       'averagingDuration':
-          isSingleTap ? '瞬時測量' : '${duration.toStringAsFixed(1)}秒',
+          isSingleTap ? t.gps.instantMeasurement : t.gps.durationSeconds(duration: duration.toStringAsFixed(1)),
       'recordedAt': DateTime.now().toIso8601String(),
     };
 

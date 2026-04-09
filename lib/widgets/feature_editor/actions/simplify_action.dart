@@ -5,8 +5,10 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+
 
 import '../../../models/app_notification.dart';
 import '../../../models/nodes/feature_node.dart';
@@ -19,7 +21,7 @@ import '../shared/sub_table_helper.dart';
 
 class SimplifyAction extends FeatureEditAction {
   @override
-  String get label => '簡略化';
+  String get label => t.featureEditor.simplifyLabel;
 
   @override
   IconData get icon => Icons.timeline;
@@ -109,7 +111,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
             .updatePolygon(updated);
       }
 
-      if (!success) throw Exception('ジオメトリの更新に失敗しました');
+      if (!success) throw Exception(t.featureEditorActions.geometryUpdateFailed);
 
       // sub_tableも簡略化後の頂点に合わせてフィルタ
       if (_originalSubTableJson != null) {
@@ -133,7 +135,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
 
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '簡略化が適用されました',
+          title: t.simplification.applied,
           level: NotificationLevel.success,
         );
         Navigator.of(context).pop(true);
@@ -142,7 +144,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
       AppLogger.debug('[SimplifyAction] 適用失敗: $e');
       if (mounted) {
         ref.read(notificationCenterProvider.notifier).add(
-          title: '簡略化の適用に失敗しました: $e',
+          title: t.simplification.applyFailed(error: '$e'),
           level: NotificationLevel.error,
         );
       }
@@ -154,7 +156,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
   @override
   Widget build(BuildContext context) {
     if (_originalLine.length < 2) {
-      return const Center(child: Text('簡略化対象のデータが不足しています'));
+      return Center(child: Text(t.simplification.insufficientData));
     }
 
     return Column(
@@ -171,7 +173,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
           children: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
+              child: Text(t.common.cancel),
             ),
             const SizedBox(width: 16),
             ElevatedButton(
@@ -183,7 +185,7 @@ class _SimplifyControlsState extends ConsumerState<_SimplifyControls> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('適用'),
+                  : Text(t.featureEditor.apply),
             ),
           ],
         ),

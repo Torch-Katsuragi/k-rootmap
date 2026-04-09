@@ -1,6 +1,7 @@
 // フィーチャ詳細パネルウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../i18n/strings.g.dart';
 import 'dart:io';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
@@ -70,8 +71,8 @@ class FeatureDetailPanel extends ConsumerWidget {
                             children: [
                               const Icon(Icons.broken_image, color: Colors.grey, size: 24),
                               const SizedBox(height: 4),
-                              const Text(
-                                '画像エラー',
+                              Text(
+                                t.featureDetail.imageError,
                                 style: TextStyle(color: Colors.grey, fontSize: 10),
                               ),
                             ],
@@ -105,7 +106,7 @@ class FeatureDetailPanel extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('名前: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(t.featureDetail.nameLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
               Expanded(child: Text(photo.name)),
             ],
           ),
@@ -113,7 +114,7 @@ class FeatureDetailPanel extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('パス: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(t.featureDetail.pathLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
               Expanded(
                 child: Text(displayPath, style: const TextStyle(fontSize: 11)),
               ),
@@ -123,12 +124,12 @@ class FeatureDetailPanel extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('座標: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(t.featureDetail.coordLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
               Expanded(
                 child: Text(
                   photo.hasLocation
                       ? '${photo.location!.latitude.toStringAsFixed(6)}, ${photo.location!.longitude.toStringAsFixed(6)}'
-                      : '位置情報なし',
+                      : t.featureDetail.noLocation,
                   style: TextStyle(
                     fontSize: 11,
                     color: photo.hasLocation ? null : Colors.grey,
@@ -143,8 +144,8 @@ class FeatureDetailPanel extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '撮影日時: ',
+                Text(
+                  t.featureDetail.dateLabel,
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Expanded(
@@ -160,8 +161,8 @@ class FeatureDetailPanel extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'サイズ: ',
+              Text(
+                t.featureDetail.sizeLabel,
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Expanded(
@@ -213,7 +214,7 @@ class FeatureDetailPanel extends ConsumerWidget {
             child: ElevatedButton.icon(
               onPressed: () => _openFeatureEditor(context, feature),
               icon: const Icon(Icons.edit, size: 16),
-              label: const Text('編集'),
+              label: Text(t.featureDetail.edit),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade50,
                 foregroundColor: Colors.blue.shade700,

@@ -1,6 +1,7 @@
 // K-MAPS: インライン編集ウィジェット
 // GeoPackage名・レイヤ名のインライン編集用Widget
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 
 /// GeoPackage名インライン編集用Widget
 class InlineEditGpkgName extends StatefulWidget {
@@ -38,12 +39,12 @@ class _InlineEditGpkgNameState extends State<InlineEditGpkgName> {
   void _submit() {
     final newName = controller.text.trim();
     if (newName.isEmpty) {
-      setState(() => errorText = '空欄不可');
+      setState(() => errorText = t.inlineEdit.emptyError);
       return;
     }
     if (newName != widget.initialName &&
         widget.existingNames.contains(newName)) {
-      setState(() => errorText = '同名ファイルが存在');
+      setState(() => errorText = t.inlineEdit.duplicateFile);
       return;
     }
     if (newName != widget.initialName) {
@@ -128,12 +129,12 @@ class _InlineEditLayerNameState extends State<InlineEditLayerName> {
   void _submit() {
     final newName = controller.text.trim();
     if (newName.isEmpty) {
-      setState(() => errorText = '空欄不可');
+      setState(() => errorText = t.inlineEdit.emptyError);
       return;
     }
     if (newName != widget.initialName &&
         widget.existingNames.contains(newName)) {
-      setState(() => errorText = '同名レイヤが存在');
+      setState(() => errorText = t.inlineEdit.duplicateLayer);
       return;
     }
     if (newName != widget.initialName) {

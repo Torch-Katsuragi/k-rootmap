@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../i18n/strings.g.dart';
 import '../../../utils/feature_calc_utils.dart';
 
 /// Isolate で実行する簡略化関数（トップレベル）
@@ -131,7 +132,7 @@ class SimplificationControlsState extends State<SimplificationControls> {
         // スライダー
         Row(
           children: [
-            const Text('許容誤差: ', style: TextStyle(fontSize: 12)),
+            Text(t.simplification.tolerance, style: const TextStyle(fontSize: 12)),
             Expanded(
               child: Slider(
                 value: _tolerance,
@@ -174,13 +175,13 @@ class SimplificationControlsState extends State<SimplificationControls> {
                   children: [
                     Expanded(
                       child: Text(
-                        '点数: ${_stats!['originalPoints']} -> ${_stats!['simplifiedPoints']}',
+                        t.simplification.pointCount(original: '${_stats!['originalPoints']}', simplified: '${_stats!['simplifiedPoints']}'),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
                     Expanded(
                       child: Text(
-                        '削減率: ${_stats!['pointReductionPercent']}',
+                        t.simplification.reduction(value: '${_stats!['pointReductionPercent']}'),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -190,13 +191,13 @@ class SimplificationControlsState extends State<SimplificationControls> {
                   children: [
                     Expanded(
                       child: Text(
-                        '長さ誤差: ${_stats!['lengthErrorPercent']}',
+                        t.simplification.error(value: '${_stats!['lengthErrorPercent']}'),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
                     Expanded(
                       child: Text(
-                        '誤差距離: ${(_stats!['lengthError'] as double).toStringAsFixed(1)}m',
+                        t.simplification.errorDistance(value: (_stats!['lengthError'] as double).toStringAsFixed(1)),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),

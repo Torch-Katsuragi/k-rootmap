@@ -3,6 +3,7 @@
 
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
+import '../i18n/strings.g.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_notification.dart';
@@ -93,7 +94,7 @@ class KeyboardHandler {
       AppLogger.debug('[KeyboardHandler] フィーチャ削除エラー: $e');
 
       ref.read(notificationCenterProvider.notifier).add(
-        title: 'フィーチャの削除に失敗しました: $e',
+        title: t.editor.deleteFeatureError(error: e.toString()),
         level: NotificationLevel.error,
       );
     }

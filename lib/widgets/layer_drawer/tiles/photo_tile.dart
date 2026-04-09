@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:image/image.dart' as img;
+import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/image_node.dart';
 import '../../../models/nodes/overlay_image_node.dart';
 import '../../../models/kmeta.dart';
@@ -38,10 +39,10 @@ class PhotoTile extends ConsumerWidget {
       leading: NodeVisibilityIcon(node: node),
       title: Text(node.name),
       subtitle: isOverlay
-          ? const Text('オーバーレイ', style: TextStyle(fontSize: 11, color: Colors.teal))
+          ? Text(t.layerDrawer.photo.overlay, style: const TextStyle(fontSize: 11, color: Colors.teal))
           : node.hasLocation
               ? null
-              : const Text('位置情報なし', style: TextStyle(fontSize: 11)),
+              : Text(t.layerDrawer.photo.noLocation, style: const TextStyle(fontSize: 11)),
       onTap: () {
         ref.read(selectedFeaturesProvider.notifier).set([node]);
         if (node.hasLocation && onJumpTo != null) {
@@ -66,18 +67,18 @@ class PhotoTile extends ConsumerWidget {
           }
         },
         itemBuilder: (context) => [
-          const PopupMenuItem(value: 'rename', child: Text('名前の変更')),
+          PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.photo.changeName)),
           if (!isOverlay)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'convert_to_overlay',
-              child: Text('オーバーレイに変換'),
+              child: Text(t.layerDrawer.photo.convertToOverlay),
             ),
           if (isOverlay)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'convert_to_normal',
-              child: Text('通常の写真に戻す'),
+              child: Text(t.layerDrawer.photo.convertToNormal),
             ),
-          const PopupMenuItem(value: 'delete', child: Text('削除')),
+          PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.photo.deletePhoto)),
         ],
       ),
     );
@@ -87,11 +88,11 @@ class PhotoTile extends ConsumerWidget {
     await confirmAndExecute(
       context,
       ref: ref,
-      title: '写真削除',
-      content: Text('${node.name} を本当に削除しますか？\nファイルも完全に削除されます。'),
-      confirmLabel: '削除',
+      title: t.layerDrawer.photo.deleteTitle,
+      content: Text(t.layerDrawer.photo.deleteConfirm(name: node.name)),
+      confirmLabel: t.common.delete,
       confirmColor: Colors.red,
-      successMessage: '写真を削除しました: ${node.name}',
+      successMessage: t.layerDrawer.photo.photoDeleted(name: node.name),
       execute: () async {
         ref.read(selectedFeaturesProvider.notifier).remove(node);
         await node.dispose();

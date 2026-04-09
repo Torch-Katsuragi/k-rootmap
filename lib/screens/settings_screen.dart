@@ -1,4 +1,6 @@
 import 'dart:io' show Platform;
+import '../i18n/strings.g.dart';
+import '../main.dart' show kAppLocaleKey;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,14 +37,14 @@ enum SettingsCategory {
 
 extension SettingsCategoryExt on SettingsCategory {
   String get title => switch (this) {
-    SettingsCategory.general => '一般',
-    SettingsCategory.basemap => '地図・タイル',
-    SettingsCategory.gps => 'GPS・測位',
-    SettingsCategory.devices => '外部機器',
-    SettingsCategory.layerStyle => 'レイヤ描画',
-    SettingsCategory.sync => 'Drive同期',
-    SettingsCategory.feedback => 'フィードバック',
-    SettingsCategory.appInfo => 'アプリ情報',
+    SettingsCategory.general => t.settings.categories.general,
+    SettingsCategory.basemap => t.settings.categories.basemap,
+    SettingsCategory.gps => t.settings.categories.gps,
+    SettingsCategory.devices => t.settings.categories.devices,
+    SettingsCategory.layerStyle => t.settings.categories.layerStyle,
+    SettingsCategory.sync => t.settings.categories.sync,
+    SettingsCategory.feedback => t.settings.categories.feedback,
+    SettingsCategory.appInfo => t.settings.categories.appInfo,
   };
 
   IconData get icon => switch (this) {
@@ -57,14 +59,14 @@ extension SettingsCategoryExt on SettingsCategory {
   };
 
   String get description => switch (this) {
-    SettingsCategory.general => 'グローバルフォルダ設定',
-    SettingsCategory.basemap => '背景地図、オフライン地図、キャッシュ管理',
-    SettingsCategory.gps => 'GPSソース選択、外部GNSS接続',
-    SettingsCategory.devices => 'レーザー距離計等の外部計測機器',
-    SettingsCategory.layerStyle => '点・線・ポリゴンの描画スタイル',
-    SettingsCategory.sync => 'WiFi自動同期、同期間隔',
-    SettingsCategory.feedback => '要望・バグ報告をお送りください',
-    SettingsCategory.appInfo => 'バージョン情報、ライセンス',
+    SettingsCategory.general => t.settings.categories.generalDesc,
+    SettingsCategory.basemap => t.settings.categories.basemapDesc,
+    SettingsCategory.gps => t.settings.categories.gpsDesc,
+    SettingsCategory.devices => t.settings.categories.devicesDesc,
+    SettingsCategory.layerStyle => t.settings.categories.layerStyleDesc,
+    SettingsCategory.sync => t.settings.categories.syncDesc,
+    SettingsCategory.feedback => t.settings.categories.feedbackDesc,
+    SettingsCategory.appInfo => t.settings.categories.appInfoDesc,
   };
 }
 
@@ -122,7 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildNarrowLayout() {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('設定'),
+        title: Text(t.settings.title),
       ),
       body: ListView(
         children: _visibleCategories.map((category) {
@@ -156,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               children: [
                 AppBar(
-                  title: const Text('設定'),
+                  title: Text(t.settings.title),
                   elevation: 0,
                   backgroundColor: Colors.transparent,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -269,13 +271,13 @@ class FeedbackScreen extends ConsumerWidget {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         ref.read(notificationCenterProvider.notifier).add(
-              title: 'ブラウザを開けませんでした',
+              title: t.settings.feedback.browserError,
               level: NotificationLevel.error,
             );
       }
     } catch (e) {
       ref.read(notificationCenterProvider.notifier).add(
-            title: 'エラーが発生しました: $e',
+            title: t.settings.feedback.errorOccurred(error: e.toString()),
             level: NotificationLevel.error,
           );
     }
@@ -284,24 +286,20 @@ class FeedbackScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsScaffold(
-      title: 'フィードバック',
+      title: t.settings.feedback.title,
       isEmbedded: isEmbedded,
       body: SettingsBody(
         sections: [
           SettingsHighlightSection(
-            title: 'ご意見・ご要望をお聞かせください',
+            title: t.settings.feedback.callToAction,
             icon: Icons.mail_outline,
             iconColor: Colors.blue,
             backgroundColor: Colors.blue.shade50,
-            description:
-                'K-MAPSをより良いアプリにするために、'
-                'あなたのフィードバックをお待ちしています。\n\n'
-                '機能の要望やバグ報告など、お気軽にお送りください。'
-                '開発の参考にさせていただきます。',
+            description: t.settings.feedback.description,
             actionButton: ElevatedButton.icon(
               onPressed: () => _openFeedbackForm(ref),
               icon: const Icon(Icons.open_in_new),
-              label: const Text('フィードバックフォームを開く'),
+              label: Text(t.settings.feedback.openForm),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -310,26 +308,26 @@ class FeedbackScreen extends ConsumerWidget {
             ),
           ),
           SettingsSection(
-            title: 'フィードバックの種類',
+            title: t.settings.feedback.feedbackTypes,
             icon: Icons.category,
             iconColor: Colors.orange,
             children: [
-              const ListTile(
-                leading: Icon(Icons.lightbulb_outline, color: Colors.amber),
-                title: Text('機能の要望'),
-                subtitle: Text('こんな機能があったら便利！というアイデア'),
+              ListTile(
+                leading: const Icon(Icons.lightbulb_outline, color: Colors.amber),
+                title: Text(t.settings.feedback.featureRequest),
+                subtitle: Text(t.settings.feedback.featureRequestDesc),
               ),
               const Divider(),
-              const ListTile(
-                leading: Icon(Icons.bug_report, color: Colors.red),
-                title: Text('バグ報告'),
-                subtitle: Text('動作がおかしい、エラーが出るなどの問題'),
+              ListTile(
+                leading: const Icon(Icons.bug_report, color: Colors.red),
+                title: Text(t.settings.feedback.bugReport),
+                subtitle: Text(t.settings.feedback.bugReportDesc),
               ),
               const Divider(),
-              const ListTile(
-                leading: Icon(Icons.thumb_up_outlined, color: Colors.green),
-                title: Text('その他'),
-                subtitle: Text('感想、質問、改善提案など何でも'),
+              ListTile(
+                leading: const Icon(Icons.thumb_up_outlined, color: Colors.green),
+                title: Text(t.settings.feedback.other),
+                subtitle: Text(t.settings.feedback.otherDesc),
               ),
             ],
           ),
@@ -371,7 +369,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
   @override
   Widget build(BuildContext context) {
     return SettingsScaffold(
-      title: 'アプリ情報',
+      title: t.settings.appInfo.title,
       isEmbedded: widget.isEmbedded,
       body: SettingsBody(
         sections: [
@@ -382,46 +380,44 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.numbers, color: Colors.blueGrey),
-                title: const Text('バージョン'),
+                title: Text(t.settings.appInfo.version),
                 subtitle: Text(
                   _packageInfo != null
-                      ? '${_packageInfo!.version} (ビルド ${_packageInfo!.buildNumber})'
-                      : '読み込み中...',
+                      ? '${_packageInfo!.version} (${t.settings.appInfo.buildLabel(number: _packageInfo!.buildNumber)})'
+                      : t.common.loading,
                 ),
               ),
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.android, color: Colors.green),
-                title: const Text('パッケージ名'),
-                subtitle: Text(_packageInfo?.packageName ?? '読み込み中...'),
+                title: Text(t.settings.appInfo.packageName),
+                subtitle: Text(_packageInfo?.packageName ?? t.common.loading),
               ),
             ],
           ),
           SettingsSection(
-            title: '概要',
+            title: t.settings.appInfo.overview,
             icon: Icons.description,
             iconColor: Colors.teal,
-            children: const [
+            children: [
               Padding(
-                padding: EdgeInsets.all(12),
+                padding: const EdgeInsets.all(12),
                 child: Text(
-                  'K-MAPSはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\n'
-                  'GeoPackage形式でのデータ管理、GPS測量・軌跡記録、'
-                  '外部GNSS機器連携、オフライン地図対応などの機能を提供します。',
-                  style: TextStyle(height: 1.5),
+                  t.settings.appInfo.overviewText,
+                  style: const TextStyle(height: 1.5),
                 ),
               ),
             ],
           ),
           SettingsSection(
-            title: 'ライセンス',
+            title: t.settings.appInfo.licenses,
             icon: Icons.gavel,
             iconColor: Colors.orange,
             children: [
               ListTile(
                 leading: const Icon(Icons.open_in_new, color: Colors.blue),
-                title: const Text('オープンソースライセンス'),
-                subtitle: const Text('使用しているパッケージのライセンス一覧'),
+                title: Text(t.settings.appInfo.openSourceLicenses),
+                subtitle: Text(t.settings.appInfo.openSourceLicensesDesc),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   showLicensePage(
@@ -440,6 +436,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
 }
 
 /// 一般設定画面（PC専用: グローバルフォルダパス設定）
+
 class GeneralSettingsScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
   const GeneralSettingsScreen({super.key, this.isEmbedded = false});
@@ -469,6 +466,22 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
 
   String get _effectivePath => _customPath ?? _defaultPath;
   bool get _isCustom => _customPath != null;
+
+  Future<void> _changeLocale(AppLocale locale) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kAppLocaleKey, locale.languageCode);
+    LocaleSettings.instance.setLocale(locale);
+    if (mounted) setState(() {});
+  }
+
+  String _localeName(AppLocale locale) {
+    switch (locale) {
+      case AppLocale.en:
+        return t.settings.general.languageNames.en;
+      case AppLocale.ja:
+        return t.settings.general.languageNames.ja;
+    }
+  }
 
   Future<void> _pickFolder() async {
     final dir = await FilePicker.platform.getDirectoryPath(
@@ -521,7 +534,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(t.common.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -534,12 +547,48 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentLocale = LocaleSettings.currentLocale;
+
     return SettingsScaffold(
-      title: '一般',
+      title: t.settings.general.title,
       isEmbedded: widget.isEmbedded,
       isLoading: _isLoading,
       body: SettingsBody(
         sections: [
+          // 言語設定セクション
+          SettingsSection(
+            title: t.settings.general.language,
+            icon: Icons.language,
+            iconColor: Colors.indigo,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  t.settings.general.languageDesc,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...AppLocale.values.map((locale) {
+                final isSelected = locale == currentLocale;
+                return ListTile(
+                  leading: Icon(
+                    isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                    color: isSelected ? Colors.indigo : Colors.grey,
+                  ),
+                  title: Text(
+                    _localeName(locale),
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(locale.languageCode.toUpperCase()),
+                  onTap: () => _changeLocale(locale),
+                );
+              }),
+            ],
+          ),
+
           SettingsSection(
             title: 'Global Folder',
             icon: Icons.folder_special,
@@ -650,7 +699,7 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return SettingsScaffold(
-      title: 'Drive同期',
+      title: t.settings.categories.sync,
       isEmbedded: widget.isEmbedded,
       body: SettingsBody(
         sections: [

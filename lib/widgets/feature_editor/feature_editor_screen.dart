@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../i18n/strings.g.dart';
 import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -105,15 +106,15 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   Widget build(BuildContext context) {
     if (_applicable.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('編集')),
-        body: const Center(child: Text('利用可能な編集操作がありません')),
+        appBar: AppBar(title: Text(t.featureEditorScreen.title)),
+        body: Center(child: Text(t.featureEditorScreen.noActions)),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${widget.feature.name} を編集',
+          '${widget.feature.name} — ${t.featureEditorScreen.title}',
           overflow: TextOverflow.ellipsis,
         ),
         leading: IconButton(

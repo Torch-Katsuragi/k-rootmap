@@ -1,6 +1,7 @@
 // 地図画面の左側ツールバーウィジェット
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../i18n/strings.g.dart';
 import '../models/nodes/overlay_image_node.dart';
 import '../providers/selection_providers.dart';
 import '../providers/tool_providers.dart';
@@ -39,7 +40,7 @@ class MapToolbar extends ConsumerWidget {
             const SizedBox(height: 16),
             _ToolButton(
               icon: Icons.pan_tool_alt,
-              tooltip: 'Pan',
+              tooltip: t.map.toolbar.pan,
               isSelected: currentTool.name == 'Pan',
               onPressed: () {
                 ref.read(currentToolProvider.notifier).set(ref.read(panToolProvider));
@@ -49,7 +50,7 @@ class MapToolbar extends ConsumerWidget {
             const SizedBox(height: 8),
             _ToolButton(
               icon: Icons.edit,
-              tooltip: 'Pen',
+              tooltip: t.map.toolbar.pen,
               isSelected: currentTool.name == 'Pen',
               onPressed: () {
                 ref.read(currentToolProvider.notifier).set(ref.read(penToolProvider));
@@ -59,7 +60,7 @@ class MapToolbar extends ConsumerWidget {
             const SizedBox(height: 8),
             _ToolButton(
               icon: Icons.select_all,
-              tooltip: 'Select',
+              tooltip: t.map.toolbar.select,
               isSelected: currentTool.name == 'Select',
               onPressed: () {
                 ref.read(currentToolProvider.notifier).set(ref.read(selectToolProvider));
@@ -69,7 +70,7 @@ class MapToolbar extends ConsumerWidget {
             const SizedBox(height: 8),
             _ToolButton(
               icon: Icons.gps_fixed,
-              tooltip: 'GPS Tool',
+              tooltip: t.map.toolbar.gpsTool,
               isSelected: currentTool.name == 'GPS',
               onPressed: () {
                 ref.read(currentToolProvider.notifier).set(ref.read(gpsToolProvider));
@@ -81,7 +82,7 @@ class MapToolbar extends ConsumerWidget {
               const SizedBox(height: 8),
               _ToolButton(
                 icon: Icons.transform,
-                tooltip: 'Overlay Transform',
+                tooltip: t.map.toolbar.overlayTransform,
                 isSelected: currentTool.name == 'Overlay Transform',
                 onPressed: () {
                   final tool = ref.read(overlayTransformToolProvider);

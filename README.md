@@ -79,3 +79,8 @@ GISアプリケーション（Flutter製）
 - [[docs/index]] - ドキュメント目次
 - [[docs/features/concept]] - コンセプト・ターゲットユーザー
 - [[docs/technical/tech-stack]] - 技術スタック
+
+## リンク
+
+- **プロジェクトページ**: https://github.com/Torch-Katsuragi/k_maps
+- **プライバシーポリシー**: [PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)

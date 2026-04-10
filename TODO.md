@@ -1,376 +1,210 @@
 # TODO List
 
-## 完了済み
+## 🔥 直近のアクション
 
-- [x] Drive連携フォルダ機能MVP完了（2026/01/14-15）
-  - [x] 認証: サイレント/明示的サインイン、トークンリフレッシュ
-  - [x] フォルダ追加: 通常/Drive連携の選択ダイアログ
-  - [x] URL入力: ペースト＋QRスキャン対応（mobile_scanner導入）
-  - [x] クローン: 共有フォルダからの初回ダウンロード
-  - [x] 永続化: .kmeta.jsonにDrive情報保存、再読み込み時にDriveFolderNodeとして復元
-  - [x] 視覚的区別: 青いクラウドアイコン、同期状態オーバーレイ（↑↓）
-  - [x] 手動同期: Push/Pull/状態確認/連携解除メニュー
-  - [x] 自動チェック: プロジェクト読み込み時に同期状態を自動確認
-  - [x] エラーハンドリング: 失敗時の適切なステータス表示、supportsAllDrives対応
-  - [x] 設計書更新（google-drive.md, google-drive-setup.md）
-  - 注: **モバイル専用機能**（PCでは無効化。Google Drive Desktopとの競合防止）
+- [ ] 内部テスト版でGoogle Sign-Inログイン動作確認
+- [ ] 連絡先メールアドレスを `k-root@googlegroups.com` に統一
+  - [x] GCP ブランディング: サポートメール・デベロッパー連絡先 → 設定済み
+  - [ ] Play Console: ストアの設定・デベロッパープロフィール → メール確認ロック中（2026/04/11以降に再試行）
+  - 原因: Google Groupへの確認メールが届かず、リトライでロックがかかった。原因は除去済み。
 
-## 未完了
+---
 
-### Google Drive連携
+## 未完了タスク
 
-- [ ] レイヤ単位での競合解決の実装
-  - GeoPackage内のレイヤレベルでのマージ機能
-  - ops.log操作ログによる細粒度な競合検出
+### Google Play リリース
 
-- [x] ドキュメント構造の整理（2025/12/30）
-  - [x] FEATURES.mdとDOCUMENT.mdをdocs/配下に分割
-  - [x] docs/features/（機能設計8ファイル）、docs/technical/（技術資料5ファイル）
-  - [x] docs/index.md（目次・ナビゲーション）作成
-- [x] READMEの整理（更新履歴の削除と機能概要の統合）
-- [x] 背景地図の機能改善
-  - [x] 一括ダウンロード機能（範囲・ズーム指定）の実装
-  - [x] ダウンロードの並列処理化（4スレッド）と進捗バー表示
-  - [x] オフライン時のフォールバック処理の最適化（親タイル拡大表示の高速化）
-  - [x] ネットワーク接続状態検知による無駄なリクエスト抑制（圏外対策）
-  - [x] 航空写真（JPEG）タイルのダウンロード対応
-- [x] 設定画面のUI統一（共通ウィジェットテンプレート作成）
-- [x] 不要な型チェック・キャストの削除
-  - [x] map_page.dart
-  - [x] feature_converter.dart
-  - [x] import_export_service.dart
-- [x] 非推奨APIの更新（一部）
-  - [x] withOpacity → withValues()
-  - [x] onPopInvoked → onPopInvokedWithResult
+#### 内部テスト（残り）
 
-## アーキテクチャ改善（2025/12/18実施）
+- [ ] ストア掲載情報（アプリ名、説明文、スクリーンショット等）
+- [ ] 内部テスターリスト設定
+- [ ] 内部テストとしてリリース
 
-### 完了
+#### クローズドテスト
 
-- [x] 型安全性の改善
-  - [x] IMapStateインターフェースの作成（lib/interfaces/map_state_interface.dart）
-  - [x] GlobalConfigのdynamic型を具体型に変更（mapState: IMapState, selectedFeatures: List<LayerTreeNode>）
-  - [x] MapToolおよび各ツールクラスの型安全化（PanTool, PenTool, SelectTool, GpsTool）
-- [x] 重複コードの削減
-  - [x] geopackage_file.dartのバッチ処理メソッド共通化（_addGeometryBatch<T>）
-  - [x] ダイアログヘルパークラスの作成（lib/widgets/dialogs/dialog_helpers.dart）
-- [x] 定数の集約
-  - [x] アプリケーション定数ファイルの作成（lib/core/constants.dart）
-- [x] ファイル構造の整備
-  - [x] map_page用mixinディレクトリ作成（lib/screens/map_page/）
-  - [x] import_export用ディレクトリ作成（lib/services/import_export/）
+> 内部テスト完了後、より広い範囲のテスターに配布するためのステップ。
 
-### 将来の作業
+**Play Console「アプリのセットアップ」**
 
-- [x] map_page.dartへのmixin統合（2025/12/23完了）
-  - MapPageStateBase（状態変数の定義）
-  - MapInitializationMixin（初期化処理）
-  - MapGpsTrackingMixin（GPS追跡サービス）
-  - MapGpsSurveyMixin（GPS測量）
-  - MapFeatureCacheMixin（フィーチャキャッシュ）
-  - MapDrawingMixin（描画確定処理）
-  - GpsInfoBar, GpsTrackingOverlay, GpsSurveyButtons（ウィジェット）
-- [x] import_export_service.dartのフォーマット別分割
-- [x] geopackage_file.dartの機能別分割
-- [x] 内蔵GPSリファクタリング（2026/02/06）
-  - [x] InternalGpsLocationStore導入（常に1ストリーム原則）
-  - [x] GpsPositionRecord / GpsPositionResponse 型安全モデル作成
-  - [x] Android: ForegroundService常時稼働（delegatedモード）
-  - [x] Windows: Geolocator直接実行（directモード）
-  - [x] Geolocatorストリーム3重重複を1本に統一
-  - [x] map_initialization_mixin / map_gps_tracking_mixin をStore経由に変更
-  - [x] WindowsでのGPS追跡ボタン有効化
-  - [x] requestPosition()にhasNewUpdateフラグ追加
-- [x] GPS軌跡の常時記録と切り取りUI（2026/02/06）
-  - [x] GpsHistoryRecorder: グローバルフォルダのGeoPackageに日付別レイヤで常時記録
-  - [x] 本日のGPS軌跡をPolylineLayerでリアルタイム表示（緑ライン）
-  - [x] TrackExtractionDialog: 日付選択、時間範囲スライダー、Douglas-Peucker簡略化、ライン保存
-  - [x] 既存の「追跡開始/停止」フローを完全廃止
-  - [x] GpsTrackingOverlay（回転光エフェクト）を廃止、実際の軌跡表示に置換
-  - [x] GPS追跡ボタンを軌跡抽出ボタンに変更（全プラットフォーム対応）
-- [x] Riverpod状態管理基盤の導入（ServiceLocator代替）（2026/02/20）
-  - [x] flutter_riverpod導入、ProviderScope設定
-  - [x] GlobalConfigをプロバイダーブリッジ化（内部的にRiverpodに委譲）
-  - [x] 8つのプロバイダーファイル作成（project, selection, tool, ui_state, gps, drawing, service, app_container）
-- [x] LayerDrawerリファクタリング（2026/03/09）
-  - [x] タイルmixin→独立ConsumerWidget変換（FolderTile, GeoPackageTile, LayerTile, PhotoTile, NodeVisibilityIcon）
-  - [x] ビジネスロジックをLayerDrawerService層に抽出
-  - [x] expandedGpkgPaths/userClosedGpkgPathsをRiverpod Provider化（ExpandedGeoPackagesProvider）
-  - [x] 確認ダイアログ+操作+SnackBarの共通ヘルパー作成（RenameDialog, confirmAndExecute）
-  - [x] デッドコード除去（layer_drawer_extensions.dart削除）+ 過剰デバッグログ整理
-- [x] Riverpod正規化リファクタリング（2026/02/20）
-  - [x] flutter_riverpod v3.0.3 + riverpod_generator v3.0.3 + riverpod_annotation v3.0.3導入
-  - [x] 全プロバイダーを@riverpod コード生成に移行（StateProvider → Notifier）
-  - [x] GlobalConfig（Godオブジェクト）完全削除（38ファイル190箇所の依存を解消）
-  - [x] setStateCallbackパターン除去（LayerDrawer系9ファイル）
-  - [x] 主要ウィジェットConsumerWidget/ConsumerStatefulWidget化（MapPage, HomeScreen, MapToolbar, FAB, LayerDrawer等）
-  - [x] ツールへのRef注入（PenTool, SelectTool, GpsTool, PanTool）
-  - [x] mapState/folderTreeをMapPageStateBaseのstaticフィールドに移行
-  - [x] selectedFeaturesをSelectedFeaturesプロバイダーに完全移行
-- [x] Riverpod完全正規化（2026/02/20-25）
-  - [x] appContainer（グローバルProviderContainer）をlib/から完全除去
-  - [x] MapPageStateBaseのstaticフィールド除去 → 専用プロバイダ化（folderTree, mapControllerHolder, featureRefreshTrigger）
-  - [x] IMapStateインターフェース依存の縮小（refreshFeatures/setState/mapController → プロバイダ経由）
-  - [x] BaseMapService/GpsManagerServiceのChangeNotifierProvider → @riverpod移行
-  - [x] PathResolverからのRef直接依存除去（コールバック注入方式へ）
-  - [x] GeoPackageFile/GeoPackageConnectionのappContainer依存除去（projectRootDir注入）
-  - [x] FeatureNodeのappContainer依存除去（onDisposeコールバック方式へ）
-  - [x] GlobalDrawingState.instance直接アクセス → drawingStateProvider経由に統一
-  - [x] GpsManagerService()直接インスタンス化 → gpsManagerServiceProvider経由に統一
-  - [x] GpsSettingsScreenのConsumerStatefulWidget化
-- [x] 非同期競合状態防止の改善（Completer使用）（2026/03/12）
-  - [x] GeoPackageConnection._initializeDatabase(): Completer<void>で二重初期化防止
-  - [x] MapSourceManager.initialize(): Completerガード追加
-  - [x] GpsManagerService.initialize(): Completerガード追加
-  - [x] GpsHistoryRecorder.initialize(): Completerガード追加
-  - [x] GoogleDriveService.initialize(): Completerガード追加
-  - [x] TileServer.ensureLocalStyle(): static Completer<String>で排他制御
-  - [x] LayerNode.updateChildren(): スキップ→完了待ちに改善（共有Future方式）
-- [x] フィーチャキャッシュの差分更新対応
-- [x] LayerNodeサブクラスの個別ファイル分離（部分的完了：PathResolver、NodePresenter、ExifParser、LayerMigrationService分離済み）
+- [ ] アプリのアクセス権（Google Drive連携にはGoogleログインが必要である旨を記載）
+- [ ] 広告の有無申告（「いいえ」）
+- [ ] コンテンツのレーティング（IAQCレーティング質問票）
+- [ ] ターゲットユーザー設定（18歳以上）
+- [ ] ニュースアプリ申告（「いいえ」）
+- [ ] データの安全性（開発者サーバーへの送信なし、端末内利用の説明）
+- [ ] 行政機関のアプリ申告（「いいえ」）
+- [ ] 財務機能申告（「提供していない」）
 
-## コード品質改善
+**デモ動画の作成**
 
-### 優先度：高（安全性・正確性）
+> Play Console権限説明 + OAuth検証申請で兼用可能。1本にまとめてYouTubeタイムスタンプで各セクションに飛ばす。
 
-- [x] BuildContextの非同期使用問題の修正
-  - [x] gps_settings_screen.dart
-  - [x] map_page.dart
-  - [x] layer_drawer.dart
-  - [x] layer_drawer_tiles.dart
-  - [x] dynamic_attribute_table_widget.dart
-  - [x] camera_screen.dart
-  - [x] dialog_manager.dart（元々修正済み）
-  - [x] gps_tracking_dialogs.dart（元々修正済み）
-  - [x] metadata_table_dialog.dart
-  - [x] gps_manager_example.dart
+- [ ] 撮影内容:
+  - [ ] Google Sign-In → Drive同期の操作フロー（OAuth検証用）
+  - [ ] 位置情報（バックグラウンド）: GPS軌跡記録がバックグラウンドで継続する様子
+  - [ ] カメラ: 写真マーカー撮影、QRコードスキャン
+  - [ ] Bluetooth: TruPulse測量機器との接続・データ取得
+- [ ] YouTubeに限定公開でアップロード
+- [ ] Play Console各権限セクション + GCPデータアクセスページにリンク登録
 
-### 優先度：中（非推奨API・未使用コード）
+**ストア掲載情報**
 
-- [x] 非推奨APIの更新（残り）（2026/03/12）
-  - [x] DropdownButtonFormField value → initialValue（layer_import_export_dialog.dart）
-  - [x] RadioListTile groupValue/onChanged → RadioGroup（drive_connect_dialog.dart, feature_import_export_dialog.dart）
-  - [x] withOpacity → withValues()残存6箇所修正（node_presenter, drive_url_input_dialog, add_folder_type_dialog）
-- [x] 未使用importの削除（主要ファイル）（2026/03/12確認済み: flutter analyze で検出0件）
+- [ ] アプリ名・短い説明・詳しい説明
+- [ ] スクリーンショット（スマートフォン用: 最低2枚）
+- [ ] アプリアイコン（512x512 PNG）
+- [ ] フィーチャーグラフィック（1024x500 PNG）
+- [ ] カテゴリ設定（ツール or 地図＆ナビ）
+- [ ] 連絡先情報（`k-root@googlegroups.com`）
 
-### 優先度：低（スタイル改善）
+**クローズドテストトラック**
 
-- [x] print()をロギングフレームワークに置換（確認済み: AppLogger統一済み、lib/内print()は0件）
-- [ ] その他のスタイル問題修正
+- [ ] トラック作成・テスターリスト登録
+- [ ] AABアップロード・リリースノート入力
+- [ ] ロールアウト・参加リンク共有
 
-## 機能改善
+---
 
-- [x] フォルダメタデータシステム（.kmeta.json）の実装
-  - [x] KMetaモデルクラス（JSON読み書き・継承マージロジック）
-  - [x] KMetaService（継承チェーン解決・保存処理）
-  - [x] FolderNode/GeoPackageNodeへのKMeta統合
-  - [x] LayerStyleConfigとKMetaの連携
+### OAuth検証申請（一般公開向け）
 
-- [x] グローバルフォルダ機能の実装（2026/01/08）
-  - [x] GlobalFolderNode/GlobalSubFolderNodeクラス作成
-  - [x] GeoPackageFile/GeoPackageConnectionに絶対パスモード追加
-  - [x] GlobalGeoPackageNode/GlobalImageNodeクラス作成
-  - [x] ホーム画面でのグローバルフォルダ初期化処理
-  - [x] レイヤードロワーでの青色アイコン表示対応
-  - [x] PC版グローバルフォルダのカスタムパス設定（2026/03/24）
-    - [x] 設定画面「一般」カテゴリ追加（PC限定）
-    - [x] SharedPreferencesにカスタムパス永続化
-    - [x] home_screen.dartのカスタムパス対応初期化
-    - [x] グローバル/プロジェクトフォルダ含有関係チェック＆警告表示
+> 内部テスト（100人以下）には不要。一般公開時に必要。
 
-- [x] LayerTreeNode大規模リファクタリング（2026/01/09）
-  - [x] NodeType enum作成（文字列からenumに移行）
-  - [x] PathResolverインターフェース作成（Project/Global実装）
-  - [x] NodePresenterクラス作成（UI責務分離）
-  - [x] ExifParserユーティリティ作成（EXIF解析ロジック集約）
-  - [x] LayerMigrationService作成（レイヤー移植処理分離）
+- [x] GCP ブランディング設定（HP・プライバシーポリシー・承認ドメイン）
+- [x] GCP データアクセス（`drive` スコープ、用途チェック3種全選択）
+- [ ] デモ動画のYouTubeリンクをGCPデータアクセスページに登録
+- [ ] CASA対応（`drive`は制限付きスコープ。Googleから要求された場合のみ）
+- [ ] 検証センターから申請
 
-- [x] Google Drive連携MVP実装（2026/01/14）
-  - [x] 認証基盤（google_sign_in, googleapis, flutter_secure_storage）
-  - [x] GoogleDriveService/DriveAuthState（OAuth認証フロー）
-  - [x] KMetaSyncを拡張（driveFolderName, driveRevisionId, deviceId追加）
-  - [x] SyncEngine（Push/Pull同期機能）
-  - [x] DriveConnectDialog（Drive連携ダイアログ）
-  - [x] OpenFromUrlDialog（URL入力ダイアログ）
-  - [x] DriveFolderPicker（フォルダ選択ダイアログ）
-  - [x] セットアップガイド（docs/technical/google-drive-setup.md）
-  - 注: 設計書のproject_meta.jsonは.kmeta.jsonに統合
+---
 
-- [ ] フィードバックフォームにバージョン情報を事前入力
-  - Google FormsのURLパラメータを使用して、アプリバージョンを埋め込む
-  - フォームを開いたときにバージョン情報が入力済みの状態で表示される
+### 機能開発
 
-- [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能を追加
-  - ポイントの詳細情報画面に「Google Mapリンクをコピー」ボタンを設置
-  - 座標からGoogle MapsのURLを生成してクリップボードにコピー
+#### Google Drive連携
 
-- [x] 属性テーブルからQGIS構文でフィーチャをフィルタして複製する機能（2026/03/13）
-  - [x] QgisExpressionFilter: QGIS式→SQL WHERE句変換（安全性バリデーション付き）
-  - [x] FeatureRepository: getFilteredFeatureIds / countFilteredFeatures / duplicateFilteredFeatures
-  - [x] AttributeTableController: フィルタ状態管理（applyFilter/clearFilter）
-  - [x] AttributeTableToolbar: フィルタ入力バー（QGIS式入力、適用/クリア、フィルタ件数表示）
-  - [x] 複製ダイアログ: フィルタ結果を新規レイヤに一括コピー（スキーマ自動移植）
+- [ ] レイヤ単位での競合解決（GeoPackage内のレイヤレベルマージ、ops.logによる競合検出）
 
-### パフォーマンス改善
-
-- [x] 大量フィーチャのロード・通常動作の軽量化リファクタリング（2026/02/20）
-  - [x] FeatureNodeの遅延初期化・キャッシュ改善（centroid, metadata, length, area）
-  - [x] FeatureRepositoryのDRY化（updatePoint/Line/Polygon統一、エンベロープ計算共通化）
-  - [x] constコンストラクタ追加による再構築最小化
-- [x] 巨大ファイル分割（2026/02/20）
-  - [x] feature_converter.dart（2,070行）→ 7ファイル（Strategy pattern）
-  - [x] layer_drawer_tiles.dart（2,073行）→ 7ファイル（機能別mixin）
-  - [x] sync_engine.dart（1,895行）→ 5ファイル（handler/resolver分割）
-  - [x] metadata_parser.dart（1,645行）→ 7ファイル（facade + 専門パーサー）
-  - [x] map_page.dart FAB抽出 → DrawingActionButtons widget
-
-- [x] トラッキング保存形式の変更（2026/02/20完了）
-  - lineレイヤ方式に変更済み
-
-- [x] GeoPackageロード高速化（2026/03/04）
-  - [x] N+1クエリ解消: getFeaturesWithGeometry()で1クエリに統合（getFeatures+N回getFeature → 1回）
-  - [x] ツリー構築の並列化: updateNodeRecursively()をFuture.waitで兄弟ノード並列初期化
-  - [x] レイヤ読み込みの並列化: updateFeaturesImpl()でKMetaスタイル・DB読み込みを並列実行
-  - [x] WKBパースのIsolate化: 500フィーチャ以上でcompute()による別Isolate実行
-
-- [x] 地図操作パフォーマンス改善（2026/03/04）
-  - [x] レンダリングキャッシュ: Polyline/Polygon/Markerをキャッシュし、データ変更時のみ再構築
-  - [x] scheduleMarkerRefresh廃止: パン/ズーム時のsetState完全除去（300msデバウンスタイマー削除）
-  - [x] ビューポートカリング廃止: Point/ImageNodeの手動カリングを削除、FlutterMap/Clusterに委譲
-  - [x] selectedFeaturesのSet化: contains()をO(N)→O(1)に最適化
-  - [x] flutter_map描画最適化: simplificationTolerance 0.3→1.0（Douglas-Peucker簡略化強化）
-  - [x] PolygonLayer useAltRendering有効化: 三角形分割による高速Canvas描画
-  - [x] パフォーマンス設定画面: simplificationTolerance/useAltRenderingをUI設定化
-
-- [x] 宣言的設定フレームワーク導入（2026/03/04）
-  - [x] SettingDef sealed class + SettingsStore: SharedPreferences/KMeta二層ストア（lib/core/settings_schema.dart）
-  - [x] DataDrivenSettingsScreen: SettingDefからUI自動生成（Slider/Switch/ColorPicker/TextField）
-  - [x] performance_settings_screen.dart 宣言的書き換え（265行→85行）
-  - [x] layer_style_settings_screen.dart 宣言的書き換え（1424行→440行、LayerStyleConfig/LayerStyleDefaults廃止）
-  - [x] map_page.dart: LayerStyleConfig参照 → SettingsStore.resolve*()に移行
-
-## MapLibre移行（2026/03/05〜）
-
-### 完了
-
-- [x] maplibreパッケージのPoC（Android向けPoC画面作成済み）
-- [x] FlutterMap → MapLibreMap ウィジェット置換
-  - [x] KMapController/KMapCameraラッパー作成（lib/core/k_map_controller.dart）
-  - [x] geo_converter.dart作成（LatLng↔Geographic変換ユーティリティ）
-  - [x] map_page.dart: FlutterMap→MapLibreMap、レイヤ構成全面書き換え
-  - [x] map_page_state_base.dart: キャッシュ型をmaplibre Feature型に変更
-  - [x] map_state_interface.dart: MapController→KMapControllerに差替え
-  - [x] ui_state_providers.dart: MapControllerHolder→KMapController対応
-  - [x] feature_editor_screen.dart: MapLibreMap化
-  - [x] layer_tile_builder.dart: fitCoordinates()対応
-- [x] レイヤ移植（Polygon/Polyline/Marker → maplibre PolygonLayer/PolylineLayer/MarkerLayer/WidgetLayer）
-- [x] MapTool系の移行（IMapState経由のKMapController差替え、ツール側変更不要）
-- [x] タイルキャッシュ基盤の移行（2026/03/05）
-  - [x] TileServerクラス作成（dart:io HttpServer、BaseMapService.getTile()をlocalhost経由で配信）
-  - [x] map_page.dart / feature_editor_screen.dart: RasterSourceをlocalhost URLに変更
-  - [x] ベースマップ切替対応（replaceBasemapSource: ソース削除→再追加）
-  - [x] CachedTileLayer削除（flutter_map専用のため不要に）
-  - GeoPackageキャッシュ・オフラインモード・親タイルフォールバック・一括DLは全て保持
-
-- [x] フィーチャ描画パフォーマンス修正（OOM/カクつき解消）（2026/03/05）
-  - [x] MapSourceManagerクラス作成（StyleController直接管理、layersプロパティからの脱却）
-  - [x] ポリゴン/ライン/ポイント/GPS軌跡をGeoJsonSource+StyleLayerで描画（FillStyleLayer/LineStyleLayer/CircleStyleLayer）
-  - [x] データ変更時のみupdateGeoJsonSource呼び出し（前回データとの比較でスキップ）
-  - [x] 大量フィーチャのGeoJSONシリアライズをIsolate化（500件以上で自動適用）
-  - [x] GPS待機タイマーをGpsInfoBar内部に移動（毎秒のMapPage全体rebuild除去）
-  - [x] コンパス方角をValueNotifier化（秒10回以上のMapPage全体rebuild除去）
-  - [x] 未使用import/show整理、deprecated API修正
-  - [x] ポリゴン輪郭線を専用LineStyleLayerで描画（fill-outline-color 1px制限の回避）
-  - [x] ImageNode描画をWidgetLayerに復帰（カメラアイコン+撮影方向くちばし+タップ選択）
-
-- [x] ポイントクラスタリング実装（2026/03/06）
-  - [x] superclusterパッケージ導入（Dart側クラスタリング）
-  - [x] MapSourceManagerにクラスタソース/レイヤ追加（kClusters + CircleStyleLayer + SymbolStyleLayer）
-  - [x] ズーム変更時にクラスタ/個別ポイントを自動再分配
-  - [x] 段階的な色・サイズ変化（step expression: 10/50/200ポイントで段階変化）
-  - [x] 既存クラスタリング設定（有効/無効、半径、最大ズーム）をMapSourceManagerに接続
-  - [x] flutter_map_marker_clusterパッケージ削除（デッド依存解消）
-
-- [x] ImageNode描画をSymbolStyleLayerに移行（GPU描画化）（2026/03/06）
-  - [x] MapIconGenerator作成（Canvas+PictureRecorderで4枚のアイコンPNG生成: 方向あり/なし × 通常/選択）
-  - [x] MapSourceManagerにImageNodeソース/レイヤ/クラスタ追加（kImages/kImagesSel/kImageClusters）
-  - [x] SymbolStyleLayerでicon-image/icon-rotate/text-field使用（case/coalesce式で方向有無を自動切替）
-  - [x] ImageNode専用superclusterクラスタリング（Point系と独立）
-  - [x] WidgetLayerの_buildPhotoMarkers削除、GeoJSON化でsyncFeatureSourcesに統合
-  - [x] タップ選択をlatlong2距離検索に置換（ズーム連動閾値）
-
-- [x] Windows版パフォーマンス最適化（2026/03/09）
-  - [x] 頂点マーカーのGPU描画化（WidgetLayer→CircleStyleLayer、パン・ズーム時のWidget再生成を排除）
-  - [x] didUpdateWidget内のlayers変更チェック追加（不要なGeoJSON再処理をスキップ）
-  - [x] updateLayerStylesの一括更新化（remove/add 60+回→batchSetPaintProperties 1回、E_INVALIDARGエラー解消）
-  - [x] moveCamera/animateCameraにmapReady前ガード追加（Null check例外防止）
-  - [ ] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
-    - 注: バンドル版pmtiles.jsがNode.js用ビルドでブラウザ非互換のため保留
-
-- [x] Windows版マップ表示不具合の修正（2026/03/11）
-  - [x] WebSocketレースコンディション修正（map.on('load')がWS接続前に発火→onStyleLoaded未到達→ベースマップ追加されず灰色画面）
-  - [x] ホーム画面RenderFlexオーバーフロー修正（Column→LayoutBuilder+SingleChildScrollView）
-
-### 外部計測機器 (TruPulse)
-
-- [x] TruPulseService: BT SPP接続、プロトコルパーサー
-- [x] TruPulseTool: BP選択、座標算出、レイ管理
-- [x] ExternalDeviceService / DeviceTool 抽象レイヤ (プラグインパターン)
-- [x] connectedDeviceToolsProvider: 接続済みデバイスツール集約
-- [x] MapToolbar / map_page へのDeviceTool汎用統合
-- [x] リアクティビティ修正: DeviceTool ChangeNotifier + deviceToolOverlayRefreshProvider
-- [x] connectedDeviceToolsProvider: addListener→invalidateSelf ブリッジ
-- [x] TruPulseStatusPanel: Save/Clearボタン、ListenableBuilder対応
-- [x] デバイス設定画面 (SettingsCategory.devices)
-- [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一 (将来課題)
-
-### 測量機能の拡充
-
-- [x] Point → Line/Polygon 変換（閉合処理込み）（2026/03/28）
-  - [x] SurveyChainResolver: survey_stn チェーンを辿って順序付きポイント列を構築
-  - [x] 変換ダイアログ（SurveyConversionDialog）で処理オプションを提示:
-    - 閉合補正なし（生データのまま変換）
-    - コンパス法則（Bowditch法: 路線長比例で閉合差を配分）
-    - トランシット法則（緯距/経距比例で配分）
-  - [x] 変換後の Line/Polygon フィーチャのプロパティに閉合比（1/N）を記録
-  - [x] 元の測量データ（方位角・距離等）は sub_table に保存
-- [x] 磁気偏角補正（2026/03/28）
-  - [x] 変換ダイアログで手動入力（東偏+/西偏-）
-  - [x] TraverseAdjuster が偏角オフセットを適用して座標を再計算
-  - 注: 地域・日付からの自動取得は将来課題
-- [x] 器械高・目標高補正（2026/03/28）
-  - [x] 変換ダイアログで器械高・目標高を入力可能
-  - [x] TraverseAdjuster が VD 補正を算出（ground_vd = measured_vd + hi - ht）
-  - 注: 現在は2Dジオメトリ生成のみ。3D座標への反映は将来課題
-- [x] 測量精度表示（2026/03/28）
-  - [x] TruPulseStatusPanel に累積路線長・閉合差・閉合比をリアルタイム表示
-  - [x] 閉合比が 1/300 未満の場合にオレンジ色で警告
-
-### 未完了
+#### MapLibre
 
 - [ ] 3D terrain有効化（RasterDemSource + setTerrain + pitch/tiltコントロール）
 - [ ] 国土地理院DEMタイル → Terrain-RGB変換の実装・検証
 - [ ] Flutter SDKアップグレード（3.10+）→ maplibre_webview導入（Windows対応）
-  - **Windows対応一時中断**（2026/04/07）: maplibre_webview の WebView2 実装に起因する問題（setMinZoom レースコンディション、灰色画面）のため、当面 Android 特化で開発。Windows 対応は maplibre_webview の安定化を待って再開。
+  - **Windows対応一時中断**（2026/04/07）: maplibre_webviewのWebView2実装に起因する問題のため、当面Android特化。
+- [ ] MapLibre GL JS/CSS/pmtiles.jsのローカルバンドル化（CDN依存排除、オフライン起動対応）
+  - 注: バンドル版pmtiles.jsがNode.js用ビルドでブラウザ非互換のため保留
 
-### OverlayImageNode（2026/04/07）
+#### OverlayImageNode
 
-- [x] ImageNode → OverlayImageNode変換後の即時マップ反映
-  - [x] addChildIfNotExists: runtimeType変更時にノード入れ替え（ImageNode→OverlayImageNode）
-  - [x] PhotoTile: 変換後にparent.updateChildren()で親フォルダを再スキャン
 - [ ] OverlayTransformTool: ハンドルベースの移動・拡縮・回転UI
 - [ ] オーバーレイ設定ダイアログ: 不透明度・位置パラメータの調整UI
 
-## 内部テスト（Google Play）
+#### その他機能
+
+- [ ] フィードバックフォームにバージョン情報を事前入力（Google Forms URLパラメータ使用）
+- [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能
+- [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一
+
+### コード品質
+
+- [ ] その他のスタイル問題修正
+
+---
+
+## 完了済み
+
+<details>
+<summary>内部テスト・Google Play（2026/04）</summary>
 
 - [x] リリース準備
-  - [x] keystore統一（`C:\Users\kitay\k-maps-release.keystore` に一本化、ヒント: `android/KEYSTORE_HINT.txt`）
-  - [x] バージョン番号設定（pubspec.yaml: 0.4.0+2）
-  - [x] 署名付きAABビルド（`flutter build appbundle --release`）
+  - [x] keystore統一、バージョン番号設定（0.5.1+6）、署名付きAABビルド
   - [x] ACCESS_MOCK_LOCATION をdebugマニフェストに移動
-- [ ] Play Consoleアップロード・公開
-  - [x] アップロード鍵リセット申請（2026/03/12、3/14 10:37 JST以降に有効化）
-  - [ ] 内部テストトラックにAABアップロード（鍵リセット有効化後に再実施）
-  - [ ] ストア掲載情報（アプリ名、説明文、スクリーンショット等）
-  - [ ] 内部テスターリスト設定
-  - [ ] 内部テストとしてリリース
+  - [x] keystoreをandroid/配下にコピー、key.propertiesのパス修正
+- [x] Play Consoleアップロード・公開
+  - [x] アップロード鍵リセット申請、内部テストトラックにAABアップロード（v0.5.1+6）
+  - [x] プライバシーポリシー作成・GitHub公開・Play Console登録
+  - [x] リリースノート作成（`docs/release_notes_v0.5.1.md`）
+- [x] Google Sign-In修正（2026/04/10）
+  - [x] Play App Signing の SHA-1 取得（deployment_cert.der）
+  - [x] Google Cloud Console に Play App Signing 用 Android OAuthクライアントID 作成
+  - [x] SHA-1 一覧をGoogle Drive保存（`開発用キー/SHA-1フィンガープリント.txt`）
+  - [x] 不要な `email` スコープを削除
+
+</details>
+
+<details>
+<summary>Google Drive連携MVP（2026/01）</summary>
+
+- [x] 認証基盤（google_sign_in, googleapis）、GoogleDriveService/DriveAuthState
+- [x] フォルダ追加: 通常/Drive連携の選択、URL入力（ペースト＋QRスキャン）
+- [x] クローン: 共有フォルダからの初回ダウンロード
+- [x] 永続化: .kmeta.jsonにDrive情報保存、再読み込み時にDriveFolderNodeとして復元
+- [x] 手動同期（Push/Pull/状態確認/連携解除）、自動チェック
+- [x] 視覚的区別（青いクラウドアイコン、同期状態オーバーレイ）
+- 注: モバイル専用機能（PCでは無効化）
+
+</details>
+
+<details>
+<summary>MapLibre移行（2026/03）</summary>
+
+- [x] FlutterMap → MapLibreMap ウィジェット置換（KMapController/KMapCameraラッパー）
+- [x] レイヤ移植（Polygon/Polyline/Marker → maplibre StyleLayer）
+- [x] タイルキャッシュ基盤の移行（TileServer、localhost経由配信）
+- [x] フィーチャ描画パフォーマンス修正（MapSourceManager、GeoJsonSource+StyleLayer）
+- [x] ポイントクラスタリング実装（supercluster）
+- [x] ImageNode描画をSymbolStyleLayerに移行（GPU描画化）
+- [x] Windows版パフォーマンス最適化（頂点マーカーGPU化、batchSetPaintProperties）
+- [x] Windows版マップ表示不具合修正（WebSocketレースコンディション）
+
+</details>
+
+<details>
+<summary>外部計測機器・測量機能（2026/03）</summary>
+
+- [x] TruPulseService: BT SPP接続、プロトコルパーサー
+- [x] ExternalDeviceService / DeviceTool 抽象レイヤ（プラグインパターン）
+- [x] MapToolbar / map_page へのDeviceTool汎用統合
+- [x] Point → Line/Polygon 変換（閉合補正: コンパス法則/トランシット法則）
+- [x] 磁気偏角補正、器械高・目標高補正
+- [x] 測量精度リアルタイム表示（閉合比警告）
+
+</details>
+
+<details>
+<summary>アーキテクチャ改善・Riverpod移行（2025/12〜2026/03）</summary>
+
+- [x] 型安全性改善（IMapState、MapTool型安全化）
+- [x] 重複コード削減、定数集約、ファイル構造整備
+- [x] map_page.dart mixin統合（6 mixin + 3 widget）
+- [x] 内蔵GPSリファクタリング（InternalGpsLocationStore、ForegroundService）
+- [x] GPS軌跡の常時記録と切り取りUI（GpsHistoryRecorder、TrackExtractionDialog）
+- [x] Riverpod導入 → 正規化 → 完全正規化（GlobalConfig完全削除、38ファイル190箇所解消）
+- [x] LayerDrawerリファクタリング（ConsumerWidget化、LayerDrawerService抽出）
+- [x] 非同期競合状態防止（Completer使用、6箇所）
+- [x] 巨大ファイル分割（feature_converter, layer_drawer_tiles, sync_engine, metadata_parser）
+
+</details>
+
+<details>
+<summary>コード品質・パフォーマンス改善</summary>
+
+- [x] BuildContextの非同期使用問題の修正（10ファイル）
+- [x] 非推奨APIの更新（withOpacity→withValues、onPopInvoked→onPopInvokedWithResult等）
+- [x] print()をAppLoggerに統一
+- [x] GeoPackageロード高速化（N+1解消、並列化、Isolate化）
+- [x] 地図操作パフォーマンス改善（レンダリングキャッシュ、selectedFeaturesのSet化）
+- [x] 宣言的設定フレームワーク（SettingDef + SettingsStore）
+
+</details>
+
+<details>
+<summary>その他完了済み機能</summary>
+
+- [x] フォルダメタデータシステム（.kmeta.json）
+- [x] グローバルフォルダ機能（PC版カスタムパス対応含む）
+- [x] LayerTreeNode大規模リファクタリング（NodeType enum、PathResolver等）
+- [x] 属性テーブルQGISフィルタ・複製機能
+- [x] OverlayImageNode変換後の即時マップ反映
+- [x] ドキュメント構造整理（docs/features + docs/technical分割）
+- [x] 背景地図改善（一括DL、並列処理、オフラインフォールバック、航空写真対応）
+- [x] 設定画面UI統一
+
+</details>

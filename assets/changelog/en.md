@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.5 — 2026/04/11
+
+### 📝 Auto-Fill Version & Device Info in Feedback Form
+
+- Feedback form now auto-fills app version and device model when opened
+- Makes bug reports smoother and more informative
+
+---
+
 ## v0.5.4 — 2026/04/10
 
 ### 🌐 Now Available in English
@@ -43,6 +52,8 @@
 - 3-button navigation bar (◁□○) is now hidden by default for a full-screen experience
 - Swipe from the bottom edge to temporarily reveal; auto-hides after 3 seconds
 
+---
+
 ## v0.5.1 — 2026/04/02
 
 ### 📊 Smarter Data Search & Editing
@@ -63,6 +74,11 @@
 
 - Created and published privacy policy on GitHub
 - Configured AAB build and signing for Google Play
+
+### 🖥️ Windows Support Temporarily Paused
+
+- Windows development paused due to maplibre_webview performance falling short of requirements and significant behavioral differences from maplibre core
+- Will resume once native Windows support is available in maplibre
 
 ---
 

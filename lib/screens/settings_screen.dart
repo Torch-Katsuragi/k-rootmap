@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../i18n/strings.g.dart';
 import '../main.dart' show kAppLocaleKey;
@@ -258,20 +259,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class FeedbackScreen extends ConsumerWidget {
   final bool isEmbedded;
   
-  /// Google Forms フィードバックURL
-  static const _feedbackUrl = 'https://forms.gle/zQEHoHt1d9nXzW5x7';
+  /// Google Forms フィードバックURL (フルURL)
+  static const _feedbackBaseUrl =
+      'https://docs.google.com/forms/d/e/1FAIpQLSdPPuWtjW-t4rfdyLF9fCGEcrIMG49hFkV4N3WU4CiidivkLg/viewform';
+
+  /// バージョンフィールドの entry ID
+  static const _versionEntryId = 'entry.2058352308';
+
+  /// 端末モデルフィールドの entry ID
+  static const _deviceModelEntryId = 'entry.1483381142';
 
   const FeedbackScreen({
     super.key,
     this.isEmbedded = false,
   });
 
+  /// デバイスモデル名を取得
+  Future<String> _getDeviceModel() async {
+    final deviceInfo = DeviceInfoPlugin();
+    if (Platform.isAndroid) {
+      final android = await deviceInfo.androidInfo;
+      return '${android.manufacturer} ${android.model}';
+    } else if (Platform.isWindows) {
+      final windows = await deviceInfo.windowsInfo;
+      return 'Windows (${windows.computerName})';
+    }
+    return Platform.operatingSystem;
+  }
+
   Future<void> _openFeedbackForm(WidgetRef ref) async {
-    final uri = Uri.parse(_feedbackUrl);
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+      final info = await PackageInfo.fromPlatform();
+      final version = '${info.version}+${info.buildNumber}';
+      final deviceModel = await _getDeviceModel();
+      final uri = Uri.parse(_feedbackBaseUrl).replace(
+        queryParameters: {
+          'usp': 'pp_url',
+          _versionEntryId: version,
+          _deviceModelEntryId: deviceModel,
+        },
+      );
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
         ref.read(notificationCenterProvider.notifier).add(
               title: t.settings.feedback.browserError,
               level: NotificationLevel.error,

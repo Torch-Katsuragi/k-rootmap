@@ -12,7 +12,7 @@ Flutter製の地図アプリ（k_maps）。Windows/Android対応。
 ## 開発フロー
 
 1. 作業前: `TODO.md`、`docs/` を確認
-2. 実装: 既存パッケージを優先、既存スタイルに従う
+2. 実装: できるだけ計画を立ててから実装に移る
 3. 作業後: `TODO.md` を更新
 
 ## 優先順位
@@ -28,6 +28,7 @@ Flutter製の地図アプリ（k_maps）。Windows/Android対応。
 - 削除: 一時ファイル、テスト用ダミー
 - 一時ファイル出力: `.temp/` に配置（`.gitignore` 済み）
 - .md系はObsidian記法（フロントマター、`[[リンク]]`）
+- commitの前にchangelogを全言語分更新
 
 ## 参照
 

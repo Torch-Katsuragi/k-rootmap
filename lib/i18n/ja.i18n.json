@@ -954,5 +954,10 @@
     "bluetoothDisclosure": "外部GNSS機器（RTK受信機等）やレーザー距離計との接続にBluetooth権限が必要です。\n外部機器を使用しない場合はスキップできます。",
     "bluetoothButton": "Bluetooth権限を許可",
     "bluetoothSkip": "スキップ"
+  },
+  "changelog": {
+    "title": "更新履歴",
+    "noContent": "更新履歴はまだありません",
+    "updated": "アプリが更新されました ✨"
   }
 }

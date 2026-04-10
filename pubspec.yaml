@@ -101,6 +101,7 @@ dependencies:
   geobase: ^1.5.0
   exif: ^3.3.0
   audioplayers: ^6.6.0
+  flutter_markdown: ^0.7.6              # CHANGELOG.md表示用
 
 dependency_overrides:
   jni:
@@ -135,6 +136,7 @@ flutter:
 
   assets:
     - assets/sounds/
+    - assets/changelog/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

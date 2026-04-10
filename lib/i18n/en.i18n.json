@@ -954,5 +954,10 @@
     "bluetoothDisclosure": "Bluetooth permission is required to connect external GNSS devices (RTK receivers) and laser rangefinders.\nYou can skip this if you don't use external devices.",
     "bluetoothButton": "Allow Bluetooth Access",
     "bluetoothSkip": "Skip"
+  },
+  "changelog": {
+    "title": "Changelog",
+    "noContent": "No changelog available yet",
+    "updated": "App updated! ✨"
   }
 }

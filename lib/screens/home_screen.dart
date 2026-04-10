@@ -18,9 +18,11 @@ import '../providers/project_providers.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
+import '../services/changelog_service.dart';
 import '../utils/folder_utils.dart';
+import 'changelog_screen.dart';
 import 'map_page/map_page.dart';
-import 'maplibre_poc_screen.dart';
+
 import 'onboarding_screen.dart';
 import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
 
@@ -39,12 +41,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   bool _isOpeningProject = false; // プロジェクト開始中フラグ
   String _openingProjectStatus = '';
   bool _initCompleted = false; // 初期化（オンボーディング含む）完了フラグ
+  bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initPermissions();
+    _checkChangelogUnread();
+  }
+
+  /// チェンジログの未読状態を確認
+  Future<void> _checkChangelogUnread() async {
+    final unread = await ChangelogService.instance.hasUnread();
+    if (mounted) {
+      setState(() => _hasUnreadChangelog = unread);
+    }
+  }
+
+  /// チェンジログ画面を開く
+  void _openChangelog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangelogScreen(
+          onRead: () {
+            if (mounted) {
+              setState(() => _hasUnreadChangelog = false);
+            }
+          },
+        ),
+      ),
+    );
   }
 
   /// オンボーディング確認 → 権限チェック
@@ -378,14 +406,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         title: const Text('K-MAPS'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          // MapLibre PoC（技術検証用）
+          // チェンジログボタン（常時表示、小さめ）
           IconButton(
-            icon: const Icon(Icons.terrain),
-            tooltip: 'MapLibre PoC',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MapLibrePocScreen()),
-            ),
+            icon: const Icon(Icons.history),
+            tooltip: t.changelog.title,
+            onPressed: _openChangelog,
           ),
         ],
       ),
@@ -416,6 +441,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
               t.home.subtitle,
               style: const TextStyle(fontSize: 16, color: Colors.grey),
               textAlign: TextAlign.center,
+            ),
+            // 更新通知バナー（未読時のみ表示）
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: _hasUnreadChangelog
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: _UpdateBanner(onTap: _openChangelog),
+                    )
+                  : const SizedBox.shrink(),
             ),
             const SizedBox(height: 48),
             Card(
@@ -538,3 +574,96 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   }
 }
 
+/// 更新通知バナー（アニメーション付き）
+///
+/// アイコン直下に表示され、タップでチェンジログ画面に遷移する。
+class _UpdateBanner extends StatefulWidget {
+  final VoidCallback onTap;
+  const _UpdateBanner({required this.onTap});
+
+  @override
+  State<_UpdateBanner> createState() => _UpdateBannerState();
+}
+
+class _UpdateBannerState extends State<_UpdateBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeIn,
+    );
+    // 少し遅らせてアニメーション開始（画面描画完了後に注目させる）
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Card(
+          elevation: 3,
+          color: Theme.of(context).colorScheme.primaryContainer,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.auto_awesome,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    t.changelog.updated,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

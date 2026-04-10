@@ -14,6 +14,11 @@
 - View the full changelog in Markdown format within the app
 - Multi-language support (auto-switches between Japanese and English)
 
+### 📱 Auto-Hide Android Navigation Bar
+
+- 3-button navigation bar (◁□○) is now hidden by default for a full-screen experience
+- Swipe from the bottom edge to temporarily reveal; auto-hides after 3 seconds
+
 ---
 
 ## v0.5.3 — 2026/04/10

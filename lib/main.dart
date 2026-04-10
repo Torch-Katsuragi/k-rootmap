@@ -1,6 +1,7 @@
 import 'package:k_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -23,6 +24,24 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _setupErrorHandlers();
   _setupDebugPrintFilter();
+
+  // Android: ナビゲーションバー（◁□○）を非表示にする（ステータスバーは維持）
+  if (Platform.isAndroid) {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: [SystemUiOverlay.top],
+    );
+    // ジェスチャーでナビバーが表示された後、自動的に再非表示にする
+    SystemChrome.setSystemUIChangeCallback((systemOverlaysAreVisible) async {
+      if (systemOverlaysAreVisible) {
+        await Future.delayed(const Duration(seconds: 3));
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: [SystemUiOverlay.top],
+        );
+      }
+    });
+  }
 
   // 言語設定: 保存値があればそれを使用、なければ端末の言語設定を自動検出
   await _initLocale();

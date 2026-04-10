@@ -37,20 +37,27 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
     }
   }
 
+  /// ベルアイコンの下端Y座標をOverlay座標系で取得
+  double? _anchorBottomY() {
+    final box = _bellKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlayBox == null) return null;
+    final globalBottom = box.localToGlobal(Offset(0, box.size.height));
+    return overlayBox.globalToLocal(globalBottom).dy;
+  }
+
   void _showPopup() {
     _removeToast();
     final overlay = Overlay.of(context);
-    final box = _bellKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-
-    final position = box.localToGlobal(Offset.zero);
-    final bellSize = box.size;
+    final bottomY = _anchorBottomY();
+    if (bottomY == null) return;
 
     _popupEntry = OverlayEntry(
       builder:
           (_) => _PopupOverlay(
-            anchorPosition: position,
-            anchorSize: bellSize,
+            anchorBottomY: bottomY,
             onDismiss: _removePopup,
             ref: ref,
           ),
@@ -68,18 +75,14 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
   void _showAutoToast(AppNotification notification) {
     _removeToast();
     final overlay = Overlay.of(context);
-    final box = _bellKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-
-    final position = box.localToGlobal(Offset.zero);
-    final bellSize = box.size;
+    final bottomY = _anchorBottomY();
+    if (bottomY == null) return;
 
     _toastEntry = OverlayEntry(
       builder:
           (_) => _NotificationToast(
             notification: notification,
-            anchorPosition: position,
-            anchorSize: bellSize,
+            anchorBottomY: bottomY,
             onTap: () {
               _removeToast();
               _showPopup();
@@ -132,14 +135,12 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
 
 /// ポップアップ全体（背景タップで閉じる + 通知リスト）
 class _PopupOverlay extends StatelessWidget {
-  final Offset anchorPosition;
-  final Size anchorSize;
+  final double anchorBottomY;
   final VoidCallback onDismiss;
   final WidgetRef ref;
 
   const _PopupOverlay({
-    required this.anchorPosition,
-    required this.anchorSize,
+    required this.anchorBottomY,
     required this.onDismiss,
     required this.ref,
   });
@@ -154,11 +155,8 @@ class _PopupOverlay extends StatelessWidget {
           child: const SizedBox.expand(),
         ),
         Positioned(
-          top: anchorPosition.dy + anchorSize.height + 4,
-          right:
-              MediaQuery.of(context).size.width -
-              anchorPosition.dx -
-              anchorSize.width,
+          top: anchorBottomY + 4,
+          right: 8,
           child: NotificationPopup(onDismiss: onDismiss, ref: ref),
         ),
       ],
@@ -169,15 +167,13 @@ class _PopupOverlay extends StatelessWidget {
 /// 自動ポップアップ（1件分のトースト）
 class _NotificationToast extends StatefulWidget {
   final AppNotification notification;
-  final Offset anchorPosition;
-  final Size anchorSize;
+  final double anchorBottomY;
   final VoidCallback onTap;
   final VoidCallback onDismiss;
 
   const _NotificationToast({
     required this.notification,
-    required this.anchorPosition,
-    required this.anchorSize,
+    required this.anchorBottomY,
     required this.onTap,
     required this.onDismiss,
   });
@@ -224,11 +220,8 @@ class _NotificationToastState extends State<_NotificationToast>
           child: const SizedBox.expand(),
         ),
         Positioned(
-          top: widget.anchorPosition.dy + widget.anchorSize.height + 4,
-          right:
-              MediaQuery.of(context).size.width -
-              widget.anchorPosition.dx -
-              widget.anchorSize.width,
+          top: widget.anchorBottomY + 4,
+          right: 8,
           child: SlideTransition(
             position: _slide,
             child: FadeTransition(

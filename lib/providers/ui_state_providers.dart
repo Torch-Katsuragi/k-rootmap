@@ -1,9 +1,41 @@
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../core/k_map_controller.dart';
 
 part 'ui_state_providers.g.dart';
+
+// ============================================================
+// UIスケール
+// ============================================================
+
+/// UIスケールレベル（7段階: 0=XS, 1=S, 2=M-, 3=M, 4=M+, 5=L, 6=XL）
+@Riverpod(keepAlive: true)
+class UiScaleLevel extends _$UiScaleLevel {
+  static const _key = 'ui_scale_level';
+  static const defaultLevel = 3;
+  static const _scaleFactors = [0.5, 0.65, 0.8, 1.0, 1.25, 1.55, 2.0];
+
+  @override
+  int build() => defaultLevel;
+
+  /// SharedPreferencesから読み込み
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = (prefs.getInt(_key) ?? defaultLevel).clamp(0, 6);
+  }
+
+  /// レベルを設定して永続化
+  Future<void> set(int level) async {
+    state = level.clamp(0, 6);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_key, state);
+  }
+
+  /// 現在のレベルに対応するスケール係数
+  double get scaleFactor => _scaleFactors[state];
+}
 
 /// GeoPackage タイル展開状態（不変値オブジェクト）
 @immutable

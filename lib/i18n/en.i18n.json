@@ -111,6 +111,26 @@
       "languageNames": {
         "en": "English",
         "ja": "Japanese"
+      },
+      "uiScale": "UI Size",
+      "uiScaleDesc": "Adjust the size of text and UI elements",
+      "uiScaleLabels": {
+        "0": "XS",
+        "1": "S",
+        "2": "M\u2212",
+        "3": "M",
+        "4": "M+",
+        "5": "L",
+        "6": "XL"
+      },
+      "uiScaleNames": {
+        "0": "Extra Small",
+        "1": "Small",
+        "2": "Slightly Small",
+        "3": "Standard",
+        "4": "Slightly Large",
+        "5": "Large",
+        "6": "Extra Large"
       }
     },
     "layerStyle": {
@@ -959,5 +979,9 @@
     "title": "Changelog",
     "noContent": "No changelog available yet",
     "updated": "App updated! ✨"
+  },
+  "userGuide": {
+    "title": "User Guide",
+    "noContent": "User guide is not available yet"
   }
 }

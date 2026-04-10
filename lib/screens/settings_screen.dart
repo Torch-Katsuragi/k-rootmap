@@ -20,6 +20,7 @@ import '../utils/folder_utils.dart';
 import '../widgets/settings_widgets.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
+import '../providers/ui_state_providers.dart';
 
 /// グローバルフォルダのカスタムパス用SharedPreferencesキー
 const kGlobalFolderCustomPathKey = 'global_folder_custom_path';
@@ -615,6 +616,9 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
             ],
           ),
 
+          // UIサイズ調整セクション
+          _buildUiScaleSection(),
+
           SettingsSection(
             title: 'Global Folder',
             icon: Icons.folder_special,
@@ -736,6 +740,100 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
             ),
         ],
       ),
+    );
+  }
+  Widget _buildUiScaleSection() {
+    final scaleLevel = ref.watch(uiScaleLevelProvider);
+    final labels = [
+      t.settings.general.uiScaleLabels.k0,
+      t.settings.general.uiScaleLabels.k1,
+      t.settings.general.uiScaleLabels.k2,
+      t.settings.general.uiScaleLabels.k3,
+      t.settings.general.uiScaleLabels.k4,
+      t.settings.general.uiScaleLabels.k5,
+      t.settings.general.uiScaleLabels.k6,
+    ];
+    final names = [
+      t.settings.general.uiScaleNames.k0,
+      t.settings.general.uiScaleNames.k1,
+      t.settings.general.uiScaleNames.k2,
+      t.settings.general.uiScaleNames.k3,
+      t.settings.general.uiScaleNames.k4,
+      t.settings.general.uiScaleNames.k5,
+      t.settings.general.uiScaleNames.k6,
+    ];
+
+    return SettingsSection(
+      title: t.settings.general.uiScale,
+      icon: Icons.format_size,
+      iconColor: Colors.teal,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            t.settings.general.uiScaleDesc,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.4),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // 現在の選択ラベル
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(names[scaleLevel],
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text(
+                labels[scaleLevel],
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 離散的スライダー
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 6,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+          ),
+          child: Slider(
+            value: scaleLevel.toDouble(),
+            min: 0,
+            max: 6,
+            divisions: 6,
+            onChanged: (v) {
+              ref.read(uiScaleLevelProvider.notifier).set(v.round());
+            },
+          ),
+        ),
+        // ラベル行
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (i) {
+              final isSelected = i == scaleLevel;
+              return Text(
+                labels[i],
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey[500],
+                ),
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
     );
   }
 

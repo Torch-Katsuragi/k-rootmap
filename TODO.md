@@ -99,6 +99,7 @@
 #### その他機能
 
 - [x] チェンジログ表示機能（CHANGELOG.md + アプリ内Markdown表示 + 未読通知バッジ）
+- [x] UIサイズ5段階調整機能（設定 → 一般、MediaQuery.textScaler + Riverpod）
 - [ ] フィードバックフォームにバージョン情報を事前入力（Google Forms URLパラメータ使用）
 - [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能
 - [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一

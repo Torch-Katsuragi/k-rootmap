@@ -2,6 +2,11 @@
 
 ## v0.5.4 — 2026/04/10
 
+### 🔤 Adjustable UI Size (7 Levels)
+
+- Adjust the size of text and UI elements in 7 levels (XS / S / M− / M / M+ / L / XL) from Settings → General
+- Changes apply instantly with a simple slider — no restart required
+
 ### 🎓 Permission Setup on First Launch
 
 - Added first-launch onboarding screen that walks you through required permissions (Storage, Location, Bluetooth)

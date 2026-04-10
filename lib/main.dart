@@ -11,6 +11,7 @@ import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
 import 'core/path_resolver.dart';
 import 'providers/project_providers.dart';
+import 'providers/ui_state_providers.dart';
 import 'providers/selection_providers.dart';
 import 'providers/service_providers.dart';
 import 'providers/drawing_provider.dart';
@@ -154,6 +155,9 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
   }
 
   Future<void> _initializeServices() async {
+    // UIスケールを早期に読み込み
+    await ref.read(uiScaleLevelProvider.notifier).load();
+
     // シングルトンサービスにRefを注入（プロバイダ初回読み込みでsetRef()が呼ばれる）
     ref.read(drawingStateProvider);
 
@@ -205,6 +209,11 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
 
   @override
   Widget build(BuildContext context) {
+    final scaleLevel = ref.watch(uiScaleLevelProvider);
+    final scaleFactor = ref.read(uiScaleLevelProvider.notifier).scaleFactor;
+    // scaleLevel を使用して依存関係を確立（watchで再構築をトリガー）
+    assert(scaleLevel >= 0);
+
     return MaterialApp(
       title: 'K-MAPS',
       locale: TranslationProvider.of(context).flutterLocale,
@@ -214,6 +223,30 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        if (scaleFactor == 1.0) return child!;
+        final mq = MediaQuery.of(context);
+        // 論理サイズを逆スケールして、Transform.scaleで拡大した時に
+        // 実際の画面サイズにぴったり収まるようにする
+        return MediaQuery(
+          data: mq.copyWith(
+            size: mq.size / scaleFactor,
+            padding: mq.padding / scaleFactor,
+            viewInsets: mq.viewInsets / scaleFactor,
+            viewPadding: mq.viewPadding / scaleFactor,
+          ),
+          child: FractionallySizedBox(
+            widthFactor: 1.0 / scaleFactor,
+            heightFactor: 1.0 / scaleFactor,
+            alignment: Alignment.topLeft,
+            child: Transform.scale(
+              scale: scaleFactor,
+              alignment: Alignment.topLeft,
+              child: child,
+            ),
+          ),
+        );
+      },
       home: const HomeScreen(),
       routes: {'/map': (context) => const KMapsHomePage()},
     );

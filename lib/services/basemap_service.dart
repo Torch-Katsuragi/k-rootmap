@@ -18,7 +18,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:image/image.dart' as img;
 import '../models/basemap_provider.dart';
-import 'tile_cache_geopackage.dart';
+import 'package:sqflite/sqflite.dart';
+import 'tile_cache_mbtiles.dart';
 
 /// Isolateで実行するための画像処理関数（トップレベル関数）
 Future<Uint8List?> _processTileExtraction(Map<String, dynamic> params) async {
@@ -110,7 +111,7 @@ class BaseMapService extends ChangeNotifier {
   BaseMapProvider _currentProvider = BaseMapProvider.defaultProvider;
   bool _isOfflineMode = false;
   String? _cacheDirectory;
-  TileCacheGeoPackage? _tileCacheDb;
+  TileCacheMBTiles? _tileCacheDb;
   
   // ネットワーク状態監視
   final Connectivity _connectivity = Connectivity();
@@ -129,8 +130,14 @@ class BaseMapService extends ChangeNotifier {
   /// オフラインモードかどうか
   bool get isOfflineMode => _isOfflineMode;
 
+  /// ネットワークが利用可能かどうか
+  bool get isNetworkAvailable => _isNetworkAvailable;
+
   /// ダウンロード中かどうか
   bool get isDownloading => _isDownloading;
+
+  /// 指定プロバイダーのMBTilesファイルパスを取得
+  String? getMBTilesPath(String providerId) => _tileCacheDb?.getMBTilesPath(providerId);
 
   /// 利用可能なプロバイダー一覧
   List<BaseMapProvider> get availableProviders =>
@@ -197,13 +204,83 @@ class BaseMapService extends ChangeNotifier {
   /// タイルキャッシュデータベースの初期化
   Future<void> _initializeTileCacheDatabase() async {
     try {
-      _tileCacheDb = TileCacheGeoPackage();
+      // 旧GeoPackageからの移行チェック
+      await _migrateFromGeoPackage();
+
+      _tileCacheDb = TileCacheMBTiles();
       await _tileCacheDb!.initialize(_cacheDirectory!);
       final total = await _tileCacheDb!.getTotalTileCount();
       AppLogger.debug('[BaseMapService] Cache: $total tiles');
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ TileDB init error: $e');
       rethrow;
+    }
+  }
+
+  /// 旧GeoPackage形式からMBTiles形式への移行
+  Future<void> _migrateFromGeoPackage() async {
+    if (_cacheDirectory == null) return;
+
+    final oldDbPath = path.join(_cacheDirectory!, 'tile_cache.gpkg');
+    final oldFile = File(oldDbPath);
+    if (!oldFile.existsSync()) return;
+
+    AppLogger.debug('[BaseMapService] 🔄 Migrating GeoPackage → MBTiles...');
+    try {
+      final oldDb = await openDatabase(oldDbPath, readOnly: true);
+
+      // 旧DBからプロバイダー別にタイルを読み出し
+      final providers = await oldDb.rawQuery(
+        'SELECT DISTINCT provider_id FROM map_tiles',
+      );
+
+      final tempMbtiles = TileCacheMBTiles();
+      await tempMbtiles.initialize(_cacheDirectory!);
+
+      for (final providerRow in providers) {
+        final providerId = providerRow['provider_id'] as String;
+        final tiles = await oldDb.query(
+          'map_tiles',
+          columns: ['zoom_level', 'tile_column', 'tile_row', 'tile_data'],
+          where: 'provider_id = ?',
+          whereArgs: [providerId],
+        );
+
+        AppLogger.debug('[BaseMapService]   $providerId: ${tiles.length} tiles');
+
+        for (final tile in tiles) {
+          final z = tile['zoom_level'] as int;
+          final tileCol = tile['tile_column'] as int;
+          // tile_row は既にTMS形式で格納されているので逆変換してXYZのyに戻す
+          final tileRow = tile['tile_row'] as int;
+          final y = (1 << z) - 1 - tileRow;
+          final data = tile['tile_data'] as Uint8List;
+
+          await tempMbtiles.saveTile(
+            providerId: providerId,
+            z: z,
+            x: tileCol,
+            y: y,
+            data: data,
+          );
+        }
+      }
+
+      await tempMbtiles.close();
+      await oldDb.close();
+
+      // 旧DBを削除
+      await oldFile.delete();
+      // WALファイルも削除
+      final walFile = File('$oldDbPath-wal');
+      if (walFile.existsSync()) await walFile.delete();
+      final shmFile = File('$oldDbPath-shm');
+      if (shmFile.existsSync()) await shmFile.delete();
+
+      AppLogger.debug('[BaseMapService] ✅ Migration complete');
+    } catch (e) {
+      AppLogger.debug('[BaseMapService] ❌ Migration error: $e');
+      // 移行失敗しても続行（旧DBは残す）
     }
   }
 

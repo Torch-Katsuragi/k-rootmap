@@ -34,7 +34,6 @@ class TileServer {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/k_maps_style.json');
       const style = '{"version":8,"sources":{},'
-          '"glyphs":"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",'
           '"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
       await file.writeAsString(style);
       _localStyleUri = file.path.startsWith('/') ? file.path : style;
@@ -143,6 +142,7 @@ class TileServer {
       final tileData = await _baseMapService.getTile(provider, z, x, y);
 
       if (tileData != null && tileData.isNotEmpty) {
+        AppLogger.debug('[TileServer] ✅ tile $z/$x/$y (${tileData.length}B)');
         final contentType =
             yFile.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
         request.response
@@ -150,6 +150,7 @@ class TileServer {
           ..headers.contentType = ContentType.parse(contentType)
           ..add(tileData);
       } else {
+        AppLogger.debug('[TileServer] ⬜ tile $z/$x/$y → transparent');
         // タイル無し → 透明PNG
         request.response
           ..statusCode = HttpStatus.ok

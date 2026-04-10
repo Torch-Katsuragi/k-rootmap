@@ -256,7 +256,14 @@ class TileCacheGeoPackage {
       tileRow: tileRow,
     ));
     
-    // 100ms後にバッチ書き込み（複数タイルをまとめて処理）
+    // 上限チェック: 一定数溜まったら即フラッシュ（飢餓状態防止）
+    if (_writeQueue.length >= 50) {
+      _batchTimer?.cancel();
+      await _flushBatch();
+      return;
+    }
+    
+    // 少量ならDebounceで待つ（100ms後にまとめて書き込み）
     _batchTimer?.cancel();
     _batchTimer = Timer(const Duration(milliseconds: 100), _flushBatch);
   }
@@ -291,6 +298,11 @@ class TileCacheGeoPackage {
       AppLogger.debug('[TILE-CACHE] ❌ Batch save failed: $e');
     } finally {
       _isFlushing = false;
+      // フラッシュ中に新たに溜まったタイルがあれば再フラッシュ
+      if (_writeQueue.isNotEmpty) {
+        _batchTimer?.cancel();
+        _batchTimer = Timer(const Duration(milliseconds: 50), _flushBatch);
+      }
     }
   }
 
@@ -301,6 +313,16 @@ class TileCacheGeoPackage {
     required int x,
     required int y,
   }) async {
+    // 書き込みキュー内のタイルもヒットさせる（未フラッシュデータ対応）
+    for (final pending in _writeQueue) {
+      if (pending.providerId == providerId &&
+          pending.z == z &&
+          pending.x == x &&
+          pending.y == y) {
+        return pending.data;
+      }
+    }
+    
     if (_database == null) {
       // 初期化前は静かにnullを返す（キャッシュなしとして扱われる）
       return null;

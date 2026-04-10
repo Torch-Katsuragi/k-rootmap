@@ -1,6 +1,7 @@
 // K-MAPS: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../i18n/strings.g.dart';
 import 'package:flutter/gestures.dart';
@@ -565,30 +566,64 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     invalidateLayerCache();
   }
 
-  /// ベースマップソース追加（TileServer経由のlocalhost URL）
+  /// ベースマップソース追加
+  /// Android + オフライン時は mbtiles:// で直接読み込み
+  /// それ以外は TileServer経由のlocalhost URL
   /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSource用）
   Future<void> _addBasemapSource(
     ml.StyleController style, {
     String? belowLayerId,
   }) async {
     final provider = baseMapService.currentProvider;
-    final url =
-        tileServer.isRunning
+
+    ml.RasterSource source;
+
+    // Android + オフライン → mbtiles:// 直接読み込み
+    if (Platform.isAndroid && !baseMapService.isNetworkAvailable) {
+      final mbtilesPath = baseMapService.getMBTilesPath(provider.id);
+      if (mbtilesPath != null) {
+        AppLogger.debug(
+          '[MAP] addBasemapSource: mbtiles://$mbtilesPath (offline)',
+        );
+        source = ml.RasterSource(
+          id: 'basemap',
+          url: 'mbtiles://$mbtilesPath',
+          maxZoom: provider.maxZoom.toDouble(),
+          tileSize: 256,
+        );
+      } else {
+        // MBTilesファイルがない場合はTileServer経由（キャッシュもない状態）
+        final url = tileServer.isRunning
             ? tileServer.urlTemplate(provider.id)
             : provider.urlTemplate;
-
-    AppLogger.debug(
-      '[MAP] addBasemapSource: url=$url (tileServer=${tileServer.isRunning})',
-    );
-
-    try {
-      final source = ml.RasterSource(
+        AppLogger.debug('[MAP] addBasemapSource: $url (no mbtiles cache)');
+        source = ml.RasterSource(
+          id: 'basemap',
+          tiles: [url],
+          maxZoom: provider.maxZoom.toDouble(),
+          tileSize: 256,
+          attribution: provider.attribution,
+        );
+      }
+    } else {
+      // オンライン or Windows → TileServer経由
+      final url =
+          tileServer.isRunning
+              ? tileServer.urlTemplate(provider.id)
+              : provider.urlTemplate;
+      AppLogger.debug(
+        '[MAP] addBasemapSource: url=$url (tileServer=${tileServer.isRunning})',
+      );
+      source = ml.RasterSource(
         id: 'basemap',
         tiles: [url],
         maxZoom: provider.maxZoom.toDouble(),
         tileSize: 256,
         attribution: provider.attribution,
       );
+    }
+
+    try {
       await style.addSource(source);
       await style.addLayer(
         const ml.RasterStyleLayer(id: 'basemap-layer', sourceId: 'basemap'),

@@ -21,6 +21,7 @@ import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
 import '../utils/folder_utils.dart';
 import 'changelog_screen.dart';
+import 'user_guide_screen.dart';
 import 'map_page/map_page.dart';
 
 import 'onboarding_screen.dart';
@@ -406,6 +407,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         title: const Text('K-MAPS'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // ユーザーガイドボタン
+          IconButton(
+            icon: const Icon(Icons.menu_book),
+            tooltip: t.userGuide.title,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const UserGuideScreen(),
+                ),
+              );
+            },
+          ),
           // チェンジログボタン（常時表示、小さめ）
           IconButton(
             icon: const Icon(Icons.history),

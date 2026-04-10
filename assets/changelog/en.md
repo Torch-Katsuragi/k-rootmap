@@ -2,10 +2,29 @@
 
 ## v0.5.4 — 2026/04/10
 
+### 🌐 Now Available in English
+
+- Introduced type-safe internationalization framework using the slang package
+- All UI strings localized to Japanese and English
+- One-tap language switching in Settings
+
+### 📶 Maps Work Smoothly Even Offline
+
+- Migrated tile caching from HTTP server-based delivery to direct MBTiles access
+- Native MapLibre loading via `mbtiles://` protocol dramatically improves offline stability
+- Fixed blank map issue on Android when returning from background
+
 ### 🔤 Adjustable UI Size (7 Levels)
 
 - Adjust the size of text and UI elements in 7 levels (XS / S / M− / M / M+ / L / XL) from Settings → General
 - Changes apply instantly with a simple slider — no restart required
+
+### 📖 In-App User Guide
+
+- Access the user guide from the home screen AppBar
+- Available in Japanese and English (auto-switches with app language)
+- Custom Markdown renderer displays actual app icons inline within the guide
+- *Note: Guide content is AI-generated*
 
 ### 🎓 Permission Setup on First Launch
 
@@ -23,28 +42,6 @@
 
 - 3-button navigation bar (◁□○) is now hidden by default for a full-screen experience
 - Swipe from the bottom edge to temporarily reveal; auto-hides after 3 seconds
-
----
-
-## v0.5.3 — 2026/04/10
-
-### 📶 Maps Work Smoothly Even Offline
-
-- Migrated tile caching from HTTP server-based delivery to direct MBTiles access
-- Native MapLibre loading via `mbtiles://` protocol dramatically improves offline stability
-- Fixed blank map issue on Android when returning from background
-
----
-
-## v0.5.2 — 2026/04/10
-
-### 🌐 Now Available in English
-
-- Introduced type-safe internationalization framework using the slang package
-- All UI strings localized to Japanese and English
-- One-tap language switching in Settings
-
----
 
 ## v0.5.1 — 2026/04/02
 

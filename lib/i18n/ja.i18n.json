@@ -934,5 +934,25 @@
     "unmatchedParens": "括弧の対応が不正です",
     "unclosedParens": "括弧が閉じられていません",
     "unclosedQuotes": "引用符が閉じられていません"
+  },
+  "onboarding": {
+    "welcome": "K-MAPSへようこそ",
+    "welcomeDesc": "GeoPackageベースの地理情報管理アプリです。\nはじめに、アプリの利用に必要な設定を行います。",
+    "next": "次へ",
+    "getStarted": "はじめる",
+    "permissionGranted": "許可済み",
+    "laterSettings": "後で設定する",
+    "storageTitle": "ファイルアクセス",
+    "storageDisclosure": "K-MAPSはGeoPackageファイルの読み書き、地図キャッシュの保存、プロジェクトデータの管理のためにストレージへの完全アクセスが必要です。",
+    "storageButton": "ストレージ権限を許可",
+    "storageRequired": "この権限なしではアプリの基本機能を使えません",
+    "locationTitle": "位置情報",
+    "locationDisclosure": "K-MAPSは、現在地のマップ表示、GPS測量、GPS軌跡の記録のために位置情報を取得します。\n\n位置情報はデバイス内に保存され、外部サーバーに送信されることはありません。",
+    "locationButton": "位置情報を許可する",
+    "locationDeniedNote": "GPS機能が利用できません。設定アプリから後で許可できます。",
+    "bluetoothTitle": "Bluetooth接続",
+    "bluetoothDisclosure": "外部GNSS機器（RTK受信機等）やレーザー距離計との接続にBluetooth権限が必要です。\n外部機器を使用しない場合はスキップできます。",
+    "bluetoothButton": "Bluetooth権限を許可",
+    "bluetoothSkip": "スキップ"
   }
 }

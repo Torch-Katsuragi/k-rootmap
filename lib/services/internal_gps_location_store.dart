@@ -192,6 +192,23 @@ class InternalGpsLocationStore {
   Future<void> _startDelegated() async {
     _isDelegated = true;
 
+    // GPS権限チェック（ForegroundService起動前に確認）
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _isDelegated = false;
+      throw Exception(t.gps.locationServiceDisabled);
+    }
+
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      _isDelegated = false;
+      AppLogger.debug(
+        '$_logTag: GPS権限が未付与のためdelegatedモードを開始できません (permission: $permission)',
+      );
+      throw Exception(t.gps.locationPermissionRequired);
+    }
+
     // ForegroundServiceをconfigure → 起動
     final serviceManager = ForegroundServiceManager();
     await serviceManager.initializeService();

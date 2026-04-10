@@ -21,6 +21,7 @@ import '../providers/ui_state_providers.dart';
 import '../utils/folder_utils.dart';
 import 'map_page/map_page.dart';
 import 'maplibre_poc_screen.dart';
+import 'onboarding_screen.dart';
 import 'settings_screen.dart' show kGlobalFolderCustomPathKey;
 
 /// ホーム画面（最小構成）
@@ -37,11 +38,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   bool _navigatedToMapPage = false; // マップ画面に遷移済みフラグ
   bool _isOpeningProject = false; // プロジェクト開始中フラグ
   String _openingProjectStatus = '';
+  bool _initCompleted = false; // 初期化（オンボーディング含む）完了フラグ
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initPermissions();
+  }
+
+  /// オンボーディング確認 → 権限チェック
+  Future<void> _initPermissions() async {
+    // オンボーディングが必要か判定
+    final needsOnboarding = await OnboardingScreen.shouldShow();
+    if (needsOnboarding && mounted) {
+      // オンボーディング画面を表示
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => const OnboardingScreen(),
+          fullscreenDialog: true,
+        ),
+      );
+    }
+    // オンボーディング完了後（または不要の場合）、通常の権限チェックを実行
+    _initCompleted = true;
     _checkPermissions();
   }
 
@@ -55,9 +75,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // アプリがフォアグラウンドに戻ったときに権限を再確認
-      // ただし、既に権限チェック中またはマップ画面に遷移済みの場合はスキップ
-      // （MapPageでのGPS権限リクエストと競合を防ぐため）
-      if (!_isCheckingPermissions && !_navigatedToMapPage) {
+      // ただし、初期化未完了・権限チェック中・マップ画面遷移済みの場合はスキップ
+      if (_initCompleted && !_isCheckingPermissions && !_navigatedToMapPage) {
         _checkPermissions();
       }
     }
@@ -91,8 +110,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
       if (manageStorageGranted) {
         AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
-        // ストレージ権限OK後、Bluetooth権限をチェック
-        await _checkBluetoothPermissions();
+        // ストレージ権限OK後、位置情報→Bluetooth権限をチェック
+        await _checkLocationPermission();
         return;
       }
 
@@ -103,8 +122,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
       if (status.isGranted) {
         AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が許可されました');
-        // ストレージ権限OK後、Bluetooth権限をチェック
-        await _checkBluetoothPermissions();
+        // ストレージ権限OK後、位置情報→Bluetooth権限をチェック
+        await _checkLocationPermission();
       } else if (status.isPermanentlyDenied) {
         AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が恒久的に拒否されました');
         // 権限が恒久的に拒否された場合、設定画面を開く
@@ -134,15 +153,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     if (statuses[Permission.storage]?.isGranted == true) {
       AppLogger.debug('[HomeScreen] ストレージ権限が許可されました');
-      // ストレージ権限OK後、Bluetooth権限をチェック
-      await _checkBluetoothPermissions();
+      // ストレージ権限OK後、位置情報→Bluetooth権限をチェック
+      await _checkLocationPermission();
     } else {
       AppLogger.debug('[HomeScreen] ストレージ権限が拒否されました');
       _showPermissionDeniedDialog();
     }
   }
 
-  /// Bluetooth権限の確認・リクエスト（ストレージ権限の後に実行）
+  /// 位置情報権限の確認（ストレージ権限の後に実行）
+  Future<void> _checkLocationPermission() async {
+    AppLogger.debug('[HomeScreen] 位置情報権限チェック開始');
+
+    final locationGranted = await Permission.location.isGranted;
+    AppLogger.debug('[HomeScreen] 位置情報権限状態: $locationGranted');
+
+    if (!locationGranted) {
+      AppLogger.debug('[HomeScreen] 位置情報権限をリクエスト中...');
+      final status = await Permission.location.request();
+      AppLogger.debug('[HomeScreen] 位置情報権限リクエスト結果: $status');
+
+      if (!status.isGranted) {
+        AppLogger.debug('[HomeScreen] 位置情報権限が拒否されました（GPS機能制限付きで続行）');
+      }
+    }
+
+    // 位置情報権限の結果に関わらず、Bluetooth権限チェックへ進む
+    await _checkBluetoothPermissions();
+  }
+
+  /// Bluetooth権限の確認・リクエスト（位置情報権限の後に実行）
   Future<void> _checkBluetoothPermissions() async {
     AppLogger.debug('[HomeScreen] Bluetooth権限チェック開始');
 

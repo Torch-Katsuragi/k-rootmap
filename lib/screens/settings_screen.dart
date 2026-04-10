@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:permission_handler/permission_handler.dart';
 import '../i18n/strings.g.dart';
 import '../main.dart' show kAppLocaleKey;
 import 'package:flutter/material.dart';
@@ -450,6 +451,11 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
   String _defaultPath = '';
   bool _isLoading = true;
 
+  // 権限状態（Android用）
+  bool _storageGranted = false;
+  bool _locationGranted = false;
+  bool _bluetoothGranted = false;
+
   @override
   void initState() {
     super.initState();
@@ -461,7 +467,27 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     final appDir = await getApplicationDocumentsDirectory();
     _defaultPath = p.join(appDir.path, 'k_maps_global');
     _customPath = prefs.getString(kGlobalFolderCustomPathKey);
+    if (_isMobileDevice) {
+      await _loadPermissions();
+    }
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  static bool get _isMobileDevice => Platform.isAndroid || Platform.isIOS;
+
+  Future<void> _loadPermissions() async {
+    final storage = await Permission.manageExternalStorage.isGranted;
+    final location = await Permission.location.isGranted;
+    final btScan = await Permission.bluetoothScan.isGranted;
+    final btConnect = await Permission.bluetoothConnect.isGranted;
+
+    if (mounted) {
+      setState(() {
+        _storageGranted = storage;
+        _locationGranted = location;
+        _bluetoothGranted = btScan && btConnect;
+      });
+    }
   }
 
   String get _effectivePath => _customPath ?? _defaultPath;
@@ -661,6 +687,83 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
                 ),
               ),
             ],
+          ),
+          // 権限管理セクション（Android/iOS時のみ）
+          if (_isMobileDevice)
+            SettingsSection(
+              title: t.home.permissionRequired,
+              icon: Icons.security,
+              iconColor: Colors.deepPurple,
+              children: [
+                _buildPermissionTile(
+                  icon: Icons.folder,
+                  iconColor: Colors.orange,
+                  title: t.onboarding.storageTitle,
+                  isGranted: _storageGranted,
+                ),
+                const Divider(),
+                _buildPermissionTile(
+                  icon: Icons.gps_fixed,
+                  iconColor: Colors.green,
+                  title: t.onboarding.locationTitle,
+                  isGranted: _locationGranted,
+                ),
+                const Divider(),
+                _buildPermissionTile(
+                  icon: Icons.bluetooth,
+                  iconColor: Colors.blue,
+                  title: t.onboarding.bluetoothTitle,
+                  isGranted: _bluetoothGranted,
+                ),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await openAppSettings();
+                      // 設定画面から戻ったら権限を再チェック
+                      await _loadPermissions();
+                    },
+                    icon: const Icon(Icons.settings),
+                    label: Text(t.common.openSettings),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required bool isGranted,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: iconColor),
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isGranted ? Icons.check_circle : Icons.cancel,
+            color: isGranted ? Colors.green : Colors.red,
+            size: 20,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isGranted ? t.permissions.granted : t.permissions.denied,
+            style: TextStyle(
+              color: isGranted ? Colors.green : Colors.red,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),

@@ -3,8 +3,7 @@
     <!-- GPS位置情報権限 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- Android 10以降でバックグラウンド位置情報アクセスが必要な場合 -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- 注: ACCESS_BACKGROUND_LOCATIONは不要（ForegroundServiceはフォアグラウンド扱いのため） -->
     <!-- インターネット権限（地図タイル取得用） -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- ネットワーク状態確認権限 -->

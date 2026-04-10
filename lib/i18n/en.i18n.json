@@ -934,5 +934,25 @@
     "unmatchedParens": "Unmatched parentheses",
     "unclosedParens": "Unclosed parentheses",
     "unclosedQuotes": "Unclosed quotes"
+  },
+  "onboarding": {
+    "welcome": "Welcome to K-MAPS",
+    "welcomeDesc": "A GeoPackage-based geographic information management app.\nLet's set up the required permissions to get started.",
+    "next": "Next",
+    "getStarted": "Get Started",
+    "permissionGranted": "Granted",
+    "laterSettings": "Set up later",
+    "storageTitle": "File Access",
+    "storageDisclosure": "K-MAPS requires full storage access to read and write GeoPackage files, save map cache, and manage project data.",
+    "storageButton": "Allow Storage Access",
+    "storageRequired": "Basic app features are unavailable without this permission",
+    "locationTitle": "Location",
+    "locationDisclosure": "K-MAPS collects location data to display your current position on the map, perform GPS surveys, and record GPS tracks.\n\nLocation data is stored on your device and is never sent to external servers.",
+    "locationButton": "Allow Location Access",
+    "locationDeniedNote": "GPS features will be unavailable. You can enable it later in Settings.",
+    "bluetoothTitle": "Bluetooth",
+    "bluetoothDisclosure": "Bluetooth permission is required to connect external GNSS devices (RTK receivers) and laser rangefinders.\nYou can skip this if you don't use external devices.",
+    "bluetoothButton": "Allow Bluetooth Access",
+    "bluetoothSkip": "Skip"
   }
 }

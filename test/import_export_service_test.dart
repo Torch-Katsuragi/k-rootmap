@@ -1,11 +1,11 @@
-// K-MAPS: Import/Export Service Tests
+﻿// Root Maps: Import/Export Service Tests
 import 'package:flutter_test/flutter_test.dart';
-import 'package:k_maps/services/import_export_service.dart';
-import 'package:k_maps/models/geometry_type.dart';
+import 'package:root_maps/services/import_export_service.dart';
+import 'package:root_maps/models/geometry_type.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:proj4dart/proj4dart.dart';
-import 'package:k_maps/utils/coordinate_converter.dart';
+import 'package:root_maps/utils/coordinate_converter.dart';
 
 void main() {
   group('ImportExportService Tests', () {

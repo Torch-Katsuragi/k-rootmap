@@ -1,4 +1,4 @@
-// K-MAPS: ダイアログヘルパークラス
+﻿// Root Maps: ダイアログヘルパークラス
 // 共通のダイアログパターンを一元化して重複コードを削減
 
 import 'package:flutter/material.dart';

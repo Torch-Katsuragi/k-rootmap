@@ -1,11 +1,11 @@
-/// MBTilesを使用したタイルキャッシュ管理
+﻿/// MBTilesを使用したタイルキャッシュ管理
 /// プロバイダーごとに独立したMBTilesファイルを管理
 /// MapLibre の mbtiles:// プロトコルで直接オフライン読み込み可能
 library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 

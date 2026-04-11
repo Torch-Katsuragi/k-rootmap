@@ -1,4 +1,4 @@
-// K-MAPS: Import/Export Models
+﻿// Root Maps: Import/Export Models
 // ファイル形式定義とインポート/エクスポート結果クラス
 import '../../../models/nodes/layer_node.dart';
 import '../coordinate/epsg_registry.dart';

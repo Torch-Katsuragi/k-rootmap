@@ -1,4 +1,4 @@
-// K-MAPS: 同期エンジン
+﻿// Root Maps: 同期エンジン
 // Google DriveとローカルファイルのPush/Pull同期を担当するオーケストレーター
 
 import 'dart:io';

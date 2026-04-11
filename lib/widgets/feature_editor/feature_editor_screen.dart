@@ -1,4 +1,4 @@
-/// 全画面フィーチャ編集スクリーン
+﻿/// 全画面フィーチャ編集スクリーン
 ///
 /// MapLibreMap を背景に、下部パネルで編集コントロールを表示。
 /// カメラツールと同じ Navigator.push パターンで遷移する。
@@ -10,13 +10,13 @@ import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/k_map_controller.dart';
+import '../../core/r_map_controller.dart';
 import '../../models/nodes/feature_node.dart';
 import '../../providers/service_providers.dart';
 import '../../services/basemap_service.dart';
 import '../../services/tile_server.dart';
 import '../../utils/geo_converter.dart';
-import '../map/k_map_widget.dart';
+import '../map/r_map_widget.dart';
 import 'feature_edit_action.dart';
 
 class FeatureEditorScreen extends ConsumerStatefulWidget {
@@ -36,7 +36,7 @@ class FeatureEditorScreen extends ConsumerStatefulWidget {
 class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
   late final List<FeatureEditAction> _applicable;
   late final ValueNotifier<PreviewLines> _previewLines;
-  final KMapController _mapController = KMapController();
+  final RMapController _mapController = RMapController();
   bool _mapReady = false;
   bool _initialFitDone = false;
 
@@ -145,7 +145,7 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
 
   Widget _buildMap(BaseMapService baseMapService, TileServer ts) {
     final lines = _previewLines.value;
-    return KMapWidget(
+    return RMapWidget(
       options: ml.MapOptions(
         initZoom: 14,
         initCenter: const geo.Geographic(lon: 139.7671, lat: 35.6812),

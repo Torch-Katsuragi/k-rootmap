@@ -1,4 +1,4 @@
-// K-MAPS: ノードのUI表示に関する責務を集約
+﻿// Root Maps: ノードのUI表示に関する責務を集約
 // LayerTreeNodeからUI関連の責務を分離
 
 import 'package:flutter/material.dart';

@@ -1,4 +1,4 @@
-// K-MAPS: 同期Pushハンドラー
+﻿// Root Maps: 同期Pushハンドラー
 // ローカル→Google DriveへのPush（アップロード）処理を担当
 
 import 'dart:convert';

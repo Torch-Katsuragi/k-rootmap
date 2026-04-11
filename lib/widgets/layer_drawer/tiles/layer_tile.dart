@@ -1,4 +1,4 @@
-/// K-MAPS: レイヤタイルウィジェット
+﻿/// Root Maps: レイヤタイルウィジェット
 library;
 
 import 'package:flutter/material.dart';

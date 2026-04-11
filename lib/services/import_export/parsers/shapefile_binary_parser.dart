@@ -1,8 +1,8 @@
-// K-MAPS: Shapefile Binary Parser
+﻿// Root Maps: Shapefile Binary Parser
 // SHPファイルのバイナリ解析クラス
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:proj4dart/proj4dart.dart';
 import '../../../utils/coordinate_converter.dart';

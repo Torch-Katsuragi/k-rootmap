@@ -1,4 +1,4 @@
-/// K-MAPS: LayerDrawer 共通ダイアログヘルパー
+﻿/// Root Maps: LayerDrawer 共通ダイアログヘルパー
 /// 確認ダイアログ+操作+通知パターン / リネームダイアログ
 library;
 

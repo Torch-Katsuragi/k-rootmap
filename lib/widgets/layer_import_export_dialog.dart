@@ -1,4 +1,4 @@
-// K-MAPS: Layer Import/Export Dialog Widget
+﻿// Root Maps: Layer Import/Export Dialog Widget
 // レイヤー全体のインポート・エクスポート機能を提供するダイアログ
 import 'dart:io';
 import 'package:flutter/material.dart';

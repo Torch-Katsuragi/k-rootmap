@@ -1,10 +1,10 @@
-// K-MAPS: turf_dart統合テスト
+﻿// Root Maps: turf_dart統合テスト
 // turf_dartのFeature/FeatureCollectionとの統合機能をテストする
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
-import 'package:k_maps/converters/turf_converter.dart';
+import 'package:root_maps/converters/turf_converter.dart';
 
 void main() {
   group('TurfConverter Tests', () {
@@ -98,7 +98,7 @@ void main() {
         'name': 'Test Point',
         'description': 'テスト用ポイント',
         'geometry': [LatLng(35.6895, 139.6917)], // Point形式
-        'kmaps_metadata': {'test': 'data'},
+        'rmaps_metadata': {'test': 'data'},
       };
 
       // turf_dartのFeatureを作成

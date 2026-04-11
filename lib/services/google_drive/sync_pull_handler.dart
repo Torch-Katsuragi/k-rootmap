@@ -1,4 +1,4 @@
-// K-MAPS: 同期Pullハンドラー
+﻿// Root Maps: 同期Pullハンドラー
 // Google Drive→ローカルへのPull（ダウンロード）処理を担当
 
 import 'dart:io';

@@ -1,8 +1,8 @@
-/// 背景地図設定画面
+﻿/// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 library;
 import '../i18n/strings.g.dart';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';

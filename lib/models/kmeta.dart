@@ -1,4 +1,4 @@
-// K-MAPS: フォルダメタデータモデル
+﻿// Root Maps: フォルダメタデータモデル
 // 各フォルダに配置される.kmeta.jsonの読み書き・継承マージを担当
 
 import 'dart:convert';

@@ -1,4 +1,4 @@
-// K-MAPS: 座標系サービス エクスポートファイル
+﻿// Root Maps: 座標系サービス エクスポートファイル
 // lib/services/coordinate/ のパブリックAPIをエクスポート
 
 export 'epsg_registry.dart';

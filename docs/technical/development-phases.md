@@ -1,4 +1,4 @@
----
+﻿---
 title: 開発ステップ（フェーズ）
 tags: [technical, development, roadmap]
 ---
@@ -43,6 +43,6 @@ tags: [technical, development, roadmap]
 
 ## 関連ドキュメント
 
-- [[../features/concept]] - K-MAPSコンセプト
+- [[../features/concept]] - Root Mapsコンセプト
 - [[tech-stack]] - 技術スタック
 

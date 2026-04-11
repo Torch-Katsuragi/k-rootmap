@@ -1,4 +1,4 @@
-/// 統合GPS管理サービス
+﻿/// 統合GPS管理サービス
 ///
 /// 内蔵GPSと外部GNSS機器を統一的に管理し、GPS記録・追跡機能を提供
 ///
@@ -14,7 +14,7 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import '../i18n/strings.g.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';

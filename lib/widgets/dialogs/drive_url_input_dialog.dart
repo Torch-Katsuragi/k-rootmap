@@ -1,4 +1,4 @@
-// K-MAPS: Drive URL入力ダイアログ
+﻿// Root Maps: Drive URL入力ダイアログ
 // Google DriveフォルダのURLを入力またはQRスキャンしてクローンする
 
 import 'dart:io';

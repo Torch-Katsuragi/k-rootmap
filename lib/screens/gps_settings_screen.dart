@@ -1,4 +1,4 @@
-/// GPS設定画面
+﻿/// GPS設定画面
 ///
 /// 統合GPS管理サービスを使用してGPSソース（内蔵GPS・外部GNSS）の
 /// 切り替えと設定管理を行います。
@@ -12,7 +12,7 @@
 library;
 import '../i18n/strings.g.dart';
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';

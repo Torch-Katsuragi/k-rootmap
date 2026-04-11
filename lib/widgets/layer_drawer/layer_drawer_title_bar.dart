@@ -1,4 +1,4 @@
-/// K-MAPS: LayerDrawer用タイトルバーウィジェット
+﻿/// Root Maps: LayerDrawer用タイトルバーウィジェット
 library;
 
 import 'package:flutter/material.dart';

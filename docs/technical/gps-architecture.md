@@ -1,9 +1,9 @@
----
+﻿---
 title: GPS追跡・測量アーキテクチャ
 tags: [technical, gps, architecture]
 ---
 
-# K-MAPSでの実装方針
+# Root Mapsでの実装方針
 
 ## GPS追跡機能のアーキテクチャ
 

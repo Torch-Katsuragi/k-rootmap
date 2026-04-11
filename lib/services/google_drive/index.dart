@@ -1,4 +1,4 @@
-// K-MAPS: Google Drive連携サービス
+﻿// Root Maps: Google Drive連携サービス
 // エクスポート用インデックス
 
 export 'drive_auth_state.dart';

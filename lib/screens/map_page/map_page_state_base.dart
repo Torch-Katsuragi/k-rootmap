@@ -1,4 +1,4 @@
-// K-MAPS: MapPage状態の基底mixin
+﻿// Root Maps: MapPage状態の基底mixin
 // 全てのMixinが共通でアクセスする状態変数を定義
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -7,7 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:maplibre/maplibre.dart' as ml;
-import '../../core/k_map_controller.dart';
+import '../../core/r_map_controller.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/layer_node.dart';
 import '../../models/nodes/feature_node.dart';
@@ -48,10 +48,10 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   bool movedToCurrentLocationOnce = false;
 
   /// 地図コントローラー（flutter_map互換ラッパー）
-  final KMapController mapControllerInstance = KMapController();
+  final RMapController mapControllerInstance = RMapController();
 
   @override
-  KMapController get mapController => mapControllerInstance;
+  RMapController get mapController => mapControllerInstance;
 
   // =============================================
   // コンパス関連

@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 
-/// turf_dartオブジェクトとK-MAPSのデータ形式間の変換を行うユーティリティクラス
+/// turf_dartオブジェクトとK-RootMapのデータ形式間の変換を行うユーティリティクラス
 class TurfConverter {
   // ============================================================
   // LatLng ↔ Position 変換

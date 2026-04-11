@@ -1,4 +1,4 @@
-// K-MAPS: Base Exporter
+﻿// Root Maps: Base Exporter
 // エクスポーターの抽象基底クラス
 import '../import_export_models.dart';
 import '../../../models/nodes/layer_node.dart';

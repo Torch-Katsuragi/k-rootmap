@@ -1,4 +1,4 @@
-/// グローバルGNSS接続管理クラス
+﻿/// グローバルGNSS接続管理クラス
 ///
 /// BluetoothGnssServiceのインスタンスをアプリ全体で共有し、
 /// 画面遷移時でも接続を維持できるようにします。
@@ -10,7 +10,7 @@
 /// - 接続状態の集約管理
 library;
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import '../models/bluetooth_gnss_service.dart';
 

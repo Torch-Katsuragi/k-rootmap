@@ -1,4 +1,4 @@
-// K-MAPS: 属性テーブルコントローラ
+﻿// Root Maps: 属性テーブルコントローラ
 // TrinaGridの状態管理、フィーチャ操作、属性編集を担当
 
 import 'package:flutter/material.dart';

@@ -1,10 +1,10 @@
-/// K-MAPS: 地図状態の抽象インターフェース
+﻿/// Root Maps: 地図状態の抽象インターフェース
 /// MapToolやその他のクラスで型安全にMapPageStateにアクセスするためのインターフェース
 library;
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import '../core/k_map_controller.dart';
+import '../core/r_map_controller.dart';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
 import '../models/nodes/overlay_image_node.dart';
@@ -36,7 +36,7 @@ abstract class IMapState {
   List<LatLng> closeRing(List<LatLng> points);
 
   /// 地図コントローラー（flutter_map互換ラッパー）
-  KMapController get mapController;
+  RMapController get mapController;
 
   /// StateがWidgetツリーにマウントされているか
   bool get mounted;

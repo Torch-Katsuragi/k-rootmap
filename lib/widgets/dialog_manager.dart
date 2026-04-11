@@ -1,6 +1,6 @@
-// K-MAPS: Dialog Manager
+﻿// Root Maps: Dialog Manager
 // ダイアログとコンバーターを統合管理するマネージャー
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';

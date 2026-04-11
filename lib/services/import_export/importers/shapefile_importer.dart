@@ -1,7 +1,7 @@
-// K-MAPS: Shapefile Importer
+﻿// Root Maps: Shapefile Importer
 // シェープファイルインポートクラス
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import '../../../i18n/strings.g.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;

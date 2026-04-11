@@ -1,4 +1,4 @@
-// K-MAPS: Google Drive認証状態管理
+﻿// Root Maps: Google Drive認証状態管理
 // OAuth認証の状態と認証済みユーザー情報を管理
 
 import 'package:flutter/foundation.dart';

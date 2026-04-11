@@ -1,4 +1,4 @@
-// K-MAPS: Import/Export Dialog Widget (DEPRECATED)
+﻿// Root Maps: Import/Export Dialog Widget (DEPRECATED)
 // ファイルのインポート・エクスポート機能を提供するダイアログ
 //
 // ⚠️ DEPRECATED: このダイアログは非推奨です
@@ -6,7 +6,7 @@
 // - LayerImportExportDialog: レイヤー全体の操作用
 // - FeatureImportExportDialog: 個別フィーチャの操作用
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';

@@ -1,7 +1,7 @@
-// lib/services/geometry_conversion_service.dart
+﻿// lib/services/geometry_conversion_service.dart
 // ジオメトリ変換サービス（ポイント⇔ライン/ポリゴン）
 import 'dart:convert';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/geopackage_node.dart';

@@ -1,6 +1,6 @@
 {
-    "name": "k_maps",
-    "short_name": "k_maps",
+    "name": "K-RootMap",
+    "short_name": "K-RootMap",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",

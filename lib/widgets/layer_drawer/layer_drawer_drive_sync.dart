@@ -1,4 +1,4 @@
-/// K-MAPS: Drive同期関連ミックスイン
+﻿/// Root Maps: Drive同期関連ミックスイン
 /// DriveSyncOperationsへの薄いラッパー
 library;
 

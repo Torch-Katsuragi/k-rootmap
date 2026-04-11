@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart' show immutable;
+﻿import 'package:flutter/foundation.dart' show immutable;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nodes/layer_tree_node.dart';
-import '../core/k_map_controller.dart';
+import '../core/r_map_controller.dart';
 
 part 'ui_state_providers.g.dart';
 
@@ -84,9 +84,9 @@ class FeatureRefreshTrigger extends _$FeatureRefreshTrigger {
 @Riverpod(keepAlive: true)
 class MapControllerHolder extends _$MapControllerHolder {
   @override
-  KMapController? build() => null;
+  RMapController? build() => null;
 
-  void set(KMapController controller) => state = controller;
+  void set(RMapController controller) => state = controller;
 }
 
 @Riverpod(keepAlive: true)

@@ -1,8 +1,8 @@
-// K-MAPS: 画像ノードクラス
+﻿// Root Maps: 画像ノードクラス
 // 位置情報付き画像ファイルに対応するレイヤツリーノード
 
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
 import 'layer_tree_node.dart';

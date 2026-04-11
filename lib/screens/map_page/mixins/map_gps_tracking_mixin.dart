@@ -1,4 +1,4 @@
-// K-MAPS: GPS軌跡抽出Mixin
+﻿// Root Maps: GPS軌跡抽出Mixin
 // GPS軌跡は常時記録されており、このmixinは軌跡抽出ダイアログを開く機能のみ提供
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -1,7 +1,7 @@
-// K-MAPS: キーボードショートカットハンドラー
+﻿// Root Maps: キーボードショートカットハンドラー
 // Deleteキーなどのグローバルキーボードイベントを処理
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';
 import 'package:flutter/services.dart';
@@ -213,7 +213,7 @@ class _KeyboardShortcutWrapperState extends ConsumerState<KeyboardShortcutWrappe
       final physicalKeyId = event.physicalKey.usbHidUsage;
       // 無効な物理キーID（0x1600000000等のIME合成イベント）
       if (physicalKeyId > 0x100000000 || physicalKeyId == 0) {
-        AppLogger.debug('[K-MAPS] IME関連キーボードイベントを無視');
+        AppLogger.debug('[Root Maps] IME関連キーボードイベントを無視');
         return false; // イベントを伝播
       }
     } catch (e) {

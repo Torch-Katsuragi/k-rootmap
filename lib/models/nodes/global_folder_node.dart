@@ -1,4 +1,4 @@
-// K-MAPS: グローバルフォルダノードクラス
+﻿// Root Maps: グローバルフォルダノードクラス
 // どのプロジェクトを開いても表示される共有フォルダ
 // 実体はアプリケーションのDocumentsディレクトリに存在
 // 
@@ -7,7 +7,7 @@
 
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
 import 'geopackage_node.dart';

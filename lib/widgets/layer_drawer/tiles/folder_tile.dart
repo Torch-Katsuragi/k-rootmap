@@ -1,4 +1,4 @@
-/// K-MAPS: フォルダタイルウィジェット
+﻿/// Root Maps: フォルダタイルウィジェット
 library;
 
 import 'dart:io' show Directory, Platform;

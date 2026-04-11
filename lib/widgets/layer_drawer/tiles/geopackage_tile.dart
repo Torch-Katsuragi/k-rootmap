@@ -1,4 +1,4 @@
-/// K-MAPS: GeoPackageタイルウィジェット
+﻿/// Root Maps: GeoPackageタイルウィジェット
 library;
 
 import 'package:flutter/material.dart';

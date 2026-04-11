@@ -1,4 +1,4 @@
-// K-MAPS: レイヤツリー共通ノード基底クラス
+﻿// Root Maps: レイヤツリー共通ノード基底クラス
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
 import 'package:flutter/material.dart';

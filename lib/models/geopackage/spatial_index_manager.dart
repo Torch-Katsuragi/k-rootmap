@@ -1,4 +1,4 @@
-// K-MAPS: 空間インデックス管理クラス
+﻿// Root Maps: 空間インデックス管理クラス
 // R-Tree操作、エンベロープ更新、SpatiaLiteトリガー処理を担当
 import '../../utils/app_logger.dart';
 import 'geopackage_connection.dart';

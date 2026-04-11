@@ -1,4 +1,4 @@
-// K-MAPS: GPS追跡アニメーションオーバーレイ
+﻿// Root Maps: GPS追跡アニメーションオーバーレイ
 // GPS追跡中に表示される回転する光エフェクト
 import 'dart:math';
 import 'package:flutter/material.dart';

@@ -1,10 +1,10 @@
-// K-MAPS: ホーム画面（プロジェクト作成・選択）
+// Root Maps: ホーム画面（プロジェクト作成・選択）
 // プロジェクト新規作成・ローカル/DriveからインポートUI
 import '../i18n/strings.g.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -387,7 +387,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         _navigatedToMapPage = true;
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const KMapsHomePage()),
+          MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
         ).then((_) {
           if (!mounted) return;
           setState(() {
@@ -404,7 +404,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('K-MAPS'),
+        title: const Text('K-RootMap'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // ユーザーガイドボタン
@@ -443,7 +443,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             const Icon(Icons.map, size: 100, color: Colors.blue),
             const SizedBox(height: 32),
             Text(
-              'K-MAPS',
+              'K-RootMap',
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: Colors.blue,

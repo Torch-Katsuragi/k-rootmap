@@ -1,10 +1,10 @@
-/// 背景地図管理サービス
+﻿/// 背景地図管理サービス
 /// 背景地図の選択、切り替え、オフラインキャッシュ機能を提供
 library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import '../i18n/strings.g.dart';
 

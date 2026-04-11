@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "ok": "OK",
     "cancel": "キャンセル",
@@ -29,7 +29,7 @@
     "settings": "設定"
   },
   "home": {
-    "title": "K-MAPS",
+    "title": "Root Maps",
     "subtitle": "GeoPackageベースの地理情報管理・編集アプリケーション",
     "startProject": "プロジェクトを開始",
     "selectProjectFolder": "プロジェクトフォルダを選択して地図編集を開始してください",
@@ -79,7 +79,7 @@
     "feedback": {
       "title": "フィードバック",
       "callToAction": "ご意見・ご要望をお聞かせください",
-      "description": "K-MAPSをより良いアプリにするために、あなたのフィードバックをお待ちしています。\n\n機能の要望やバグ報告など、お気軽にお送りください。開発の参考にさせていただきます。",
+      "description": "Root Mapsをより良いアプリにするために、あなたのフィードバックをお待ちしています。\n\n機能の要望やバグ報告など、お気軽にお送りください。開発の参考にさせていただきます。",
       "openForm": "フィードバックフォームを開く",
       "featureRequest": "機能の要望",
       "featureRequestDesc": "こんな機能があったら便利！というアイデア",
@@ -97,7 +97,7 @@
       "buildLabel": "ビルド $number",
       "packageName": "パッケージ名",
       "overview": "概要",
-      "overviewText": "K-MAPSはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\nGeoPackage形式でのデータ管理、GPS測量・軌跡記録、外部GNSS機器連携、オフライン地図対応などの機能を提供します。",
+      "overviewText": "Root MapsはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\nGeoPackage形式でのデータ管理、GPS測量・軌跡記録、外部GNSS機器連携、オフライン地図対応などの機能を提供します。",
       "licenses": "ライセンス",
       "openSourceLicenses": "オープンソースライセンス",
       "openSourceLicensesDesc": "使用しているパッケージのライセンス一覧"
@@ -946,7 +946,7 @@
     "columnNotFound": "カラム \"$name\" は存在しません"
   },
   "geometryType": {
-    "kMapsFolder": "K-MAPSフォルダにアクセスできません"
+    "rootMapsFolder": "Root Mapsフォルダにアクセスできません"
   },
   "qgisFilter": {
     "emptyExpression": "式が空です",
@@ -956,18 +956,18 @@
     "unclosedQuotes": "引用符が閉じられていません"
   },
   "onboarding": {
-    "welcome": "K-MAPSへようこそ",
+    "welcome": "Root Mapsへようこそ",
     "welcomeDesc": "GeoPackageベースの地理情報管理アプリです。\nはじめに、アプリの利用に必要な設定を行います。",
     "next": "次へ",
     "getStarted": "はじめる",
     "permissionGranted": "許可済み",
     "laterSettings": "後で設定する",
     "storageTitle": "ファイルアクセス",
-    "storageDisclosure": "K-MAPSはGeoPackageファイルの読み書き、地図キャッシュの保存、プロジェクトデータの管理のためにストレージへの完全アクセスが必要です。",
+    "storageDisclosure": "Root MapsはGeoPackageファイルの読み書き、地図キャッシュの保存、プロジェクトデータの管理のためにストレージへの完全アクセスが必要です。",
     "storageButton": "ストレージ権限を許可",
     "storageRequired": "この権限なしではアプリの基本機能を使えません",
     "locationTitle": "位置情報",
-    "locationDisclosure": "K-MAPSは、現在地のマップ表示、GPS測量、GPS軌跡の記録のために位置情報を取得します。\n\n位置情報はデバイス内に保存され、外部サーバーに送信されることはありません。",
+    "locationDisclosure": "Root Mapsは、現在地のマップ表示、GPS測量、GPS軌跡の記録のために位置情報を取得します。\n\n位置情報はデバイス内に保存され、外部サーバーに送信されることはありません。",
     "locationButton": "位置情報を許可する",
     "locationDeniedNote": "GPS機能が利用できません。設定アプリから後で許可できます。",
     "bluetoothTitle": "Bluetooth接続",

@@ -1,4 +1,4 @@
----
+﻿---
 title: Google Drive連携
 tags: [features, google-drive, sync]
 ---
@@ -7,7 +7,7 @@ tags: [features, google-drive, sync]
 
 ## 概要
 
-K-MAPSのプロジェクトをGoogle Driveと同期し、複数デバイス間でのデータ共有やバックアップを実現する機能。
+Root MapsのプロジェクトをGoogle Driveと同期し、複数デバイス間でのデータ共有やバックアップを実現する機能。
 
 ### 基本方針
 
@@ -26,7 +26,7 @@ K-MAPSのプロジェクトをGoogle Driveと同期し、複数デバイス間�
 
 ### 概要
 
-K-MAPSでは、プロジェクト内の任意のフォルダを個別にGoogle Driveと連携できる。
+Root Mapsでは、プロジェクト内の任意のフォルダを個別にGoogle Driveと連携できる。
 これにより、以下のようなユースケースに対応：
 
 - プロジェクト内で一部のフォルダだけを共有
@@ -67,13 +67,13 @@ flowchart TB
 | macOS | × 非対応（Drive Desktopを使用） |
 | Linux | × 非対応 |
 
-PCではGoogle Drive Desktopを使用してフォルダを同期し、K-MAPSからは通常のローカルフォルダとして開く。
+PCではGoogle Drive Desktopを使用してフォルダを同期し、Root Mapsからは通常のローカルフォルダとして開く。
 
 **PC版での動作:**
 - フォルダ追加時に「Driveフォルダ」オプションは表示されない
 - 既存のDrive連携フォルダはアイコンは表示されるが、同期メニューは無効化
 - 同期状態の自動チェックもスキップされる
-- これはGoogle Drive DesktopとK-MAPSが同時に同期すると競合が発生するため
+- これはGoogle Drive DesktopとRoot Mapsが同時に同期すると競合が発生するため
 
 ### QRコード共有
 
@@ -81,7 +81,7 @@ PCではGoogle Drive Desktopを使用してフォルダを同期し、K-MAPSか�
 
 1. オーナーがDriveで共有設定 → URLを取得
 2. URLをQRコード化（任意のQRコード生成サービス使用）
-3. 他ユーザーがK-MAPSでQRスキャン → 自動でクローン
+3. 他ユーザーがRoot MapsでQRスキャン → 自動でクローン
 
 ### コスト
 
@@ -103,7 +103,7 @@ PCではGoogle Drive Desktopを使用してフォルダを同期し、K-MAPSか�
 ```mermaid
 sequenceDiagram
     participant User
-    participant App as K-MAPS
+    participant App as Root Maps
     participant Google as Google OAuth
     participant Drive as Drive API
     
@@ -533,7 +533,7 @@ Drive APIを使用してリビジョンを管理：
   
   "drive": {
     "folderId": "1abc...xyz",
-    "folderName": "K-MAPS Projects/My Survey",
+    "folderName": "Root Maps Projects/My Survey",
     "lastSync": "2025-01-15T12:00:00Z",
     "autoSync": false
   },
@@ -659,7 +659,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant App as K-MAPS
+    participant App as Root Maps
     participant Auth as OAuth
     participant Sync as SyncEngine
     participant Drive as Google Drive
@@ -720,7 +720,7 @@ flowchart LR
     Owner --> |2. 共有設定| Share[リンクを知っている全員<br/>編集者権限]
     Owner --> |3. URL共有| URL[drive.google.com/...]
     URL --> |4. URLを受け取る| User[他のユーザー]
-    User --> |5. K-MAPSで開く| App[K-MAPS]
+    User --> |5. Root Mapsで開く| App[Root Maps]
     App --> |6. Googleログイン| Auth[OAuth認証]
     Auth --> |7. フォルダIDでアクセス| Drive
 ```
@@ -731,7 +731,7 @@ flowchart LR
 https://drive.google.com/drive/folders/{folderId}?usp=sharing
 ```
 
-K-MAPSはURLからフォルダIDを抽出し、Drive APIでアクセス。
+Root MapsはURLからフォルダIDを抽出し、Drive APIでアクセス。
 
 ### 共有設定（オーナー側）
 
@@ -742,7 +742,7 @@ K-MAPSはURLからフォルダIDを抽出し、Drive APIでアクセス。
 
 ### アクセス（共有された側）
 
-1. K-MAPSで「Open from URL」
+1. Root Mapsで「Open from URL」
 2. 共有URLを貼り付け
 3. Googleアカウントでログイン（初回のみ）
 4. プロジェクトがローカルにPull（クローン）される

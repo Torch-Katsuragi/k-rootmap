@@ -1,4 +1,4 @@
-/// K-MAPS: メタデータテーブル表示ダイアログ
+﻿/// Root Maps: メタデータテーブル表示ダイアログ
 library;
 
 import 'dart:io';

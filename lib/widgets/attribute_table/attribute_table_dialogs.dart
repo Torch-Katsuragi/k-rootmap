@@ -1,4 +1,4 @@
-// K-MAPS: 属性テーブル用ダイアログ
+﻿// Root Maps: 属性テーブル用ダイアログ
 // カラム追加、フィルタ複製、フィールド計算機、カラム操作など
 
 import 'package:flutter/material.dart';

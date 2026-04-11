@@ -1,7 +1,7 @@
-// lib/models/gps_track.dart
+﻿// lib/models/gps_track.dart
 // GPS追跡軌跡データ管理クラス
 import 'dart:math' as math;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 
 /// GPS追跡の1つの位置情報ポイント

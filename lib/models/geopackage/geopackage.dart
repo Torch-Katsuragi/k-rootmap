@@ -1,4 +1,4 @@
-// K-MAPS: GeoPackage モジュール バレルエクスポート
+﻿// Root Maps: GeoPackage モジュール バレルエクスポート
 // 外部からの簡易インポート用
 
 export 'geopackage_file.dart';

@@ -1,4 +1,4 @@
-/// flutter_map互換のMapControllerラッパー
+﻿/// flutter_map互換のMapControllerラッパー
 ///
 /// maplibreのMapControllerを内包し、既存コードが使う
 /// flutter_map風のAPIを提供する。座標はLatLng(latlong2)を維持。
@@ -33,7 +33,7 @@ class KMapCamera {
 }
 
 /// maplibreのMapControllerをラップし、flutter_map互換APIを提供
-class KMapController {
+class RMapController {
   ml.MapController? _controller;
   ml.StyleController? _styleController;
 

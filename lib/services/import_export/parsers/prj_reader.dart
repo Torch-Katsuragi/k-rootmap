@@ -1,7 +1,7 @@
-// K-MAPS: PRJ Reader
+﻿// Root Maps: PRJ Reader
 // PRJファイル（座標系定義）の読み込みクラス
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import '../../../utils/coordinate_converter.dart';
 import '../coordinate_system_manager.dart';
 

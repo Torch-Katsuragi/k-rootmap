@@ -1,4 +1,4 @@
-/// K-MAPS: 写真タイルウィジェット
+﻿/// Root Maps: 写真タイルウィジェット
 library;
 
 import 'dart:io';

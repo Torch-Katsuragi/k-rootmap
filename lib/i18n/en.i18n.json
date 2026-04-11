@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "ok": "OK",
     "cancel": "Cancel",
@@ -29,7 +29,7 @@
     "settings": "Settings"
   },
   "home": {
-    "title": "K-MAPS",
+    "title": "Root Maps",
     "subtitle": "GeoPackage-based geographic information management and editing application",
     "startProject": "Start Project",
     "selectProjectFolder": "Select a project folder to start editing maps",
@@ -79,7 +79,7 @@
     "feedback": {
       "title": "Feedback",
       "callToAction": "We'd love to hear from you",
-      "description": "Help us make K-MAPS a better app by sharing your feedback.\n\nFeel free to send feature requests, bug reports, or anything else.\nYour input helps guide our development.",
+      "description": "Help us make Root Maps a better app by sharing your feedback.\n\nFeel free to send feature requests, bug reports, or anything else.\nYour input helps guide our development.",
       "openForm": "Open Feedback Form",
       "featureRequest": "Feature Request",
       "featureRequestDesc": "Ideas for new features that would be useful",
@@ -97,7 +97,7 @@
       "buildLabel": "Build $number",
       "packageName": "Package Name",
       "overview": "Overview",
-      "overviewText": "K-MAPS is a cross-platform map application built with Flutter.\n\nIt provides features such as GeoPackage-based data management, GPS surveying and track recording, external GNSS device connectivity, and offline map support.",
+      "overviewText": "Root Maps is a cross-platform map application built with Flutter.\n\nIt provides features such as GeoPackage-based data management, GPS surveying and track recording, external GNSS device connectivity, and offline map support.",
       "licenses": "Licenses",
       "openSourceLicenses": "Open Source Licenses",
       "openSourceLicensesDesc": "List of licenses for packages used"
@@ -946,7 +946,7 @@
     "columnNotFound": "Column \"$name\" does not exist"
   },
   "geometryType": {
-    "kMapsFolder": "Cannot access K-MAPS folder"
+    "rootMapsFolder": "Cannot access Root Maps folder"
   },
   "qgisFilter": {
     "emptyExpression": "Expression is empty",
@@ -956,18 +956,18 @@
     "unclosedQuotes": "Unclosed quotes"
   },
   "onboarding": {
-    "welcome": "Welcome to K-MAPS",
+    "welcome": "Welcome to Root Maps",
     "welcomeDesc": "A GeoPackage-based geographic information management app.\nLet's set up the required permissions to get started.",
     "next": "Next",
     "getStarted": "Get Started",
     "permissionGranted": "Granted",
     "laterSettings": "Set up later",
     "storageTitle": "File Access",
-    "storageDisclosure": "K-MAPS requires full storage access to read and write GeoPackage files, save map cache, and manage project data.",
+    "storageDisclosure": "Root Maps requires full storage access to read and write GeoPackage files, save map cache, and manage project data.",
     "storageButton": "Allow Storage Access",
     "storageRequired": "Basic app features are unavailable without this permission",
     "locationTitle": "Location",
-    "locationDisclosure": "K-MAPS collects location data to display your current position on the map, perform GPS surveys, and record GPS tracks.\n\nLocation data is stored on your device and is never sent to external servers.",
+    "locationDisclosure": "Root Maps collects location data to display your current position on the map, perform GPS surveys, and record GPS tracks.\n\nLocation data is stored on your device and is never sent to external servers.",
     "locationButton": "Allow Location Access",
     "locationDeniedNote": "GPS features will be unavailable. You can enable it later in Settings.",
     "bluetoothTitle": "Bluetooth",

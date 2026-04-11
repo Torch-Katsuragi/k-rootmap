@@ -1,4 +1,4 @@
-// K-MAPS: GPS測量Mixin
+﻿// Root Maps: GPS測量Mixin
 // GPS測量（単一点記録、長押し測量）関連の機能を提供
 import 'dart:async';
 import 'package:flutter/material.dart';

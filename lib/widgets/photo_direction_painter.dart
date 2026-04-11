@@ -1,4 +1,4 @@
-// K-MAPS: 写真撮影方向インジケーター
+﻿// Root Maps: 写真撮影方向インジケーター
 // 写真マーカーの円外側に方向を示すくちばし状の三角形を描画
 
 import 'package:flutter/material.dart';

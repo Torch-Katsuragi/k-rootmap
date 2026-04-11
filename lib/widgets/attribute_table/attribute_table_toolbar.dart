@@ -1,4 +1,4 @@
-// K-MAPS: 属性テーブルツールバー
+﻿// Root Maps: 属性テーブルツールバー
 // 座標系選択、各種操作ボタンを提供
 
 import 'package:flutter/material.dart';

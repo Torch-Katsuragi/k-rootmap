@@ -1,8 +1,8 @@
-// K-MAPS: Binary Utilities
+﻿// Root Maps: Binary Utilities
 // バイト変換ヘルパー（Shapefile等のバイナリファイル処理用）
 import 'dart:typed_data';
 import 'package:charset/charset.dart' as charset;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 
 /// バイナリ変換ユーティリティクラス
 class BinaryUtils {

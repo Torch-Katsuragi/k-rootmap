@@ -1,4 +1,4 @@
-// K-MAPS: Drive連携フォルダノードクラス
+﻿// Root Maps: Drive連携フォルダノードクラス
 // Google Driveと同期するフォルダを表すレイヤツリーノード
 
 import 'dart:io';

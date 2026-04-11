@@ -1,6 +1,6 @@
-// K-MAPS: バックグラウンド保存管理クラス（シングルトン）
+﻿// Root Maps: バックグラウンド保存管理クラス（シングルトン）
 // 複数のGeoPackageFileインスタンスのバックグラウンド保存を一元管理
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'dart:async';
 import '../models/geopackage/geopackage_file.dart';
 

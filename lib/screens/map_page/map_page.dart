@@ -1,4 +1,4 @@
-// K-MAPS: Map and edit screen
+// Root Maps: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
 import 'dart:io';
@@ -25,7 +25,7 @@ import '../../widgets/attribute_table/attribute_table_widget.dart';
 import '../../widgets/compass_fan_painter.dart';
 import '../../widgets/feature_detail_panel.dart';
 import '../../widgets/left_bottom_fab.dart';
-import '../../widgets/map/k_map_widget.dart';
+import '../../widgets/map/r_map_widget.dart';
 import '../../widgets/map_toolbar.dart';
 import '../../widgets/map_appbar_actions.dart';
 import '../../utils/app_logger.dart';
@@ -74,16 +74,16 @@ import 'mixins/index.dart';
 import 'widgets/index.dart';
 
 /// Map and edit screen (main structure)
-class KMapsHomePage extends ConsumerStatefulWidget {
-  const KMapsHomePage({super.key});
+class RootMapsHomePage extends ConsumerStatefulWidget {
+  const RootMapsHomePage({super.key});
   @override
-  ConsumerState<KMapsHomePage> createState() => _KMapsHomePageState();
+  ConsumerState<RootMapsHomePage> createState() => _RootMapsHomePageState();
 }
 
 /// Tool types
 enum ToolType { pen, eraser, gps }
 
-class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
+class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     with
         TickerProviderStateMixin,
         MapPageStateBase,
@@ -287,7 +287,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
   // =============================================
 
   Widget _buildAppBarTitle(LayerTreeNode? rootNode) {
-    return Text(p.basename(ref.watch(projectRootDirProvider) ?? 'K-MAPS'));
+    return Text(p.basename(ref.watch(projectRootDirProvider) ?? 'K-RootMap'));
   }
 
   // =============================================
@@ -460,7 +460,7 @@ class _KMapsHomePageState extends ConsumerState<KMapsHomePage>
     final drawingState = GlobalDrawingState.instance;
     final currentTool = ref.read(currentToolProvider);
 
-    return KMapWidget(
+    return RMapWidget(
       options: ml.MapOptions(
         initStyle: basemapStyleUri!,
         initCenter: defaultCenter.toGeographic(),

@@ -1,4 +1,4 @@
-// K-MAPS: 属性フォームビュー
+﻿// Root Maps: 属性フォームビュー
 // 個別フィーチャの属性をフォーム形式で表示・編集
 
 import 'package:flutter/material.dart';

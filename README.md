@@ -1,4 +1,4 @@
-# K-MAPS
+﻿# Root Maps
 
 GISアプリケーション（Flutter製）
 
@@ -82,5 +82,5 @@ GISアプリケーション（Flutter製）
 
 ## リンク
 
-- **プロジェクトページ**: https://github.com/Torch-Katsuragi/k_maps
+- **プロジェクトページ**: https://github.com/Torch-Katsuragi/root_maps
 - **プライバシーポリシー**: [PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)

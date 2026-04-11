@@ -1,4 +1,4 @@
-// K-MAPS: 統合EPSG座標系レジストリ
+﻿// Root Maps: 統合EPSG座標系レジストリ
 // 全プロジェクトのSingle Source of Truth
 // JGD2011/JGD2000平面直角座標系、UTM、WGS84を統合管理
 

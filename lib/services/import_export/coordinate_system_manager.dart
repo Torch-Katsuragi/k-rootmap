@@ -1,6 +1,6 @@
-// K-MAPS: Coordinate System Manager
+﻿// Root Maps: Coordinate System Manager
 // 高度な座標系管理クラス（proj4dartとEPSGデータベースを活用）
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:proj4dart/proj4dart.dart';
 import '../../utils/coordinate_converter.dart';
 

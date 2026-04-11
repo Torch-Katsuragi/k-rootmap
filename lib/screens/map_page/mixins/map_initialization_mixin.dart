@@ -1,4 +1,4 @@
-// K-MAPS: 初期化処理Mixin
+﻿// Root Maps: 初期化処理Mixin
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

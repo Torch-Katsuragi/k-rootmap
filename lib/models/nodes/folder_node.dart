@@ -1,8 +1,8 @@
-// K-MAPS: フォルダノードクラス
+﻿// Root Maps: フォルダノードクラス
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';

@@ -1,4 +1,4 @@
----
+﻿---
 title: Google Drive連携セットアップ
 tags: [technical, google-drive, setup]
 ---
@@ -20,7 +20,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 
 1. [Google Cloud Console](https://console.cloud.google.com/) にアクセス
 2. 「プロジェクトを選択」→「新しいプロジェクト」
-3. プロジェクト名: `k-maps`（任意）
+3. プロジェクト名: `Root Maps`（任意）
 4. 「作成」をクリック
 
 ### 1.2 Drive API有効化
@@ -34,7 +34,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 1. 左メニュー「APIとサービス」→「OAuth同意画面」
 2. ユーザータイプ: 「外部」を選択（テスト段階）
 3. 必須項目を入力：
-   - アプリ名: `K-MAPS`
+   - アプリ名: `Root Maps`
    - ユーザーサポートメール: 自分のメールアドレス（またはGoogle Group）
    - デベロッパーの連絡先: 自分のメールアドレス
 4. スコープ設定で以下を追加：
@@ -72,7 +72,7 @@ Google Drive連携機能を有効にするためのセットアップ手順。
 keytool -list -v -keystore $env:USERPROFILE\.android\debug.keystore -alias androiddebugkey -storepass android -keypass android | Select-String "SHA1"
 
 # リリース用SHA-1（key.propertiesのパスを参照）
-keytool -list -v -keystore C:\Users\kitay\k-maps-release.keystore -alias k-maps
+keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root Maps
 ```
 
 #### デバッグ用クライアントID作成
@@ -80,8 +80,8 @@ keytool -list -v -keystore C:\Users\kitay\k-maps-release.keystore -alias k-maps
 1. 左メニュー「APIとサービス」→「認証情報」
 2. 「認証情報を作成」→「OAuthクライアントID」
 3. アプリケーションの種類: 「Android」
-4. 名前: `K-MAPS Android (Debug)`
-5. パッケージ名: `com.k_root.k_maps`
+4. 名前: `Root Maps Android (Debug)`
+5. パッケージ名: `com.k_root.root_maps`
 6. SHA-1フィンガープリント: デバッグ用SHA-1を入力
 7. 「作成」をクリック
 
@@ -89,8 +89,8 @@ keytool -list -v -keystore C:\Users\kitay\k-maps-release.keystore -alias k-maps
 
 1. 「認証情報を作成」→「OAuthクライアントID」
 2. アプリケーションの種類: 「Android」
-3. 名前: `K-MAPS Android (Release)`
-4. パッケージ名: `com.k_root.k_maps`
+3. 名前: `Root Maps Android (Release)`
+4. パッケージ名: `com.k_root.root_maps`
 5. SHA-1フィンガープリント: リリース用SHA-1を入力
 6. 「作成」をクリック
 
@@ -102,7 +102,7 @@ google_sign_inパッケージはWebクライアントIDも必要：
 
 1. 「認証情報を作成」→「OAuthクライアントID」
 2. アプリケーションの種類: 「ウェブ アプリケーション」
-3. 名前: `K-MAPS Web`
+3. 名前: `Root Maps Web`
 4. 「作成」をクリック
 5. **クライアントIDをコピー**
 
@@ -152,7 +152,7 @@ $env:GOOGLE_WEB_CLIENT_ID = "your-web-client-id.apps.googleusercontent.com"
 
 - **最もよくある原因**: デバッグ/リリース両方のAndroidクライアントIDが登録されていない
 - SHA-1フィンガープリントが正しいか確認（`keytool`で再取得して比較）
-- パッケージ名が`com.k_root.k_maps`と一致しているか確認
+- パッケージ名が`com.k_root.root_maps`と一致しているか確認
 - Google Cloud Consoleで両方のクライアントIDが作成されているか確認
 
 ### 「access_denied」が表示される

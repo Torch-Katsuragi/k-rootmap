@@ -1,8 +1,8 @@
-// K-MAPS: フィーチャノードクラス
+﻿// Root Maps: フィーチャノードクラス
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
 // turf_dartのFeatureオブジェクトをメインデータとして使用
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import 'dart:async';
@@ -168,7 +168,7 @@ abstract class FeatureNode extends LayerTreeNode {
   Map<String, dynamic>? get metadata {
     if (_isDisposed || parent.isDisposed) return null;
     if (_metadataCacheValid) return _cachedMetadata;
-    final value = turfFeature.properties?['kmaps_metadata'];
+    final value = turfFeature.properties?['rmaps_metadata'];
     if (value == null) {
       _cachedMetadata = null;
     } else if (value is Map<String, dynamic>) {
@@ -190,7 +190,7 @@ abstract class FeatureNode extends LayerTreeNode {
   /// メタデータのsetter（親のMapを更新）
   set metadata(Map<String, dynamic>? value) {
     if (_isDisposed) return;
-    parent.updateFeatureAttribute(_rowId, 'kmaps_metadata', value);
+    parent.updateFeatureAttribute(_rowId, 'rmaps_metadata', value);
     _markDirty();
   }
 
@@ -643,8 +643,8 @@ class PointFeatureNode extends FeatureNode {
     if (columnSet.contains('description')) {
       properties['description'] = description;
     }
-    if (columnSet.contains('kmaps_metadata') && metadata != null) {
-      properties['kmaps_metadata'] = jsonEncode(metadata);
+    if (columnSet.contains('rmaps_metadata') && metadata != null) {
+      properties['rmaps_metadata'] = jsonEncode(metadata);
     }
 
     // DBへの保存を実行してrowIdを取得
@@ -706,7 +706,7 @@ class PointFeatureNode extends FeatureNode {
           'id': _rowId,
           'name': name,
           'description': description,
-          'kmaps_metadata': metadata,
+          'rmaps_metadata': metadata,
         },
       );
       parent.addFeatureToMap(_rowId, updatedFeature);
@@ -871,8 +871,8 @@ class LineFeatureNode extends FeatureNode {
     if (columnSet.contains('description')) {
       properties['description'] = description;
     }
-    if (columnSet.contains('kmaps_metadata') && metadata != null) {
-      properties['kmaps_metadata'] = jsonEncode(metadata);
+    if (columnSet.contains('rmaps_metadata') && metadata != null) {
+      properties['rmaps_metadata'] = jsonEncode(metadata);
     }
 
     // DBへの保存を実行してrowIdを取得
@@ -934,7 +934,7 @@ class LineFeatureNode extends FeatureNode {
           'id': _rowId,
           'name': name,
           'description': description,
-          'kmaps_metadata': metadata,
+          'rmaps_metadata': metadata,
         },
       );
       parent.addFeatureToMap(_rowId, updatedFeature);
@@ -1117,8 +1117,8 @@ class PolygonFeatureNode extends FeatureNode {
     if (columnSet.contains('description')) {
       attributes['description'] = description;
     }
-    if (columnSet.contains('kmaps_metadata') && metadata != null) {
-      attributes['kmaps_metadata'] = jsonEncode(metadata);
+    if (columnSet.contains('rmaps_metadata') && metadata != null) {
+      attributes['rmaps_metadata'] = jsonEncode(metadata);
     }
 
     // 新しい辞書ベースAPIを使用してDBへの保存を実行
@@ -1180,7 +1180,7 @@ class PolygonFeatureNode extends FeatureNode {
           'id': _rowId,
           'name': name,
           'description': description,
-          'kmaps_metadata': metadata,
+          'rmaps_metadata': metadata,
         },
       );
       parent.addFeatureToMap(_rowId, updatedFeature);

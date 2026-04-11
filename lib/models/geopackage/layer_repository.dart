@@ -1,4 +1,4 @@
-// K-MAPS: レイヤリポジトリクラス
+﻿// Root Maps: レイヤリポジトリクラス
 // レイヤの作成・削除・リネーム・一覧取得を担当
 import 'package:sqflite/sqflite.dart';
 import '../../utils/app_logger.dart';

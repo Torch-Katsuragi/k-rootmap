@@ -1,7 +1,7 @@
-// K-MAPS: Import/Export Service (Facade)
+﻿// Root Maps: Import/Export Service (Facade)
 // インポート/エクスポート処理のファサード（軽量なエントリポイント）
 import 'package:path/path.dart' as p;
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/geopackage_node.dart';
 import '../../models/nodes/layer_node.dart';

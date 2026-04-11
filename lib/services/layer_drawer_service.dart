@@ -1,4 +1,4 @@
-/// K-MAPS: LayerDrawer 用ビジネスロジック Service
+﻿/// Root Maps: LayerDrawer 用ビジネスロジック Service
 /// フォルダ・GeoPackage の作成/リネーム/Driveクローンを UI 非依存で提供
 library;
 

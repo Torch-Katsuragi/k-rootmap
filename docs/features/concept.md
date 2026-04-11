@@ -1,13 +1,13 @@
----
-title: K-MAPS コンセプト
+﻿---
+title: Root Maps コンセプト
 tags: [concept, overview]
 ---
 
-# K-MAPS構想（Fresco風UI）
+# Root Maps構想（Fresco風UI）
 
 ## コンセプト
 
-「お絵描きアプリのような直感的な操作性で、誰でも気軽にGeoPackageデータを編集・作成できるモバイルアプリ K-MAPS」
+「お絵描きアプリのような直感的な操作性で、誰でも気軽にGeoPackageデータを編集・作成できるモバイルアプリ Root Maps」
 
 ## ターゲットユーザー
 

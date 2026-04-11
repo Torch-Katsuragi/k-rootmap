@@ -1,4 +1,4 @@
-// K-MAPS: 初回起動オンボーディング画面
+﻿// Root Maps: 初回起動オンボーディング画面
 // 権限設定を順序立てて案内するフルスクリーンUI
 // Google Play Prominent Disclosure準拠
 import 'dart:io' show Platform;

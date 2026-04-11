@@ -1,4 +1,4 @@
-// K-MAPS: 描画確定Mixin
+﻿// Root Maps: 描画確定Mixin
 // ペンツールでの描画確定と追記モード関連の機能を提供
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

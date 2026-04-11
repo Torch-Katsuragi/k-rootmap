@@ -1,11 +1,11 @@
-/// K-MAPS: レイヤ構造Drawerウィジェット（メインファイル）
+﻿/// Root Maps: レイヤ構造Drawerウィジェット（メインファイル）
 /// プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示し、
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
 
 import 'dart:async';
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;

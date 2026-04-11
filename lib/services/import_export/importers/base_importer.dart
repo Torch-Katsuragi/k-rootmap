@@ -1,4 +1,4 @@
-// K-MAPS: Base Importer
+﻿// Root Maps: Base Importer
 // インポーターの抽象基底クラス
 import '../import_export_models.dart';
 import '../../../models/nodes/geopackage_node.dart';

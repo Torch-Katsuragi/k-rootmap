@@ -1,13 +1,13 @@
-// BackgroundSaveManagerとGeoPackageFileの統合テスト
+﻿// BackgroundSaveManagerとGeoPackageFileの統合テスト
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:k_maps/models/geopackage/geopackage_file.dart';
-import 'package:k_maps/models/geometry_type.dart';
+import 'package:root_maps/models/geopackage/geopackage_file.dart';
+import 'package:root_maps/models/geometry_type.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:k_maps/providers/app_container.dart';
-import 'package:k_maps/providers/project_providers.dart';
-import 'package:k_maps/utils/background_save_manager.dart';
+import 'package:root_maps/providers/app_container.dart';
+import 'package:root_maps/providers/project_providers.dart';
+import 'package:root_maps/utils/background_save_manager.dart';
 
 void main() {
   group('BackgroundSaveManager Tests', () {

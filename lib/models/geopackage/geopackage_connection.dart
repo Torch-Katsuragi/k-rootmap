@@ -1,4 +1,4 @@
-// K-MAPS: GeoPackage DB接続管理クラス
+﻿// Root Maps: GeoPackage DB接続管理クラス
 // DB接続の初期化、クローズ、バリデーションを担当
 import 'dart:async';
 import 'dart:io';
@@ -234,7 +234,7 @@ class GeoPackageConnection {
 
       if (missingTables.isNotEmpty) {
         AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables');
-        AppLogger.debug('[GeoPackageConnection] ⚠️ これはK-MAPS標準形式ではない可能性があります。');
+        AppLogger.debug('[GeoPackageConnection] ⚠️ これはRoot Maps標準形式ではない可能性があります。');
         return;
       }
 

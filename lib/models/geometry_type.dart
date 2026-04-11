@@ -1,4 +1,4 @@
-// K-MAPS: ジオメトリタイプenumクラス
+﻿// Root Maps: ジオメトリタイプenumクラス
 // 文字列リテラルの代わりに型安全な定数として使用
 
 /// OGC Simple Features仕様に基づくジオメトリタイプ

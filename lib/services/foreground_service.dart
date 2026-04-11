@@ -1,9 +1,9 @@
-// K-MAPS: フォアグラウンドサービス管理クラス
+// Root Maps: フォアグラウンドサービス管理クラス
 // Android: アプリ起動時から常時稼働し、1秒間隔で位置情報をメインisolateに送信
 // InternalGpsLocationStore の delegatedモード のバックエンドとして機能
 import 'dart:async';
 import 'dart:ui';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -42,7 +42,7 @@ class ForegroundServiceManager {
 
         // 通知設定
         notificationChannelId: 'k_maps_foreground_channel',
-        initialNotificationTitle: 'K-MAPS GPS取得中',
+        initialNotificationTitle: 'K-RootMap GPS取得中',
         initialNotificationContent: 'GPS位置情報を取得しています...',
         foregroundServiceNotificationId: 888,
       ),
@@ -186,7 +186,7 @@ void onStart(ServiceInstance service) async {
                     "\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
               }
               service.setForegroundNotificationInfo(
-                title: "K-MAPS GPS取得中",
+                title: "K-RootMap GPS取得中",
                 content: notificationContent,
               );
             } catch (_) {

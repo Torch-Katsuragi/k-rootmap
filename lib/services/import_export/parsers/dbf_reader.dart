@@ -1,8 +1,8 @@
-// K-MAPS: DBF Reader
+﻿// Root Maps: DBF Reader
 // DBFファイル（dBASE III）の読み込みクラス
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:charset_converter/charset_converter.dart';
 
 /// DBFファイルを読み込んで属性データを取得するクラス

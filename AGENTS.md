@@ -1,4 +1,4 @@
-# AGENTS.md
+﻿# AGENTS.md
 
 ## 会話ルール
 
@@ -7,7 +7,7 @@
 
 ## プロジェクト概要
 
-Flutter製の地図アプリ（k_maps）。Windows/Android対応。
+Flutter製の地図アプリ（root_maps）。Windows/Android対応。
 
 ## 開発フロー
 

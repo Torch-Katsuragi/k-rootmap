@@ -1,9 +1,9 @@
-// K-MAPS: レイヤノードクラス
+﻿// Root Maps: レイヤノードクラス
 // GeoPackage内のレイヤに対応するレイヤツリーノード
 // turf_dartのFeatureCollectionオブジェクトをメインデータとして使用
 
 import 'dart:async';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import 'layer_tree_node.dart';

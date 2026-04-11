@@ -1,4 +1,4 @@
-// K-MAPS: EXIF解析ユーティリティ
+﻿// Root Maps: EXIF解析ユーティリティ
 // 画像ファイルからGPS座標やメタデータを抽出する共通処理
 // ImageNodeとGlobalImageNodeで使用
 

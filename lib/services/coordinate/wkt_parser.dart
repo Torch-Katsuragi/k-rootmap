@@ -1,4 +1,4 @@
-// K-MAPS: WKT座標系解析クラス
+﻿// Root Maps: WKT座標系解析クラス
 // WKT文字列からEPSGコードとProj4定義を解析
 // Shapefileの.prjファイル読み込み等で使用
 

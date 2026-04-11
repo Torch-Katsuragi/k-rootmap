@@ -1,4 +1,4 @@
----
+﻿---
 tags: [technical, ui, layer-tree]
 ---
 
@@ -6,7 +6,7 @@ tags: [technical, ui, layer-tree]
 
 ## 概要
 
-k_mapsのレイヤツリーは `LayerTreeNode` を基底クラスとした階層構造で、ファイルシステムと同期している。UIを正しく更新するには `updateChildren()` メソッドを適切に呼び出す必要がある。
+root_mapsのレイヤツリーは `LayerTreeNode` を基底クラスとした階層構造で、ファイルシステムと同期している。UIを正しく更新するには `updateChildren()` メソッドを適切に呼び出す必要がある。
 
 ## ノード階層
 

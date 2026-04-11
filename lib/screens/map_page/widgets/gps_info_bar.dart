@@ -1,4 +1,4 @@
-// K-MAPS: GPS情報バーウィジェット
+﻿// Root Maps: GPS情報バーウィジェット
 // AppBar下部に表示するGPS情報バー
 // GPS待機タイマーを内部管理し、MapPage全体のsetStateを回避
 import 'dart:async';

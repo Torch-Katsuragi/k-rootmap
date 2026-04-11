@@ -1,8 +1,8 @@
-// K-MAPS: GeoJSON Exporter
+﻿// Root Maps: GeoJSON Exporter
 // GeoJSONエクスポートクラス（turfパッケージ活用版）
 import 'dart:convert';
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import '../import_export_models.dart';

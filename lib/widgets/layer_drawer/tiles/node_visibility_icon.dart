@@ -1,4 +1,4 @@
-/// K-MAPS: ノード可視性トグルアイコン
+﻿/// Root Maps: ノード可視性トグルアイコン
 library;
 
 import 'package:flutter/material.dart';

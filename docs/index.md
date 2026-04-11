@@ -1,11 +1,11 @@
----
-title: K-MAPS ドキュメント
+﻿---
+title: Root Maps ドキュメント
 tags: [index, navigation]
 ---
 
-# K-MAPS ドキュメント
+# Root Maps ドキュメント
 
-このディレクトリには、K-MAPSの機能設計と技術資料が格納されています。
+このディレクトリには、Root Mapsの機能設計と技術資料が格納されています。
 
 ---
 

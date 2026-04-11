@@ -1,4 +1,4 @@
-// K-MAPS: GeoPackage スキーマ管理クラス
+﻿// Root Maps: GeoPackage スキーマ管理クラス
 // PRIMARY KEY検出、カラム追加・取得などのスキーマ操作を担当
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
@@ -24,8 +24,8 @@ class GeoPackageSchema {
 
   /// PRIMARY KEYカラム名を動的に取得（キャッシュ機能付き）
   /// 
-  /// K-MAPS標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
-  /// 旧K-MAPS形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
+  /// Root Maps標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
+  /// 旧Root Maps形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
   /// PRIMARY KEYがない外部ファイル: fid を自動追加、または rowid フォールバック
   Future<String> getPrimaryKeyColumn(String tableName) async {
     // キャッシュをチェック
@@ -52,7 +52,7 @@ class GeoPackageSchema {
     if (primaryKeyColumn != null) {
       if (primaryKeyColumn != 'fid') {
         if (primaryKeyColumn == 'id') {
-          AppLogger.debug('[GeoPackageSchema] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のK-MAPS標準は "fid"）');
+          AppLogger.debug('[GeoPackageSchema] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のRoot Maps標準は "fid"）');
         } else {
           AppLogger.debug('[GeoPackageSchema] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用');
         }

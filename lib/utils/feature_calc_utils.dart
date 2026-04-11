@@ -1,4 +1,4 @@
-// K-MAPS: フィーチャ計算ユーティリティ
+﻿// Root Maps: フィーチャ計算ユーティリティ
 // 点・線・面の重心、距離、長さ、面積、最近傍feature取得など
 //
 // 本ファイルの関数は全て静的関数として利用可能
@@ -6,7 +6,7 @@
 //
 // 依存: latlong2, turf
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart';
 import 'dart:math' as math;

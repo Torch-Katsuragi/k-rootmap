@@ -1,4 +1,4 @@
-// K-MAPS: GPS測量ボタンウィジェット
+﻿// Root Maps: GPS測量ボタンウィジェット
 // GPS測量と軌跡抽出のためのボタン群
 import 'package:flutter/material.dart';
 

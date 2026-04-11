@@ -1,7 +1,7 @@
-// lib/tools/gps_tool.dart
+﻿// lib/tools/gps_tool.dart
 // GPS関連機能を扱うツール（GPS測量機能対応）
 import 'dart:async';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

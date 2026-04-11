@@ -1,4 +1,4 @@
----
+﻿---
 title: UI/UXの方向性
 tags: [features, ui, ux, design]
 ---
@@ -35,7 +35,7 @@ tags: [features, ui, ux, design]
 
 ## 関連ドキュメント
 
-- [[concept]] - K-MAPSコンセプト
+- [[concept]] - Root Mapsコンセプト
 - [[drawing-editing]] - 描画・編集機能
 - [[layer-management]] - レイヤー管理機能
 

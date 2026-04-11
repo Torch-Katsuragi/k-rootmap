@@ -1,4 +1,4 @@
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,7 +54,7 @@ void main() async {
 
   runApp(
     TranslationProvider(
-      child: const ProviderScope(child: KMapsApp()),
+      child: const ProviderScope(child: RootMapsApp()),
     ),
   );
 }
@@ -95,7 +95,7 @@ void _setupErrorHandlers() {
         (errorString.contains('KeyRepeatEvent') &&
             errorString.contains('physical key is not pressed'))) {
       if (kDebugMode) {
-        AppLogger.debug('[K-MAPS] IME関連キーイベント不整合を無視');
+        AppLogger.debug('[Root Maps] IME関連キーイベント不整合を無視');
       }
       return;
     }
@@ -122,14 +122,14 @@ void _setupDebugPrintFilter() {
   };
 }
 
-class KMapsApp extends ConsumerStatefulWidget {
-  const KMapsApp({super.key});
+class RootMapsApp extends ConsumerStatefulWidget {
+  const RootMapsApp({super.key});
 
   @override
-  ConsumerState<KMapsApp> createState() => _KMapsAppState();
+  ConsumerState<RootMapsApp> createState() => _RootMapsAppState();
 }
 
-class _KMapsAppState extends ConsumerState<KMapsApp>
+class _RootMapsAppState extends ConsumerState<RootMapsApp>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -164,17 +164,17 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await ref.read(gpsManagerServiceProvider).initialize();
-        AppLogger.debug('[K-MAPS] GPS管理サービス初期化完了（待機状態）');
+        AppLogger.debug('[Root Maps] GPS管理サービス初期化完了（待機状態）');
       } catch (e) {
-        AppLogger.debug('[K-MAPS] GPS管理サービス初期化エラー: $e');
+        AppLogger.debug('[Root Maps] GPS管理サービス初期化エラー: $e');
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await ref.read(baseMapServiceProvider).initialize();
-        AppLogger.debug('[K-MAPS] 背景地図サービス初期化完了');
+        AppLogger.debug('[Root Maps] 背景地図サービス初期化完了');
       } catch (e) {
-        AppLogger.debug('[K-MAPS] 背景地図サービス初期化エラー: $e');
+        AppLogger.debug('[Root Maps] 背景地図サービス初期化エラー: $e');
       }
     });
   }
@@ -196,14 +196,14 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
   }
 
   Future<void> _cleanupOnAppExit() async {
-    AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ開始');
+    AppLogger.debug('[Root Maps] アプリ終了クリーンアップ開始');
     try {
       await InternalGpsLocationStore().dispose();
       await BackgroundSaveManager.instance.dispose();
       ref.read(gpsManagerServiceProvider).dispose();
-      AppLogger.debug('[K-MAPS] アプリ終了クリーンアップ完了');
+      AppLogger.debug('[Root Maps] アプリ終了クリーンアップ完了');
     } catch (e) {
-      AppLogger.debug('[K-MAPS] クリーンアップエラー: $e');
+      AppLogger.debug('[Root Maps] クリーンアップエラー: $e');
     }
   }
 
@@ -215,7 +215,7 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
     assert(scaleLevel >= 0);
 
     return MaterialApp(
-      title: 'K-MAPS',
+      title: 'K-RootMap',
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -248,7 +248,7 @@ class _KMapsAppState extends ConsumerState<KMapsApp>
         );
       },
       home: const HomeScreen(),
-      routes: {'/map': (context) => const KMapsHomePage()},
+      routes: {'/map': (context) => const RootMapsHomePage()},
     );
   }
 }

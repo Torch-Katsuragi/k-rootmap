@@ -1,4 +1,4 @@
-// K-MAPS: Feature Import/Export Dialog Widget
+﻿// Root Maps: Feature Import/Export Dialog Widget
 // 個別フィーチャのインポート・エクスポート機能を提供するダイアログ
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';

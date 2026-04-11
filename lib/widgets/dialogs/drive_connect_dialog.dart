@@ -1,4 +1,4 @@
-// K-MAPS: Google Drive連携ダイアログ
+﻿// Root Maps: Google Drive連携ダイアログ
 // プロジェクトとDriveフォルダの連携・同期を行うダイアログ
 
 import 'package:flutter/material.dart';
@@ -97,9 +97,9 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
   }
 
   Future<void> _loadExistingFolders() async {
-    final kmapsFolder = await _driveService.getOrCreateKMapsFolder();
-    if (kmapsFolder != null) {
-      final folders = await _driveService.listFolders(kmapsFolder.id!);
+    final rootMapsFolder = await _driveService.getOrCreateRootMapsFolder();
+    if (rootMapsFolder != null) {
+      final folders = await _driveService.listFolders(rootMapsFolder.id!);
       setState(() => _existingFolders = folders);
     }
   }
@@ -279,7 +279,7 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
                 children: [
                   RadioListTile<bool>(
                     title: Text(t.drive.newFolder(name: widget.projectName)),
-                    subtitle: const Text('K-MAPS Projectsフォルダ内に作成'),
+                    subtitle: const Text('Root Maps Projectsフォルダ内に作成'),
                     value: true,
                   ),
 

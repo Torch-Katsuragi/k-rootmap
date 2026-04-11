@@ -1,4 +1,4 @@
-// K-MAPS: フィーチャキャッシュMixin
+﻿// Root Maps: フィーチャキャッシュMixin
 // 地図表示用のフィーチャキャッシュを効率的に管理
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';

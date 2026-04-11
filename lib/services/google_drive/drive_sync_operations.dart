@@ -1,4 +1,4 @@
-/// K-MAPS: Drive同期操作のスタンドアロンサービス
+﻿/// Root Maps: Drive同期操作のスタンドアロンサービス
 /// LayerDrawerやタイトルバーなど、複数のUIから再利用可能
 library;
 

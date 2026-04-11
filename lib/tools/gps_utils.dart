@@ -1,4 +1,4 @@
-// lib/tools/gps_utils.dart
+﻿// lib/tools/gps_utils.dart
 // GPSユーティリティークラス（マルチプラットフォーム対応: Android/iOS/Windows）
 // 位置情報取得、NMEAパース、衛星情報取得、権限管理などを提供
 //
@@ -7,11 +7,11 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:nmea/nmea.dart'; // NMEA0183パーサ
 import 'package:geolocator/geolocator.dart';
 // geolocator, permission_handler等はpubspec.yamlに追加済み
-// import 'package:k_maps/utils/app_logger.dart';
+// import 'package:root_maps/utils/app_logger.dart';
 // Sentence型もここでimportされる（nmeaパッケージの主要型）
 
 /// 衛星情報モデル

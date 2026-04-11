@@ -1,4 +1,4 @@
-// K-MAPS: オーバーレイ画像設定ダイアログ
+﻿// Root Maps: オーバーレイ画像設定ダイアログ
 // 変換パラメータ（位置・スケール・回転・透明度）を数値入力で設定
 
 import 'package:flutter/material.dart';

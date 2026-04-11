@@ -1,8 +1,8 @@
-// K-MAPS: GeoPackageノードクラス
+﻿// Root Maps: GeoPackageノードクラス
 // GeoPackageファイルに対応するレイヤツリーノード
 
 import 'dart:io';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
 import 'layer_tree_node.dart';
 import 'layer_node.dart';

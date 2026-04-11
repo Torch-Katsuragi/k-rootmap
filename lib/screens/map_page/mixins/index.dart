@@ -1,4 +1,4 @@
-// K-MAPS: map_page関連のmixinエクスポート
+﻿// Root Maps: map_page関連のmixinエクスポート
 export 'map_initialization_mixin.dart';
 export 'map_gps_tracking_mixin.dart';
 export 'map_gps_survey_mixin.dart';

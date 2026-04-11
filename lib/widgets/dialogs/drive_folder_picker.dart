@@ -1,4 +1,4 @@
-// K-MAPS: Driveフォルダ選択ダイアログ
+// Root Maps: Driveフォルダ選択ダイアログ
 // Google Driveからプロジェクトフォルダを選択してダウンロード
 
 import 'package:flutter/material.dart';
@@ -95,9 +95,9 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
 
   Future<void> _loadFolders() async {
     try {
-      final kmapsFolder = await _driveService.getOrCreateKMapsFolder();
-      if (kmapsFolder != null) {
-        final folders = await _driveService.listFolders(kmapsFolder.id!);
+      final rootMapsFolder = await _driveService.getOrCreateRootMapsFolder();
+      if (rootMapsFolder != null) {
+        final folders = await _driveService.listFolders(rootMapsFolder.id!);
         setState(() {
           _folders = folders;
           _currentStep = _DialogStep.selectFolder;
@@ -105,7 +105,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       } else {
         setState(() {
           _currentStep = _DialogStep.selectFolder;
-          _errorMessage = 'K-MAPSフォルダにアクセスできません';
+          _errorMessage = 'K-RootMapフォルダにアクセスできません';
         });
       }
     } catch (e) {
@@ -257,7 +257,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
                 ),
               ),
 
-            const Text('K-MAPS Projectsフォルダ:'),
+            const Text('Root Maps Projectsフォルダ:'),
             const SizedBox(height: 8),
 
             // フォルダ一覧

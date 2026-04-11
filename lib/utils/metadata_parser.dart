@@ -1,4 +1,4 @@
-// K-MAPS: メタデータパーサーユーティリティ
+// Root Maps: メタデータパーサーユーティリティ
 // kmaps_metadataカラムの内容をパースして表形式データに変換
 
 export 'metadata_parser/metadata_table_data.dart';
@@ -8,7 +8,7 @@ export 'metadata_parser/metadata_gps_data_parser.dart';
 export 'metadata_parser/metadata_xy_calculator.dart';
 export 'metadata_parser/metadata_xy_table_handler.dart';
 
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'metadata_parser/metadata_content_parser.dart';

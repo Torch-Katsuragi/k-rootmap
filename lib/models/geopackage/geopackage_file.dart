@@ -1,4 +1,4 @@
-// K-MAPS: GeoPackageファイル管理クラス（ファサード）
+﻿// Root Maps: GeoPackageファイル管理クラス（ファサード）
 // 既存APIを維持しつつ、内部で各サービスクラスに委譲
 import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';

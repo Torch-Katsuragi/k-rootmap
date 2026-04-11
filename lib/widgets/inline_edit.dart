@@ -1,4 +1,4 @@
-// K-MAPS: インライン編集ウィジェット
+﻿// Root Maps: インライン編集ウィジェット
 // GeoPackage名・レイヤ名のインライン編集用Widget
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';

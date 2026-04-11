@@ -1,10 +1,10 @@
-/// GeoPackageを使用したタイルキャッシュ管理
+﻿/// GeoPackageを使用したタイルキャッシュ管理
 /// OGC GeoPackage標準仕様に準拠したタイル格納
 library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:k_maps/utils/app_logger.dart';
+import 'package:root_maps/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 

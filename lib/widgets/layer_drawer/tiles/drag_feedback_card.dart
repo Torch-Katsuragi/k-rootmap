@@ -1,4 +1,4 @@
-/// K-MAPS: ドラッグ中フィードバックカード（共通ウィジェット）
+﻿/// Root Maps: ドラッグ中フィードバックカード（共通ウィジェット）
 library;
 
 import 'package:flutter/material.dart';

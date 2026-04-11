@@ -1,4 +1,4 @@
-// K-MAPS: URLからプロジェクトを開くダイアログ
+﻿// Root Maps: URLからプロジェクトを開くダイアログ
 // Google Driveの共有URLを入力してプロジェクトをダウンロード
 
 import 'package:flutter/material.dart';

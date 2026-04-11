@@ -1,4 +1,4 @@
-// K-MAPS: 属性テーブルウィジェット エクスポートファイル
+﻿// Root Maps: 属性テーブルウィジェット エクスポートファイル
 // lib/widgets/attribute_table/ のパブリックAPIをエクスポート
 
 export 'attribute_table_widget.dart';

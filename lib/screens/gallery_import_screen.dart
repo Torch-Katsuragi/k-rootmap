@@ -1,9 +1,16 @@
 // Root Maps: ギャラリーインポート
 // file_picker で画像を選択し、プロジェクトフォルダにコピー（EXIF完全保持）
+//
+// Android の Photo Picker は content URI 経由でキャッシュコピーを返す際に
+// EXIF GPS データをプライバシー保護のため除去してしまう。
+// そこで file_picker の identifier (content URI) を MethodChannel 経由で
+// Kotlin 側に渡し、MediaStore から実ファイルパスを解決して直接コピーすることで
+// EXIF メタデータを完全保持する。
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -18,8 +25,9 @@ import '../utils/exif_parser.dart';
 class GalleryImporter {
   GalleryImporter._();
 
+  static const _channel = MethodChannel('com.k_root.k_maps/media_copy');
+
   /// ファイルピッカーで画像を選択し、targetFolder にインポートする。
-  /// file_picker は ACTION_OPEN_DOCUMENT を使用するため EXIF が完全保持される。
   static Future<bool> pickAndImport(
     BuildContext context,
     FolderNode targetFolder, {
@@ -44,17 +52,21 @@ class GalleryImporter {
 
     int imported = 0;
     for (final file in result.files) {
-      final srcPath = file.path;
-      if (srcPath == null) continue;
-
       try {
-        final ext = p.extension(srcPath).toLowerCase();
+        // 拡張子を name から取得（identifier 経由だと srcPath が無い場合がある）
+        final ext = p.extension(file.name).toLowerCase();
         if (ext.isEmpty) continue;
 
         final baseName = p.basenameWithoutExtension(file.name);
         final destPath = _uniquePath(folderPath, baseName, ext);
 
-        await File(srcPath).copy(destPath);
+        // Android: content URI からネイティブ側で実ファイルを直接コピー（EXIF 保持）
+        // 非 Android: 従来の File.copy フォールバック
+        final copied = await _copyFile(file, destPath);
+        if (!copied) {
+          AppLogger.debug('[GalleryImport] Failed to copy ${file.name}');
+          continue;
+        }
 
         final node = await _createImageNode(destPath, targetFolder);
         targetFolder.addChild(node);
@@ -71,6 +83,31 @@ class GalleryImporter {
       );
     }
     return imported > 0;
+  }
+
+  /// ファイルをコピーする。
+  /// Android では MethodChannel 経由で content URI から実ファイルを直接コピーし、
+  /// EXIF メタデータを完全保持する。
+  /// 非 Android や identifier が無い場合は File.copy でフォールバック。
+  static Future<bool> _copyFile(PlatformFile file, String destPath) async {
+    // Android: content URI が取れればネイティブ側で実ファイルコピー
+    if (Platform.isAndroid && file.identifier != null) {
+      try {
+        final success = await _channel.invokeMethod<bool>('copyOriginal', {
+          'uri': file.identifier,
+          'destPath': destPath,
+        });
+        if (success == true) return true;
+      } catch (e) {
+        AppLogger.debug('[GalleryImport] Native copy failed, falling back: $e');
+      }
+    }
+
+    // フォールバック: file_picker のキャッシュパスからコピー
+    final srcPath = file.path;
+    if (srcPath == null) return false;
+    await File(srcPath).copy(destPath);
+    return true;
   }
 
   /// EXIF から位置情報・メタデータを読み取って ImageNode を生成

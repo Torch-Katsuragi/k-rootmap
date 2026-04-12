@@ -16,6 +16,7 @@
 
 ### 🐛 Bug Fixes
 
+- Fixed EXIF location and timestamp data being lost when importing photos from gallery (bypassed Android Photo Picker's EXIF stripping via native file copy)
 - Fixed crash when loading images with NaN GPS coordinates from EXIF (0/0 Ratio)
 - Suppressed tile server success logs to reduce console noise
 

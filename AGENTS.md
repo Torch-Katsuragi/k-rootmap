@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 ## 会話ルール
 
@@ -39,3 +39,7 @@ Flutter製の地図アプリ（root_maps）。Windows/Android対応。
 ## よく使うパターン
 
 - UI更新: [[docs/technical/ui-layer-tree|レイヤツリー更新ガイド]] - `updateChildren()` の使い方
+
+## UI規約
+
+- **SnackBar禁止**: ユーザーへの通知は `ScaffoldMessenger` / `SnackBar` を使わず、必ず通知センター（`NotificationCenter`）を使用すること。詳細は [[.agent/skills/notification/SKILL.md]] を参照。

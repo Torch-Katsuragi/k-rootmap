@@ -1,4 +1,4 @@
-﻿// Root Maps: turf_dart統合テスト
+// Root Maps: turf_dart統合テスト
 // turf_dartのFeature/FeatureCollectionとの統合機能をテストする
 
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +24,7 @@ void main() {
       expect(convertedBack.latitude, equals(latlng.latitude));
       expect(convertedBack.longitude, equals(latlng.longitude));
 
+      // ignore: avoid_print
       print('[TEST] LatLng⇄Position変換テスト成功: $latlng ⇄ $position');
     });
 
@@ -41,6 +42,7 @@ void main() {
       expect(convertedLatLng.latitude, equals(latlng.latitude));
       expect(convertedLatLng.longitude, equals(latlng.longitude));
 
+      // ignore: avoid_print
       print('[TEST] Point Feature作成・変換テスト成功');
     });
 
@@ -62,6 +64,7 @@ void main() {
       expect(convertedLine[0].latitude, equals(line[0].latitude));
       expect(convertedLine[0].longitude, equals(line[0].longitude));
 
+      // ignore: avoid_print
       print('[TEST] LineString Feature作成・変換テスト成功');
     });
 
@@ -88,6 +91,7 @@ void main() {
       expect(convertedPolygon[0].length, equals(5));
       expect(convertedPolygon[0][0].latitude, equals(polygon[0][0].latitude));
 
+      // ignore: avoid_print
       print('[TEST] Polygon Feature作成・変換テスト成功');
     });
 
@@ -114,6 +118,7 @@ void main() {
       expect(convertedRowData!['name'], equals('Test Point'));
       expect(convertedRowData['geometry'], isA<List<LatLng>>());
 
+      // ignore: avoid_print
       print('[TEST] RowData⇄Feature変換テスト成功');
     });
 
@@ -140,6 +145,7 @@ void main() {
       expect(centroid!.latitude, closeTo(1.0, 0.1));
       expect(centroid.longitude, closeTo(1.0, 0.1));
 
+      // ignore: avoid_print
       print('[TEST] 重心計算テスト成功: centroid = $centroid');
     });
 
@@ -180,6 +186,7 @@ void main() {
       expect(length, isNotNull);
       expect(length!, greaterThan(0));
 
+      // ignore: avoid_print
       print('[TEST] 面積・長さ計算テスト成功: area=$area m², length=$length m');
     });
   });

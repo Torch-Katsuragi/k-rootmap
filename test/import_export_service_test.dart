@@ -1,4 +1,4 @@
-﻿// Root Maps: Import/Export Service Tests
+// Root Maps: Import/Export Service Tests
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/services/import_export_service.dart';
 import 'package:root_maps/models/geometry_type.dart';
@@ -162,6 +162,7 @@ void main() {
 
       expect(coordinateSystem.name, 'JGD2000 / Japan Plane Rectangular CS VI');
       expect(coordinateSystem.epsgCode, 'EPSG:2448');
+      // ignore: avoid_print
       print('[TEST] CoordinateSystemオブジェクト作成成功');
     });
 
@@ -182,6 +183,7 @@ void main() {
         final point = Point(x: x, y: y);
         final result = CoordinateConverter.xyToLatLng(point, coordinateSystem);
 
+        // ignore: avoid_print
         print(
           '[TEST] 座標変換結果: ($x, $y) -> (${result.latitude}, ${result.longitude})',
         );
@@ -192,8 +194,10 @@ void main() {
         expect(result.longitude, greaterThan(135.0));
         expect(result.longitude, lessThan(137.0)); // 余裕を持った範囲に調整
 
+        // ignore: avoid_print
         print('[TEST] 和歌山県座標変換テスト成功');
       } catch (e) {
+        // ignore: avoid_print
         print('[TEST] 座標変換エラー: $e');
         fail('座標変換に失敗: $e');
       }
@@ -216,6 +220,7 @@ void main() {
           final wgs84Point = Point(x: 135.8, y: 34.2); // 和歌山県内の座標
           final result = source.transform(target, wgs84Point);
 
+          // ignore: avoid_print
           print(
             '[TEST] proj4dart変換テスト: (${wgs84Point.y}, ${wgs84Point.x}) -> (${result.x.toStringAsFixed(1)}, ${result.y.toStringAsFixed(1)})',
           );
@@ -224,9 +229,11 @@ void main() {
           expect(result.x.abs(), greaterThan(1000.0));
           expect(result.y.abs(), greaterThan(1000.0));
 
+          // ignore: avoid_print
           print('[TEST] proj4dart基本動作テスト成功');
         }
       } catch (e) {
+        // ignore: avoid_print
         print('[TEST] proj4dartテストエラー: $e');
         fail('proj4dart動作テストに失敗: $e');
       }
@@ -244,6 +251,7 @@ void main() {
         // 有限数チェック
         expect(coord.x.isFinite, isTrue);
         expect(coord.y.isFinite, isTrue);
+        // ignore: avoid_print
         print('[TEST] 大きな座標値 (${coord.x}, ${coord.y}) の妥当性確認');
       }
     });

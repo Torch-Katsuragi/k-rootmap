@@ -142,7 +142,6 @@ class TileServer {
       final tileData = await _baseMapService.getTile(provider, z, x, y);
 
       if (tileData != null && tileData.isNotEmpty) {
-        AppLogger.debug('[TileServer] ✅ tile $z/$x/$y (${tileData.length}B)');
         final contentType =
             yFile.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
         request.response
@@ -150,7 +149,7 @@ class TileServer {
           ..headers.contentType = ContentType.parse(contentType)
           ..add(tileData);
       } else {
-        AppLogger.debug('[TileServer] ⬜ tile $z/$x/$y → transparent');
+        AppLogger.debug('[TileServer] tile not available → transparent fallback');
         // タイル無し → 透明PNG
         request.response
           ..statusCode = HttpStatus.ok
@@ -167,7 +166,7 @@ class TileServer {
     }
   }
 
-  /// オーバーレイ画像リクエスト処理: GET /overlay?path=<encoded_path>
+  /// オーバーレイ画像リクエスト処理: `GET /overlay?path=<encoded_path>`
   Future<void> _handleOverlayRequest(HttpRequest request) async {
     try {
       final filePath = request.uri.queryParameters['path'];

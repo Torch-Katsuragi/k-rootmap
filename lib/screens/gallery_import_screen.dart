@@ -1,4 +1,4 @@
-﻿// Root Maps: ギャラリーインポート
+// Root Maps: ギャラリーインポート
 // file_picker で画像を選択し、プロジェクトフォルダにコピー（EXIF完全保持）
 
 import 'dart:io';

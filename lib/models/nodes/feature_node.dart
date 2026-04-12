@@ -1,4 +1,4 @@
-﻿// Root Maps: フィーチャノードクラス
+// Root Maps: フィーチャノードクラス
 // GeoPackage内のフィーチャに対応するレイヤツリーノード
 // turf_dartのFeatureオブジェクトをメインデータとして使用
 
@@ -508,8 +508,8 @@ abstract class FeatureNode extends LayerTreeNode {
   }
 
   /// 親LayerNode
-  // ignore: overridden_fields
   @override
+  // ignore: overridden_fields
   final LayerNode parent;
 
   /// rowデータとジオメトリタイプを基にFeatureNodeを作成

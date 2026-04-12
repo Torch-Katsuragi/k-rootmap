@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "ok": "OK",
     "cancel": "Cancel",
@@ -808,7 +808,12 @@
     "noLocation": "No location",
     "dateLabel": "Date taken: ",
     "sizeLabel": "Size: ",
-    "edit": "Edit"
+    "edit": "Edit",
+    "openInGoogleMaps": "Open in Google Maps",
+    "googleMapsOpenFailed": "Failed to open Google Maps",
+    "delete": "Delete (hold)",
+    "deleted": "Deleted",
+    "deleteFailed": "Failed to delete"
   },
   "addFolder": {
     "title": "New Folder",

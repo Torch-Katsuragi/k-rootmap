@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "ok": "OK",
     "cancel": "キャンセル",
@@ -808,7 +808,12 @@
     "noLocation": "位置情報なし",
     "dateLabel": "撮影日時: ",
     "sizeLabel": "サイズ: ",
-    "edit": "編集"
+    "edit": "編集",
+    "openInGoogleMaps": "Google Maps で開く",
+    "googleMapsOpenFailed": "Google Maps を開けませんでした",
+    "delete": "削除（長押し）",
+    "deleted": "削除しました",
+    "deleteFailed": "削除に失敗しました"
   },
   "addFolder": {
     "title": "新規フォルダ",

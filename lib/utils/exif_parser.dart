@@ -1,4 +1,4 @@
-﻿// Root Maps: EXIF解析ユーティリティ
+// Root Maps: EXIF解析ユーティリティ
 // 画像ファイルからGPS座標やメタデータを抽出する共通処理
 // ImageNodeとGlobalImageNodeで使用
 
@@ -100,6 +100,8 @@ class ExifParser {
 
     final lat = _ratiosDmsToDecimal(latValues.ratios) * (latRefTag.printable == 'S' ? -1 : 1);
     final lng = _ratiosDmsToDecimal(lngValues.ratios) * (lngRefTag.printable == 'W' ? -1 : 1);
+    // NaN/Infinityチェック（Ratio 0/0 等で発生しうる）
+    if (lat.isNaN || lat.isInfinite || lng.isNaN || lng.isInfinite) return null;
     return LatLng(lat, lng);
   }
 
@@ -112,7 +114,9 @@ class ExifParser {
     if (tag == null) return null;
     final values = tag.values;
     if (values is IfdRatios && values.ratios.isNotEmpty) {
-      return values.ratios[0].toDouble();
+      final dir = values.ratios[0].toDouble();
+      if (dir.isNaN || dir.isInfinite) return null;
+      return dir;
     }
     return null;
   }

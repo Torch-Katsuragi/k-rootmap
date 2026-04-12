@@ -1,4 +1,4 @@
-﻿// Root Maps: MapPage状態の基底mixin
+// Root Maps: MapPage状態の基底mixin
 // 全てのMixinが共通でアクセスする状態変数を定義
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -160,6 +160,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   List<OverlayImageNode> overlayImageNodes = [];
 
   /// MapLibreに登録済みのオーバーレイソースID
+  @override
   Set<String> activeOverlaySourceIds = {};
 
   // =============================================
@@ -199,6 +200,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   List<LayerTreeNode>? lastCacheSelection;
 
   /// レンダリングキャッシュを無効化（次回build時に再構築）
+  @override
   void invalidateLayerCache() {
     layerCacheDirty = true;
   }

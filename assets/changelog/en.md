@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.6 — 2026/04/12
+
+### 📍 Open Points in Google Maps from Detail Panel
+
+- Added "Open in Google Maps" button to the point detail panel
+- On Android, launches Google Maps app directly via geo: intent
+- Falls back to browser on PC or when the app is not installed
+
+### 🗑️ Long-Press Delete from Detail Panel
+
+- Added a "Delete" button to all feature and photo detail panels
+- Requires a 1-second long press to prevent accidental deletion
+- Red gauge animation provides visual feedback during the hold
+
+### 🐛 Bug Fixes
+
+- Fixed crash when loading images with NaN GPS coordinates from EXIF (0/0 Ratio)
+- Suppressed tile server success logs to reduce console noise
+
+---
+
 ## v0.5.5 — 2026/04/11
 
 ### 🏷️ Rebranded to "RootMap GIS"

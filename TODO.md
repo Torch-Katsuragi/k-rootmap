@@ -6,11 +6,10 @@
   - [ ] J-PlatPat（日本特許庁）で「rootmap」の商標検索（Class 9/42）— メンテ明け後に実施
   - [ ] USPTO TESSで「rootmap」の商標検索
   - [x] 改名作業を実施（UI、Android/Windows/Web、changelog、Drive連携フォルダ名）
-- [ ] 内部テスト版でGoogle Sign-Inログイン動作確認
-- [ ] 連絡先メールアドレスを `k-root@googlegroups.com` に統一
+- [x] 内部テスト版でGoogle Sign-Inログイン動作確認
+- [x] 連絡先メールアドレスを `k-root@googlegroups.com` に統一
   - [x] GCP ブランディング: サポートメール・デベロッパー連絡先 → 設定済み
-  - [ ] Play Console: ストアの設定・デベロッパープロフィール → メール確認ロック中（2026/04/11以降に再試行）
-  - 原因: Google Groupへの確認メールが届かず、リトライでロックがかかった。原因は除去済み。
+  - [x] Play Console: アカウントの詳細・デベロッパープロフィール → 設定完了（2026/04/12）
 
 ---
 
@@ -103,14 +102,19 @@
 #### その他機能
 
 - [x] チェンジログ表示機能（CHANGELOG.md + アプリ内Markdown表示 + 未読通知バッジ）
-- [x] UIサイズ5段階調整機能（設定 → 一般、MediaQuery.textScaler + Riverpod）
-- [ ] フィードバックフォームにバージョン情報を事前入力（Google Forms URLパラメータ使用）
+- [x] UIサイズ7段階調整機能（0.75x〜1.30x、設定 → 一般、MediaQuery.textScaler + Riverpod）
+- [x] フィードバックフォームにバージョン情報・端末モデルを事前入力（Google Forms URLパラメータ + PackageInfo + DeviceInfo）
 - [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能
 - [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一
 
 ### コード品質
 
-- [ ] その他のスタイル問題修正
+`flutter analyze` 残存警告: **0件** ✅
+
+- [x] `overridden_fields`: `FeatureNode` のフィールドオーバーライド警告 → ignoreコメント位置修正
+- [x] `annotate_overrides`: `@override` アノテーション不足 → 2箇所追加（map_page_state_base.dart）
+- [x] `unintended_html_in_doc_comment`: docコメント内のHTML解釈問題 → バッククォートエスケープ（tile_server.dart）
+- [x] `avoid_print`: テストコード内の `print()` → `// ignore: avoid_print` 追加（15箇所）
 
 ---
 
@@ -132,6 +136,12 @@
   - [x] Google Cloud Console に Play App Signing 用 Android OAuthクライアントID 作成
   - [x] SHA-1 一覧をGoogle Drive保存（`開発用キー/SHA-1フィンガープリント.txt`）
   - [x] 不要な `email` スコープを削除
+- [x] GPSゾンビプロセス対策（2026/04/11）
+  - [x] AndroidManifest `stopWithTask="true"` 設定（OS レベルでのサービス自動停止）
+  - [x] ハートビートベース自殺機構（foreground_service.dart: 5秒間隔ping/pong、30秒無応答で自動停止）
+  - [x] メインisolate側の応答ハンドラ（internal_gps_location_store.dart）
+- [x] アプリ名を「RootMap GIS」に改名（2026/04/12）
+  - [x] UI、Android/Windows/Web、changelog、Drive連携フォルダ名を一括更新
 
 </details>
 

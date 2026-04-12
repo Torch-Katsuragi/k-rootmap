@@ -2,24 +2,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "k_maps",
+            "name": "RootMap GIS",
             "request": "launch",
-            "type": "dart",
-            "toolArgs": [
-                "--no-enable-impeller"
-            ]
+            "type": "dart"
         },
         {
-            "name": "k_maps (profile mode)",
+            "name": "RootMap GIS (profile mode)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile",
-            "toolArgs": [
-                "--no-enable-impeller"
-            ]
+            "flutterMode": "profile"
         },
         {
-            "name": "k_maps (release mode)",
+            "name": "RootMap GIS (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"

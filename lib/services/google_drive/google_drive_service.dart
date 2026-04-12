@@ -46,8 +46,8 @@ class GoogleDriveService {
   /// 認証状態
   final DriveAuthState authState = DriveAuthState();
 
-  /// K-RootMap用Driveフォルダ名
-  static const String kMapsFolderName = 'K-RootMap Projects';
+  /// RootMap GIS用Driveフォルダ名
+  static const String kMapsFolderName = 'RootMap GIS Projects';
 
   /// 必要なOAuthスコープ
   static const List<String> _scopes = [
@@ -175,7 +175,7 @@ class GoogleDriveService {
 
   // ========== フォルダ操作 ==========
 
-  /// K-RootMapルートフォルダを取得または作成
+  /// RootMap GISルートフォルダを取得または作成
   Future<drive.File?> getOrCreateRootMapsFolder() async {
     if (_driveApi == null) return null;
 
@@ -195,7 +195,7 @@ class GoogleDriveService {
         ..mimeType = 'application/vnd.google-apps.folder';
 
       final created = await _driveApi!.files.create(folder);
-      AppLogger.debug('[GoogleDriveService] K-RootMapフォルダ作成: ${created.id}');
+      AppLogger.debug('[GoogleDriveService] RootMap GISフォルダ作成: ${created.id}');
       return created;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] フォルダ取得/作成エラー: $e');
@@ -267,7 +267,7 @@ class GoogleDriveService {
     if (_driveApi == null) return null;
 
     try {
-      // 親フォルダが指定されていない場合はK-RootMapフォルダに作成
+      // 親フォルダが指定されていない場合はRootMap GISフォルダに作成
       final parent = parentId ?? (await getOrCreateRootMapsFolder())?.id;
       if (parent == null) return null;
 

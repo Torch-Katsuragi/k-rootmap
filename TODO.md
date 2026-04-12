@@ -2,6 +2,10 @@
 
 ## 🔥 直近のアクション
 
+- [/] アプリ名を「RootMap GIS」に改名
+  - [ ] J-PlatPat（日本特許庁）で「rootmap」の商標検索（Class 9/42）— メンテ明け後に実施
+  - [ ] USPTO TESSで「rootmap」の商標検索
+  - [x] 改名作業を実施（UI、Android/Windows/Web、changelog、Drive連携フォルダ名）
 - [ ] 内部テスト版でGoogle Sign-Inログイン動作確認
 - [ ] 連絡先メールアドレスを `k-root@googlegroups.com` に統一
   - [x] GCP ブランディング: サポートメール・デベロッパー連絡先 → 設定済み

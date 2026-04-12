@@ -404,7 +404,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('K-RootMap'),
+        title: const Text('RootMap GIS'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // ユーザーガイドボタン
@@ -443,7 +443,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             const Icon(Icons.map, size: 100, color: Colors.blue),
             const SizedBox(height: 32),
             Text(
-              'K-RootMap',
+              'RootMap GIS',
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: Colors.blue,

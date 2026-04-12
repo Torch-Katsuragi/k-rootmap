@@ -2,12 +2,12 @@
 
 ## v0.5.5 — 2026/04/11
 
-### 🏷️ Rebranded to "K-RootMap"
+### 🏷️ Rebranded to "RootMap GIS"
 
-- Application name changed from "k_maps" to "K-RootMap"
+- Application name changed from "k_maps" to "RootMap GIS"
 - Unified app name display across all platforms (Android / Windows / Web)
 - Internal package name changed to `root_maps`
-- Updated class names, comments, and codebase-wide references to the new name
+- Google Drive sync folder renamed to "RootMap GIS Projects"
 
 ### 📝 Auto-Fill Version & Device Info in Feedback Form
 

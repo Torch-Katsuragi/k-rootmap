@@ -42,7 +42,7 @@ class ForegroundServiceManager {
 
         // 通知設定
         notificationChannelId: 'k_maps_foreground_channel',
-        initialNotificationTitle: 'K-RootMap GPS取得中',
+        initialNotificationTitle: 'RootMap GIS GPS取得中',
         initialNotificationContent: 'GPS位置情報を取得しています...',
         foregroundServiceNotificationId: 888,
       ),
@@ -219,7 +219,7 @@ void onStart(ServiceInstance service) async {
                     "\n${currentPosition.latitude.toStringAsFixed(4)}, ${currentPosition.longitude.toStringAsFixed(4)}";
               }
               service.setForegroundNotificationInfo(
-                title: "K-RootMap GPS取得中",
+                title: "RootMap GIS GPS取得中",
                 content: notificationContent,
               );
             } catch (_) {

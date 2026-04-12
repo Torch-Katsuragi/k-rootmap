@@ -1,6 +1,6 @@
 {
-    "name": "K-RootMap",
-    "short_name": "K-RootMap",
+    "name": "RootMap GIS",
+    "short_name": "RootMap GIS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",

@@ -105,7 +105,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       } else {
         setState(() {
           _currentStep = _DialogStep.selectFolder;
-          _errorMessage = 'K-RootMapフォルダにアクセスできません';
+          _errorMessage = 'RootMap GISフォルダにアクセスできません';
         });
       }
     } catch (e) {

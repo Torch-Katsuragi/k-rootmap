@@ -405,7 +405,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
       body: SettingsBody(
         sections: [
           SettingsSection(
-            title: 'K-RootMap',
+            title: 'RootMap GIS',
             icon: Icons.map,
             iconColor: Colors.blue,
             children: [
@@ -453,7 +453,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                 onTap: () {
                   showLicensePage(
                     context: context,
-                    applicationName: 'K-RootMap',
+                    applicationName: 'RootMap GIS',
                     applicationVersion: _packageInfo?.version ?? '',
                   );
                 },

@@ -95,8 +95,8 @@ dependencies:
   flutter_secure_storage: ^9.2.4    # トークン安全保存用
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0
-  maplibre: ^0.3.4
-  maplibre_webview: ^0.3.4         # Windows/macOS WebView実装
+  maplibre: ^0.3.5
+  maplibre_webview: ^0.3.5         # Windows/macOS WebView実装
   supercluster: ^3.2.0
   geobase: ^1.5.0
   exif: ^3.3.0
@@ -106,9 +106,6 @@ dependencies:
   device_info_plus: ^12.4.0
   image_picker: ^1.2.1
 
-dependency_overrides:
-  jni:
-    path: third_party/jni
 
 dev_dependencies:
   flutter_test:

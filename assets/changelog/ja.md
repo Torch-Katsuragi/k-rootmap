@@ -20,6 +20,11 @@
 - EXIFのGPS座標がNaN（0/0 Ratio）の画像を読み込んだ際にMapLibreがクラッシュする問題を修正
 - タイルサーバーの成功ログを抑制し、コンソール出力を整理
 
+### 🔧 メンテナンス
+
+- MapLibreをv0.3.5に更新（Android: MapLibre Native 13.0、jni v1.0.0）
+- 不要になった`third_party/jni`オーバーライドを削除（jni v1.0.0で不要に）
+
 ---
 
 ## v0.5.5 — 2026/04/11

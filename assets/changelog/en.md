@@ -20,6 +20,11 @@
 - Fixed crash when loading images with NaN GPS coordinates from EXIF (0/0 Ratio)
 - Suppressed tile server success logs to reduce console noise
 
+### 🔧 Maintenance
+
+- Upgraded MapLibre to v0.3.5 (Android: MapLibre Native 13.0, jni v1.0.0)
+- Removed obsolete `third_party/jni` override (no longer needed with jni v1.0.0)
+
 ---
 
 ## v0.5.5 — 2026/04/11

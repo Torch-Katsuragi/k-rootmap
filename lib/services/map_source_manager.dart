@@ -1,4 +1,4 @@
-﻿// Root Maps: MapLibre GeoJSONソース直接管理
+// Root Maps: MapLibre GeoJSONソース直接管理
 // layersプロパティを経由せず、StyleController経由でソース/レイヤを管理
 // データ変更時のみupdateGeoJsonSourceを呼び出し、OOMを防止
 import 'dart:async';

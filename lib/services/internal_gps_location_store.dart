@@ -45,6 +45,9 @@ class InternalGpsLocationStore {
   // delegatedモード用
   StreamSubscription<Map<String, dynamic>?>? _serviceSubscription;
 
+  // delegatedモード用: ハートビート応答サブスクリプション
+  StreamSubscription<Map<String, dynamic>?>? _heartbeatSubscription;
+
   // 全モード共通の出力ストリーム
   final StreamController<GpsPositionRecord> _positionController =
       StreamController<GpsPositionRecord>.broadcast();
@@ -108,6 +111,8 @@ class InternalGpsLocationStore {
     _geolocatorSubscription = null;
 
     // delegatedモード停止
+    await _heartbeatSubscription?.cancel();
+    _heartbeatSubscription = null;
     await _serviceSubscription?.cancel();
     _serviceSubscription = null;
 
@@ -214,10 +219,17 @@ class InternalGpsLocationStore {
     await serviceManager.initializeService();
     await serviceManager.startService();
 
+    final bgService = FlutterBackgroundService();
+
+    // ハートビート応答: サービスからの heartbeatPing に heartbeatPong を返す
+    // メインisolateが生きている限り応答し続けることで、
+    // サービス側がアプリの生存を確認できる
+    _heartbeatSubscription = bgService.on('heartbeatPing').listen((event) {
+      bgService.invoke('heartbeatPong');
+    });
+
     // ForegroundServiceからのpositionUpdateイベントを受信
-    _serviceSubscription = FlutterBackgroundService()
-        .on('positionUpdate')
-        .listen((event) {
+    _serviceSubscription = bgService.on('positionUpdate').listen((event) {
       if (event != null) {
         try {
           final record = GpsPositionRecord.fromServiceEvent(

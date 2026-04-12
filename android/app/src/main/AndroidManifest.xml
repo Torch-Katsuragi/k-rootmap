@@ -77,7 +77,8 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync|location"
             android:exported="false"
-            tools:replace="android:exported" />
+            android:stopWithTask="true"
+            tools:replace="android:exported,android:stopWithTask" />
             
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -138,6 +138,38 @@ void onStart(ServiceInstance service) async {
     Position? lastPosition;
     Timer? periodicTimer;
 
+    // ── ハートビート監視（自殺ロジック） ──
+    // メインisolateが生きているか定期的に確認し、
+    // 応答がなければサービスを自分で終了する。
+    // これにより、アプリがタスクキル等で強制終了された場合に
+    // サービスがゾンビプロセスとして残り続けることを防止する。
+    DateTime lastPongReceived = DateTime.now();
+    const heartbeatInterval = Duration(seconds: 5);
+    const heartbeatTimeout = Duration(seconds: 30);
+
+    // メインisolateからの heartbeatPong を受信したらタイムスタンプを更新
+    service.on('heartbeatPong').listen((event) {
+      lastPongReceived = DateTime.now();
+    });
+
+    // ハートビート送信＆タイムアウト監視タイマー
+    final heartbeatTimer = Timer.periodic(heartbeatInterval, (timer) {
+      // メインisolateに ping を送信
+      service.invoke('heartbeatPing');
+
+      // タイムアウトチェック
+      final elapsed = DateTime.now().difference(lastPongReceived);
+      if (elapsed > heartbeatTimeout) {
+        AppLogger.debug(
+          '[ForegroundService] ハートビートタイムアウト（${elapsed.inSeconds}秒応答なし）→ サービスを自動停止',
+        );
+        timer.cancel();
+        periodicTimer?.cancel();
+        positionSubscription?.cancel();
+        service.stopSelf();
+      }
+    });
+
     // 内蔵GPS位置情報ストリームを開始
     positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -150,6 +182,7 @@ void onStart(ServiceInstance service) async {
 
     // サービス停止要求の監視を設定
     service.on('stopService').listen((event) {
+      heartbeatTimer.cancel();
       periodicTimer?.cancel();
       positionSubscription?.cancel();
       service.stopSelf();
@@ -196,6 +229,7 @@ void onStart(ServiceInstance service) async {
         }
       } catch (e) {
         AppLogger.debug('[ForegroundService] タイマー処理エラー: $e');
+        heartbeatTimer.cancel();
         timer.cancel();
         positionSubscription?.cancel();
         service.stopSelf();

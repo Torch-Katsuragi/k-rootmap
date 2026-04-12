@@ -16,6 +16,10 @@
 
 ### 🐛 Bug Fixes
 
+- Fixed SymbolStyleLayers (photo markers, cluster counts) not rendering due to missing font specification
+- Fixed potential issue where map text disappears in offline mode (font PBF glyphs now cached locally and served via file://)
+- Cluster circle and text sizes now scale proportionally with point size setting
+
 - Fixed EXIF location and timestamp data being lost when importing photos from gallery (bypassed Android Photo Picker's EXIF stripping via native file copy)
 - Fixed crash when loading images with NaN GPS coordinates from EXIF (0/0 Ratio)
 - Suppressed tile server success logs to reduce console noise

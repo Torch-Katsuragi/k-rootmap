@@ -507,6 +507,7 @@ class MapSourceManager {
       },
     ));
     // クラスタ円（ポイント数に応じてサイズを段階的に変化、色はポイント設定に準拠）
+    // デフォルトのpointSize=6.0に合わせたサイズ
     await style.addLayer(ml.CircleStyleLayer(
       id: kClusterCircle,
       sourceId: kClusters,
@@ -514,10 +515,10 @@ class MapSourceManager {
         'circle-color': '#2196F3',
         'circle-radius': <Object>[
           'step', ['get', 'point_count'],
-          7.0,
+          7.2,
           10, 9.0,
-          50, 11.0,
-          200, 14.0,
+          50, 10.8,
+          200, 13.8,
         ],
         'circle-stroke-width': 1.5,
         'circle-stroke-color': '#FFFFFF',
@@ -529,7 +530,9 @@ class MapSourceManager {
       sourceId: kClusters,
       layout: {
         'text-field': '{point_count_abbreviated}',
-        'text-size': 10.0,
+        'text-font': ['Open Sans Semibold'],
+        'text-size': 9.6,
+        'text-allow-overlap': true,
       },
       paint: {
         'text-color': '#000000',
@@ -581,6 +584,7 @@ class MapSourceManager {
       sourceId: kImageClusters,
       layout: {
         'text-field': '{point_count_abbreviated}',
+        'text-font': ['Open Sans Semibold'],
         'text-size': 10.0,
       },
       paint: {
@@ -595,6 +599,7 @@ class MapSourceManager {
       sourceId: kImageClusters,
       layout: {
         'text-field': <Object>['get', 'name'],
+        'text-font': ['Open Sans Semibold'],
         'text-size': 10.0,
         'text-anchor': 'left',
         'text-offset': <Object>[1.2, 0],
@@ -620,6 +625,7 @@ class MapSourceManager {
         'icon-allow-overlap': true,
         'icon-size': 0.7,
         'text-field': <Object>['get', 'name'],
+        'text-font': ['Open Sans Semibold'],
         'text-size': 12.0,
         'text-anchor': 'left',
         'text-offset': <Object>[1.0, 0],
@@ -646,6 +652,7 @@ class MapSourceManager {
         'icon-allow-overlap': true,
         'icon-size': 1.0,
         'text-field': <Object>['get', 'name'],
+        'text-font': ['Open Sans Semibold'],
         'text-size': 13.0,
         'text-anchor': 'left',
         'text-offset': <Object>[1.0, 0],
@@ -781,7 +788,9 @@ class MapSourceManager {
         ? (lineWidth * selectedMultiplier * lineVertexSizeFactor / 2).clamp(2.0, 24.0)
         : 0.0;
 
-    final clusterRadius = <Object>['step', ['get', 'point_count'], 7.0, 10, 9.0, 50, 11.0, 200, 14.0];
+    final clusterRadius = <Object>['step', ['get', 'point_count'],
+      pointSize * 1.2, 10, pointSize * 1.5, 50, pointSize * 1.8, 200, pointSize * 2.3];
+    final clusterTextSize = pointSize * 1.6;
 
     if (s is webview_style.StyleControllerWebView) {
       await _webViewBatchSetPaint(
@@ -797,6 +806,7 @@ class MapSourceManager {
         polyVR: polyVR, polyVSelR: polyVSelR,
         lineVR: lineVR, lineVSelR: lineVSelR,
         clusterRadius: clusterRadius,
+        clusterTextSize: clusterTextSize,
       );
     } else {
       await _removeAndReaddLayers(
@@ -812,6 +822,7 @@ class MapSourceManager {
         polyVR: polyVR, polyVSelR: polyVSelR,
         lineVR: lineVR, lineVSelR: lineVSelR,
         clusterRadius: clusterRadius,
+        clusterTextSize: clusterTextSize,
       );
     }
 
@@ -839,6 +850,7 @@ class MapSourceManager {
     required double lineVR,
     required double lineVSelR,
     required List<Object> clusterRadius,
+    required double clusterTextSize,
   }) async {
     final outlineColorHex = _colorToHex(polygonOutlineColor);
     final clusterRadiusJson = jsonEncode(clusterRadius);
@@ -917,6 +929,7 @@ class MapSourceManager {
     required double lineVR,
     required double lineVSelR,
     required List<Object> clusterRadius,
+    required double clusterTextSize,
   }) async {
     for (final id in _allLayerIds.reversed) {
       try { await s.removeLayer(id); } catch (_) {}
@@ -947,7 +960,7 @@ class MapSourceManager {
     await s.addLayer(ml.CircleStyleLayer(id: kClusterCircle, sourceId: kClusters,
       paint: {'circle-color': pointHex, 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
     await s.addLayer(ml.SymbolStyleLayer(id: kClusterCount, sourceId: kClusters,
-      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
+      layout: {'text-field': '{point_count_abbreviated}', 'text-font': ['Open Sans Semibold'], 'text-size': clusterTextSize, 'text-allow-overlap': true},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.CircleStyleLayer(id: kPointsCircle, sourceId: kPoints,
       paint: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
@@ -956,17 +969,17 @@ class MapSourceManager {
     await s.addLayer(ml.CircleStyleLayer(id: kImageClusterCircle, sourceId: kImageClusters,
       paint: {'circle-color': '#9C27B0', 'circle-radius': clusterRadius, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterCount, sourceId: kImageClusters,
-      layout: {'text-field': '{point_count_abbreviated}', 'text-size': 10.0},
+      layout: {'text-field': '{point_count_abbreviated}', 'text-font': ['Open Sans Semibold'], 'text-size': clusterTextSize, 'text-allow-overlap': true},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImageClusterName, sourceId: kImageClusters,
-      layout: {'text-field': <Object>['get', 'name'], 'text-size': 10.0, 'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0},
+      layout: {'text-field': <Object>['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': 10.0, 'text-anchor': 'left', 'text-offset': <Object>[1.2, 0], 'text-max-width': 100.0},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.SymbolStyleLayer(id: kImagesSymbol, sourceId: kImages,
       layout: {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarker, _iconPhotoMarkerNoDir],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
         'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 0.7,
-        'text-field': <Object>['get', 'name'], 'text-size': 12.0,
+        'text-field': <Object>['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': 12.0,
         'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
@@ -975,7 +988,7 @@ class MapSourceManager {
         'icon-image': <Object>['case', ['get', 'has_direction'], _iconPhotoMarkerSel, _iconPhotoMarkerNoDirSel],
         'icon-rotate': <Object>['coalesce', ['get', 'direction'], 0],
         'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': 1.0,
-        'text-field': <Object>['get', 'name'], 'text-size': 13.0,
+        'text-field': <Object>['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': 13.0,
         'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));

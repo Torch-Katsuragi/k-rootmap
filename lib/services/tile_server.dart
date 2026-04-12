@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import '../models/basemap_provider.dart';
 import '../utils/app_logger.dart';
@@ -20,10 +21,109 @@ class TileServer {
   static Completer<String>? _localStyleCompleter;
   static String? get localStyleUri => _localStyleUri;
 
+  /// フォントPBFキャッシュディレクトリ（遅延初期化）
+  static Directory? _fontCacheDir;
+
+  /// フォントPBFをダウンロード＆キャッシュし、キャッシュディレクトリのパスを返す。
+  ///
+  /// MapLibreのデフォルトフォント (Open Sans Regular) の全Unicode範囲を先行取得。
+  /// 既にキャッシュ済みなら即座にパスを返す。
+  /// オフライン時はダウンロードをスキップし、既存キャッシュがあればそのパスを返す。
+  static Future<String?> ensureFontCache() async {
+    try {
+      _fontCacheDir ??= Directory(
+        '${(await getTemporaryDirectory()).path}/k_maps_fonts',
+      );
+
+      // ディレクトリ名はMapLibreの{fontstack}置換と完全一致させる
+      const fontstack = 'Open Sans Semibold';
+      final cacheDir = Directory('${_fontCacheDir!.path}/$fontstack');
+
+      // 既にキャッシュ済みならパスを返す
+      final testFile = File('${cacheDir.path}/0-255.pbf');
+      if (await testFile.exists()) {
+        AppLogger.debug('[TileServer] font cache already populated');
+        return _fontCacheDir!.path;
+      }
+
+      AppLogger.debug('[TileServer] downloading font glyphs...');
+      await cacheDir.create(recursive: true);
+
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 10);
+
+      try {
+        // 必須レンジのみダウンロード（数字・ASCII・日本語の主要範囲）
+        // 全256レンジではなく実際に使うものだけに絞る
+        final ranges = <String>[
+          '0-255',       // Basic Latin (数字、英字、記号)
+          '256-511',     // Latin Extended
+          '8192-8447',   // General Punctuation
+          '12288-12543', // CJK Symbols (日本語句読点等)
+          '12544-12799', // Katakana
+          '12800-13055', // CJK Compatibility
+          '19968-20223', // CJK Unified Ideographs (漢字の一部)
+          '20224-20479',
+          '20480-20735',
+          '65280-65535', // Halfwidth/Fullwidth Forms
+        ];
+
+        var cached = 0;
+        for (final range in ranges) {
+          final file = File('${cacheDir.path}/$range.pbf');
+          if (await file.exists()) {
+            cached++;
+            continue;
+          }
+
+          try {
+            final url = Uri.parse(
+              'https://demotiles.maplibre.org/font/'
+              '${Uri.encodeComponent(fontstack)}/$range.pbf',
+            );
+            AppLogger.debug('[TileServer] fetching font: $url');
+            final req = await client.getUrl(url);
+            final res = await req.close();
+            if (res.statusCode == HttpStatus.ok) {
+              final chunks = <int>[];
+              await for (final chunk in res) {
+                chunks.addAll(chunk);
+              }
+              await file.writeAsBytes(Uint8List.fromList(chunks));
+              cached++;
+            } else {
+              AppLogger.debug('[TileServer] font HTTP ${res.statusCode}: $range');
+              await res.drain<void>();
+            }
+          } catch (e) {
+            AppLogger.debug('[TileServer] font download error ($range): $e');
+          }
+        }
+
+        AppLogger.debug('[TileServer] font download complete ($cached/${ranges.length} ranges)');
+      } finally {
+        client.close();
+      }
+
+      // ダウンロード後、テストファイルが存在すればパスを返す
+      if (await testFile.exists()) {
+        return _fontCacheDir!.path;
+      }
+      return null; // オフライン等でダウンロード失敗
+    } catch (e) {
+      AppLogger.debug('[TileServer] font cache error: $e');
+      return null;
+    }
+  }
+
   /// 空のローカルスタイルJSONをファイルに書き出しパスを返す。
   /// オフラインでも onStyleLoaded を確実に発火させるための最小スタイル。
-  static Future<String> ensureLocalStyle() async {
-    if (_localStyleUri != null) return _localStyleUri!;
+  ///
+  /// [fontDir] を渡すと glyphs URL を file:// パスにする（Android/iOS用）。
+  /// [port] を渡すと glyphs URL をローカルTileServer経由にする（Windows用）。
+  static Future<String> ensureLocalStyle({String? fontDir, int? port}) async {
+    // 毎回再生成（ポート・フォントパスが変わる可能性があるため）
+    _localStyleUri = null;
 
     if (_localStyleCompleter != null) {
       return _localStyleCompleter!.future;
@@ -33,7 +133,25 @@ class TileServer {
     try {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/k_maps_style.json');
-      const style = '{"version":8,"sources":{},'
+
+      // glyphs URL の優先順位:
+      // 1. file:// (Android/iOS: MapLibre Nativeが直接ファイルを読む)
+      // 2. http://localhost (Windows: TileServer経由)
+      // 3. https://demotiles (フォールバック)
+      String glyphsUrl;
+      if (fontDir != null) {
+        glyphsUrl = 'file://$fontDir/{fontstack}/{range}.pbf';
+      } else if (port != null) {
+        glyphsUrl = 'http://127.0.0.1:$port/font/{fontstack}/{range}.pbf';
+      } else {
+        glyphsUrl = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+      }
+
+      AppLogger.debug('[TileServer] glyphs URL: $glyphsUrl');
+
+      final style = '{"version":8,'
+          '"glyphs":"$glyphsUrl",'
+          '"sources":{},'
           '"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
       await file.writeAsString(style);
       _localStyleUri = file.path.startsWith('/') ? file.path : style;
@@ -109,6 +227,12 @@ class TileServer {
 
     try {
       final segments = request.uri.pathSegments;
+
+      // /font/{fontstack}/{range}.pbf → フォントグリフ配信（Windows用キャッシュプロキシ）
+      if (segments.length >= 3 && segments[0] == 'font') {
+        await _handleFontRequest(request, segments);
+        return;
+      }
 
       // /overlay?path=... → オーバーレイ画像配信
       if (segments.length == 1 && segments[0] == 'overlay') {
@@ -209,5 +333,75 @@ class TileServer {
       request.response.statusCode = HttpStatus.internalServerError;
     }
   }
-}
 
+  /// フォントPBFリクエスト処理（Windows用）: `GET /font/{fontstack}/{range}.pbf`
+  /// ensureFontCacheでキャッシュしたPBFをディスクから配信。
+  /// キャッシュミス時はdemotilesからダウンロードして保存。
+  Future<void> _handleFontRequest(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    try {
+      final fontstack = Uri.decodeComponent(segments[1]);
+      final rangeFile = segments.last;
+
+      _fontCacheDir ??= Directory(
+        '${(await getTemporaryDirectory()).path}/k_maps_fonts',
+      );
+
+      final cacheDir = Directory('${_fontCacheDir!.path}/$fontstack');
+      final cacheFile = File('${cacheDir.path}/$rangeFile');
+
+      // キャッシュヒット → 直接配信
+      if (await cacheFile.exists()) {
+        final bytes = await cacheFile.readAsBytes();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType('application', 'x-protobuf')
+          ..add(bytes);
+        return;
+      }
+
+      // キャッシュミス → demotilesからダウンロード
+      final upstreamUrl = Uri.parse(
+        'https://demotiles.maplibre.org/font/'
+        '${Uri.encodeComponent(fontstack)}/$rangeFile',
+      );
+
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 10);
+      try {
+        final upstream = await client.getUrl(upstreamUrl);
+        final response = await upstream.close();
+
+        if (response.statusCode == HttpStatus.ok) {
+          final chunks = <int>[];
+          await for (final chunk in response) {
+            chunks.addAll(chunk);
+          }
+          final bytes = Uint8List.fromList(chunks);
+
+          // キャッシュに保存
+          try {
+            await cacheDir.create(recursive: true);
+            await cacheFile.writeAsBytes(bytes);
+          } catch (e) {
+            AppLogger.debug('[TileServer] font cache write error: $e');
+          }
+
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('application', 'x-protobuf')
+            ..add(bytes);
+        } else {
+          request.response.statusCode = response.statusCode;
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      AppLogger.debug('[TileServer] font error: $e');
+      request.response.statusCode = HttpStatus.internalServerError;
+    }
+  }
+}

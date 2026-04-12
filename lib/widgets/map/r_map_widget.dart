@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -13,7 +13,7 @@ typedef RMapStyleLoadedCallback =
 
 /// ネットワーク不要なローカルスタイル。背景色のみ定義し、ソースは動的に追加する。
 const kEmptyMapStyle =
-    '{"version":8,"sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
+    '{"version":8,"glyphs":"https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf","sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"#e8e8e8"}}]}';
 
 /// MapLibreMap の生成差分をここに閉じ込める薄いラッパー。
 class RMapWidget extends StatefulWidget {

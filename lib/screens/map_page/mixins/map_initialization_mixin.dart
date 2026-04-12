@@ -1,4 +1,4 @@
-﻿// Root Maps: 初期化処理Mixin
+// Root Maps: 初期化処理Mixin
 // MapPageの各種サービス初期化処理を分離
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,7 +137,18 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     try {
       await baseMapService.initialize();
       await tileServer.start();
-      basemapStyleUri = await TileServer.ensureLocalStyle();
+
+      // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
+      final fontDir = await TileServer.ensureFontCache();
+
+      // Android/iOS: file://パスで直接読み込み、Windows: TileServer経由
+      if (fontDir != null) {
+        basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
+      } else {
+        // フォントキャッシュなし（オフライン初回起動等）→ TileServerプロキシ
+        basemapStyleUri = await TileServer.ensureLocalStyle(port: tileServer.port);
+      }
+
       baseMapService.addListener(onBaseMapServiceUpdate);
       if (mapControllerInstance.style != null) onBaseMapServiceUpdate();
       triggerSetState(() {});

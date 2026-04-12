@@ -161,9 +161,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void updateOverlayTransform(OverlayImageNode node) {
     if (!sourceManager.isInitialized) return;
     final corners = node.cornerCoordinates;
-    // 画像URLを解決（TileServer経由 or file://）
+    // 画像URLを解決
+    // Android: file://直接（MapLibre Nativeがサポート、オフラインでも確実）
+    // Windows: TileServer経由（WebView2がfile://非対応のため）
     final absPath = node.getAbsoluteFilePath();
-    final imageUrl = absPath != null && tileServer.isRunning
+    final imageUrl = absPath != null && tileServer.isRunning && !Platform.isAndroid
         ? tileServer.imageUrlForPath(absPath)
         : node.imageUrl;
     sourceManager.updateOverlayCoordinates(
@@ -1108,9 +1110,11 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     for (final node in overlayImageNodes) {
       if (toAdd.contains(node.overlaySourceId)) {
         final corners = node.cornerCoordinates;
-        // 画像URLをHTTPサーバ経由で配信（WebView2はfile://非対応）
+        // 画像URLを解決
+        // Android: file://直接（MapLibre Nativeがサポート、オフラインでも確実）
+        // Windows: TileServer経由（WebView2がfile://非対応のため）
         final absPath = node.getAbsoluteFilePath();
-        final httpUrl = absPath != null && tileServer.isRunning
+        final httpUrl = absPath != null && tileServer.isRunning && !Platform.isAndroid
             ? tileServer.imageUrlForPath(absPath)
             : node.imageUrl;
         sourceManager.addOverlayImage(

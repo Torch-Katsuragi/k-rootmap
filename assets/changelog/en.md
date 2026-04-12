@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.7 — 2026/04/13
+
+### 🐛 Bug Fixes
+
+- Fixed overlay images not displaying in offline mode
+  - Android: Changed to load images directly via file:// instead of routing through localhost HTTP server (supported by MapLibre Native)
+  - Avoids OS-level blocking of localhost connections when network interfaces are disabled
+
+---
+
 ## v0.5.6 — 2026/04/12
 
 ### 📍 Open Points in Google Maps from Detail Panel

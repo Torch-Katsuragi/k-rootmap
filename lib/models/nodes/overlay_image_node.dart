@@ -43,11 +43,23 @@ class OverlayImageNode extends ImageNode {
   /// MapLibreレイヤID（ユニーク）
   String get overlayLayerId => 'overlay-lyr-${filePath.hashCode.abs()}';
 
+  /// ensurePngCacheで解決されたPNGキャッシュのパス
+  String? _cachedPngPath;
+
+  /// PNGキャッシュパスを設定（ensurePngCache後に呼ばれる）
+  set cachedPngPath(String path) => _cachedPngPath = path;
+
   /// 画像URLを取得（file://プロトコル）
+  /// TIFFの場合はPNGキャッシュ（アプリキャッシュ領域）を参照
   String get imageUrl {
+    // TIFFでPNGキャッシュが解決済みならそちらを使用
+    if (_cachedPngPath != null) {
+      final normalized = _cachedPngPath!.replaceAll('\\', '/');
+      return 'file:///$normalized';
+    }
+    // JPG/PNGなど直接読めるファイル
     final absPath = getAbsoluteFilePath();
     if (absPath != null) {
-      // Windows: バックスラッシュをスラッシュに変換
       final normalized = absPath.replaceAll('\\', '/');
       return 'file:///$normalized';
     }

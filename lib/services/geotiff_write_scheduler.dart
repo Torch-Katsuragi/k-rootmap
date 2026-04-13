@@ -94,6 +94,10 @@ class GeoTiffWriteScheduler {
         pending.filePath,
         pending.params,
       );
+      // タグ更新でTIFFの更新日時が変わるため、
+      // PNGキャッシュのタイムスタンプも更新して「古い」判定を回避
+      // ピクセルデータは不変なので再変換は不要
+      await GeoTiffService.touchPngCacheTimestamp(pending.filePath);
       AppLogger.debug(
         '[GeoTiffWriteScheduler] flushed: ${pending.filePath}',
       );

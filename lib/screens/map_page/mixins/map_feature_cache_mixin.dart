@@ -1,7 +1,8 @@
-﻿// Root Maps: フィーチャキャッシュMixin
+// Root Maps: フィーチャキャッシュMixin
 // 地図表示用のフィーチャキャッシュを効率的に管理
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../utils/app_logger.dart';
+import '../../../services/geotiff_service.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/layer_node.dart';
@@ -78,6 +79,19 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     AppLogger.debug(
       '[Features] P:${newPointFeatures.length} L:${newLineFeatures.length} Pg:${newPolygonFeatures.length} Ph:${newPhotoNodes.length} Ov:${newOverlayNodes.length}',
     );
+
+    // GeoTIFFオーバーレイのPNGキャッシュを事前生成
+    // MapLibreはTIFF非対応のため、file://で参照できるPNGが必要
+    for (final node in newOverlayNodes) {
+      final absPath = node.getAbsoluteFilePath();
+      if (absPath != null) {
+        final lower = absPath.toLowerCase();
+        if (lower.endsWith('.tif') || lower.endsWith('.tiff')) {
+          final pngPath = await GeoTiffService.ensurePngCache(absPath);
+          node.cachedPngPath = pngPath;
+        }
+      }
+    }
 
     if (mounted) {
       triggerSetState(() {

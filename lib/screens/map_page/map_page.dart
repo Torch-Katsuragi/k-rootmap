@@ -91,11 +91,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         MapGpsTrackingMixin,
         MapGpsSurveyMixin,
         MapFeatureCacheMixin,
-        MapDrawingMixin {
+        MapDrawingMixin,
+        WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     AppLogger.debug('[MapPage] initState start');
+    WidgetsBinding.instance.addObserver(this);
     initializeAllServices();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,8 +107,20 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     disposeAllServices();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // バックグラウンド復帰時にオーバーレイを再同期
+      // AndroidでMapLibreのImageSourceが消失する問題への対策
+      AppLogger.debug('[MapPage] app resumed, re-syncing overlays');
+      activeOverlaySourceIds.clear(); // 強制的に全再追加
+      _syncOverlayImages();
+    }
   }
 
   // =============================================
@@ -161,22 +175,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void updateOverlayTransform(OverlayImageNode node) {
     if (!sourceManager.isInitialized) return;
     final corners = node.cornerCoordinates;
-    // 画像URLを解決
-    // GeoTIFF(.tif): 全プラットフォームでTileServer経由（TIFF→PNG変換）
-    // その他(.jpg/.png): Android=file://直接、Windows=TileServer経由
-    final absPath = node.getAbsoluteFilePath();
-    final isTiff = absPath != null &&
-        (absPath.toLowerCase().endsWith('.tif') ||
-         absPath.toLowerCase().endsWith('.tiff'));
-
-    String imageUrl;
-    if (isTiff && tileServer.isRunning) {
-      imageUrl = tileServer.imageUrlForPath(absPath);
-    } else if (absPath != null && tileServer.isRunning && !Platform.isAndroid) {
-      imageUrl = tileServer.imageUrlForPath(absPath);
-    } else {
-      imageUrl = node.imageUrl;
-    }
     sourceManager.updateOverlayCoordinates(
       node.overlaySourceId,
       ml.LngLatQuad(
@@ -185,9 +183,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         bottomRight: corners[2].toGeographic(),
         bottomLeft: corners[3].toGeographic(),
       ),
-      imageUrl: imageUrl,
+      imageUrl: node.imageUrl,
       layerId: node.overlayLayerId,
-
     );
     // triggerSetStateは呼ばない—ハンドルマーカーは​transformNotifier経由で局所rebuild
   }
@@ -1119,30 +1116,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     for (final node in overlayImageNodes) {
       if (toAdd.contains(node.overlaySourceId)) {
         final corners = node.cornerCoordinates;
-        // 画像URLを解決
-        // GeoTIFF(.tif): 全プラットフォームでTileServer経由（TIFF→PNG変換）
-        //   MapLibreのImageSourceがTIFF非対応のため
-        // その他(.jpg/.png): Android=file://直接、Windows=TileServer経由
-        final absPath = node.getAbsoluteFilePath();
-        final isTiff = absPath != null &&
-            (absPath.toLowerCase().endsWith('.tif') ||
-             absPath.toLowerCase().endsWith('.tiff'));
-
-        String imageUrl;
-        if (isTiff && tileServer.isRunning) {
-          // GeoTIFF → 全プラットフォームでTileServer経由（TIFF→PNG変換）
-          imageUrl = tileServer.imageUrlForPath(absPath);
-        } else if (absPath != null && tileServer.isRunning && !Platform.isAndroid) {
-          // Windows: TileServer経由
-          imageUrl = tileServer.imageUrlForPath(absPath);
-        } else {
-          // Android: file://直接（JPG/PNGのみ）
-          imageUrl = node.imageUrl;
-        }
         sourceManager.addOverlayImage(
           sourceId: node.overlaySourceId,
           layerId: node.overlayLayerId,
-          imageUrl: imageUrl,
+          imageUrl: node.imageUrl,
           coordinates: ml.LngLatQuad(
             topLeft: geo.Geographic(
               lon: corners[0].longitude, lat: corners[0].latitude,
@@ -1157,7 +1134,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               lon: corners[3].longitude, lat: corners[3].latitude,
             ),
           ),
-
         );
       }
     }

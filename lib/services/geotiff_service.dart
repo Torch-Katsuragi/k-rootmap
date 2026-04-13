@@ -11,6 +11,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
@@ -54,6 +55,10 @@ class GeoTiffService {
 
     final tiffBytes = _encodeGeoTiff(image, params);
     await File(outputPath).writeAsBytes(tiffBytes, flush: true);
+
+    // MapLibre用PNGキャッシュも生成
+    await ensurePngCache(outputPath);
+
     AppLogger.debug(
       '[GeoTiffService] created: ${p.basename(outputPath)} '
       '(${tiffBytes.length} bytes)',
@@ -81,7 +86,62 @@ class GeoTiffService {
     );
   }
 
-  /// TIFFファイルをデコードしてPNGバイト列に変換する
+
+  /// PNGキャッシュディレクトリ（遅延初期化）
+  static Directory? _pngCacheDir;
+
+  /// TIFFファイルパスに対応するPNGキャッシュのパスを返す
+  static String _pngCachePath(String tifPath) {
+    final hash = tifPath.hashCode.abs();
+    return '${_pngCacheDir!.path}/$hash.png';
+  }
+
+  /// GeoTIFFに対応するPNGキャッシュファイルのパスを返す
+  ///
+  /// アプリのキャッシュ領域に `{hash}.png` を生成。
+  /// キャッシュが存在し、TIFFより新しい場合は再変換をスキップ。
+  /// MapLibreがTIFFを直接読めないため、file://でこのPNGを参照する。
+  /// キャッシュがOSに掃除されても自動的に再生成される。
+  static Future<String> ensurePngCache(String tifPath) async {
+    _pngCacheDir ??= Directory(
+      '${(await getApplicationCacheDirectory()).path}/overlay_png_cache',
+    );
+    await _pngCacheDir!.create(recursive: true);
+
+    final pngPath = _pngCachePath(tifPath);
+    final pngFile = File(pngPath);
+    final tifFile = File(tifPath);
+
+    // キャッシュ有効判定
+    if (pngFile.existsSync()) {
+      final pngMod = pngFile.lastModifiedSync();
+      final tifMod = tifFile.lastModifiedSync();
+      if (pngMod.isAfter(tifMod)) {
+        return pngPath;
+      }
+    }
+
+    // TIFF → PNG変換
+    AppLogger.debug('[GeoTiffService] converting to PNG cache: $pngPath');
+    final pngBytes = await decodeTiffToPng(tifPath);
+    await pngFile.writeAsBytes(pngBytes, flush: true);
+    return pngPath;
+  }
+
+  /// PNGキャッシュの更新日時を現在時刻に更新する
+  ///
+  /// GeoTIFFタグ更新（位置・スケール等）後に呼ぶ。
+  /// TIFFの再書き出しで更新日時が変わるが、ピクセルデータは不変なので
+  /// PNGの再変換は不要。タイムスタンプだけ更新して「古い」判定を回避。
+  static Future<void> touchPngCacheTimestamp(String tifPath) async {
+    if (_pngCacheDir == null) return;
+    final pngFile = File(_pngCachePath(tifPath));
+    if (pngFile.existsSync()) {
+      await pngFile.setLastModified(DateTime.now());
+    }
+  }
+
+  /// TIFFをデコードしてPNGバイト列に変換
   ///
   /// TileServerでMapLibre向けに配信する際に使用。
   static Future<Uint8List> decodeTiffToPng(String tifPath) async {

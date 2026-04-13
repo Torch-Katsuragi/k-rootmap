@@ -988,5 +988,19 @@
   "userGuide": {
     "title": "User Guide",
     "noContent": "User guide is not available yet"
+  },
+  "overlayConvert": {
+    "outputName": "Output file name",
+    "effectLabel": "Processing mode",
+    "modeNone": "None",
+    "modeNoneDesc": "Use original image as-is",
+    "modeBrightness": "Brightness → Alpha",
+    "modeBrightnessDesc": "Bright areas transparent, dark areas opaque (gradient)",
+    "modeAlphaBinarize": "Split transparent/opaque",
+    "modeAlphaBinarizeDesc": "Full transparent or opaque by threshold (colors preserved)",
+    "modeBwTransparent": "B&W binarize + white transparent",
+    "modeBwTransparentDesc": "Convert to B&W, then make white areas transparent",
+    "threshold": "Threshold",
+    "convert": "Convert"
   }
 }

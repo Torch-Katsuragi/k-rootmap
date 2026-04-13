@@ -988,5 +988,19 @@
   "userGuide": {
     "title": "使い方ガイド",
     "noContent": "ガイドはまだ利用できません"
+  },
+  "overlayConvert": {
+    "outputName": "変換後のファイル名",
+    "effectLabel": "変換時の処理",
+    "modeNone": "なし",
+    "modeNoneDesc": "元画像をそのまま使用",
+    "modeBrightness": "輝度→透明度",
+    "modeBrightnessDesc": "明るい部分を透明、暗い部分を不透明に（グラデーション）",
+    "modeAlphaBinarize": "透明/不透明に分離",
+    "modeAlphaBinarizeDesc": "閾値で完全透明と完全不透明に分ける（色は維持）",
+    "modeBwTransparent": "白黒2値化＋白を透明化",
+    "modeBwTransparentDesc": "白黒に変換し、白い部分を透明にする",
+    "threshold": "閾値",
+    "convert": "変換"
   }
 }

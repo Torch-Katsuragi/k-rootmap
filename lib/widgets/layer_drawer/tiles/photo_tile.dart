@@ -17,6 +17,7 @@ import '../../../services/kmeta_service.dart';
 import '../../../services/geotiff_service.dart';
 import '../../../utils/app_logger.dart';
 import '../common_dialogs.dart';
+import '../../dialogs/overlay_convert_dialog.dart';
 import 'node_visibility_icon.dart';
 
 /// 写真ノード用の ListTile ウィジェット
@@ -103,12 +104,21 @@ class PhotoTile extends ConsumerWidget {
   }
 
   /// 通常のImageNode → OverlayImageNodeに変換
-  /// 元画像をGeoTIFFにコピーし、kmetaにGeoTIFFファイル名で登録
+  /// ダイアログでファイル名と画像処理を選択してからGeoTIFF生成
   Future<void> _handleConvertToOverlay(BuildContext context, WidgetRef ref) async {
     final absPath = node.getAbsoluteFilePath();
     if (absPath == null) return;
 
     final folderPath = p.dirname(absPath);
+    final srcFileName = p.basename(absPath);
+
+    // 変換ダイアログを表示
+    if (!context.mounted) return;
+    final result = await showOverlayConvertDialog(
+      context,
+      srcFileName: srcFileName,
+    );
+    if (result == null) return; // キャンセル
 
     // 画像サイズを取得
     int imageWidth = 1920;
@@ -150,10 +160,19 @@ class PhotoTile extends ConsumerWidget {
     );
 
     // GeoTIFFファイルを生成
-    final tifPath = GeoTiffService.outputPathForSource(absPath);
+    final tifPath = GeoTiffService.outputPathForSource(
+      absPath,
+      outputName: result.outputName,
+    );
     final tifFileName = p.basename(tifPath);
     try {
-      await GeoTiffService.createGeoTiff(absPath, tifPath, overlay);
+      await GeoTiffService.createGeoTiff(
+        absPath,
+        tifPath,
+        overlay,
+        mode: result.mode,
+        threshold: result.threshold,
+      );
     } catch (e) {
       AppLogger.debug('[PhotoTile] GeoTIFF creation failed: $e');
       return;

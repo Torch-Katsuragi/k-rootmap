@@ -12,6 +12,14 @@
 - Removed opacity parameter (transparency managed via GeoTIFF alpha channel)
 - Added dedicated detail panel for overlay images
 
+### 🖼️ Overlay Conversion Dialog
+
+- Added image processing options to make scanned paper maps easier to overlay with GIS data
+  - Brightness → Alpha: bright areas transparent, dark areas opaque (gradient)
+  - Split transparent/opaque: full transparent or opaque by threshold (colors preserved)
+  - B&W binarize + white transparent: convert to B&W, then make white areas transparent
+- Output file name can be specified in the conversion dialog
+
 ### ⚡ Performance Improvements
 
 - Significantly improved responsiveness of overlay image transforms (move, scale, rotate)

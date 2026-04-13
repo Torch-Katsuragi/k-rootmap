@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/kmeta.dart';
 import '../utils/app_logger.dart';
+import '../widgets/dialogs/overlay_convert_dialog.dart';
 
 /// GeoTIFF読み書きサービス
 class GeoTiffService {
@@ -33,16 +34,23 @@ class GeoTiffService {
   /// [srcPath] 元画像ファイルパス（JPG/PNG等）
   /// [outputPath] 出力GeoTIFFパス（.tif）
   /// [params] オーバーレイ変換パラメータ
+  /// [mode] 変換時の画像処理モード
+  /// [threshold] 閾値（0.0〜1.0、alphaBinarize/bwTransparent時に使用）
   static Future<void> createGeoTiff(
     String srcPath,
     String outputPath,
-    KMetaImageOverlay params,
-  ) async {
+    KMetaImageOverlay params, {
+    OverlayConvertMode mode = OverlayConvertMode.none,
+    double threshold = 0.5,
+  }) async {
     final srcBytes = await File(srcPath).readAsBytes();
-    final image = img.decodeImage(srcBytes);
+    var image = img.decodeImage(srcBytes);
     if (image == null) {
       throw Exception('画像のデコードに失敗: $srcPath');
     }
+
+    // 画像処理を適用
+    image = _applyMode(image, mode, threshold);
 
     final tiffBytes = _encodeGeoTiff(image, params);
     await File(outputPath).writeAsBytes(tiffBytes, flush: true);
@@ -299,10 +307,64 @@ class GeoTiffService {
   }
 
   /// 元画像のパスからGeoTIFF出力パスを生成
-  /// 拡張子を `.tif` に変更するだけ
-  static String outputPathForSource(String srcPath) {
+  /// [outputName] を指定した場合はそれを使い、省略時は元ファイル名をベースに
+  static String outputPathForSource(String srcPath, {String? outputName}) {
     final dir = p.dirname(srcPath);
-    final baseName = p.basenameWithoutExtension(srcPath);
+    final baseName = outputName ?? p.basenameWithoutExtension(srcPath);
     return p.join(dir, '$baseName.tif');
+  }
+
+  // ── 画像処理 ────────────────────────────────────
+
+  /// 変換モードに応じた画像処理を適用する
+  static img.Image _applyMode(
+    img.Image image,
+    OverlayConvertMode mode,
+    double threshold,
+  ) {
+    final rgba = image.convert(numChannels: 4);
+
+    switch (mode) {
+      case OverlayConvertMode.none:
+        // そのまま（αチャンネル確保のみ）
+        return rgba;
+
+      case OverlayConvertMode.brightnessToAlpha:
+        // 輝度→透明度（グラデーション）
+        // 明→透明、暗→不透明
+        for (final pixel in rgba) {
+          final lum = pixel.luminanceNormalized;
+          pixel.a = pixel.maxChannelValue * (1.0 - lum);
+        }
+        return rgba;
+
+      case OverlayConvertMode.alphaBinarize:
+        // 輝度で透明/不透明に分離（色は維持）
+        // 閾値以上（明るい）→ 完全透明、未満（暗い）→ 完全不透明
+        for (final pixel in rgba) {
+          final lum = pixel.luminanceNormalized;
+          pixel.a = lum >= threshold ? 0 : pixel.maxChannelValue;
+        }
+        return rgba;
+
+      case OverlayConvertMode.bwTransparent:
+        // 白黒2値化 → 白部分を透明化
+        // 閾値未満（暗い）→ 黒＋不透明、閾値以上（明るい）→ 透明
+        for (final pixel in rgba) {
+          final lum = pixel.luminanceNormalized;
+          if (lum >= threshold) {
+            // 白→透明
+            pixel.a = 0;
+          } else {
+            // 黒化＋不透明
+            pixel
+              ..r = 0
+              ..g = 0
+              ..b = 0
+              ..a = pixel.maxChannelValue;
+          }
+        }
+        return rgba;
+    }
   }
 }

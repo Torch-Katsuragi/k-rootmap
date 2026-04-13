@@ -1,4 +1,4 @@
-﻿// Root Maps: オーバーレイ画像ノード
+// Root Maps: オーバーレイ画像ノード
 // ImageNodeを継承し、地図上にラスタ画像をオーバーレイ表示するノード
 // 変換パラメータ（位置・スケール・回転・透明度）はKMetaに永続化
 
@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import '../kmeta.dart';
 import '../../services/kmeta_service.dart';
+import '../../services/geotiff_write_scheduler.dart';
 import '../../utils/app_logger.dart';
 import 'image_node.dart';
 
@@ -91,7 +92,10 @@ class OverlayImageNode extends ImageNode {
     }).toList();
   }
 
-  /// 変換パラメータをKMetaに永続化
+  /// GeoTIFFデバウンス書き込みスケジューラ（全OverlayImageNodeで共有）
+  static final geoTiffScheduler = GeoTiffWriteScheduler();
+
+  /// 変換パラメータをKMetaに永続化し、GeoTIFFタグ更新をスケジュール
   Future<void> saveOverlayParams() async {
     final absPath = getAbsoluteFilePath();
     if (absPath == null) return;
@@ -99,6 +103,7 @@ class OverlayImageNode extends ImageNode {
     final folderPath = p.dirname(absPath);
     final imageName = p.basename(absPath);
 
+    // kmeta は即時保存
     final success = await KMetaService.instance.setImageOverlay(
       folderPath,
       imageName,
@@ -107,21 +112,9 @@ class OverlayImageNode extends ImageNode {
     if (success) {
       AppLogger.debug('[OverlayImageNode] Saved overlay params for $imageName');
     }
+
+    // GeoTIFFタグ更新をデバウンススケジュール（.tifファイルのみ）
+    geoTiffScheduler.scheduleWrite(this);
   }
 }
 
-/// グローバルフォルダ用のオーバーレイ画像ノード
-class GlobalOverlayImageNode extends OverlayImageNode {
-  GlobalOverlayImageNode(
-    super.filePath,
-    super.location,
-    super.metadata, {
-    required super.overlayParams,
-    super.takenAt,
-    super.direction,
-    super.visible,
-    super.parent,
-  });
-
-  // isGlobalNodeはPathResolverベースで判断される
-}

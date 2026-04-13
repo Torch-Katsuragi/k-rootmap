@@ -1,8 +1,9 @@
-﻿// Root Maps: オーバーレイ画像変換ツール
+// Root Maps: オーバーレイ画像変換ツール
 // ハンドル型のUI操作で画像オーバーレイの平行移動・拡縮・回転を行う
 // スマホ: 1本指でハンドル操作、2本指でカメラ移動（PanTool委譲）
 // PC: マウスドラッグでハンドル操作、ホイールでズーム（PanTool委譲）
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,6 +52,16 @@ class OverlayTransformTool extends MapTool {
   /// 2本指操作中フラグ（PanTool委譲中）
   bool _isPanDelegating = false;
 
+  /// MapLibre更新デバウンスタイマー
+  Timer? _mapUpdateDebounce;
+
+  /// MapLibre更新の最小間隔（100ms）
+  /// 毎フレームの重い remove+add を間引き、ハンドルUIだけ即時更新する
+  static const _mapUpdateInterval = Duration(milliseconds: 100);
+
+  /// 最新のmapState参照（デバウンスコールバック用）
+  IMapState? _lastMapState;
+
   @override
   String get name => 'Overlay Transform';
 
@@ -66,6 +77,8 @@ class OverlayTransformTool extends MapTool {
 
   @override
   void onDeactivate() {
+    _mapUpdateDebounce?.cancel();
+    _mapUpdateDebounce = null;
     _target = null;
     _activeHandle = _HandleType.none;
   }
@@ -168,6 +181,11 @@ class OverlayTransformTool extends MapTool {
     }
 
     if (_target != null && _activeHandle != _HandleType.none) {
+      // デバウンスタイマーをキャンセルし、最終位置を即時反映
+      _mapUpdateDebounce?.cancel();
+      _mapUpdateDebounce = null;
+      mapState.updateOverlayTransform(_target!);
+
       // KMetaに永続化
       _target!.saveOverlayParams();
     }
@@ -312,11 +330,24 @@ class OverlayTransformTool extends MapTool {
     _notifyOverlayChanged(mapState);
   }
 
-  /// オーバーレイ変更をMapSourceManagerに通知（軽量パス）
+  /// オーバーレイ変更を通知
+  ///
+  /// ハンドルUIは即時更新（transformNotifier）し、
+  /// MapLibreへの反映は100msデバウンスで間引く。
+  /// これにより毎フレームの重いremove+addを回避する。
   void _notifyOverlayChanged(IMapState mapState) {
-    if (_target != null) {
-      mapState.updateOverlayTransform(_target!);
-      transformNotifier.value++; // ハンドル位置の局所更新を通知
-    }
+    if (_target == null) return;
+
+    // ハンドル位置は即座に更新（Flutter側の軽量描画）
+    transformNotifier.value++;
+
+    // MapLibre更新は100ms間隔にデバウンス
+    _lastMapState = mapState;
+    _mapUpdateDebounce?.cancel();
+    _mapUpdateDebounce = Timer(_mapUpdateInterval, () {
+      if (_target != null && _lastMapState != null) {
+        _lastMapState!.updateOverlayTransform(_target!);
+      }
+    });
   }
 }

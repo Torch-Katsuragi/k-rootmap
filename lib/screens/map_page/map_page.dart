@@ -162,12 +162,21 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     if (!sourceManager.isInitialized) return;
     final corners = node.cornerCoordinates;
     // 画像URLを解決
-    // Android: file://直接（MapLibre Nativeがサポート、オフラインでも確実）
-    // Windows: TileServer経由（WebView2がfile://非対応のため）
+    // GeoTIFF(.tif): 全プラットフォームでTileServer経由（TIFF→PNG変換）
+    // その他(.jpg/.png): Android=file://直接、Windows=TileServer経由
     final absPath = node.getAbsoluteFilePath();
-    final imageUrl = absPath != null && tileServer.isRunning && !Platform.isAndroid
-        ? tileServer.imageUrlForPath(absPath)
-        : node.imageUrl;
+    final isTiff = absPath != null &&
+        (absPath.toLowerCase().endsWith('.tif') ||
+         absPath.toLowerCase().endsWith('.tiff'));
+
+    String imageUrl;
+    if (isTiff && tileServer.isRunning) {
+      imageUrl = tileServer.imageUrlForPath(absPath);
+    } else if (absPath != null && tileServer.isRunning && !Platform.isAndroid) {
+      imageUrl = tileServer.imageUrlForPath(absPath);
+    } else {
+      imageUrl = node.imageUrl;
+    }
     sourceManager.updateOverlayCoordinates(
       node.overlaySourceId,
       ml.LngLatQuad(
@@ -178,7 +187,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       ),
       imageUrl: imageUrl,
       layerId: node.overlayLayerId,
-      opacity: node.overlayParams.opacity,
+
     );
     // triggerSetStateは呼ばない—ハンドルマーカーは​transformNotifier経由で局所rebuild
   }
@@ -1111,16 +1120,29 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       if (toAdd.contains(node.overlaySourceId)) {
         final corners = node.cornerCoordinates;
         // 画像URLを解決
-        // Android: file://直接（MapLibre Nativeがサポート、オフラインでも確実）
-        // Windows: TileServer経由（WebView2がfile://非対応のため）
+        // GeoTIFF(.tif): 全プラットフォームでTileServer経由（TIFF→PNG変換）
+        //   MapLibreのImageSourceがTIFF非対応のため
+        // その他(.jpg/.png): Android=file://直接、Windows=TileServer経由
         final absPath = node.getAbsoluteFilePath();
-        final httpUrl = absPath != null && tileServer.isRunning && !Platform.isAndroid
-            ? tileServer.imageUrlForPath(absPath)
-            : node.imageUrl;
+        final isTiff = absPath != null &&
+            (absPath.toLowerCase().endsWith('.tif') ||
+             absPath.toLowerCase().endsWith('.tiff'));
+
+        String imageUrl;
+        if (isTiff && tileServer.isRunning) {
+          // GeoTIFF → 全プラットフォームでTileServer経由（TIFF→PNG変換）
+          imageUrl = tileServer.imageUrlForPath(absPath);
+        } else if (absPath != null && tileServer.isRunning && !Platform.isAndroid) {
+          // Windows: TileServer経由
+          imageUrl = tileServer.imageUrlForPath(absPath);
+        } else {
+          // Android: file://直接（JPG/PNGのみ）
+          imageUrl = node.imageUrl;
+        }
         sourceManager.addOverlayImage(
           sourceId: node.overlaySourceId,
           layerId: node.overlayLayerId,
-          imageUrl: httpUrl,
+          imageUrl: imageUrl,
           coordinates: ml.LngLatQuad(
             topLeft: geo.Geographic(
               lon: corners[0].longitude, lat: corners[0].latitude,
@@ -1135,7 +1157,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
               lon: corners[3].longitude, lat: corners[3].latitude,
             ),
           ),
-          opacity: node.overlayParams.opacity,
+
         );
       }
     }

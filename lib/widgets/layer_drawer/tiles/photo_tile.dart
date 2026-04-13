@@ -1,4 +1,4 @@
-﻿/// Root Maps: 写真タイルウィジェット
+/// Root Maps: 写真タイルウィジェット
 library;
 
 import 'dart:io';
@@ -14,6 +14,7 @@ import '../../../models/kmeta.dart';
 import '../../../providers/selection_providers.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../services/kmeta_service.dart';
+import '../../../services/geotiff_service.dart';
 import '../../../utils/app_logger.dart';
 import '../common_dialogs.dart';
 import 'node_visibility_icon.dart';
@@ -102,13 +103,12 @@ class PhotoTile extends ConsumerWidget {
   }
 
   /// 通常のImageNode → OverlayImageNodeに変換
-  /// カメラ中心に配置、画像サイズからデフォルトパラメータを生成
+  /// 元画像をGeoTIFFにコピーし、kmetaにGeoTIFFファイル名で登録
   Future<void> _handleConvertToOverlay(BuildContext context, WidgetRef ref) async {
     final absPath = node.getAbsoluteFilePath();
     if (absPath == null) return;
 
     final folderPath = p.dirname(absPath);
-    final fileName = p.basename(absPath);
 
     // 画像サイズを取得
     int imageWidth = 1920;
@@ -144,16 +144,27 @@ class PhotoTile extends ConsumerWidget {
       centerLat: centerLat,
       scale: 1.0,  // 1 m/px
       rotation: 0.0,
-      opacity: 0.7,
+
       imageWidth: imageWidth,
       imageHeight: imageHeight,
     );
 
+    // GeoTIFFファイルを生成
+    final tifPath = GeoTiffService.outputPathForSource(absPath);
+    final tifFileName = p.basename(tifPath);
+    try {
+      await GeoTiffService.createGeoTiff(absPath, tifPath, overlay);
+    } catch (e) {
+      AppLogger.debug('[PhotoTile] GeoTIFF creation failed: $e');
+      return;
+    }
+
+    // kmetaにGeoTIFFファイル名でオーバーレイ設定を登録
     final success = await KMetaService.instance.setImageOverlay(
-      folderPath, fileName, overlay,
+      folderPath, tifFileName, overlay,
     );
     if (success) {
-      AppLogger.debug('[PhotoTile] Converted to overlay: $fileName');
+      AppLogger.debug('[PhotoTile] Converted to overlay: $tifFileName');
       if (node.parent != null) {
         await node.parent!.updateChildren();
       }
@@ -164,6 +175,7 @@ class PhotoTile extends ConsumerWidget {
   }
 
   /// OverlayImageNode → 通常のImageNodeに戻す
+  /// GeoTIFFファイルを削除し、kmetaからオーバーレイ設定を削除
   Future<void> _handleConvertToNormal(BuildContext context, WidgetRef ref) async {
     final absPath = node.getAbsoluteFilePath();
     if (absPath == null) return;
@@ -171,10 +183,22 @@ class PhotoTile extends ConsumerWidget {
     final folderPath = p.dirname(absPath);
     final fileName = p.basename(absPath);
 
+    // kmetaからオーバーレイ設定を削除
     final success = await KMetaService.instance.removeImageOverlay(
       folderPath, fileName,
     );
     if (success) {
+      // GeoTIFFファイルを削除
+      try {
+        final file = File(absPath);
+        if (await file.exists()) {
+          await file.delete();
+          AppLogger.debug('[PhotoTile] Deleted GeoTIFF: $fileName');
+        }
+      } catch (e) {
+        AppLogger.debug('[PhotoTile] Failed to delete GeoTIFF: $e');
+      }
+
       AppLogger.debug('[PhotoTile] Converted to normal: $fileName');
       if (node.parent != null) {
         await node.parent!.updateChildren();
@@ -185,3 +209,4 @@ class PhotoTile extends ConsumerWidget {
     }
   }
 }
+

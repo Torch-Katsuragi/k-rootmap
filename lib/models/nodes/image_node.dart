@@ -1,4 +1,4 @@
-﻿// Root Maps: 画像ノードクラス
+// Root Maps: 画像ノードクラス
 // 位置情報付き画像ファイルに対応するレイヤツリーノード
 
 import 'dart:io';
@@ -9,6 +9,8 @@ import 'layer_tree_node.dart';
 import 'folder_node.dart';
 import '../../core/node_types.dart';
 import '../../i18n/strings.g.dart';
+import '../../models/kmeta.dart';
+import '../../services/geotiff_service.dart';
 import '../../services/kmeta_service.dart';
 import '../../utils/exif_parser.dart';
 import 'overlay_image_node.dart';
@@ -97,7 +99,7 @@ class ImageNode extends LayerTreeNode {
   bool get fileExists => File(filePath).existsSync();
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
-  /// KMetaにオーバーレイ設定がある画像はOverlayImageNodeとして生成
+  /// GeoTIFFタグ（ModelTransformationTag）を持つ.tifファイルはOverlayImageNodeとして生成
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
@@ -117,29 +119,32 @@ class ImageNode extends LayerTreeNode {
         .toList()
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    // KMetaからオーバーレイ設定を読み込み
-    final kmeta = await KMetaService.instance.getRawMeta(absPath);
-    final overlays = kmeta?.imageOverlays ?? {};
-
     for (var entity in imageFiles) {
       try {
-        final fileName = p.basename(entity.path);
-        final exifData = await ExifParser.extractFromFile(entity.path);
-        final meta = exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync());
+        final ext = p.extension(entity.path).toLowerCase();
+        final isTiff = ext == '.tif' || ext == '.tiff';
 
-        if (overlays.containsKey(fileName)) {
-          // オーバーレイ設定があればOverlayImageNodeとして生成
+        // GeoTIFFタグの判定（.tifファイルのみ）
+        KMetaImageOverlay? overlayParams;
+        if (isTiff) {
+          final bytes = await entity.readAsBytes();
+          overlayParams = GeoTiffService.readGeoTiffParams(bytes);
+        }
+
+        if (overlayParams != null) {
+          // GeoTIFFタグあり → OverlayImageNode
           nodes.add(OverlayImageNode(
             entity.path,
-            exifData?.location,
-            meta,
-            overlayParams: overlays[fileName]!,
-            takenAt: exifData?.takenAt,
-            direction: exifData?.direction,
+            LatLng(overlayParams.centerLat, overlayParams.centerLng),
+            ImageMetadata(fileSize: entity.lengthSync()),
+            overlayParams: overlayParams,
             visible: true,
             parent: parent,
           ));
         } else {
+          // 通常画像
+          final exifData = await ExifParser.extractFromFile(entity.path);
+          final meta = exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync());
           nodes.add(ImageNode(
             entity.path,
             exifData?.location,

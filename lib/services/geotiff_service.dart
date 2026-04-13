@@ -1,0 +1,308 @@
+/// GeoTIFF変換サービス
+///
+/// 画像ファイルをGeoTIFF形式に変換し、地理参照メタデータ
+/// （ModelTransformationTag, GeoKeyDirectoryTag）を注入する。
+/// `image` パッケージのTIFFエンコーダ/ExifData構造を活用。
+library;
+
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
+
+import '../models/kmeta.dart';
+import '../utils/app_logger.dart';
+
+/// GeoTIFF読み書きサービス
+class GeoTiffService {
+  GeoTiffService._();
+
+  // ── GeoTIFFタグID ──────────────────────────────
+  /// ModelTransformationTag: 4x4アフィン変換行列（DOUBLE[16]）
+  static const int kModelTransformationTag = 34264;
+
+  /// GeoKeyDirectoryTag: CRS定義等のキーディレクトリ（SHORT[N]）
+  static const int kGeoKeyDirectoryTag = 34735;
+
+  // ── 公開API ────────────────────────────────────
+
+  /// 元画像からGeoTIFFを生成する
+  ///
+  /// [srcPath] 元画像ファイルパス（JPG/PNG等）
+  /// [outputPath] 出力GeoTIFFパス（.tif）
+  /// [params] オーバーレイ変換パラメータ
+  static Future<void> createGeoTiff(
+    String srcPath,
+    String outputPath,
+    KMetaImageOverlay params,
+  ) async {
+    final srcBytes = await File(srcPath).readAsBytes();
+    final image = img.decodeImage(srcBytes);
+    if (image == null) {
+      throw Exception('画像のデコードに失敗: $srcPath');
+    }
+
+    final tiffBytes = _encodeGeoTiff(image, params);
+    await File(outputPath).writeAsBytes(tiffBytes, flush: true);
+    AppLogger.debug(
+      '[GeoTiffService] created: ${p.basename(outputPath)} '
+      '(${tiffBytes.length} bytes)',
+    );
+  }
+
+  /// 既存GeoTIFFのメタデータ（位置・スケール・回転）を更新して再書き出し
+  ///
+  /// 画像データはデコード→再エンコードされるが、ピクセル内容は不変。
+  /// デバウンスされた呼び出しで使用するため、頻繁には実行されない。
+  static Future<void> updateGeoTiffTags(
+    String tifPath,
+    KMetaImageOverlay params,
+  ) async {
+    final srcBytes = await File(tifPath).readAsBytes();
+    final image = img.decodeImage(srcBytes);
+    if (image == null) {
+      throw Exception('TIFFのデコードに失敗: $tifPath');
+    }
+
+    final tiffBytes = _encodeGeoTiff(image, params);
+    await File(tifPath).writeAsBytes(tiffBytes, flush: true);
+    AppLogger.debug(
+      '[GeoTiffService] updated tags: ${p.basename(tifPath)}',
+    );
+  }
+
+  /// TIFFファイルをデコードしてPNGバイト列に変換する
+  ///
+  /// TileServerでMapLibre向けに配信する際に使用。
+  static Future<Uint8List> decodeTiffToPng(String tifPath) async {
+    final srcBytes = await File(tifPath).readAsBytes();
+    final image = img.decodeImage(srcBytes);
+    if (image == null) {
+      throw Exception('TIFFのデコードに失敗: $tifPath');
+    }
+    return Uint8List.fromList(img.encodePng(image));
+  }
+
+  /// TIFFファイルにGeoTIFFタグ（ModelTransformationTag）が含まれるか判定
+  ///
+  /// OverlayImageNode判定のための軽量チェック。
+  static bool hasGeoTiffTags(Uint8List bytes) {
+    try {
+      final decoder = img.TiffDecoder();
+      final info = decoder.startDecode(bytes);
+      if (info == null || info.images.isEmpty) return false;
+      // frames[0] のExifDataを確認
+      final image = info.images.first;
+      return image.tags.containsKey(kModelTransformationTag);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// GeoTIFFタグからオーバーレイパラメータを逆算する
+  ///
+  /// ModelTransformationTag（4x4行列）を読み取り、
+  /// centerLng/centerLat/scale/rotation/imageWidth/imageHeight を復元する。
+  /// GeoTIFFタグがない場合は null を返す。
+  static KMetaImageOverlay? readGeoTiffParams(Uint8List bytes) {
+    try {
+      final decoder = img.TiffDecoder();
+      final info = decoder.startDecode(bytes);
+      if (info == null || info.images.isEmpty) return null;
+
+      final tiffImage = info.images.first;
+      if (!tiffImage.tags.containsKey(kModelTransformationTag)) return null;
+
+      final matrixEntry = tiffImage.tags[kModelTransformationTag]!;
+      // TiffEntry.read() で遅延読み込み → IfdValue を取得
+      final matrixValue = matrixEntry.read();
+      if (matrixValue == null) return null;
+
+      // IfdValueから16要素のdouble配列を取得
+      final matrix = <double>[];
+      for (var i = 0; i < 16; i++) {
+        matrix.add(matrixValue.toDouble(i));
+      }
+
+      final a = matrix[0]; // scaleX * cosR
+      final b = matrix[1]; // -scaleY * sinR
+      final d = matrix[3]; // originLng
+      final e = matrix[4]; // scaleX * sinR
+      final f = matrix[5]; // -scaleY * cosR
+      final h = matrix[7]; // originLat
+
+      // 画像サイズ取得
+      final imageWidth = tiffImage.width;
+      final imageHeight = tiffImage.height;
+
+      // 回転角度を逆算: rotation = atan2(e, a)
+      final rotRad = math.atan2(e, a);
+      final rotation = rotRad * 180.0 / math.pi;
+
+      // スケール逆算（緯度方向）
+      // f = -scaleY * cosR, b = -scaleY * sinR
+      final scaleY = math.sqrt(b * b + f * f); // 度/ピクセル (緯度方向)
+
+      // 中心座標を逆算
+      // center = origin + matrix * (halfW, halfH)
+      final halfW = imageWidth / 2.0;
+      final halfH = imageHeight / 2.0;
+      final centerLng = d + a * halfW + b * halfH;
+      final centerLat = h + e * halfW + f * halfH;
+
+      // 度/ピクセル → メートル/ピクセル に戻す
+      // scaleY(度/px) = scale(m/px) * degPerMeterLat = scale / 111320
+      final scaleMetersFromLat = scaleY * 111320.0;
+
+      return KMetaImageOverlay(
+        centerLng: centerLng,
+        centerLat: centerLat,
+        scale: scaleMetersFromLat,
+        rotation: rotation,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+      );
+    } catch (e) {
+      AppLogger.debug('[GeoTiffService] readGeoTiffParams error: $e');
+      return null;
+    }
+  }
+
+  // ── 内部実装 ──────────────────────────────────
+
+  /// 画像をGeoTIFFタグ付きTIFFとしてエンコードする
+  ///
+  /// TiffEncoder.encode() のロジックを参考に、
+  /// GeoTIFFタグを含む ExifData を手動構築して書き出す。
+  static Uint8List _encodeGeoTiff(img.Image image, KMetaImageOverlay params) {
+    // HDR画像はuint8に変換
+    var src = image;
+    if (src.isHdrFormat) {
+      src = src.convert(format: img.Format.uint8);
+    }
+
+    final exif = img.ExifData();
+    final ifd = exif.imageIfd;
+
+    // ── 標準TIFFタグ（TiffEncoder.encode()と同等） ──
+    final nc = src.numChannels;
+    final type = nc == 1
+        ? img.TiffPhotometricType.blackIsZero.index
+        : src.hasPalette
+            ? img.TiffPhotometricType.palette.index
+            : img.TiffPhotometricType.rgb.index;
+
+    ifd['ImageWidth'] = src.width;
+    ifd['ImageHeight'] = src.height;
+    ifd['BitsPerSample'] = src.bitsPerChannel;
+    ifd['SampleFormat'] = _getSampleFormat(src).index;
+    ifd['SamplesPerPixel'] = src.hasPalette ? 1 : nc;
+    ifd['Compression'] = img.TiffCompression.none;
+    ifd['PhotometricInterpretation'] = type;
+    ifd['RowsPerStrip'] = src.height;
+    ifd['PlanarConfiguration'] = 1;
+    ifd['TileWidth'] = src.width;
+    ifd['TileLength'] = src.height;
+    ifd['StripByteCounts'] = src.lengthInBytes;
+    ifd['StripOffsets'] = img.IfdValueUndefined.list(src.toUint8List());
+
+    // パレット画像の場合
+    if (src.hasPalette) {
+      final palette = src.palette!;
+      const numCh = 3;
+      final numC = palette.numColors;
+      final colorMap = Uint16List(numC * numCh);
+      for (var c = 0, ci = 0; c < numCh; ++c) {
+        for (var i = 0; i < numC; ++i) {
+          colorMap[ci++] = palette.get(i, c).toInt() << 8;
+        }
+      }
+      ifd['ColorMap'] = colorMap;
+    }
+
+    // ── GeoTIFFタグ注入 ──
+    // exifImageTagsに未登録のタグはdata mapに直接設定
+    final matrix = buildModelTransformationMatrix(params);
+    ifd.data[kModelTransformationTag] =
+        img.IfdValueDouble.list(matrix.toList());
+
+    ifd.data[kGeoKeyDirectoryTag] = img.IfdValueShort.list(const [
+      1, 1, 0, 3, //     Version=1, Revision=1.0, KeyCount=3
+      1024, 0, 1, 2, //  GTModelTypeGeoKey = ModelTypeGeographic(2)
+      1025, 0, 1, 1, //  GTRasterTypeGeoKey = RasterPixelIsArea(1)
+      2048, 0, 1, 4326, // GeographicTypeGeoKey = EPSG:4326
+    ]);
+
+    // ── バイナリ書き出し ──
+    final out = img.OutputBuffer();
+    exif.write(out);
+    return out.getBytes();
+  }
+
+  /// kmetaパラメータから4x4 ModelTransformationMatrixを構築
+  ///
+  /// ラスタ座標(I, J) → モデル座標(Lng, Lat) の変換行列:
+  /// ```
+  /// | a  b  0  d |   | I |   | Lng |
+  /// | e  f  0  h | × | J | = | Lat |
+  /// | 0  0  0  0 |   | 0 |   |  0  |
+  /// | 0  0  0  1 |   | 1 |   |  1  |
+  /// ```
+  static Float64List buildModelTransformationMatrix(KMetaImageOverlay params) {
+    // メートル→度の変換係数
+    final cosLat = math.cos(params.centerLat * math.pi / 180.0);
+    final degPerMeterLng = 1.0 / (111320.0 * cosLat);
+    const degPerMeterLat = 1.0 / 111320.0;
+
+    // ピクセル→度のスケール
+    final scaleX = params.scale * degPerMeterLng;
+    final scaleY = params.scale * degPerMeterLat;
+
+    // 回転行列要素
+    final rotRad = params.rotation * math.pi / 180.0;
+    final cosR = math.cos(rotRad);
+    final sinR = math.sin(rotRad);
+
+    // 行列要素（ラスタ→モデル変換）
+    final a = scaleX * cosR; //     ΔLng per ΔI
+    final b = -scaleY * sinR; //    ΔLng per ΔJ
+    final e = scaleX * sinR; //     ΔLat per ΔI
+    final f = -scaleY * cosR; //    ΔLat per ΔJ (J増→南=Lat減)
+
+    // 画像左上(0,0)のモデル座標
+    // center = origin + matrix * (halfW, halfH) を逆算
+    final halfW = params.imageWidth / 2.0;
+    final halfH = params.imageHeight / 2.0;
+    final originLng = params.centerLng - (a * halfW + b * halfH);
+    final originLat = params.centerLat - (e * halfW + f * halfH);
+
+    return Float64List.fromList([
+      a, b, 0, originLng,
+      e, f, 0, originLat,
+      0, 0, 0, 0,
+      0, 0, 0, 1,
+    ]);
+  }
+
+  /// 画像フォーマットからTIFF SampleFormatを決定
+  static img.TiffFormat _getSampleFormat(img.Image image) {
+    switch (image.formatType) {
+      case img.FormatType.uint:
+        return img.TiffFormat.uint;
+      case img.FormatType.int:
+        return img.TiffFormat.int;
+      case img.FormatType.float:
+        return img.TiffFormat.float;
+    }
+  }
+
+  /// 元画像のパスからGeoTIFF出力パスを生成
+  /// 拡張子を `.tif` に変更するだけ
+  static String outputPathForSource(String srcPath) {
+    final dir = p.dirname(srcPath);
+    final baseName = p.basenameWithoutExtension(srcPath);
+    return p.join(dir, '$baseName.tif');
+  }
+}

@@ -2,6 +2,22 @@
 
 ## v0.5.7 — 2026/04/13
 
+### 🗺️ Save Overlay Images as GeoTIFF
+
+- Introduced GeoTIFF format for overlay image storage (full compatibility with QGIS and other GIS software)
+- Position, scale, and rotation expressed via ModelTransformationTag (4x4 affine transformation matrix)
+- Overlay parameters automatically restored from GeoTIFF tags (eliminates dependency on kmeta)
+- TIFF-to-PNG conversion via TileServer for MapLibre display (with caching)
+- Debounced GeoTIFF file writes on parameter changes (10-second interval)
+- Removed opacity parameter (transparency managed via GeoTIFF alpha channel)
+- Added dedicated detail panel for overlay images
+
+### ⚡ Performance Improvements
+
+- Significantly improved responsiveness of overlay image transforms (move, scale, rotate)
+  - Handle UI updates instantly; MapLibre source updates debounced at 100ms intervals
+  - Avoids expensive per-frame source removal and re-addition
+
 ### 🐛 Bug Fixes
 
 - Fixed overlay images not displaying in offline mode

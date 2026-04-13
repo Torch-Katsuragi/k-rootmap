@@ -1,4 +1,4 @@
-﻿// Root Maps: オーバーレイ画像設定ダイアログ
+// Root Maps: オーバーレイ画像設定ダイアログ
 // 変換パラメータ（位置・スケール・回転・透明度）を数値入力で設定
 
 import 'package:flutter/material.dart';
@@ -42,7 +42,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
   late TextEditingController _latController;
   late TextEditingController _scaleController;
   late TextEditingController _rotationController;
-  late double _opacity;
+
 
   @override
   void initState() {
@@ -52,7 +52,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
     _latController = TextEditingController(text: p.centerLat.toStringAsFixed(6));
     _scaleController = TextEditingController(text: p.scale.toStringAsFixed(3));
     _rotationController = TextEditingController(text: p.rotation.toStringAsFixed(1));
-    _opacity = p.opacity;
+
   }
 
   @override
@@ -128,31 +128,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Text(t.overlaySettings.opacity),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Slider(
-                    value: _opacity,
-                    min: 0.0,
-                    max: 1.0,
-                    divisions: 20,
-                    label: '${(_opacity * 100).round()}%',
-                    onChanged: (v) => setState(() => _opacity = v),
-                  ),
-                ),
-                SizedBox(
-                  width: 40,
-                  child: Text(
-                    '${(_opacity * 100).round()}%',
-                    style: const TextStyle(fontSize: 12),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox(height: 8),
             const SizedBox(height: 8),
             Text(
               t.overlaySettings.imageSize(width: '${widget.node.overlayParams.imageWidth}', height: '${widget.node.overlayParams.imageHeight}'),
@@ -180,7 +156,7 @@ class _OverlaySettingsDialogState extends State<OverlaySettingsDialog> {
       centerLat: double.tryParse(_latController.text) ?? widget.node.overlayParams.centerLat,
       scale: double.tryParse(_scaleController.text) ?? widget.node.overlayParams.scale,
       rotation: double.tryParse(_rotationController.text) ?? widget.node.overlayParams.rotation,
-      opacity: _opacity,
+
       imageWidth: widget.node.overlayParams.imageWidth,
       imageHeight: widget.node.overlayParams.imageHeight,
     );

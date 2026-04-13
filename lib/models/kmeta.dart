@@ -1,4 +1,4 @@
-﻿// Root Maps: フォルダメタデータモデル
+// Root Maps: フォルダメタデータモデル
 // 各フォルダに配置される.kmeta.jsonの読み書き・継承マージを担当
 
 import 'dart:convert';
@@ -511,8 +511,6 @@ class KMetaImageOverlay {
   /// 回転角度（度、時計回り）
   final double rotation;
 
-  /// 不透明度（0.0〜1.0）
-  final double opacity;
 
   /// 画像幅（ピクセル）
   final int imageWidth;
@@ -525,7 +523,7 @@ class KMetaImageOverlay {
     required this.centerLat,
     this.scale = 1.0,
     this.rotation = 0.0,
-    this.opacity = 0.7,
+
     required this.imageWidth,
     required this.imageHeight,
   });
@@ -537,7 +535,7 @@ class KMetaImageOverlay {
       centerLat: (json['centerLat'] as num).toDouble(),
       scale: (json['scale'] as num?)?.toDouble() ?? 1.0,
       rotation: (json['rotation'] as num?)?.toDouble() ?? 0.0,
-      opacity: (json['opacity'] as num?)?.toDouble() ?? 0.7,
+
       imageWidth: json['imageWidth'] as int,
       imageHeight: json['imageHeight'] as int,
     );
@@ -550,7 +548,7 @@ class KMetaImageOverlay {
       'centerLat': centerLat,
       'scale': scale,
       'rotation': rotation,
-      'opacity': opacity,
+
       'imageWidth': imageWidth,
       'imageHeight': imageHeight,
     };
@@ -562,7 +560,7 @@ class KMetaImageOverlay {
     double? centerLat,
     double? scale,
     double? rotation,
-    double? opacity,
+
     int? imageWidth,
     int? imageHeight,
   }) {
@@ -571,7 +569,7 @@ class KMetaImageOverlay {
       centerLat: centerLat ?? this.centerLat,
       scale: scale ?? this.scale,
       rotation: rotation ?? this.rotation,
-      opacity: opacity ?? this.opacity,
+
       imageWidth: imageWidth ?? this.imageWidth,
       imageHeight: imageHeight ?? this.imageHeight,
     );

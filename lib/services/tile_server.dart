@@ -7,10 +7,13 @@ library;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import '../models/basemap_provider.dart';
 import '../utils/app_logger.dart';
 import 'basemap_service.dart';
+import 'geotiff_service.dart';
 
 class TileServer {
   final BaseMapService _baseMapService;
@@ -290,7 +293,14 @@ class TileServer {
     }
   }
 
+  /// オーバーレイPNG変換キャッシュディレクトリ（遅延初期化）
+  static Directory? _overlayCacheDir;
+
   /// オーバーレイ画像リクエスト処理: `GET /overlay?path=<encoded_path>`
+  ///
+  /// JPG/PNG: そのまま配信（従来通り）
+  /// TIFF/TIF: image pkg でデコード→PNG変換→キャッシュ→配信
+  /// MapLibreのImageSourceがTIFF非対応のため、PNG変換を行う。
   Future<void> _handleOverlayRequest(HttpRequest request) async {
     try {
       final filePath = request.uri.queryParameters['path'];
@@ -310,28 +320,70 @@ class TileServer {
         return;
       }
 
-      // Content-Typeを拡張子から判定
       final ext = filePath.toLowerCase();
-      String contentType;
-      if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
-        contentType = 'image/jpeg';
-      } else if (ext.endsWith('.png')) {
-        contentType = 'image/png';
-      } else if (ext.endsWith('.tiff') || ext.endsWith('.tif')) {
-        contentType = 'image/tiff';
-      } else {
-        contentType = 'application/octet-stream';
-      }
+      final isTiff = ext.endsWith('.tif') || ext.endsWith('.tiff');
 
-      final bytes = await file.readAsBytes();
-      request.response
-        ..statusCode = HttpStatus.ok
-        ..headers.contentType = ContentType.parse(contentType)
-        ..add(bytes);
+      if (isTiff) {
+        // TIFF → PNG変換（キャッシュ付き）
+        final pngBytes = await _getOrConvertTiffToPng(filePath, file);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.parse('image/png')
+          ..add(pngBytes);
+      } else {
+        // JPG/PNG等: そのまま配信
+        String contentType;
+        if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+          contentType = 'image/jpeg';
+        } else if (ext.endsWith('.png')) {
+          contentType = 'image/png';
+        } else {
+          contentType = 'application/octet-stream';
+        }
+
+        final bytes = await file.readAsBytes();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.parse(contentType)
+          ..add(bytes);
+      }
     } catch (e) {
       AppLogger.debug('[TileServer] overlay error: $e');
       request.response.statusCode = HttpStatus.internalServerError;
     }
+  }
+
+  /// TIFF→PNG変換（キャッシュ付き）
+  ///
+  /// tempディレクトリにPNG変換結果を保存し、
+  /// TIFFの更新日時がキャッシュより新しい場合のみ再変換する。
+  Future<Uint8List> _getOrConvertTiffToPng(
+    String tiffPath,
+    File tiffFile,
+  ) async {
+    _overlayCacheDir ??= Directory(
+      '${(await getTemporaryDirectory()).path}/k_maps_overlay_cache',
+    );
+    await _overlayCacheDir!.create(recursive: true);
+
+    // キャッシュファイル名: パスのSHA1ハッシュ + .png
+    final hash = sha1.convert(utf8.encode(tiffPath)).toString();
+    final cacheFile = File('${_overlayCacheDir!.path}/$hash.png');
+
+    // キャッシュ有効判定: キャッシュ存在 かつ TIFFより更新日時が新しい
+    if (await cacheFile.exists()) {
+      final cacheMod = await cacheFile.lastModified();
+      final tiffMod = await tiffFile.lastModified();
+      if (cacheMod.isAfter(tiffMod)) {
+        return cacheFile.readAsBytes();
+      }
+    }
+
+    // TIFF→PNG変換
+    AppLogger.debug('[TileServer] converting TIFF to PNG: $tiffPath');
+    final pngBytes = await GeoTiffService.decodeTiffToPng(tiffPath);
+    await cacheFile.writeAsBytes(pngBytes, flush: true);
+    return pngBytes;
   }
 
   /// フォントPBFリクエスト処理（Windows用）: `GET /font/{fontstack}/{range}.pbf`

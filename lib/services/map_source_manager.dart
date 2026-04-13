@@ -1021,7 +1021,7 @@ class MapSourceManager {
     required String layerId,
     required String imageUrl,
     required ml.LngLatQuad coordinates,
-    required double opacity,
+
   }) async {
     final s = _style;
     if (s == null) return;
@@ -1038,9 +1038,6 @@ class MapSourceManager {
       );
       _overlaySourceIds.add(sourceId);
 
-      // 不透明度を設定
-      _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
-
       AppLogger.debug('[MapSourceManager] addOverlayImage: $sourceId');
     } catch (e) {
       AppLogger.debug('[MapSourceManager] addOverlayImage error: $e');
@@ -1056,7 +1053,7 @@ class MapSourceManager {
     ml.LngLatQuad coords, {
     String? imageUrl,
     String? layerId,
-    double opacity = 1.0,
+
   }) async {
     final s = _style;
     if (s == null) return;
@@ -1081,7 +1078,7 @@ class MapSourceManager {
         coords: coords,
         imageUrl: imageUrl,
         layerId: layerId,
-        opacity: opacity,
+
       );
 
       // 既に drain loop が動いていればスキップ（最新値は pending に保存済み）
@@ -1112,9 +1109,7 @@ class MapSourceManager {
               belowLayerId: kPolygonsFill,
             );
             _overlaySourceIds.add(sourceId);
-            _setOverlayPaintProperty(
-              req.layerId, 'raster-opacity', req.opacity,
-            );
+
           } catch (e) {
             AppLogger.debug(
               '[MapSourceManager] updateOverlayCoordinates native error: $e',
@@ -1127,10 +1122,7 @@ class MapSourceManager {
     }
   }
 
-  /// オーバーレイ画像の不透明度を更新
-  void updateOverlayOpacity(String layerId, double opacity) {
-    _setOverlayPaintProperty(layerId, 'raster-opacity', opacity);
-  }
+
 
   /// オーバーレイ画像を削除
   Future<void> removeOverlayImage(String sourceId, String layerId) async {
@@ -1149,19 +1141,6 @@ class MapSourceManager {
   /// 管理中のオーバーレイソースIDを取得
   Set<String> get activeOverlaySourceIds => Set.unmodifiable(_overlaySourceIds);
 
-  /// オーバーレイのpaintプロパティを設定
-  void _setOverlayPaintProperty(String layerId, String property, dynamic value) {
-    final s = _style;
-    if (s == null) return;
-
-    if (s is webview_style.StyleControllerWebView) {
-      final valueStr = value is String ? '"$value"' : value.toString();
-      s.webViewController.callAsyncJavaScript(
-        functionBody:
-            'window.map.setPaintProperty("$layerId","$property",$valueStr);',
-      );
-    }
-  }
 
   // --------------------------------------------------
   // ユーティリティ
@@ -1205,12 +1184,12 @@ class _OverlayUpdateRequest {
   final ml.LngLatQuad coords;
   final String imageUrl;
   final String layerId;
-  final double opacity;
+
 
   const _OverlayUpdateRequest({
     required this.coords,
     required this.imageUrl,
     required this.layerId,
-    required this.opacity,
+
   });
 }

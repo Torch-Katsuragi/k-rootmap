@@ -1,4 +1,4 @@
-﻿// Root Maps: グローバルフォルダノードクラス
+// Root Maps: グローバルフォルダノードクラス
 // どのプロジェクトを開いても表示される共有フォルダ
 // 実体はアプリケーションのDocumentsディレクトリに存在
 // 
@@ -6,6 +6,7 @@
 // 現在はPathResolverを注入してisGlobalNodeを自動判定
 
 import 'dart:io';
+import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:root_maps/utils/app_logger.dart';
 import 'layer_tree_node.dart';
@@ -16,7 +17,7 @@ import 'overlay_image_node.dart';
 import '../geopackage/geopackage_file.dart';
 import '../kmeta.dart';
 import '../../core/path_resolver.dart';
-import '../../services/kmeta_service.dart';
+import '../../services/geotiff_service.dart';
 import '../../utils/exif_parser.dart';
 
 /// グローバルフォルダ内サブフォルダのDrive連携チェック
@@ -200,17 +201,22 @@ class GlobalFolderNode extends FolderNode {
     }
     imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    // KMetaからオーバーレイ設定を読み込み
-    final kmeta = await KMetaService.instance.getRawMeta(globalPath);
-    final overlays = kmeta?.imageOverlays ?? {};
-
     for (final entity in imageFiles) {
-      final fileName = p.basename(entity.path);
-      if (overlays.containsKey(fileName)) {
-        final node = await GlobalOverlayImageNode._fromPath(
-          entity.path, overlays[fileName]!, parent: this,
+      final ext = p.extension(entity.path).toLowerCase();
+      final isTiff = ext == '.tif' || ext == '.tiff';
+
+      // GeoTIFFタグの判定（.tifファイルのみ）
+      KMetaImageOverlay? overlayParams;
+      if (isTiff) {
+        final bytes = await entity.readAsBytes();
+        overlayParams = GeoTiffService.readGeoTiffParams(bytes);
+      }
+
+      if (overlayParams != null) {
+        final node = GlobalOverlayImageNode._fromGeoTiff(
+          entity.path, overlayParams, parent: this,
         );
-        if (node != null) nodes.add(node);
+        nodes.add(node);
       } else {
         final node = await GlobalImageNode.fromPath(entity.path, parent: this);
         if (node != null) nodes.add(node);
@@ -391,17 +397,22 @@ class GlobalSubFolderNode extends FolderNode {
     }
     imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
 
-    // KMetaからオーバーレイ設定を読み込み
-    final kmeta = await KMetaService.instance.getRawMeta(absPath);
-    final overlays = kmeta?.imageOverlays ?? {};
-
     for (final entity in imageFiles) {
-      final fileName = p.basename(entity.path);
-      if (overlays.containsKey(fileName)) {
-        final node = await GlobalOverlayImageNode._fromPath(
-          entity.path, overlays[fileName]!, parent: this,
+      final ext = p.extension(entity.path).toLowerCase();
+      final isTiff = ext == '.tif' || ext == '.tiff';
+
+      // GeoTIFFタグの判定（.tifファイルのみ）
+      KMetaImageOverlay? overlayParams;
+      if (isTiff) {
+        final bytes = await entity.readAsBytes();
+        overlayParams = GeoTiffService.readGeoTiffParams(bytes);
+      }
+
+      if (overlayParams != null) {
+        final node = GlobalOverlayImageNode._fromGeoTiff(
+          entity.path, overlayParams, parent: this,
         );
-        if (node != null) nodes.add(node);
+        nodes.add(node);
       } else {
         final node = await GlobalImageNode.fromPath(entity.path, parent: this);
         if (node != null) nodes.add(node);
@@ -490,42 +501,31 @@ class GlobalImageNode extends ImageNode {
 }
 
 /// グローバルフォルダ用のオーバーレイ画像ノード
+/// GeoTIFFタグから直接パラメータを読み取って構築
 class GlobalOverlayImageNode extends OverlayImageNode {
   GlobalOverlayImageNode._(
     super.filePath,
     super.location,
     super.metadata, {
     required super.overlayParams,
-    super.takenAt,
-    super.direction,
     super.visible,
     super.parent,
   });
 
-  /// 絶対パスからGlobalOverlayImageNodeを作成
-  static Future<GlobalOverlayImageNode?> _fromPath(
+  /// GeoTIFFタグから読み取ったパラメータでGlobalOverlayImageNodeを作成
+  static GlobalOverlayImageNode _fromGeoTiff(
     String absolutePath,
     KMetaImageOverlay overlayParams, {
     LayerTreeNode? parent,
-  }) async {
+  }) {
     final file = File(absolutePath);
-    if (!file.existsSync()) return null;
-
-    try {
-      final exifData = await ExifParser.extractFromFile(absolutePath);
-      return GlobalOverlayImageNode._(
-        absolutePath,
-        exifData?.location,
-        exifData?.metadata ?? ImageMetadata(fileSize: file.lengthSync()),
-        overlayParams: overlayParams,
-        takenAt: exifData?.takenAt,
-        direction: exifData?.direction,
-        visible: true,
-        parent: parent,
-      );
-    } catch (e) {
-      AppLogger.debug('[GlobalOverlayImageNode] Error loading image: $e');
-      return null;
-    }
+    return GlobalOverlayImageNode._(
+      absolutePath,
+      LatLng(overlayParams.centerLat, overlayParams.centerLng),
+      ImageMetadata(fileSize: file.existsSync() ? file.lengthSync() : 0),
+      overlayParams: overlayParams,
+      visible: true,
+      parent: parent,
+    );
   }
 }

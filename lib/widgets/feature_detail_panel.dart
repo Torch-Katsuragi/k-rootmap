@@ -6,6 +6,7 @@ import '../i18n/strings.g.dart';
 import 'dart:io';
 import '../models/nodes/feature_node.dart';
 import '../models/nodes/image_node.dart';
+import '../models/nodes/overlay_image_node.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../providers/selection_providers.dart';
@@ -24,6 +25,99 @@ class FeatureDetailPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (feature == null) return const SizedBox.shrink();
+
+    // OverlayImageNode用の詳細パネル（ImageNodeより先にチェック）
+    if (feature is OverlayImageNode) {
+      final overlay = feature as OverlayImageNode;
+      final params = overlay.overlayParams;
+
+      return _buildPanel(
+        context,
+        title: "🗺️ オーバーレイ画像",
+        children: [
+          // オーバーレイアイコン
+          Container(
+            width: double.infinity,
+            height: 60,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.teal.shade200),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.layers, color: Colors.teal.shade400, size: 24),
+                const SizedBox(height: 4),
+                Text(
+                  'GeoTIFF',
+                  style: TextStyle(
+                    color: Colors.teal.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 名前
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(t.featureDetail.nameLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(child: Text(overlay.name)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 中心座標
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(t.featureDetail.coordLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text(
+                  '${params.centerLat.toStringAsFixed(6)}, ${params.centerLng.toStringAsFixed(6)}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // スケール・回転
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Scale: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('${params.scale.toStringAsFixed(3)} m/px', style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 12),
+              const Text('Rot: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('${params.rotation.toStringAsFixed(1)}°', style: const TextStyle(fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // 画像サイズ
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(t.featureDetail.sizeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text(
+                  '${params.imageWidth} x ${params.imageHeight}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          // 削除ボタン
+          const SizedBox(height: 12),
+          LongPressDeleteButton(
+            label: t.featureDetail.delete,
+            onDelete: () => _handleDelete(ref),
+          ),
+        ],
+      );
+    }
 
     // ImageNode用の詳細パネル
     if (feature is ImageNode) {

@@ -1,4 +1,4 @@
-﻿/// 背景地図設定画面
+/// 背景地図設定画面
 /// 背景地図プロバイダーの選択とオフライン機能の管理
 library;
 import '../i18n/strings.g.dart';
@@ -381,25 +381,119 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
   /// 背景地図選択セクション
   Widget _buildProviderSelectionSection() {
     final currentProvider = _baseMapService.currentProvider;
+    final isAdvanced = _baseMapService.isAdvancedMode;
+    final weights = _baseMapService.providerWeights;
 
     return SettingsSection(
       title: t.basemap.selectBasemap,
-      children: BaseMapProvider.availableProviders.map((provider) {
-        final isSelected = provider.id == currentProvider.id;
-        final cachedTileCount = _cacheStats[provider.id] ?? 0;
-        final subtitleText = cachedTileCount > 0
-            ? '${provider.description}\n${t.basemap.cacheCount(count: cachedTileCount.toString())}'
-            : provider.description;
+      children: [
+        // 通常モード: ラジオボタン式
+        if (!isAdvanced)
+          ...BaseMapProvider.availableProviders.map((provider) {
+            final isSelected = provider.id == currentProvider.id;
+            final cachedTileCount = _cacheStats[provider.id] ?? 0;
+            final subtitleText = cachedTileCount > 0
+                ? '${provider.description}\n${t.basemap.cacheCount(count: cachedTileCount.toString())}'
+                : provider.description;
 
-        return SettingsSelectionTile(
-          leadingIcon: provider.icon,
-          leadingIconColor: Colors.blue,
-          title: provider.name,
-          subtitle: subtitleText,
-          isSelected: isSelected,
-          onTap: () => _changeProvider(provider),
-        );
-      }).toList(),
+            return SettingsSelectionTile(
+              leadingIcon: provider.icon,
+              leadingIconColor: Colors.blue,
+              title: provider.name,
+              subtitle: subtitleText,
+              isSelected: isSelected,
+              onTap: () => _changeProvider(provider),
+            );
+          }),
+
+        // 高度モード: スライダー式
+        if (isAdvanced)
+          ...BaseMapProvider.availableProviders.map((provider) {
+            final weight = weights[provider.id] ?? 0;
+            final cachedTileCount = _cacheStats[provider.id] ?? 0;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    provider.icon,
+                    color: weight > 0
+                        ? Colors.blue
+                        : Colors.grey.withValues(alpha: 0.4),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          provider.name,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: weight > 0 ? null : Colors.grey,
+                          ),
+                        ),
+                        if (cachedTileCount > 0)
+                          Text(
+                            t.basemap.cacheCount(count: cachedTileCount.toString()),
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    flex: 5,
+                    child: Slider(
+                      value: weight.toDouble(),
+                      min: 0,
+                      max: 100,
+                      divisions: 20,
+                      label: weight.toString(),
+                      onChanged: (value) {
+                        _baseMapService.setProviderWeight(
+                          provider.id,
+                          value.round(),
+                        );
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 32,
+                    child: Text(
+                      '$weight',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: weight > 0 ? Colors.blue : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+        const Divider(),
+
+        // 高度な設定チェックボックス
+        SettingsSwitchTile(
+          leadingIcon: Icons.tune,
+          activeIconColor: Colors.deepPurple,
+          inactiveIconColor: Colors.grey,
+          title: '高度な設定',
+          subtitle: '複数の背景地図を重ねて表示',
+          value: isAdvanced,
+          onChanged: (value) async {
+            await _baseMapService.setAdvancedMode(value);
+            setState(() {});
+          },
+        ),
+      ],
     );
   }
 

@@ -38,9 +38,12 @@
 - Clustering radius now scales with point size (pointSize × 2)
 - Cluster circle visual size enforces a minimum of 6px for point size
 
-### 🗺️ New Basemap Option
+### 🗺️ New Basemap Options & Blending
 
 - Added GSI Red Relief Image Map to basemap lineup (zoom levels 2–14)
+- "Advanced Settings" mode enables blending multiple basemaps with sliders
+  - Cumulative alpha correction ensures visual weight matches slider ratios
+  - Example: overlay standard map + red relief to see both place names and terrain
 
 ---
 

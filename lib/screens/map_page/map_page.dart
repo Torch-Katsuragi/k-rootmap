@@ -560,10 +560,14 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     );
   }
 
+  /// アクティブなbasemapレイヤIDのトラッキング（削除用）
+  final List<String> _activeBasemapLayerIds = [];
+  final List<String> _activeBasemapSourceIds = [];
+
   Future<void> _onMapStyleLoaded(ml.StyleController style) async {
     AppLogger.debug('[MAP] onStyleLoaded fired');
     mapControllerInstance.attachStyle(style);
-    await _addBasemapSource(style);
+    await _addBasemapSources(style);
     await sourceManager.initialize(style);
 
     // 現在のスタイル設定を反映
@@ -573,72 +577,76 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     invalidateLayerCache();
   }
 
-  /// ベースマップソース追加
-  /// Android + オフライン時は mbtiles:// で直接読み込み
-  /// それ以外は TileServer経由のlocalhost URL
-  /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSource用）
-  Future<void> _addBasemapSource(
+  /// ベースマップソース追加（複数プロバイダ対応）
+  /// activeLayerConfigで有効なプロバイダを取得し、各プロバイダにRasterSource + RasterStyleLayerを登録
+  /// [belowLayerId] 指定時はそのレイヤの下に挿入（replaceBasemapSources用）
+  Future<void> _addBasemapSources(
     ml.StyleController style, {
     String? belowLayerId,
   }) async {
-    final provider = baseMapService.currentProvider;
+    final layers = baseMapService.activeLayerConfig;
+    if (layers.isEmpty) return;
 
-    ml.RasterSource source;
+    for (final (provider, opacity) in layers) {
+      final sourceId = 'basemap-${provider.id}';
+      final layerId = 'basemap-layer-${provider.id}';
 
-    // Android + オフライン → mbtiles:// 直接読み込み
-    if (Platform.isAndroid && !baseMapService.isNetworkAvailable) {
-      final mbtilesPath = baseMapService.getMBTilesPath(provider.id);
-      if (mbtilesPath != null) {
-        AppLogger.debug(
-          '[MAP] addBasemapSource: mbtiles://$mbtilesPath (offline)',
-        );
-        source = ml.RasterSource(
-          id: 'basemap',
-          url: 'mbtiles://$mbtilesPath',
-          maxZoom: provider.maxZoom.toDouble(),
-          tileSize: 256,
-        );
+      ml.RasterSource source;
+
+      // Android + オフライン → mbtiles:// 直接読み込み
+      if (Platform.isAndroid && !baseMapService.isNetworkAvailable) {
+        final mbtilesPath = baseMapService.getMBTilesPath(provider.id);
+        if (mbtilesPath != null) {
+          source = ml.RasterSource(
+            id: sourceId,
+            url: 'mbtiles://$mbtilesPath',
+            maxZoom: provider.maxZoom.toDouble(),
+            tileSize: 256,
+          );
+        } else {
+          final url = tileServer.isRunning
+              ? tileServer.urlTemplate(provider.id)
+              : provider.urlTemplate;
+          source = ml.RasterSource(
+            id: sourceId,
+            tiles: [url],
+            maxZoom: provider.maxZoom.toDouble(),
+            tileSize: 256,
+            attribution: provider.attribution,
+          );
+        }
       } else {
-        // MBTilesファイルがない場合はTileServer経由（キャッシュもない状態）
+        // オンライン or Windows → TileServer経由
         final url = tileServer.isRunning
             ? tileServer.urlTemplate(provider.id)
             : provider.urlTemplate;
-        AppLogger.debug('[MAP] addBasemapSource: $url (no mbtiles cache)');
         source = ml.RasterSource(
-          id: 'basemap',
+          id: sourceId,
           tiles: [url],
           maxZoom: provider.maxZoom.toDouble(),
           tileSize: 256,
           attribution: provider.attribution,
         );
       }
-    } else {
-      // オンライン or Windows → TileServer経由
-      final url =
-          tileServer.isRunning
-              ? tileServer.urlTemplate(provider.id)
-              : provider.urlTemplate;
-      AppLogger.debug(
-        '[MAP] addBasemapSource: url=$url (tileServer=${tileServer.isRunning})',
-      );
-      source = ml.RasterSource(
-        id: 'basemap',
-        tiles: [url],
-        maxZoom: provider.maxZoom.toDouble(),
-        tileSize: 256,
-        attribution: provider.attribution,
-      );
-    }
 
-    try {
-      await style.addSource(source);
-      await style.addLayer(
-        const ml.RasterStyleLayer(id: 'basemap-layer', sourceId: 'basemap'),
-        belowLayerId: belowLayerId,
-      );
-      AppLogger.debug('[MAP] addBasemapSource: success');
-    } catch (e) {
-      AppLogger.debug('[MAP] addBasemapSource: error: $e');
+      try {
+        await style.addSource(source);
+        await style.addLayer(
+          ml.RasterStyleLayer(
+            id: layerId,
+            sourceId: sourceId,
+            paint: {'raster-opacity': opacity},
+          ),
+          belowLayerId: belowLayerId,
+        );
+        _activeBasemapSourceIds.add(sourceId);
+        _activeBasemapLayerIds.add(layerId);
+        AppLogger.debug(
+          '[MAP] addBasemapSource: ${provider.id} opacity=${opacity.toStringAsFixed(2)}',
+        );
+      } catch (e) {
+        AppLogger.debug('[MAP] addBasemapSource error (${provider.id}): $e');
+      }
     }
   }
 
@@ -657,15 +665,22 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     }
   }
 
-  /// ベースマップ切替（旧ソース削除→新ソース追加）
+  /// ベースマップ切替（旧ソース全削除→新ソース追加）
   Future<void> replaceBasemapSource() async {
     final style = mapControllerInstance.style;
     if (style == null) return;
-    try {
-      await style.removeLayer('basemap-layer');
-      await style.removeSource('basemap');
-    } catch (_) {}
-    await _addBasemapSource(
+
+    // 既存の全basemapレイヤ・ソースを削除
+    for (final layerId in _activeBasemapLayerIds.reversed) {
+      try { await style.removeLayer(layerId); } catch (_) {}
+    }
+    for (final sourceId in _activeBasemapSourceIds.reversed) {
+      try { await style.removeSource(sourceId); } catch (_) {}
+    }
+    _activeBasemapLayerIds.clear();
+    _activeBasemapSourceIds.clear();
+
+    await _addBasemapSources(
       style,
       belowLayerId: MapSourceManager.kPolygonsFill,
     );

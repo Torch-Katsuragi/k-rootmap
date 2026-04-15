@@ -1,4 +1,4 @@
-﻿/// 全画面フィーチャ編集スクリーン
+/// 全画面フィーチャ編集スクリーン
 ///
 /// MapLibreMap を背景に、下部パネルで編集コントロールを表示。
 /// カメラツールと同じ Navigator.push パターンで遷移する。
@@ -155,20 +155,24 @@ class _FeatureEditorScreenState extends ConsumerState<FeatureEditorScreen> {
         _mapController.attach(controller.raw!);
       },
       onStyleLoaded: (_, style) async {
-        final provider = baseMapService.currentProvider;
-        final url = ts.isRunning
-            ? ts.urlTemplate(provider.id)
-            : provider.urlTemplate;
-        await style.addSource(ml.RasterSource(
-          id: 'editor-basemap',
-          tiles: [url],
-          maxZoom: provider.maxZoom.toDouble(),
-          tileSize: 256,
-        ));
-        await style.addLayer(ml.RasterStyleLayer(
-          id: 'editor-basemap-layer',
-          sourceId: 'editor-basemap',
-        ));
+        final layers = baseMapService.activeLayerConfig;
+        for (final (provider, opacity) in layers) {
+          final url = ts.isRunning
+              ? ts.urlTemplate(provider.id)
+              : provider.urlTemplate;
+          final sourceId = 'editor-basemap-${provider.id}';
+          await style.addSource(ml.RasterSource(
+            id: sourceId,
+            tiles: [url],
+            maxZoom: provider.maxZoom.toDouble(),
+            tileSize: 256,
+          ));
+          await style.addLayer(ml.RasterStyleLayer(
+            id: 'editor-basemap-layer-${provider.id}',
+            sourceId: sourceId,
+            paint: {'raster-opacity': opacity},
+          ));
+        }
         _onMapReady();
       },
       layers: [

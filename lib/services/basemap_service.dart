@@ -1,7 +1,8 @@
-﻿/// 背景地図管理サービス
+/// 背景地図管理サービス
 /// 背景地図の選択、切り替え、オフラインキャッシュ機能を提供
 library;
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:root_maps/utils/app_logger.dart';
@@ -121,10 +122,14 @@ class BaseMapService extends ChangeNotifier {
   // キャンセルトークン用
   bool _isDownloading = false;
   bool _cancelDownload = false;
-  
-  // 診断用カウンタ
 
-  /// 現在の背景地図プロバイダー
+  // --- ブレンドモード ---
+  /// プロバイダID → weight（0〜100）。0は非表示。
+  Map<String, int> _providerWeights = {};
+  /// 高度な設定モード（スライダー表示）
+  bool _advancedMode = false;
+
+  /// 現在の背景地図プロバイダー（互換用: 最大weightのプロバイダ）
   BaseMapProvider get currentProvider => _currentProvider;
 
   /// オフラインモードかどうか
@@ -142,6 +147,31 @@ class BaseMapService extends ChangeNotifier {
   /// 利用可能なプロバイダー一覧
   List<BaseMapProvider> get availableProviders =>
       BaseMapProvider.availableProviders;
+
+  /// プロバイダ重みマップ
+  Map<String, int> get providerWeights => Map.unmodifiable(_providerWeights);
+
+  /// 高度な設定モードかどうか
+  bool get isAdvancedMode => _advancedMode;
+
+  /// アクティブな背景地図レイヤ設定（プロバイダ + 累積補正済みopacity）
+  ///
+  /// 累積補正式: α_i = w_i / (w_1 + w_2 + ... + w_i)
+  /// この方式ではPainter's Algorithmの重ね塗り効果を補正し、
+  /// 各レイヤの実効表示が weight比率どおりになる。
+  List<(BaseMapProvider, double)> get activeLayerConfig {
+    final active = BaseMapProvider.availableProviders
+        .where((p) => (_providerWeights[p.id] ?? 0) > 0)
+        .toList();
+    final result = <(BaseMapProvider, double)>[];
+    double cumSum = 0;
+    for (final p in active) {
+      final w = (_providerWeights[p.id] ?? 0).toDouble();
+      cumSum += w;
+      result.add((p, w / cumSum));
+    }
+    return result;
+  }
 
   /// サービス初期化
   Future<void> initialize() async {
@@ -288,15 +318,35 @@ class BaseMapService extends ChangeNotifier {
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final providerId = prefs.getString('basemap_provider_id');
       _isOfflineMode = prefs.getBool('basemap_offline_mode') ?? false;
+      _advancedMode = prefs.getBool('basemap_advanced_mode') ?? false;
 
-      if (providerId != null) {
-        final provider = BaseMapProvider.getProviderById(providerId);
-        if (provider != null) {
-          _currentProvider = provider;
+      // ブレンド重みの読み込み
+      final weightsJson = prefs.getString('basemap_weights');
+      if (weightsJson != null) {
+        final decoded = json.decode(weightsJson) as Map<String, dynamic>;
+        _providerWeights = decoded.map((k, v) => MapEntry(k, v as int));
+      }
+
+      // 後方互換: 旧設定のみ存在する場合はマイグレーション
+      if (_providerWeights.isEmpty) {
+        final providerId = prefs.getString('basemap_provider_id');
+        if (providerId != null) {
+          final provider = BaseMapProvider.getProviderById(providerId);
+          if (provider != null) {
+            _providerWeights = {provider.id: 100};
+            _currentProvider = provider;
+          }
         }
       }
+
+      // weightsがまだ空ならデフォルトプロバイダ
+      if (_providerWeights.isEmpty) {
+        _providerWeights = {BaseMapProvider.defaultProvider.id: 100};
+      }
+
+      // _currentProviderを最大weightのプロバイダに同期
+      _syncCurrentProvider();
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Settings load error: $e');
     }
@@ -308,18 +358,62 @@ class BaseMapService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('basemap_provider_id', _currentProvider.id);
       await prefs.setBool('basemap_offline_mode', _isOfflineMode);
+      await prefs.setBool('basemap_advanced_mode', _advancedMode);
+      await prefs.setString('basemap_weights', json.encode(_providerWeights));
     } catch (e) {
       AppLogger.debug('[BaseMapService] ❌ Settings save error: $e');
     }
   }
 
-  /// 背景地図プロバイダーを変更
-  Future<void> setProvider(BaseMapProvider provider) async {
-    if (_currentProvider != provider) {
-      _currentProvider = provider;
-      await _saveSettings();
-      notifyListeners();
+  /// 最大weightのプロバイダを_currentProviderに同期
+  void _syncCurrentProvider() {
+    String? maxId;
+    int maxWeight = 0;
+    for (final entry in _providerWeights.entries) {
+      if (entry.value > maxWeight) {
+        maxWeight = entry.value;
+        maxId = entry.key;
+      }
     }
+    if (maxId != null) {
+      _currentProvider = BaseMapProvider.getProviderById(maxId)
+          ?? BaseMapProvider.defaultProvider;
+    }
+  }
+
+  /// 背景地図プロバイダーを変更（通常モード用: 選択=100、他=0）
+  Future<void> setProvider(BaseMapProvider provider) async {
+    _providerWeights = {provider.id: 100};
+    _currentProvider = provider;
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  /// 個別プロバイダのweightを設定（高度モード用）
+  Future<void> setProviderWeight(String providerId, int weight) async {
+    final clamped = weight.clamp(0, 100);
+    if ((_providerWeights[providerId] ?? 0) == clamped) return;
+    if (clamped == 0) {
+      _providerWeights.remove(providerId);
+    } else {
+      _providerWeights[providerId] = clamped;
+    }
+    _syncCurrentProvider();
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  /// 高度な設定モードの切り替え
+  Future<void> setAdvancedMode(bool enabled) async {
+    if (_advancedMode == enabled) return;
+    _advancedMode = enabled;
+    if (!enabled) {
+      // 高度→通常: 最大weightのプロバイダのみ残す
+      _syncCurrentProvider();
+      _providerWeights = {_currentProvider.id: 100};
+    }
+    await _saveSettings();
+    notifyListeners();
   }
 
   /// オフラインモードの切り替え

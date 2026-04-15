@@ -45,6 +45,12 @@
   - Cumulative alpha correction ensures visual weight matches slider ratios
   - Example: overlay standard map + red relief to see both place names and terrain
 
+### 🛠️ Maintenance
+
+- Completely removed maplibre_webview dependency, now using MapLibre Native only
+  - Eliminated WebView-specific workarounds (JS bridge, CORS headers, font HTTP proxy)
+  - Windows support paused until native Windows support is available in MapLibre
+
 ---
 
 ## v0.5.7 — 2026/04/13

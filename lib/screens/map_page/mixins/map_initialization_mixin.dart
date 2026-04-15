@@ -142,13 +142,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
       final fontDir = await TileServer.ensureFontCache();
 
-      // Android/iOS: file://パスで直接読み込み、Windows: TileServer経由
-      if (fontDir != null) {
-        basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
-      } else {
-        // フォントキャッシュなし（オフライン初回起動等）→ TileServerプロキシ
-        basemapStyleUri = await TileServer.ensureLocalStyle(port: tileServer.port);
-      }
+      // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用
+      basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
 
       baseMapService.addListener(onBaseMapServiceUpdate);
       if (mapControllerInstance.style != null) onBaseMapServiceUpdate();

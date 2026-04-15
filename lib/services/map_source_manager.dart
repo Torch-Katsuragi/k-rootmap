@@ -8,8 +8,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:maplibre/maplibre.dart' as ml;
-// ignore: implementation_imports
-import 'package:maplibre_webview/src/style_controller.dart' as webview_style;
+
 import 'package:supercluster/supercluster.dart';
 import '../core/constants.dart';
 import '../utils/app_logger.dart';
@@ -672,25 +671,11 @@ class MapSourceManager {
   // --------------------------------------------------
 
   /// GeoJSONソースを更新（変更がなければスキップ）
-  ///
-  /// WebView環境では maplibre_webview の WebSocket バイナリ転送が
-  /// 非ASCII文字を破損する(.codeUnits → setUint8 で上位バイト欠落)ため、
-  /// callAsyncJavaScript (Platform Channel) 経由で直接更新する。
   void _updateRaw(String sourceId, String geoJson) {
     if (!_initialized || _style == null) return;
     if (_lastData[sourceId] == geoJson) return;
     _lastData[sourceId] = geoJson;
-    final s = _style;
-    if (s is webview_style.StyleControllerWebView) {
-      // GeoJSON は有効な JS オブジェクトリテラルでもあるので直接埋め込み
-      s.webViewController.callAsyncJavaScript(
-        functionBody:
-            'const src = window.map.getSource("$sourceId");'
-            'if (src) src.setData($geoJson);',
-      );
-    } else {
-      s!.updateGeoJsonSource(id: sourceId, data: geoJson);
-    }
+    _style!.updateGeoJsonSource(id: sourceId, data: geoJson);
   }
 
   /// Feature リストからGeoJSONを生成して更新
@@ -794,122 +779,26 @@ class MapSourceManager {
       clusterPointSize * 1.2, 10, clusterPointSize * 1.5, 50, clusterPointSize * 1.8, 200, clusterPointSize * 2.3];
     final clusterTextSize = clusterPointSize * 1.6;
 
-    if (s is webview_style.StyleControllerWebView) {
-      await _webViewBatchSetPaint(
-        s,
-        fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
-        lineHex: lineHex, pointHex: pointHex,
-        polygonFillOpacity: polygonFillOpacity,
-        polygonOutlineOpacity: polygonOutlineOpacity,
-        polygonBorderWidth: polygonBorderWidth,
-        lineWidth: lineWidth, pointSize: pointSize,
-        selectedMultiplier: selectedMultiplier,
-        polygonOutlineColor: polygonOutlineColor,
-        polyVR: polyVR, polyVSelR: polyVSelR,
-        lineVR: lineVR, lineVSelR: lineVSelR,
-        clusterRadius: clusterRadius,
-        clusterTextSize: clusterTextSize,
-      );
-    } else {
-      await _removeAndReaddLayers(
-        s,
-        fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
-        lineHex: lineHex, pointHex: pointHex,
-        polygonFillOpacity: polygonFillOpacity,
-        polygonOutlineOpacity: polygonOutlineOpacity,
-        polygonBorderWidth: polygonBorderWidth,
-        lineWidth: lineWidth, pointSize: pointSize,
-        selectedMultiplier: selectedMultiplier,
-        polygonOutlineColor: polygonOutlineColor,
-        polyVR: polyVR, polyVSelR: polyVSelR,
-        lineVR: lineVR, lineVSelR: lineVSelR,
-        clusterRadius: clusterRadius,
-        clusterTextSize: clusterTextSize,
-      );
-    }
+    await _removeAndReaddLayers(
+      s,
+      fillHex: fillHex, outlineHex: outlineHex, selHex: selHex,
+      lineHex: lineHex, pointHex: pointHex,
+      polygonFillOpacity: polygonFillOpacity,
+      polygonOutlineOpacity: polygonOutlineOpacity,
+      polygonBorderWidth: polygonBorderWidth,
+      lineWidth: lineWidth, pointSize: pointSize,
+      selectedMultiplier: selectedMultiplier,
+      polygonOutlineColor: polygonOutlineColor,
+      polyVR: polyVR, polyVSelR: polyVSelR,
+      lineVR: lineVR, lineVSelR: lineVSelR,
+      clusterRadius: clusterRadius,
+      clusterTextSize: clusterTextSize,
+    );
 
     AppLogger.debug('[MapSourceManager] layer styles updated');
   }
 
-  /// Windows/macOS WebView向け: setPaintPropertyで直接ペイント属性を更新
-  /// removeLayer+addLayerと違い、レイヤー削除時のE_INVALIDARGエラーを回避
-  Future<void> _webViewBatchSetPaint(
-    webview_style.StyleControllerWebView s, {
-    required String fillHex,
-    required String outlineHex,
-    required String selHex,
-    required String lineHex,
-    required String pointHex,
-    required double polygonFillOpacity,
-    required double polygonOutlineOpacity,
-    required double polygonBorderWidth,
-    required double lineWidth,
-    required double pointSize,
-    required double selectedMultiplier,
-    required Color polygonOutlineColor,
-    required double polyVR,
-    required double polyVSelR,
-    required double lineVR,
-    required double lineVSelR,
-    required List<Object> clusterRadius,
-    required double clusterTextSize,
-  }) async {
-    final outlineColorHex = _colorToHex(polygonOutlineColor);
-    final clusterRadiusJson = jsonEncode(clusterRadius);
 
-    final js = StringBuffer('const m = window.map;\n');
-
-    void sp(String layerId, String prop, Object value) {
-      final v = value is String ? '"$value"' : '$value';
-      js.writeln('m.setPaintProperty("$layerId","$prop",$v);');
-    }
-
-    void spExpr(String layerId, String prop, String jsonExpr) {
-      js.writeln('m.setPaintProperty("$layerId","$prop",$jsonExpr);');
-    }
-
-    sp(kPolygonsFill, 'fill-color', fillHex);
-    sp(kPolygonsFill, 'fill-opacity', polygonFillOpacity);
-
-    sp(kPolygonsOutline, 'line-color', outlineHex);
-    sp(kPolygonsOutline, 'line-opacity', polygonOutlineOpacity);
-    sp(kPolygonsOutline, 'line-width', polygonBorderWidth);
-
-    sp(kPolygonsSelFill, 'fill-color', selHex);
-
-    sp(kPolygonsSelOutline, 'line-color', selHex);
-
-    sp(kLinesLine, 'line-color', lineHex);
-    sp(kLinesLine, 'line-width', lineWidth);
-
-    sp(kLinesSelLine, 'line-color', selHex);
-    sp(kLinesSelLine, 'line-width', lineWidth * selectedMultiplier);
-
-    sp(kPolyVerticesCircle, 'circle-radius', polyVR);
-    sp(kPolyVerticesCircle, 'circle-color', outlineColorHex);
-
-    sp(kPolyVerticesSelCircle, 'circle-radius', polyVSelR);
-    sp(kPolyVerticesSelCircle, 'circle-color', selHex);
-
-    sp(kLineVerticesCircle, 'circle-radius', lineVR);
-    sp(kLineVerticesCircle, 'circle-color', lineHex);
-
-    sp(kLineVerticesSelCircle, 'circle-radius', lineVSelR);
-    sp(kLineVerticesSelCircle, 'circle-color', selHex);
-
-    spExpr(kClusterCircle, 'circle-color', '"$pointHex"');
-    spExpr(kClusterCircle, 'circle-radius', clusterRadiusJson);
-
-    sp(kPointsCircle, 'circle-radius', pointSize);
-    sp(kPointsCircle, 'circle-color', pointHex);
-
-    sp(kPointsSelCircle, 'circle-radius', pointSize * selectedMultiplier);
-    sp(kPointsSelCircle, 'circle-color', selHex);
-
-    await s.webViewController.callAsyncJavaScript(
-      functionBody: js.toString(),
-    );
-  }
 
   /// Android/iOS向け: 全レイヤーを削除→再追加でスタイル更新
   Future<void> _removeAndReaddLayers(
@@ -1048,32 +937,17 @@ class MapSourceManager {
 
   /// オーバーレイ画像の座標を更新
   ///
-  /// WebView: JS経由でsetCoordinates呼び出し（同期的、競合なし）
-  /// Native: remove+addが非同期のため、排他制御+最新値drain loopで競合を防止
+  /// remove+addが非同期のため、排他制御+最新値drain loopで競合を防止
   Future<void> updateOverlayCoordinates(
     String sourceId,
     ml.LngLatQuad coords, {
     String? imageUrl,
     String? layerId,
-
   }) async {
     final s = _style;
     if (s == null) return;
 
-    if (s is webview_style.StyleControllerWebView) {
-      // WebView: JS経由でsetCoordinates呼び出し（同期的）
-      final tl = coords.topLeft;
-      final tr = coords.topRight;
-      final br = coords.bottomRight;
-      final bl = coords.bottomLeft;
-      s.webViewController.callAsyncJavaScript(
-        functionBody:
-            'const src = window.map.getSource("$sourceId");'
-            'if (src) src.setCoordinates(['
-            '  [${tl.lon},${tl.lat}],[${tr.lon},${tr.lat}],'
-            '  [${br.lon},${br.lat}],[${bl.lon},${bl.lat}]]);',
-      );
-    } else if (imageUrl != null && layerId != null) {
+    if (imageUrl != null && layerId != null) {
       // Native: 排他制御付き drain loop で競合を防止
       // pending に最新値を保存（前の pending は上書き＝最新値のみ保持）
       _pendingOverlayUpdates[sourceId] = _OverlayUpdateRequest(

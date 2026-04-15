@@ -43,9 +43,8 @@ class RMapWidget extends StatefulWidget {
 class _RMapWidgetState extends State<RMapWidget> {
   final RMapController _controller = RMapController();
 
-  /// maplibre_webview の didUpdateWidget は webViewController（late フィールド）
-  /// が初期化される前でも呼ばれる。options/layers/children が前回と異なると
-  /// webViewController にアクセスして LateInitializationError が発生するため、
+  /// onMapCreated が呼ばれる前に didUpdateWidget が発火すると
+  /// コントローラ未初期化でエラーになるため、
   /// onMapCreated 完了まで全パラメータを初回値に固定する。
   bool _isMapCreated = false;
   late final ml.MapOptions _initialOptions = widget.options;

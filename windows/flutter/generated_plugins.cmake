@@ -8,7 +8,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   desktop_drop
   file_selector_windows
-  flutter_inappwebview_windows
   flutter_secure_storage_windows
   geolocator_windows
   permission_handler_windows

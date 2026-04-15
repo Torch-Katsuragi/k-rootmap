@@ -616,7 +616,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           );
         }
       } else {
-        // オンライン or Windows → TileServer経由
+        // オンライン → TileServer経由（キャッシュ+フォールバック機能付き）
         final url = tileServer.isRunning
             ? tileServer.urlTemplate(provider.id)
             : provider.urlTemplate;

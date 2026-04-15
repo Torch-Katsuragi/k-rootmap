@@ -788,9 +788,11 @@ class MapSourceManager {
         ? (lineWidth * selectedMultiplier * lineVertexSizeFactor / 2).clamp(2.0, 24.0)
         : 0.0;
 
+    // クラスタ丸の見た目サイズはpointSizeに比例するが、最低6pxを保証
+    final clusterPointSize = pointSize.clamp(6.0, double.infinity);
     final clusterRadius = <Object>['step', ['get', 'point_count'],
-      pointSize * 1.2, 10, pointSize * 1.5, 50, pointSize * 1.8, 200, pointSize * 2.3];
-    final clusterTextSize = pointSize * 1.6;
+      clusterPointSize * 1.2, 10, clusterPointSize * 1.5, 50, clusterPointSize * 1.8, 200, clusterPointSize * 2.3];
+    final clusterTextSize = clusterPointSize * 1.6;
 
     if (s is webview_style.StyleControllerWebView) {
       await _webViewBatchSetPaint(

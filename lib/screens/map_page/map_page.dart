@@ -63,7 +63,6 @@ import '../layer_style_settings_screen.dart'
         selectedColorDef,
         selectedMultiplierDef,
         clusteringEnabledDef,
-        clusteringRadiusDef,
         clusteringDisableZoomDef;
 
 // Mixins
@@ -1152,9 +1151,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   void _applyLayerStyles() {
     final style = layerStyleSettings;
     // クラスタリング設定を反映
+    final pointSize = style.getDouble(pointSizeDef);
     sourceManager.configureClustering(
       enabled: style.getBool(clusteringEnabledDef),
-      radius: style.getInt(clusteringRadiusDef),
+      radius: (pointSize * 2).round(),
       maxZoom: style.getInt(clusteringDisableZoomDef),
     );
     sourceManager.updateLayerStyles(
@@ -1166,7 +1166,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       lineColor: style.getColor(lineColorDef),
       lineWidth: style.getDouble(lineWidthDef),
       pointColor: style.getColor(pointColorDef),
-      pointSize: style.getDouble(pointSizeDef),
+      pointSize: pointSize,
       selectedColor: style.getColor(selectedColorDef),
       selectedMultiplier: style.getDouble(selectedMultiplierDef),
       lineVertexEnabled: style.getBool(lineVertexPointsEnabledDef),

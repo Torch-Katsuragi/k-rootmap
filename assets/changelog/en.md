@@ -31,6 +31,13 @@
   - Added debounce (150ms) and mutual exclusion to camera animations
   - Ongoing animations are instantly cancelled before starting new jumps
 
+### 🎨 Drawing Style Improvements
+
+- Changed default polygon color from orange to black (both border and fill)
+- Changed default polygon fill opacity from 30% to 10%
+- Clustering radius now scales with point size (pointSize × 2)
+- Cluster circle visual size enforces a minimum of 6px for point size
+
 ---
 
 ## v0.5.7 — 2026/04/13

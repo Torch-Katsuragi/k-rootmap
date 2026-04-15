@@ -85,19 +85,19 @@ final polygonBorderWidthDef = DoubleDef(
 final polygonBorderColorDef = ColorDef(
   key: 'layer_style_polygon_border_color',
   title: 'Border Color',
-  defaultArgb: 0xFFFF9800,
+  defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonBorderColor,
 );
 final polygonFillColorDef = ColorDef(
   key: 'layer_style_polygon_fill_color',
   title: 'Fill Color',
-  defaultArgb: 0xFFFF9800,
+  defaultArgb: 0xFF000000,
   kmetaGetter: (k) => k.polygonFillColor,
 );
 final polygonFillOpacityDef = DoubleDef(
   key: 'layer_style_polygon_fill_opacity',
   title: 'Fill Opacity',
-  defaultValue: 0.3,
+  defaultValue: 0.1,
   min: 0.0,
   max: 1.0,
   divisions: 10,
@@ -190,8 +190,8 @@ final clusteringEnabledDef = SwitchDef(
 final clusteringRadiusDef = IntDef(
   key: 'layer_style_clustering_radius',
   title: 'Cluster Radius',
-  defaultValue: 25,
-  min: 10,
+  defaultValue: 12,
+  min: 1,
   max: 150,
   formatter: (v) => '$v px',
 );
@@ -274,7 +274,7 @@ final layerStyleSettings = SettingsStore([
     collapsible: true,
     initiallyExpanded: false,
     globalOnly: true,
-    items: [clusteringEnabledDef, clusteringRadiusDef, clusteringDisableZoomDef],
+    items: [clusteringEnabledDef, clusteringDisableZoomDef],
   ),
   SettingSectionDef(
     title: 'Selection Highlight',

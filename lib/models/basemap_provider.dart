@@ -10,6 +10,7 @@ enum BaseMapType {
   gsiPale,
   gsiPhoto,
   gsiRelief,
+  gsiRedRelief,
   gsiBlank,
 }
 
@@ -102,6 +103,20 @@ class BaseMapProvider {
       attribution: '国土地理院',
       type: BaseMapType.gsiRelief,
       icon: Icons.terrain,
+    ),
+
+    // 国土地理院地図 - 赤色立体地図
+    BaseMapProvider(
+      id: 'gsi_red_relief',
+      name: '国土地理院（赤色立体図）',
+      description: '地形の起伏を立体的に表現（アジア航測）',
+      urlTemplate:
+          'https://cyberjapandata.gsi.go.jp/xyz/sekishoku/{z}/{x}/{y}.png',
+      maxZoom: 14,
+      minZoom: 2,
+      attribution: '国土地理院・アジア航測株式会社',
+      type: BaseMapType.gsiRedRelief,
+      icon: Icons.landscape,
     ),
 
     // 国土地理院地図 - 白地図

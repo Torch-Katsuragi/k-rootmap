@@ -38,6 +38,10 @@
 - Clustering radius now scales with point size (pointSize × 2)
 - Cluster circle visual size enforces a minimum of 6px for point size
 
+### 🗺️ New Basemap Option
+
+- Added GSI Red Relief Image Map to basemap lineup (zoom levels 2–14)
+
 ---
 
 ## v0.5.7 — 2026/04/13

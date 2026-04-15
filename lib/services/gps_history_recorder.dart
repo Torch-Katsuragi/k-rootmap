@@ -4,7 +4,9 @@
 /// - Raw Buffer: AppSupport内のGeoPackageにPoint逐次追加（高速・安全）
 /// - Consolidated: Global内のgps_history.gpkgにLine+正規化テーブルで定期反映
 ///
-/// 本日分のポイントはメモリキャッシュで保持し、地図上にリアルタイム表示可能。
+/// Consolidation済みデータはGPKGレイヤツリー経由で地図上に表示。
+/// 未Consolidation分（max ~20秒）のみメモリ保持し、kGpsTrackソースで表示。
+/// Raw Bufferの反映済みポイントはConsolidation後に即時削除。
 library;
 
 import 'dart:async';
@@ -24,8 +26,8 @@ import '../utils/app_logger.dart';
 ///
 /// ハイブリッド方式:
 /// - Raw記録: GPS受信ごとにPointをバッファGeoPackageにINSERT（O(1)）
-/// - メモリキャッシュ: todayPointsに即時追加（表示遅延なし）
-/// - Consolidation: 定期的にLineジオメトリ+詳細テーブルを更新
+/// - 未Consolidation分: _pendingDetailsに保持（表示+書き込み兼用）
+/// - Consolidation: 定期的にLineジオメトリ+詳細テーブルを更新+Raw Buffer削除
 class GpsHistoryRecorder extends ChangeNotifier {
   static final GpsHistoryRecorder _instance = GpsHistoryRecorder._internal();
   factory GpsHistoryRecorder() => _instance;
@@ -59,10 +61,15 @@ class GpsHistoryRecorder extends ChangeNotifier {
   StreamSubscription<GpsPositionRecord>? _subscription;
   Timer? _consolidationTimer;
 
-  // メモリキャッシュ
-  final List<LatLng> _todayPoints = [];
+  // メモリキャッシュ（未Consolidation分のみ）
   final List<GpsTrackPoint> _pendingDetails = [];
+  final List<int> _pendingRawIds = [];
   DateTime? _lastRecordedTime;
+  LatLng? _lastRecordedPosition;
+  LatLng? _lastConsolidatedPosition;
+
+  /// Consolidation完了コールバック（レイヤリフレッシュ用）
+  VoidCallback? onConsolidated;
 
   // フラグ
   bool _isInitialized = false;
@@ -75,8 +82,13 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
   bool get isInitialized => _isInitialized;
 
-  /// 本日分のポイント座標リスト（ポリライン表示用、メモリキャッシュ）
-  List<LatLng> get todayPoints => List.unmodifiable(_todayPoints);
+  /// 未Consolidation分のポイント座標リスト（kGpsTrackソース表示用）
+  /// Consolidation済み分はGPKGレイヤツリー経由で表示される
+  /// Consolidated末尾を先頭に1点含めて表示ギャップを防止
+  List<LatLng> get todayPoints => List.unmodifiable([
+    if (_lastConsolidatedPosition != null) _lastConsolidatedPosition!,
+    ..._pendingDetails.map((p) => LatLng(p.latitude, p.longitude)),
+  ]);
 
   /// 本日の日付キー
   String get todayDateKey => _buildDateKey(DateTime.now());
@@ -147,7 +159,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
       _isInitialized = true;
       AppLogger.debug(
         '$_logTag: 初期化完了 (日付: $_currentDateKey, '
-        'キャッシュ: ${_todayPoints.length}点)',
+        'featureId: $_todayTrackFeatureId, '
+        'consolidated: $_lastConsolidatedIndex点)',
       );
       _initCompleter!.complete();
     } catch (e) {
@@ -231,10 +244,9 @@ class GpsHistoryRecorder extends ChangeNotifier {
     }
 
     // 空間的重複フィルタ（直前と完全一致なら記録しない）
-    if (_todayPoints.isNotEmpty) {
-      final last = _todayPoints.last;
-      if (last.latitude == record.latitude &&
-          last.longitude == record.longitude) {
+    if (_lastRecordedPosition != null) {
+      if (_lastRecordedPosition!.latitude == record.latitude &&
+          _lastRecordedPosition!.longitude == record.longitude) {
         return;
       }
     }
@@ -246,7 +258,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       final rawLayerName = _buildRawLayerName(_currentDateKey!);
 
       // Raw BufferにPoint INSERT（O(1)、高速）
-      await _rawBufferFile!.addPointWithAttributes(
+      final rawId = await _rawBufferFile!.addPointWithAttributes(
         rawLayerName,
         LatLng(record.latitude, record.longitude),
         {
@@ -260,11 +272,12 @@ class GpsHistoryRecorder extends ChangeNotifier {
       );
 
       _lastRecordedTime = record.timestamp;
+      _lastRecordedPosition = LatLng(record.latitude, record.longitude);
 
-      // メモリキャッシュに即時追加
-      _todayPoints.add(LatLng(record.latitude, record.longitude));
+      // Raw Buffer rowId を追跡（Consolidation後の削除用）
+      if (rawId != null) _pendingRawIds.add(rawId);
 
-      // Consolidation用にメタデータも保持
+      // 未Consolidation分として保持（表示+書き込み兼用）
       _pendingDetails.add(GpsTrackPoint(
         latitude: record.latitude,
         longitude: record.longitude,
@@ -277,7 +290,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
       ));
 
       // UI更新通知（頻度を抑える）
-      if (_todayPoints.length <= 5 || _todayPoints.length % 10 == 0) {
+      if (_pendingDetails.length <= 5 || _pendingDetails.length % 10 == 0) {
         notifyListeners();
       }
     } catch (e) {
@@ -392,8 +405,10 @@ class GpsHistoryRecorder extends ChangeNotifier {
     _currentDateKey = newDateKey;
     _todayTrackFeatureId = null;
     _lastConsolidatedIndex = 0;
-    _todayPoints.clear();
     _pendingDetails.clear();
+    _pendingRawIds.clear();
+    _lastRecordedPosition = null;
+    _lastConsolidatedPosition = null;
 
     await _ensureRawLayer(newDateKey);
 
@@ -415,27 +430,53 @@ class GpsHistoryRecorder extends ChangeNotifier {
     _isConsolidating = true;
     try {
       final detailsToWrite = List<GpsTrackPoint>.from(_pendingDetails);
+      final rawIdsToDelete = List<int>.from(_pendingRawIds);
       _pendingDetails.clear();
+      _pendingRawIds.clear();
+
+      // GPKGから現在のLine座標を読み出し + 新ポイント追加（read-modify-write）
+      final currentLine = await _readCurrentLine();
+      final newCoords = detailsToWrite
+          .map((p) => LatLng(p.latitude, p.longitude))
+          .toList();
+      currentLine.addAll(newCoords);
 
       // Line ジオメトリ更新
-      if (_todayPoints.length >= 2) {
+      if (currentLine.length >= 2) {
         if (_todayTrackFeatureId == null) {
           // 新規作成
-          final id = await _historyFile!.addLine(
+          _todayTrackFeatureId = await _historyFile!.addLine(
             _tracksLayerName,
-            _todayPoints,
+            currentLine,
             name: _currentDateKey!,
           );
-          _todayTrackFeatureId = id;
-          AppLogger.debug('$_logTag: gps_tracks フィーチャ作成 (id=$id)');
+          AppLogger.debug(
+            '$_logTag: gps_tracks フィーチャ作成 (id=$_todayTrackFeatureId)',
+          );
         } else {
-          // 既存更新
-          await _historyFile!.updateLine(
-            _tracksLayerName,
-            _todayTrackFeatureId!,
-            _todayPoints,
-            name: _currentDateKey!,
-          );
+          // 既存更新（外部削除されたフィーチャの場合はフォールバック）
+          try {
+            await _historyFile!.updateLine(
+              _tracksLayerName,
+              _todayTrackFeatureId!,
+              currentLine,
+              name: _currentDateKey!,
+            );
+          } catch (e) {
+            AppLogger.debug(
+              '$_logTag: updateLine失敗 (id=$_todayTrackFeatureId), '
+              '新規作成にフォールバック: $e',
+            );
+            _todayTrackFeatureId = await _historyFile!.addLine(
+              _tracksLayerName,
+              currentLine,
+              name: _currentDateKey!,
+            );
+            AppLogger.debug(
+              '$_logTag: gps_tracks フィーチャ再作成 '
+              '(id=$_todayTrackFeatureId)',
+            );
+          }
         }
       }
 
@@ -459,10 +500,37 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
       });
 
+      // Raw Buffer クリーンアップ（Consolidation済みポイントを削除）
+      if (rawIdsToDelete.isNotEmpty && _rawBufferFile != null) {
+        try {
+          final rawDb = await _rawBufferFile!.getDatabase();
+          final rawLayerName = _buildRawLayerName(_currentDateKey!);
+          final placeholders =
+              List.filled(rawIdsToDelete.length, '?').join(',');
+          await rawDb.rawDelete(
+            'DELETE FROM "$rawLayerName" WHERE rowid IN ($placeholders)',
+            rawIdsToDelete,
+          );
+          AppLogger.debug(
+            '$_logTag: Raw Buffer ${rawIdsToDelete.length}件削除',
+          );
+        } catch (e) {
+          AppLogger.debug('$_logTag: Raw Buffer削除エラー: $e');
+        }
+      }
+
+      // Consolidated末尾座標を記録（pending表示との接続点）
+      if (currentLine.isNotEmpty) {
+        _lastConsolidatedPosition = currentLine.last;
+      }
+
       AppLogger.debug(
         '$_logTag: Consolidation完了 (${detailsToWrite.length}点反映, '
         '合計: $_lastConsolidatedIndex点)',
       );
+
+      // レイヤリフレッシュ通知
+      onConsolidated?.call();
     } catch (e) {
       AppLogger.debug('$_logTag: Consolidationエラー: $e');
     } finally {
@@ -470,11 +538,58 @@ class GpsHistoryRecorder extends ChangeNotifier {
     }
   }
 
+  /// gps_tracks から当日のLineジオメトリ座標を読み出す
+  /// フィーチャが外部削除されていた場合は _todayTrackFeatureId をリセット
+  Future<List<LatLng>> _readCurrentLine() async {
+    if (_historyFile == null || _todayTrackFeatureId == null) return [];
+
+    try {
+      final detail = await _historyFile!.getFeature(
+        _tracksLayerName,
+        _todayTrackFeatureId!,
+      );
+      if (detail == null || detail['geometry'] == null) {
+        // フィーチャが削除されている → addLine パスに切り替え
+        AppLogger.debug(
+          '$_logTag: フィーチャ未発見 (id=$_todayTrackFeatureId), リセット',
+        );
+        _todayTrackFeatureId = null;
+        return [];
+      }
+
+      final geom = detail['geometry'];
+      final result = <LatLng>[];
+      if (geom is List<LatLng>) {
+        result.addAll(geom);
+      } else if (geom is List) {
+        for (final item in geom) {
+          if (item is LatLng) {
+            result.add(item);
+          } else if (item is List<LatLng>) {
+            // MultiLineString: List<List<LatLng>> → フラット化
+            result.addAll(item);
+          } else if (item is List) {
+            // ネストされたListの場合も再帰的にLatLngを拾う
+            for (final pt in item) {
+              if (pt is LatLng) result.add(pt);
+            }
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      AppLogger.debug('$_logTag: Line読み出しエラー: $e');
+      _todayTrackFeatureId = null;
+      return [];
+    }
+  }
+
   // ==============================
   // 起動時復元
   // ==============================
 
-  /// gps_tracks からLineジオメトリを読み込み、todayPointsキャッシュを復元
+  /// gps_tracks から当日のフィーチャIDと反映済みインデックスを復元
+  /// （座標キャッシュは不要 — GPKGレイヤツリーが表示を担当）
   Future<void> _loadTodayFromHistory() async {
     if (_historyFile == null || _currentDateKey == null) return;
 
@@ -492,22 +607,30 @@ class GpsHistoryRecorder extends ChangeNotifier {
         if (id == null) continue;
 
         final featureId = id is int ? id : int.tryParse(id.toString()) ?? 0;
+        _todayTrackFeatureId = featureId;
+
+        // 空間フィルタ用に末尾座標を復元
         final detail = await _historyFile!.getFeature(
           _tracksLayerName,
           featureId,
         );
-        if (detail == null || detail['geometry'] == null) continue;
-
-        final geom = detail['geometry'];
-        if (geom is List<LatLng>) {
-          _todayPoints.addAll(geom);
-        } else if (geom is List) {
-          for (final pt in geom) {
-            if (pt is LatLng) _todayPoints.add(pt);
+        if (detail != null && detail['geometry'] != null) {
+          final geom = detail['geometry'];
+          if (geom is List<LatLng> && geom.isNotEmpty) {
+            _lastRecordedPosition = geom.last;
+          } else if (geom is List && geom.isNotEmpty) {
+            // MultiLineString: List<List<LatLng>> → 最後のラインの末尾
+            final lastItem = geom.last;
+            if (lastItem is LatLng) {
+              _lastRecordedPosition = lastItem;
+            } else if (lastItem is List<LatLng> && lastItem.isNotEmpty) {
+              _lastRecordedPosition = lastItem.last;
+            } else if (lastItem is List && lastItem.isNotEmpty && lastItem.last is LatLng) {
+              _lastRecordedPosition = lastItem.last as LatLng;
+            }
           }
         }
 
-        _todayTrackFeatureId = featureId;
         break;
       }
 
@@ -522,7 +645,7 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
       AppLogger.debug(
         '$_logTag: History復元完了 '
-        '(${_todayPoints.length}点, featureId=$_todayTrackFeatureId, '
+        '(featureId=$_todayTrackFeatureId, '
         'consolidated=$_lastConsolidatedIndex)',
       );
     } catch (e) {
@@ -541,19 +664,19 @@ class GpsHistoryRecorder extends ChangeNotifier {
 
       final rawFeatures = await _rawBufferFile!.getFeatures(rawLayerName);
       final rawCount = rawFeatures.length;
-      final alreadyInCache = _todayPoints.length;
 
-      if (rawCount <= alreadyInCache) return;
+      // Raw Buffer のポイント数がConsolidation済み件数以下なら復元不要
+      if (rawCount <= _lastConsolidatedIndex) return;
 
       AppLogger.debug(
         '$_logTag: 未反映ポイント検出 '
-        '(raw=$rawCount, cache=$alreadyInCache, '
-        'diff=${rawCount - alreadyInCache})',
+        '(raw=$rawCount, consolidated=$_lastConsolidatedIndex, '
+        'diff=${rawCount - _lastConsolidatedIndex})',
       );
 
       // 未反映分だけ復元
       int recovered = 0;
-      for (int i = alreadyInCache; i < rawFeatures.length; i++) {
+      for (int i = _lastConsolidatedIndex; i < rawFeatures.length; i++) {
         final feature = rawFeatures[i];
         final id = feature['id'];
         if (id == null) continue;
@@ -573,7 +696,6 @@ class GpsHistoryRecorder extends ChangeNotifier {
         }
         if (latLng == null) continue;
 
-        _todayPoints.add(latLng);
         _pendingDetails.add(GpsTrackPoint(
           latitude: latLng.latitude,
           longitude: latLng.longitude,
@@ -587,6 +709,8 @@ class GpsHistoryRecorder extends ChangeNotifier {
               : DateTime.now(),
           sourceType: detail['source_type']?.toString() ?? 'GPS',
         ));
+        // Raw Buffer rowId も追跡
+        _pendingRawIds.add(featureId);
         recovered++;
       }
 

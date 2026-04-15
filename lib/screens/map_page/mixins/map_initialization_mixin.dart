@@ -12,6 +12,7 @@ import '../../../providers/ui_state_providers.dart';
 import '../../../models/nodes/layer_tree_node.dart';
 import '../../../models/nodes/folder_node.dart';
 import '../../../models/nodes/geopackage_node.dart';
+import '../../../models/nodes/layer_node.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/google_drive/auto_sync_service.dart';
 import '../../../services/tile_server.dart';
@@ -275,8 +276,16 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // positionStream の購読開始（常時記録 + consolidationタイマー）
       gpsHistoryRecorder.startRecording(locationStore.positionStream);
 
-      // 軌跡更新リスナー登録（地図上にリアルタイム表示するため）
+      // 軌跡更新リスナー登録（未Consolidation分をkGpsTrackソースに表示）
       gpsHistoryRecorder.addListener(_onGpsHistoryUpdate);
+
+      // Consolidation完了コールバック
+      // gps_tracksレイヤーのフィーチャを強制再読み込みしてから全体更新
+      gpsHistoryRecorder.onConsolidated = () async {
+        if (!mounted) return;
+        await _refreshGpsHistoryLayer();
+        await updateFeatures();
+      };
 
       AppLogger.debug('[Init] GpsHistory ready');
     } catch (e) {
@@ -284,13 +293,41 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     }
   }
 
-  /// GPS履歴更新コールバック（MapSourceManager経由でGPS軌跡ソースのみ更新）
+  /// GPS履歴更新コールバック（未Consolidation分をkGpsTrackソースに更新）
+  /// Consolidation済み分はGPKGレイヤツリー経由で表示される
   void _onGpsHistoryUpdate() {
     if (mounted && sourceManager.isInitialized) {
       sourceManager.updateGpsTrack(
         gpsHistoryRecorder.todayPoints.toGeographics(),
       );
     }
+  }
+
+  /// gps_tracks レイヤーのフィーチャを強制再読み込み
+  /// Consolidation後にGPKGの更新をレイヤツリーに反映させる
+  Future<void> _refreshGpsHistoryLayer() async {
+    try {
+      final folderTree = ref.read(folderTreeProvider);
+      if (folderTree == null) return;
+
+      // gps_tracks レイヤーを再帰検索
+      final gpsTracksLayer = _findLayerNode(folderTree, 'gps_tracks');
+      if (gpsTracksLayer != null) {
+        await gpsTracksLayer.updateChildren();
+      }
+    } catch (e) {
+      AppLogger.debug('[Init] GPS history layer refresh error: $e');
+    }
+  }
+
+  /// レイヤツリーから指定名のLayerNodeを再帰検索
+  LayerNode? _findLayerNode(LayerTreeNode node, String layerName) {
+    if (node is LayerNode && node.layerName == layerName) return node;
+    for (final child in node.children) {
+      final found = _findLayerNode(child, layerName);
+      if (found != null) return found;
+    }
+    return null;
   }
 
   /// 外部GNSS機器をバックグラウンドでスキャン
@@ -315,6 +352,7 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
     baseMapService.removeListener(onBaseMapServiceUpdate);
     layerStyleSettings.removeListener(onLayerStyleChanged);
     gpsHistoryRecorder.removeListener(_onGpsHistoryUpdate);
+    gpsHistoryRecorder.onConsolidated = null;
 
     // GPS取得を停止（測量モードでない場合のみ）
     if (gpsManager.isGpsActive && !gpsManager.isSurveyMode) {

@@ -18,6 +18,13 @@
   - Designed as an extensible pre-write cleanup mechanism
 - Fixed GPBinary header srsId being hardcoded to 4326
 
+### 📡 GPS Track Display Optimization
+
+- Revamped GPS track recording and display with a hybrid approach
+  - Pending points shown in real-time from memory cache; consolidated data rendered via GPKG layer tree
+  - Auto-refresh gps_tracks layer on consolidation completion for immediate map updates
+- Correctly flatten MultiLineString geometry readback to ensure track continuity
+
 ### 🐛 Bug Fixes
 
 - Fixed ANR freeze when rapidly double-tapping layer tiles to jump on the map

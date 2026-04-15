@@ -18,6 +18,12 @@
   - Designed as an extensible pre-write cleanup mechanism
 - Fixed GPBinary header srsId being hardcoded to 4326
 
+### 🐛 Bug Fixes
+
+- Fixed ANR freeze when rapidly double-tapping layer tiles to jump on the map
+  - Added debounce (150ms) and mutual exclusion to camera animations
+  - Ongoing animations are instantly cancelled before starting new jumps
+
 ---
 
 ## v0.5.7 — 2026/04/13

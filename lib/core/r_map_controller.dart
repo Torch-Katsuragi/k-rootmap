@@ -1,8 +1,10 @@
-﻿/// flutter_map互換のMapControllerラッパー
+/// flutter_map互換のMapControllerラッパー
 ///
 /// maplibreのMapControllerを内包し、既存コードが使う
 /// flutter_map風のAPIを提供する。座標はLatLng(latlong2)を維持。
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
@@ -36,6 +38,10 @@ class KMapCamera {
 class RMapController {
   ml.MapController? _controller;
   ml.StyleController? _styleController;
+
+  /// カメラアニメーション排他制御用
+  Timer? _fitDebounceTimer;
+  bool _isCameraAnimating = false;
 
   /// maplibreのMapControllerをセット
   void attach(ml.MapController controller) {
@@ -77,23 +83,56 @@ class RMapController {
   }
 
   /// アニメーション付きカメラ移動
+  ///
+  /// 進行中のアニメーションがあれば即キャンセルしてから開始する。
   Future<void> animateTo({
     LatLng? center,
     double? zoom,
     double? bearing,
     double? pitch,
   }) async {
-    await _controller?.animateCamera(
-      center: center?.toGeographic(),
-      zoom: zoom,
-      bearing: bearing,
-      pitch: pitch,
-    );
+    _fitDebounceTimer?.cancel();
+    _cancelOngoingAnimation();
+
+    _isCameraAnimating = true;
+    try {
+      await _controller?.animateCamera(
+        center: center?.toGeographic(),
+        zoom: zoom,
+        bearing: bearing,
+        pitch: pitch,
+      );
+    } on Exception catch (_) {
+      // moveCamera によるキャンセル時に "Map camera movement cancelled." が
+      // スローされるが、意図的なキャンセルなので無視する
+    } finally {
+      _isCameraAnimating = false;
+    }
   }
 
   /// 座標リストに合わせてカメラをフィット
+  ///
+  /// 短時間の連続呼び出しはデバウンスし、最後の呼び出しのみ実行する。
+  /// 進行中のアニメーションがあれば即キャンセルしてから開始する。
   void fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) {
     if (_controller == null || coordinates.isEmpty) return;
+
+    // デバウンス: 短時間の連続ダブルタップをまとめて最後の1つだけ実行
+    _fitDebounceTimer?.cancel();
+    _fitDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+      _executeFitBounds(coordinates, padding);
+    });
+  }
+
+  /// 実際の fitBounds 実行（排他制御付き）
+  Future<void> _executeFitBounds(
+    List<LatLng> coordinates,
+    EdgeInsets padding,
+  ) async {
+    if (_controller == null) return;
+
+    // 進行中のアニメーションをキャンセル
+    _cancelOngoingAnimation();
 
     // 座標からバウンディングボックスを計算
     double minLat = double.infinity, maxLat = -double.infinity;
@@ -105,15 +144,39 @@ class RMapController {
       if (c.longitude > maxLon) maxLon = c.longitude;
     }
 
-    _controller!.fitBounds(
-      bounds: ml.LngLatBounds(
-        longitudeWest: minLon,
-        longitudeEast: maxLon,
-        latitudeSouth: minLat,
-        latitudeNorth: maxLat,
-      ),
-      padding: padding,
+    _isCameraAnimating = true;
+    try {
+      await _controller!.fitBounds(
+        bounds: ml.LngLatBounds(
+          longitudeWest: minLon,
+          longitudeEast: maxLon,
+          latitudeSouth: minLat,
+          latitudeNorth: maxLat,
+        ),
+        padding: padding,
+      );
+    } on Exception catch (_) {
+      // moveCamera によるキャンセル時に "Map camera movement cancelled." が
+      // スローされるが、意図的なキャンセルなので無視する
+    } finally {
+      _isCameraAnimating = false;
+    }
+  }
+
+  /// 進行中のカメラアニメーションを即座にキャンセル
+  ///
+  /// moveCamera（瞬時移動）で現在位置にスナップすることで
+  /// ネイティブ側のアニメーションを中断する。
+  void _cancelOngoingAnimation() {
+    if (!_isCameraAnimating || _controller == null) return;
+    final cam = _controller!.getCamera();
+    _controller!.moveCamera(
+      center: cam.center,
+      zoom: cam.zoom,
+      bearing: cam.bearing,
+      pitch: cam.pitch,
     );
+    _isCameraAnimating = false;
   }
 
   /// 画面座標 → 地図座標
@@ -129,6 +192,7 @@ class RMapController {
   }
 
   void dispose() {
+    _fitDebounceTimer?.cancel();
     _controller = null;
     _styleController = null;
   }

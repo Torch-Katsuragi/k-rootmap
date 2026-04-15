@@ -1,5 +1,25 @@
 # 更新履歴
 
+## v0.5.8 — 2026/04/15
+
+### 🌍 あらゆる座標系のGeoPackageに対応
+
+- QGIS等で作成された任意のEPSGコードのGeoPackageを読み込み・編集可能に
+  - GPKGに内蔵されたWKTから座標参照系を自動検出
+  - WKT欠損時はEpsgRegistry → epsg.io HTTPの3段階フォールバックで解決
+  - epsg.ioの結果はGPKGに書き戻し、実質的なオフラインキャッシュとして機能
+- 読み込み時にWGS84へ自動変換、書き込み時にソースCRSへ逆変換
+  - JGD2011平面直角座標系、UTM、Web Mercator等を検証済み
+
+### 🔧 外部GeoPackageとの互換性改善
+
+- QGIS/GeoPandasが生成するSpatiaLiteトリガー（ST_IsEmpty等）を書き込み直前に検出・除去
+  - 読み取りのみではファイルを変更せず、Google Drive同期の無駄発火を防止
+  - 将来の前処理も追加しやすいクリンナップ機構として設計
+- GPBinaryヘッダーのsrsIdが常に4326にハードコードされていた問題を修正
+
+---
+
 ## v0.5.7 — 2026/04/13
 
 ### 🗺️ オーバーレイ画像をGeoTIFF形式で保存

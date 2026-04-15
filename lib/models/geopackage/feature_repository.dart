@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
+import 'package:proj4dart/proj4dart.dart';
+import 'package:sqflite/sqflite.dart';
+import '../../services/coordinate/gpkg_crs_resolver.dart';
+import '../../services/coordinate/geometry_reprojector.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/wkb_utils.dart';
 import '../geometry_type.dart';
@@ -9,22 +13,40 @@ import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 
+
 /// compute()用パラメータ
 class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
   final GeometryType geomType;
-  _GeometryParseParams(this.rows, this.geomType);
+  /// re-projection用: ソースCRSのProjection（nullならWGS84で変換不要）
+  final Projection? sourceProjection;
+  /// re-projection用: 軸入替が必要か
+  final bool needsAxisSwap;
+  _GeometryParseParams(
+    this.rows,
+    this.geomType, {
+    this.sourceProjection,
+    this.needsAxisSwap = false,
+  });
 }
 
-/// WKBパース＋メタデータパースを別Isolateで実行するトップレベル関数
+/// WKBパース＋メタデータパース＋CRS re-projectionを別Isolateで実行するトップレベル関数
 List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
   _GeometryParseParams params,
 ) {
   for (final row in params.rows) {
     final geom = row['geom'] as Uint8List?;
     if (geom != null) {
-      final geometry = parseGpkgGeometry(geom);
+      var geometry = parseGpkgGeometry(geom);
       if (geometry != null) {
+        // CRS re-projection（非WGS84の場合のみ）
+        if (params.sourceProjection != null) {
+          geometry = GeometryReprojector.reprojectToWgs84(
+            geometry,
+            params.sourceProjection!,
+            needsAxisSwap: params.needsAxisSwap,
+          );
+        }
         row['geometry'] = geobaseGeometryToLatLngs(geometry);
       }
     }
@@ -50,6 +72,113 @@ class FeatureRepository {
   final SpatialIndexManager spatialIndex;
 
   FeatureRepository(this.connection, this.schema, this.spatialIndex);
+
+  /// CRS解決結果キャッシュ（テーブル名→CRS情報）
+  final Map<String, GpkgCrsInfo> _crsCache = {};
+
+  /// レイヤのCRS情報を取得（キャッシュ付き）
+  Future<GpkgCrsInfo> _getLayerCrs(String tableName) async {
+    if (_crsCache.containsKey(tableName)) {
+      return _crsCache[tableName]!;
+    }
+    final db = await connection.getDatabase();
+    final crs = await GpkgCrsResolver.instance.resolveLayerCrs(db, tableName);
+    _crsCache[tableName] = crs;
+    return crs;
+  }
+
+  /// CRSキャッシュをクリア
+  void clearCrsCache() => _crsCache.clear();
+
+  // ============================================================
+  // 書き込み前クリンナップ
+  // ============================================================
+
+  /// クリンナップ済みテーブルの記録（1テーブルにつき1回だけ実行）
+  final Set<String> _cleanedTables = {};
+
+  /// 書き込み前にテーブルをクリンナップする
+  ///
+  /// 外部ツール（QGIS/GeoPandas等）が作成したGPKGには
+  /// SpatiaLite拡張に依存するトリガーが含まれることがあり、
+  /// sqfliteでは実行できない。書き込み前に検出・除去する。
+  ///
+  /// 将来の前処理もここに追加可能。
+  Future<void> _prepareForWrite(String tableName) async {
+    if (_cleanedTables.contains(tableName)) return;
+
+    final db = await connection.getDatabase();
+    await _removeSpatialiteTriggers(db, tableName);
+    _cleanedTables.add(tableName);
+  }
+
+  /// SpatiaLite依存のトリガーを検出・除去
+  ///
+  /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
+  /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
+  /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
+  /// RootMapは独自のSpatialIndexManagerでrtreeを管理するため、
+  /// これらのトリガーは不要。
+  Future<void> _removeSpatialiteTriggers(Database db, String tableName) async {
+    try {
+      // テーブルに関連するトリガーを全取得
+      final triggers = await db.rawQuery(
+        "SELECT name, sql FROM sqlite_master "
+        "WHERE type = 'trigger' AND tbl_name = ?",
+        [tableName],
+      );
+
+      if (triggers.isEmpty) return;
+
+      // SpatiaLite関数を使っているトリガーを検出
+      const spatialiteFunctions = [
+        'ST_IsEmpty',
+        'ST_MinX',
+        'ST_MaxX',
+        'ST_MinY',
+        'ST_MaxY',
+        'ST_MinZ',
+        'ST_MaxZ',
+        'ST_MinM',
+        'ST_MaxM',
+      ];
+
+      final triggersToRemove = <String>[];
+      for (final trigger in triggers) {
+        final sql = trigger['sql'] as String? ?? '';
+        final name = trigger['name'] as String;
+
+        // SpatiaLite関数を使っているトリガーを検出
+        final usesSpatialiteFunction = spatialiteFunctions.any(
+            (fn) => sql.contains(fn));
+
+        // rtree仮想テーブルを参照するトリガーを検出
+        // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
+        final referencesRtree = name.startsWith('rtree_');
+
+        if (usesSpatialiteFunction || referencesRtree) {
+          triggersToRemove.add(name);
+        }
+      }
+
+      if (triggersToRemove.isEmpty) return;
+
+      // トリガーを除去
+      for (final name in triggersToRemove) {
+        await db.execute('DROP TRIGGER IF EXISTS "$name"');
+      }
+
+      AppLogger.debug(
+        '[FeatureRepository] 🧹 SpatiaLiteトリガーを除去: '
+        '$tableName (${triggersToRemove.length}個: '
+        '${triggersToRemove.join(", ")})',
+      );
+    } catch (e) {
+      AppLogger.debug(
+        '[FeatureRepository] ⚠️ トリガー除去エラー: $tableName - $e',
+      );
+    }
+  }
 
   // ============================================================
   // エンベロープ計算（共通）
@@ -207,8 +336,26 @@ class FeatureRepository {
     Map<String, dynamic> attributes,
   ) async {
     try {
+      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
-      final wkb = createGpkgWkb(_buildGeoPoint(point));
+      final crs = await _getLayerCrs(tableName);
+      final geom = _buildGeoPoint(point);
+
+      // 非WGS84の場合はWGS84→ソースCRSに逆変換
+      final targetGeom = (!crs.isWgs84 && crs.projection != null)
+          ? GeometryReprojector.reprojectFromWgs84(
+              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+          : geom;
+
+      if (!crs.isWgs84 && targetGeom is geo.Point) {
+        AppLogger.debug(
+          '[FeatureRepository] CRS逆変換: '
+          'WGS84(${point.longitude}, ${point.latitude}) → '
+          '${crs.epsgCode}(${targetGeom.position.x}, ${targetGeom.position.y})',
+        );
+      }
+
+      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
       _validateAndLogWkb(
         wkb,
         'addPointWithAttributes - ${point.latitude}, ${point.longitude}',
@@ -235,8 +382,17 @@ class FeatureRepository {
     Map<String, dynamic> attributes,
   ) async {
     try {
+      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
-      final wkb = createGpkgWkb(_buildGeoMultiLineString(line));
+      final crs = await _getLayerCrs(tableName);
+      final geom = _buildGeoMultiLineString(line);
+
+      final targetGeom = (!crs.isWgs84 && crs.projection != null)
+          ? GeometryReprojector.reprojectFromWgs84(
+              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+          : geom;
+
+      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
@@ -259,8 +415,17 @@ class FeatureRepository {
     Map<String, dynamic> attributes,
   ) async {
     try {
+      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
-      final wkb = createGpkgWkb(_buildGeoMultiPolygon(polygon));
+      final crs = await _getLayerCrs(tableName);
+      final geom = _buildGeoMultiPolygon(polygon);
+
+      final targetGeom = (!crs.isWgs84 && crs.projection != null)
+          ? GeometryReprojector.reprojectFromWgs84(
+              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+          : geom;
+
+      final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
       final data = <String, dynamic>{'geom': wkb, ...attributes};
       final rowId = await db.insert(tableName, data);
@@ -344,7 +509,16 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createGpkgWkb(_buildGeoPoint(pt));
+    await _prepareForWrite(tableName);
+    final crs = await _getLayerCrs(tableName);
+    final geom = _buildGeoPoint(pt);
+
+    final targetGeom = (!crs.isWgs84 && crs.projection != null)
+        ? GeometryReprojector.reprojectFromWgs84(
+            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+        : geom;
+
+    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     _validateAndLogWkb(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
     return _updateFeatureGeometry(
       tableName,
@@ -364,7 +538,16 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createGpkgWkb(_buildGeoMultiLineString(line));
+    await _prepareForWrite(tableName);
+    final crs = await _getLayerCrs(tableName);
+    final geom = _buildGeoMultiLineString(line);
+
+    final targetGeom = (!crs.isWgs84 && crs.projection != null)
+        ? GeometryReprojector.reprojectFromWgs84(
+            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+        : geom;
+
+    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     return _updateFeatureGeometry(
       tableName,
       id,
@@ -383,7 +566,16 @@ class FeatureRepository {
     String description = '',
     Map<String, dynamic>? metadata,
   }) async {
-    final wkb = createGpkgWkb(_buildGeoMultiPolygon(rings));
+    await _prepareForWrite(tableName);
+    final crs = await _getLayerCrs(tableName);
+    final geom = _buildGeoMultiPolygon(rings);
+
+    final targetGeom = (!crs.isWgs84 && crs.projection != null)
+        ? GeometryReprojector.reprojectFromWgs84(
+            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
+        : geom;
+
+    final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     return _updateFeatureGeometry(
       tableName,
       id,
@@ -400,6 +592,7 @@ class FeatureRepository {
 
   Future<void> removeFeature(String tableName, int id) async {
     try {
+      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final whereClause = await schema.buildWhereClause(tableName);
       await db.delete(tableName, where: whereClause, whereArgs: [id]);
@@ -430,8 +623,17 @@ class FeatureRepository {
 
       final geom = row['geom'] as Uint8List?;
       if (geom != null && geomType != null) {
-        final geometry = parseGpkgGeometry(geom);
+        var geometry = parseGpkgGeometry(geom);
         if (geometry != null) {
+          // 非WGS84の場合はre-projection
+          final crs = await _getLayerCrs(tableName);
+          if (!crs.isWgs84 && crs.projection != null) {
+            geometry = GeometryReprojector.reprojectToWgs84(
+              geometry,
+              crs.projection!,
+              needsAxisSwap: crs.needsAxisSwap,
+            );
+          }
           row['geometry'] = geobaseGeometryToLatLngs(geometry);
         }
       }
@@ -466,6 +668,7 @@ class FeatureRepository {
   }
 
   /// 全フィーチャをジオメトリパース済みで一括取得
+  /// 非WGS84のレイヤはWGS84にre-projectionして返す
   Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
     String tableName,
     GeometryType? geomType,
@@ -490,21 +693,44 @@ class FeatureRepository {
 
       if (geomType == null) return mutableRows;
 
+      // CRS情報を取得
+      final crs = await _getLayerCrs(tableName);
+      final needsReproject = !crs.isWgs84 && crs.projection != null;
+
+      if (needsReproject) {
+        AppLogger.debug(
+          '[FeatureRepository] CRS re-projection: $tableName (${crs.epsgCode}→WGS84, ${mutableRows.length}件)',
+        );
+      }
+
       if (mutableRows.length >= _kIsolateThreshold) {
         AppLogger.debug(
           '[FeatureRepository] Isolateパース: $tableName (${mutableRows.length}件)',
         );
         return await compute(
           _parseGeometryBatchInIsolate,
-          _GeometryParseParams(mutableRows, geomType),
+          _GeometryParseParams(
+            mutableRows,
+            geomType,
+            sourceProjection: needsReproject ? crs.projection : null,
+            needsAxisSwap: crs.needsAxisSwap,
+          ),
         );
       }
 
       for (final row in mutableRows) {
         final geom = row['geom'] as Uint8List?;
         if (geom != null) {
-          final geometry = parseGpkgGeometry(geom);
+          var geometry = parseGpkgGeometry(geom);
           if (geometry != null) {
+            // 非WGS84の場合はre-projection
+            if (needsReproject) {
+              geometry = GeometryReprojector.reprojectToWgs84(
+                geometry,
+                crs.projection!,
+                needsAxisSwap: crs.needsAxisSwap,
+              );
+            }
             row['geometry'] = geobaseGeometryToLatLngs(geometry);
           }
         }
@@ -685,6 +911,7 @@ class FeatureRepository {
     };
 
     try {
+      await _prepareForWrite(tableName);
       final db = await connection.getDatabase();
       final batch = db.batch();
       final insertedIds = <int>[];

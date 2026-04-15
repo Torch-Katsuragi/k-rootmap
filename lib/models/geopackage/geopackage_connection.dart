@@ -1,4 +1,4 @@
-﻿// Root Maps: GeoPackage DB接続管理クラス
+// Root Maps: GeoPackage DB接続管理クラス
 // DB接続の初期化、クローズ、バリデーションを担当
 import 'dart:async';
 import 'dart:io';
@@ -254,6 +254,26 @@ class GeoPackageConnection {
       if (missingContentsColumns.isNotEmpty) {
         AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns');
         AppLogger.debug('[GeoPackageConnection] ⚠️ このファイルは破損している可能性があります。');
+      }
+
+      // CRS情報のログ出力（非WGS84レイヤの検出）
+      try {
+        final srsRows = await _database!.rawQuery(
+          'SELECT DISTINCT gc.srs_id, srs.srs_name, srs.organization, srs.organization_coordsys_id '
+          'FROM gpkg_geometry_columns gc '
+          'LEFT JOIN gpkg_spatial_ref_sys srs ON gc.srs_id = srs.srs_id',
+        );
+        for (final row in srsRows) {
+          final srsId = row['srs_id'] as int?;
+          if (srsId != null && srsId != 4326 && srsId != 0 && srsId != -1 && srsId != 6668) {
+            final name = row['srs_name'] ?? 'Unknown';
+            final org = row['organization'] ?? '';
+            final orgId = row['organization_coordsys_id'] ?? srsId;
+            AppLogger.debug('[GeoPackageConnection] 🌍 非WGS84レイヤ検出: $org:$orgId ($name) - 読み込み時にWGS84にre-projection');
+          }
+        }
+      } catch (_) {
+        // CRS検出はオプショナル - 失敗してもDB初期化には影響しない
       }
     } catch (e) {
       AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e');

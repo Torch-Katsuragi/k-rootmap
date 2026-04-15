@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'package:geobase/geobase.dart' as geo;
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:latlong2/latlong.dart';
@@ -13,6 +13,7 @@ Uint8List _createGpbHeader({
   double? maxX,
   double? minY,
   double? maxY,
+  int srsId = 4326,
 }) {
   final header = BytesBuilder();
   header.addByte(0x47); // G
@@ -25,7 +26,7 @@ Uint8List _createGpbHeader({
   }
   header.addByte(flags);
 
-  final srsBytes = ByteData(4)..setUint32(0, 4326, Endian.little);
+  final srsBytes = ByteData(4)..setUint32(0, srsId, Endian.little);
   header.add(srsBytes.buffer.asUint8List());
 
   if (minX != null && maxX != null && minY != null && maxY != null) {
@@ -61,6 +62,16 @@ Uint8List _skipGpbHeader(Uint8List data) {
   }
   return data;
 }
+
+/// GPBinaryヘッダーからsrsIdを抽出する
+/// GPBinaryヘッダーがない場合はnullを返す
+int? extractSrsIdFromGpkgBlob(Uint8List gpkgBlob) {
+  if (gpkgBlob.length >= 8 && gpkgBlob[0] == 0x47 && gpkgBlob[1] == 0x50) {
+    return ByteData.sublistView(gpkgBlob, 4, 8).getUint32(0, Endian.little);
+  }
+  return null;
+}
+
 
 // ============================================================
 // 公開 API: GeoPackage blob ↔ geobase Geometry
@@ -101,6 +112,7 @@ Uint8List createGpkgWkb(geo.Geometry geom, {int srsId = 4326}) {
     maxX: maxX,
     minY: minY,
     maxY: maxY,
+    srsId: srsId,
   );
 
   final result = BytesBuilder();

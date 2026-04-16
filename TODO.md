@@ -108,6 +108,7 @@
 - [x] フィードバックフォームにバージョン情報・端末モデルを事前入力（Google Forms URLパラメータ + PackageInfo + DeviceInfo）
 - [ ] ポイント詳細情報からGoogle Mapリンクをコピーする機能
 - [ ] 既存MapTool (PenTool/SelectTool/GpsTool) のChangeNotifier化統一
+- [x] 水準器（Spirit Level）機能（v0.6.0 — 加速度計/コンパス/GPS統合、直角三角形計算付き）
 
 ### コード品質
 

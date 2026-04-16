@@ -1002,5 +1002,27 @@
     "modeBwTransparentDesc": "白黒に変換し、白い部分を透明にする",
     "threshold": "閾値",
     "convert": "変換"
+  },
+  "level": {
+    "title": "水準器",
+    "tilt": "傾斜",
+    "bearing": "方位角",
+    "gpsBearing": "GPS方位",
+    "latitude": "緯度",
+    "longitude": "経度",
+    "altitude": "標高",
+    "accuracy": "GPS精度",
+    "level": "水平",
+    "almostLevel": "ほぼ水平",
+    "tilted": "傾いています",
+    "triangleCalcBase": "直角三角形（底辺=1）",
+    "triangleCalcHypotenuse": "直角三角形（斜辺=1）",
+    "triangleCalcHeight": "直角三角形（高さ=1）",
+    "base": "底辺",
+    "hypotenuse": "斜辺",
+    "height": "高さ",
+    "levelState": "水平です",
+    "compassAccuracy": "コンパス精度",
+    "tooltip": "水準器"
   }
 }

@@ -1002,5 +1002,27 @@
     "modeBwTransparentDesc": "Convert to B&W, then make white areas transparent",
     "threshold": "Threshold",
     "convert": "Convert"
+  },
+  "level": {
+    "title": "Spirit Level",
+    "tilt": "Tilt",
+    "bearing": "Bearing",
+    "gpsBearing": "GPS Bearing",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "altitude": "Altitude",
+    "accuracy": "GPS Accuracy",
+    "level": "Level",
+    "almostLevel": "Almost level",
+    "tilted": "Tilted",
+    "triangleCalcBase": "Right Triangle (base=1)",
+    "triangleCalcHypotenuse": "Right Triangle (hyp=1)",
+    "triangleCalcHeight": "Right Triangle (height=1)",
+    "base": "Base",
+    "hypotenuse": "Hypotenuse",
+    "height": "Height",
+    "levelState": "Level",
+    "compassAccuracy": "Compass Accuracy",
+    "tooltip": "Spirit Level"
   }
 }

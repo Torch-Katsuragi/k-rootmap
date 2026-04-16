@@ -180,8 +180,8 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   /// 指数移動平均（EMA）によるヘディング平滑化
   ///
   /// 角度は0°/360°の境界で不連続になるため、最短角度差分を用いる。
-  /// [alpha] が小さいほど滑らかだが追従が遅い（0.25 = バランス型）。
-  static const double _compassAlpha = 0.25;
+  /// [alpha] が小さいほど滑らかだが追従が遅い（0.08 = 安定重視）。
+  static const double _compassAlpha = 0.08;
 
   double _smoothHeading(double rawHeading) {
     final prev = lastSmoothedHeading;

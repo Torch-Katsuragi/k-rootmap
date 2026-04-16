@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6.0 — 2026/04/16
+
+### 📐 Spirit Level Tool
+
+- Added a full-screen spirit level screen (accessible from the map AppBar)
+- Integrated accelerometer, compass, and GPS into a unified level tool
+  - Floating bubble within a large circle (sphere metaphor) moves via spherical projection (sin(θ))
+  - Real-time angle display on the line connecting center point and floating point
+  - N/E/S/W labels rotate around the circle, always pointing to true north
+- Info panel displays comprehensive data
+  - GPS coordinates (latitude/longitude), altitude, accuracy
+  - Bearing, Pitch/Roll angles, compass accuracy indicator
+  - Right triangle calculation with diagram (tap to switch reference side)
+- Haptic feedback on level detection, color-coded status indicators
+- Responsive layout for both portrait and landscape orientations
+
+---
+
 ## v0.5.8 — 2026/04/15
 
 ### 🌍 Support for Any Coordinate Reference System in GeoPackage

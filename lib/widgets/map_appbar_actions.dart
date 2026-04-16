@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';
 import '../screens/settings_screen.dart';
+import '../screens/level_screen.dart';
 import 'notification/notification_bell.dart';
 
 /// 地図画面AppBarの右側アクションボタン群を生成する関数
@@ -13,6 +14,17 @@ List<Widget> buildMapAppBarActions({
   required VoidCallback onDrawerToggle,
 }) {
   return [
+    // 水準器ボタン
+    IconButton(
+      icon: const Icon(Icons.explore),
+      tooltip: t.level.tooltip,
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LevelScreen()),
+        );
+      },
+    ),
     const NotificationBell(),
     IconButton(
       icon: const Icon(Icons.settings),

@@ -80,6 +80,16 @@ GISアプリケーション（Flutter製）
 - [[docs/features/concept]] - コンセプト・ターゲットユーザー
 - [[docs/technical/tech-stack]] - 技術スタック
 
+## ライセンス
+
+このプロジェクトは [GNU General Public License v2.0 (GPL-2.0)](LICENSE) の下で公開されています。
+
+- ✅ 商用利用・個人利用・配布・改変が可能です
+- 📝 このソフトウェアを利用・改変した派生物を配布する場合、**プロジェクト全体のソースコードを同じGPL-2.0で公開する必要があります**
+- 🔒 プロプライエタリ（非公開）ソフトウェアへの組み込みはできません
+
+詳細は [LICENSE](LICENSE) ファイルをご覧ください。
+
 ## リンク
 
 - **プロジェクトページ**: https://github.com/Torch-Katsuragi/root_maps

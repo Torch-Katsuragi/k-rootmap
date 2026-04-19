@@ -1,3 +1,18 @@
+// Copyright (C) 2024-2026 Torch-Katsuragi
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write to the Free Software Foundation, Inc.,
+// 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // Root Maps: オーバーレイ画像変換ツール
 // ハンドル型のUI操作で画像オーバーレイの平行移動・拡縮・回転を行う
 // スマホ: 1本指でハンドル操作、2本指でカメラ移動（PanTool委譲）

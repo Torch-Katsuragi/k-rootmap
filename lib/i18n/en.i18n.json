@@ -70,7 +70,7 @@
       "layerStyle": "Layer Rendering",
       "layerStyleDesc": "Point, line, and polygon drawing styles",
       "sync": "Drive Sync",
-      "syncDesc": "WiFi auto sync, sync interval",
+      "syncDesc": "Google account, WiFi auto sync, sync interval",
       "feedback": "Feedback",
       "feedbackDesc": "Send us your requests and bug reports",
       "appInfo": "App Info",
@@ -894,7 +894,18 @@
     "invalidShareUrl": "Invalid share URL",
     "syncStart": "Start",
     "syncProgressStart": "Start",
-    "syncProgressComplete": "Complete"
+    "syncProgressComplete": "Complete",
+    "googleAccount": "Google Account",
+    "notSignedIn": "Not signed in",
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "signOutConfirm": "Sign out from Google Drive?\n\nAuto sync will stop until you sign in again.",
+    "switchAccount": "Switch Account",
+    "switchAccountDesc": "Sign in with a different Google account",
+    "switchAccountFailed": "Account switch failed",
+    "signOutSuccess": "Signed out from Google",
+    "signInWithGoogle": "Sign in with Google",
+    "signedInAs": "Signed in as $email"
   },
   "trupulse": {
     "traverse": "Traverse: $count pts",

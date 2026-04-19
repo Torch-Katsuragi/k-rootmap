@@ -35,18 +35,18 @@ dependencies:
   slang: ^4.5.0                         # i18n: 型安全な翻訳コード生成
   slang_flutter: ^4.5.0                 # i18n: Flutter統合（TranslationProvider等）
   flutter_riverpod: ^3.0.3 # 状態管理 (v3 + code generation)
-  riverpod_annotation: ^3.0.3 # @riverpod アノテーション
+  riverpod_annotation: ^4.0.0 # @riverpod アノテーション
   flutter_map: ^8.1.1 # 地図表示用（最新版にアップデート）
   latlong2: ^0.9.0 # 緯度経度座標型
-  geolocator: ^10.1.0 # GPS位置情報取得
-  file_picker: ^10.1.9 # ファイル・ディレクトリ選択用（最新版に更新）
+  geolocator: ^14.0.0 # GPS位置情報取得
+  file_picker: ^11.0.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   sqflite_common_ffi: ^2.3.0 # デスクトップ環境用sqfliteサポート
   path: ^1.8.3 # パス操作用
-  nmea: ^2.0.0
-  proj4dart: ^2.1.0  # 座標変換用
-  desktop_drop: ^0.4.4  # デスクトップでのファイルドラッグ&ドロップ用
+  nmea: ^3.3.3
+  proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）
+  desktop_drop: ^0.7.0  # デスクトップでのファイルドラッグ&ドロップ用
   cross_file: ^0.3.4+2  # クロスプラットフォームファイル操作用
   charset_converter: ^2.3.0  # Shift_JIS等の文字コード変換用（ネイティブAPI使用）
   charset: ^2.0.1  # 純粋Dart実装の文字コード変換（Shift-JIS, EUC-JP対応）
@@ -60,18 +60,18 @@ dependencies:
   
   # Bluetooth GNSS接続用パッケージ
   flutter_bluetooth_serial: ^0.4.0  # Bluetooth Classic接続用
-  permission_handler: ^11.3.1       # Androidパーミッション管理用
-  location: ^6.0.2                  # Mock location provider用
+  permission_handler: ^12.0.0       # Androidパーミッション管理用
+  location: ^8.0.0                  # Mock location provider用
   
   # バックグラウンドサービス用パッケージ
   flutter_background_service: ^5.0.9  # フォアグラウンド・バックグラウンドタスク実行用
   
   # コンパス・センサー用パッケージ
   flutter_compass: ^0.8.0             # コンパス（磁気センサー）データ取得用
-  sensors_plus: ^6.1.1                # 加速度計データ取得用（水準器機能）
+  sensors_plus: ^7.0.0                # 加速度計データ取得用（水準器機能）
 
   # 属性テーブル表示・編集用パッケージ
-  trina_grid: ^1.0.0                  # 高機能データグリッド（属性テーブル用、TrinaGrid後継）
+  trina_grid: ^2.2.1                  # 高機能データグリッド（属性テーブル用、TrinaGrid後継）
 
   # コレクション操作用パッケージ
   collection: ^1.18.0                 # 高度なコレクション操作用
@@ -90,12 +90,12 @@ dependencies:
   url_launcher: ^6.3.2              # 外部URL起動用
   
   # Google Drive連携用パッケージ
-  google_sign_in: ^6.2.2            # Google OAuth認証用
-  googleapis: ^14.0.0               # Google APIs（Drive API含む）
-  extension_google_sign_in_as_googleapis_auth: ^2.0.12  # google_sign_inとgoogleapisの連携
-  flutter_secure_storage: ^9.2.4    # トークン安全保存用
+  google_sign_in: ^7.0.0            # Google OAuth認証用
+  googleapis: ^16.0.0               # Google APIs（Drive API含む）
+  extension_google_sign_in_as_googleapis_auth: ^3.0.0  # google_sign_inとgoogleapisの連携
+  # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）
   mobile_scanner: ^7.1.4
-  package_info_plus: ^9.0.0
+  package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
   maplibre: ^0.3.5
   supercluster: ^3.2.0
   geobase: ^1.5.0
@@ -103,7 +103,7 @@ dependencies:
   audioplayers: ^6.6.0
   flutter_markdown: ^0.7.6              # CHANGELOG.md表示用
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
-  device_info_plus: ^12.4.0
+  device_info_plus: ^12.4.0         # win32 ^5 vs ^6 競合のため据え置き
   image_picker: ^1.2.1
 
 
@@ -116,10 +116,10 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   test: ^1.25.15
   flutter_launcher_icons: ^0.14.4
-  riverpod_generator: ^3.0.3 # @riverpod コード生成
+  riverpod_generator: ^4.0.0 # @riverpod コード生成
   slang_build_runner: ^4.5.0 # i18n: slangコード生成用
   build_runner: ^2.13.0 # コード生成実行用（slang_build_runner 4.14のbuild_to対応に2.13+必要）
 

@@ -1,4 +1,4 @@
-﻿// Root Maps: Dialog Manager
+// Root Maps: Dialog Manager
 // ダイアログとコンバーターを統合管理するマネージャー
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +43,7 @@ class DialogManager {
 
       // file_selectorが失敗した場合、file_pickerにフォールバック
       try {
-        final result = await FilePicker.platform.pickFiles(
+        final result = await FilePicker.pickFiles(
           type: FileType.custom,
           allowedExtensions: ['shp', 'geojson', 'json', 'kml', 'csv', 'gpx'],
           allowMultiple: false,
@@ -82,7 +82,7 @@ class DialogManager {
 
       // file_selectorが失敗した場合、file_pickerにフォールバック
       try {
-        final result = await FilePicker.platform.saveFile(
+        final result = await FilePicker.saveFile(
           dialogTitle: 'Save File',
           fileName: suggestedName,
           type: FileType.custom,

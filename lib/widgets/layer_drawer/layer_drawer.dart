@@ -1,4 +1,4 @@
-﻿/// Root Maps: レイヤ構造Drawerウィジェット（メインファイル）
+/// Root Maps: レイヤ構造Drawerウィジェット（メインファイル）
 /// プロジェクトフォルダ・サブフォルダ・GeoPackage・レイヤの階層構造をファイルエクスプローラ風に1階層のみリスト表示し、
 /// 可視切り替え・リネーム・削除などの操作を提供するUI。
 library;
@@ -150,7 +150,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
           _moveNodeToFolder(details.data, dropTarget);
         }
       },
-      builder: (context, candidateData, __) => Container(
+      builder: (context, candidateData, _) => Container(
         decoration: candidateData.isNotEmpty
             ? BoxDecoration(
                 border: Border.all(color: Colors.orange, width: 2),
@@ -344,7 +344,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
                   _moveNodeToFolder(details.data, folder);
                 }
               },
-              builder: (context, candidateData, __) => Container(
+              builder: (context, candidateData, _) => Container(
                 decoration: candidateData.isNotEmpty
                     ? BoxDecoration(
                         border: Border.all(color: Colors.orange, width: 2),
@@ -406,11 +406,11 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
   Widget _wrapDraggable(Widget child, LayerTreeNode node) {
     return LongPressDraggable<LayerTreeNode>(
       data: node,
-      dragAnchorStrategy: (_, __, ___) => const Offset(0, 0),
+      dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
       feedback: DragFeedbackCard(node: node),
       childWhenDragging: Opacity(opacity: 0.4, child: child),
       onDragStarted: () => setState(() => _draggingNode = node),
-      onDraggableCanceled: (_, __) => _endDrag(),
+      onDraggableCanceled: (_, _) => _endDrag(),
       onDragEnd: (_) => _endDrag(),
       child: child,
     );

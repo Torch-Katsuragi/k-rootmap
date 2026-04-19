@@ -1,4 +1,4 @@
-﻿// Root Maps: Layer Import/Export Dialog Widget
+// Root Maps: Layer Import/Export Dialog Widget
 // レイヤー全体のインポート・エクスポート機能を提供するダイアログ
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -618,7 +618,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
   // 以下、処理メソッド（既存のコードから移植・調整）
   Future<void> _handleFileSelection() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions:
             _importExportService
@@ -713,7 +713,7 @@ class _LayerImportExportDialogState extends State<LayerImportExportDialog> {
     if (widget.exportLayer == null) return;
 
     try {
-      final result = await FilePicker.platform.saveFile(
+      final result = await FilePicker.saveFile(
         dialogTitle: 'Export Layer',
         fileName: '${widget.exportLayer!.name}.${_exportFormat.name}',
         type: FileType.custom,

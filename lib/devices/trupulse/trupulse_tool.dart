@@ -76,7 +76,7 @@ class TruPulseTool extends DeviceTool {
   void onActivate() {
     _panTool.onActivate();
     _measurementSub = _service.measurementStream.listen(_onMeasurement);
-    _selectedLayerSub = _ref.listen(selectedLayerNodeProvider, (_, __) {
+    _selectedLayerSub = _ref.listen(selectedLayerNodeProvider, (_, _) {
       _notifyUI();
     });
     AppLogger.debug('[TruPulseTool] activated');

@@ -16,6 +16,7 @@ import 'device_settings_screen.dart';
 import 'gps_settings_screen.dart';
 import 'layer_style_settings_screen.dart';
 import '../services/google_drive/auto_sync_service.dart';
+import '../services/google_drive/google_drive_service.dart';
 import '../providers/project_providers.dart';
 import '../utils/folder_utils.dart';
 import '../widgets/settings_widgets.dart';
@@ -540,7 +541,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
   }
 
   Future<void> _pickFolder() async {
-    final dir = await FilePicker.platform.getDirectoryPath(
+    final dir = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select Global Folder',
     );
     if (dir == null) return;
@@ -908,13 +909,16 @@ class SyncSettingsScreen extends StatefulWidget {
 }
 
 class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
+  final GoogleDriveService _driveService = GoogleDriveService();
   bool _autoSyncEnabled = true;
   int _intervalMinutes = kAutoSyncDefaultInterval;
+  bool _isAccountLoading = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _initDrive();
   }
 
   Future<void> _load() async {
@@ -926,72 +930,217 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
     });
   }
 
+  Future<void> _initDrive() async {
+    await _driveService.initialize();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _handleSignIn() async {
+    setState(() => _isAccountLoading = true);
+    try {
+      await _driveService.signIn();
+    } finally {
+      if (mounted) setState(() => _isAccountLoading = false);
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.logout, color: Colors.orange, size: 36),
+        title: Text(t.drive.signOut),
+        content: Text(t.drive.signOutConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(t.common.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(t.drive.signOut),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isAccountLoading = true);
+    try {
+      await _driveService.signOut();
+    } finally {
+      if (mounted) setState(() => _isAccountLoading = false);
+    }
+  }
+
+  Future<void> _handleSwitchAccount() async {
+    setState(() => _isAccountLoading = true);
+    try {
+      await _driveService.switchAccount();
+    } finally {
+      if (mounted) setState(() => _isAccountLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SettingsScaffold(
       title: t.settings.categories.sync,
       isEmbedded: widget.isEmbedded,
-      body: SettingsBody(
-        sections: [
-          SettingsSection(
-            title: 'Auto Sync',
-            icon: Icons.sync,
-            iconColor: Colors.blue,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.wifi, color: Colors.blue),
-                title: const Text('WiFi Auto Sync'),
-                subtitle: const Text('Sync automatically when connected to WiFi'),
-                value: _autoSyncEnabled,
-                onChanged: (v) async {
-                  setState(() => _autoSyncEnabled = v);
-                  await AutoSyncService.instance.setEnabled(v);
-                },
+      body: ListenableBuilder(
+        listenable: _driveService.authState,
+        builder: (context, _) {
+          return SettingsBody(
+            sections: [
+              // Google Account セクション
+              _buildAccountSection(),
+              // Auto Sync セクション
+              SettingsSection(
+                title: 'Auto Sync',
+                icon: Icons.sync,
+                iconColor: Colors.blue,
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.wifi, color: Colors.blue),
+                    title: const Text('WiFi Auto Sync'),
+                    subtitle: const Text('Sync automatically when connected to WiFi'),
+                    value: _autoSyncEnabled,
+                    onChanged: (v) async {
+                      setState(() => _autoSyncEnabled = v);
+                      await AutoSyncService.instance.setEnabled(v);
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.timer, color: Colors.blueGrey),
+                    title: const Text('Sync Interval'),
+                    subtitle: Text('Every $_intervalMinutes min'),
+                    trailing: DropdownButton<int>(
+                      value: _intervalMinutes,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1 min')),
+                        DropdownMenuItem(value: 3, child: Text('3 min')),
+                        DropdownMenuItem(value: 5, child: Text('5 min')),
+                        DropdownMenuItem(value: 10, child: Text('10 min')),
+                        DropdownMenuItem(value: 30, child: Text('30 min')),
+                      ],
+                      onChanged: (v) async {
+                        if (v == null) return;
+                        setState(() => _intervalMinutes = v);
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setInt(kAutoSyncIntervalKey, v);
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.timer, color: Colors.blueGrey),
-                title: const Text('Sync Interval'),
-                subtitle: Text('Every $_intervalMinutes min'),
-                trailing: DropdownButton<int>(
-                  value: _intervalMinutes,
-                  underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('1 min')),
-                    DropdownMenuItem(value: 3, child: Text('3 min')),
-                    DropdownMenuItem(value: 5, child: Text('5 min')),
-                    DropdownMenuItem(value: 10, child: Text('10 min')),
-                    DropdownMenuItem(value: 30, child: Text('30 min')),
-                  ],
-                  onChanged: (v) async {
-                    if (v == null) return;
-                    setState(() => _intervalMinutes = v);
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setInt(kAutoSyncIntervalKey, v);
-                  },
-                ),
+              SettingsSection(
+                title: 'Info',
+                icon: Icons.info_outline,
+                iconColor: Colors.grey,
+                children: const [
+                  Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'Auto sync runs only over WiFi to save mobile data.\n\n'
+                      'When both local and Drive have changes to the same file '
+                      '(conflict), sync pauses and shows a warning on the folder. '
+                      'Tap the subtitle to resolve manually.',
+                      style: TextStyle(height: 1.5, color: Colors.grey),
+                    ),
+                  ),
+                ],
               ),
             ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Google Account セクション
+  Widget _buildAccountSection() {
+    final isAuthenticated = _driveService.authState.isAuthenticated;
+    final user = _driveService.authState.user;
+
+    return SettingsSection(
+      title: t.drive.googleAccount,
+      icon: Icons.account_circle,
+      iconColor: isAuthenticated ? Colors.green : Colors.grey,
+      children: [
+        if (_isAccountLoading)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (isAuthenticated && user != null) ...[
+          // 認証済み: ユーザー情報表示
+          ListTile(
+            leading: const Icon(Icons.check_circle, color: Colors.green),
+            title: Text(
+              user.email,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: user.displayName != null
+                ? Text(user.displayName!)
+                : null,
           ),
-          SettingsSection(
-            title: 'Info',
-            icon: Icons.info_outline,
-            iconColor: Colors.grey,
-            children: const [
-              Padding(
-                padding: EdgeInsets.all(12),
-                child: Text(
-                  'Auto sync runs only over WiFi to save mobile data.\n\n'
-                  'When both local and Drive have changes to the same file '
-                  '(conflict), sync pauses and shows a warning on the folder. '
-                  'Tap the subtitle to resolve manually.',
-                  style: TextStyle(height: 1.5, color: Colors.grey),
+          const Divider(),
+          // アクションボタン
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _handleSwitchAccount,
+                    icon: const Icon(Icons.swap_horiz),
+                    label: Text(t.drive.switchAccount),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _handleSignOut,
+                    icon: const Icon(Icons.logout, color: Colors.red),
+                    label: Text(
+                      t.drive.signOut,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // 未認証: サインインボタン
+          ListTile(
+            leading: const Icon(Icons.cloud_off, color: Colors.grey),
+            title: Text(t.drive.notSignedIn),
+            subtitle: Text(t.drive.switchAccountDesc),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _handleSignIn,
+                icon: const Icon(Icons.login),
+                label: Text(t.drive.signInWithGoogle),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
                 ),
               ),
-            ],
+            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }

@@ -70,7 +70,7 @@
       "layerStyle": "レイヤ描画",
       "layerStyleDesc": "点・線・ポリゴンの描画スタイル",
       "sync": "Drive同期",
-      "syncDesc": "WiFi自動同期、同期間隔",
+      "syncDesc": "Googleアカウント、WiFi自動同期、同期間隔",
       "feedback": "フィードバック",
       "feedbackDesc": "要望・バグ報告をお送りください",
       "appInfo": "アプリ情報",
@@ -894,7 +894,18 @@
     "invalidShareUrl": "無効な共有URLです",
     "syncStart": "開始",
     "syncProgressStart": "開始",
-    "syncProgressComplete": "完了"
+    "syncProgressComplete": "完了",
+    "googleAccount": "Googleアカウント",
+    "notSignedIn": "未ログイン",
+    "signIn": "サインイン",
+    "signOut": "サインアウト",
+    "signOutConfirm": "Google Driveからサインアウトしますか？\n\n再度サインインするまで自動同期は停止します。",
+    "switchAccount": "アカウント切替",
+    "switchAccountDesc": "別のGoogleアカウントでサインイン",
+    "switchAccountFailed": "アカウントの切替に失敗しました",
+    "signOutSuccess": "Googleからサインアウトしました",
+    "signInWithGoogle": "Googleでサインイン",
+    "signedInAs": "$email でサインイン中"
   },
   "trupulse": {
     "traverse": "導線: ${count}点",

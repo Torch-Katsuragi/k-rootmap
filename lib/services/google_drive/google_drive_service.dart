@@ -36,9 +36,12 @@ class GoogleDriveService {
   factory GoogleDriveService() => _instance;
   GoogleDriveService._internal();
 
-  /// Google Sign-Inインスタンス
-  GoogleSignIn? _googleSignIn;
+  /// GoogleSignIn v7 はシングルトン: GoogleSignIn.instance
+  bool _isInitialized = false;
   Completer<void>? _initCompleter;
+
+  /// 認証済みユーザー（イベントベースで更新）
+  GoogleSignInAccount? _currentUser;
 
   /// Drive APIクライアント
   drive.DriveApi? _driveApi;
@@ -57,7 +60,7 @@ class GoogleDriveService {
 
   /// 初期化（二重実行防止）
   Future<void> initialize() async {
-    if (_googleSignIn != null) return;
+    if (_isInitialized) return;
 
     if (_initCompleter != null) {
       return _initCompleter!.future;
@@ -65,25 +68,26 @@ class GoogleDriveService {
 
     _initCompleter = Completer<void>();
     try {
-      _googleSignIn = GoogleSignIn(
-        scopes: _scopes,
-      );
+      // v7: シングルトンを初期化
+      await GoogleSignIn.instance.initialize();
 
-      // 既存のサインイン状態を確認
+      // 認証イベントをリッスン
+      GoogleSignIn.instance.authenticationEvents.listen(
+        _handleAuthenticationEvent,
+      ).onError((Object error) {
+        AppLogger.debug('[GoogleDriveService] 認証イベントエラー: $error');
+      });
+
+      // v7: 軽量認証を試行（以前の signInSilently 相当）
       try {
-        final account = await _googleSignIn!.signInSilently();
-        if (account != null) {
-          await _initializeDriveApi(account);
-          authState.setAuthenticated(DriveUser.fromGoogleAccount(account));
-          AppLogger.debug('[GoogleDriveService] サイレントサインイン成功: ${account.email}');
-        }
+        await GoogleSignIn.instance.attemptLightweightAuthentication();
       } catch (e) {
-        AppLogger.debug('[GoogleDriveService] サイレントサインイン失敗: $e');
+        AppLogger.debug('[GoogleDriveService] 軽量認証失敗: $e');
       }
 
+      _isInitialized = true;
       _initCompleter!.complete();
     } catch (e) {
-      _googleSignIn = null;
       _initCompleter!.completeError(e);
       rethrow;
     } finally {
@@ -91,26 +95,50 @@ class GoogleDriveService {
     }
   }
 
+  /// 認証イベントハンドラ
+  Future<void> _handleAuthenticationEvent(
+    GoogleSignInAuthenticationEvent event,
+  ) async {
+    switch (event) {
+      case GoogleSignInAuthenticationEventSignIn():
+        _currentUser = event.user;
+        try {
+          await _initializeDriveApi(event.user);
+          authState.setAuthenticated(DriveUser.fromGoogleAccount(event.user));
+          AppLogger.debug('[GoogleDriveService] サインイン成功: ${event.user.email}');
+        } catch (e) {
+          AppLogger.debug('[GoogleDriveService] Drive API初期化エラー: $e');
+          authState.setError(t.services.signInFailed(error: e.toString()));
+        }
+      case GoogleSignInAuthenticationEventSignOut():
+        _currentUser = null;
+        _driveApi = null;
+        authState.setUnauthenticated();
+        AppLogger.debug('[GoogleDriveService] サインアウトイベント受信');
+    }
+  }
+
   /// サインイン
   Future<bool> signIn() async {
-    if (_googleSignIn == null) {
+    if (!_isInitialized) {
       await initialize();
     }
 
     authState.setAuthenticating();
 
     try {
-      final account = await _googleSignIn!.signIn();
-      if (account == null) {
-        // ユーザーがキャンセル
+      // v7: authenticate() を呼ぶ
+      await GoogleSignIn.instance.authenticate();
+      // 認証イベントハンドラが呼ばれて状態が更新される
+      return authState.status == DriveAuthStatus.authenticated;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
         authState.setUnauthenticated();
         return false;
       }
-
-      await _initializeDriveApi(account);
-      authState.setAuthenticated(DriveUser.fromGoogleAccount(account));
-      AppLogger.debug('[GoogleDriveService] サインイン成功: ${account.email}');
-      return true;
+      AppLogger.debug('[GoogleDriveService] サインインエラー: ${e.code} ${e.description}');
+      authState.setError(t.services.signInFailed(error: e.description ?? e.code.toString()));
+      return false;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] サインインエラー: $e');
       authState.setError(t.services.signInFailed(error: e.toString()));
@@ -121,44 +149,80 @@ class GoogleDriveService {
   /// サインアウト
   Future<void> signOut() async {
     try {
-      await _googleSignIn?.signOut();
-      _driveApi = null;
-      authState.setUnauthenticated();
+      await GoogleSignIn.instance.disconnect();
+      // 認証イベントハンドラで状態がクリアされる
       AppLogger.debug('[GoogleDriveService] サインアウト完了');
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] サインアウトエラー: $e');
     }
   }
 
-  /// Drive APIを初期化
-  Future<void> _initializeDriveApi(GoogleSignInAccount account) async {
-    final httpClient = await _googleSignIn!.authenticatedClient();
-    if (httpClient == null) {
-      throw Exception(t.services.authClientFailed);
+  /// アカウント切替（disconnect → authenticate でアカウント選択画面を表示）
+  Future<bool> switchAccount() async {
+    if (!_isInitialized) {
+      await initialize();
     }
-    _driveApi = drive.DriveApi(httpClient);
+
+    try {
+      // Credential Manager との紐付けを解除
+      await GoogleSignIn.instance.disconnect();
+      _currentUser = null;
+      _driveApi = null;
+
+      // 少し待ってからアカウント選択画面を表示
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // authenticate() でアカウント選択UIが表示される
+      await GoogleSignIn.instance.authenticate();
+      // 認証イベントハンドラが呼ばれて状態が更新される
+      return authState.status == DriveAuthStatus.authenticated;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        authState.setUnauthenticated();
+        return false;
+      }
+      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: ${e.code} ${e.description}');
+      authState.setError(t.services.signInFailed(error: e.description ?? e.code.toString()));
+      return false;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: $e');
+      authState.setError(t.services.signInFailed(error: e.toString()));
+      return false;
+    }
+  }
+
+  /// Drive APIを初期化
+  /// v7: authorizationClient 経由で authClient を取得
+  Future<void> _initializeDriveApi(GoogleSignInAccount account) async {
+    // スコープの認可を確認・要求
+    final authorization = await account.authorizationClient
+        .authorizationForScopes(_scopes);
+
+    if (authorization == null) {
+      // スコープがまだ認可されていない場合、認可を要求
+      final granted = await account.authorizationClient
+          .authorizeScopes(_scopes);
+      _driveApi = drive.DriveApi(granted.authClient(scopes: _scopes));
+    } else {
+      _driveApi = drive.DriveApi(authorization.authClient(scopes: _scopes));
+    }
   }
 
   /// トークンをリフレッシュしてDrive APIを再初期化
   /// トークン期限切れエラー時に呼び出す
   Future<bool> refreshToken() async {
-    if (_googleSignIn == null) return false;
+    if (!_isInitialized) return false;
 
     try {
-      // 現在のアカウントを取得
-      final currentUser = _googleSignIn!.currentUser;
-      if (currentUser == null) {
-        // サイレントサインインを試行
-        final account = await _googleSignIn!.signInSilently();
-        if (account == null) return false;
-        await _initializeDriveApi(account);
-        AppLogger.debug('[GoogleDriveService] トークンリフレッシュ成功（サイレント）');
-        return true;
+      if (_currentUser == null) {
+        // 軽量認証を再試行
+        await GoogleSignIn.instance.attemptLightweightAuthentication();
+        // 認証イベントハンドラで _currentUser が更新される
+        if (_currentUser == null) return false;
       }
 
-      // 認証トークンを再取得
-      await currentUser.authentication;
-      await _initializeDriveApi(currentUser);
+      // Drive APIを再初期化（新しいトークンを取得）
+      await _initializeDriveApi(_currentUser!);
       AppLogger.debug('[GoogleDriveService] トークンリフレッシュ成功');
       return true;
     } catch (e) {

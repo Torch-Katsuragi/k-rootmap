@@ -1,4 +1,4 @@
-﻿// Root Maps: GPS情報バーウィジェット
+// Root Maps: GPS情報バーウィジェット
 // AppBar下部に表示するGPS情報バー
 // GPS待機タイマーを内部管理し、MapPage全体のsetStateを回避
 import 'dart:async';
@@ -153,7 +153,7 @@ class _GpsInfoBarState extends State<GpsInfoBar> {
             // コンパス情報（ValueListenableBuilderで局所再描画）
             ValueListenableBuilder<double?>(
               valueListenable: widget.headingNotifier,
-              builder: (_, heading, __) {
+              builder: (_, heading, _) {
                 if (heading == null) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(left: 16),

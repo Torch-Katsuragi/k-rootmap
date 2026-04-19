@@ -1,4 +1,4 @@
-﻿// Root Maps: Feature Import/Export Dialog Widget
+// Root Maps: Feature Import/Export Dialog Widget
 // 個別フィーチャのインポート・エクスポート機能を提供するダイアログ
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -405,7 +405,7 @@ class _FeatureImportExportDialogState extends State<FeatureImportExportDialog>
   // 処理メソッド
   Future<void> _handleFileSelection() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['geojson', 'json', 'csv', 'kml'],
         allowMultiple: false,
@@ -459,7 +459,7 @@ class _FeatureImportExportDialogState extends State<FeatureImportExportDialog>
 
   Future<void> _handleFeatureExport() async {
     try {
-      final result = await FilePicker.platform.saveFile(
+      final result = await FilePicker.saveFile(
         dialogTitle: 'Export Features',
         fileName: 'features.${_exportFormat.name}',
         type: FileType.custom,

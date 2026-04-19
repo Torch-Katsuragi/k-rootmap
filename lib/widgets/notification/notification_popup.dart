@@ -49,7 +49,7 @@ class NotificationPopup extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: notifications.length,
                   separatorBuilder:
-                      (_, __) =>
+                      (_, _) =>
                           const Divider(height: 1, indent: 12, endIndent: 12),
                   itemBuilder:
                       (context, index) => _NotificationPanel(

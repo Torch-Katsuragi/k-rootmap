@@ -267,7 +267,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     return ListenableBuilder(
       listenable: Listenable.merge([headingNotifier, mapBearingNotifier]),
-      builder: (_, __) {
+      builder: (_, _) {
         final heading = headingNotifier.value;
         final mapBearing = mapBearingNotifier.value;
         return Stack(
@@ -317,7 +317,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     });
 
     // 選択状態の変更をリッスンしてフィーチャソースを再同期
-    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, __) {
+    ref.listen<List<LayerTreeNode>>(selectedFeaturesProvider, (_, _) {
       _syncFeatureSources();
     });
 
@@ -550,7 +550,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         if (currentTool is OverlayTransformTool)
           ListenableBuilder(
             listenable: currentTool.transformNotifier,
-            builder: (_, __) {
+            builder: (_, _) {
               return ml.WidgetLayer(
                 markers: _buildTransformHandleMarkers(currentTool),
               );

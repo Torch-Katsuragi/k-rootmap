@@ -1,4 +1,4 @@
-﻿/// Root Maps: GeoPackageタイルウィジェット
+/// Root Maps: GeoPackageタイルウィジェット
 library;
 
 import 'package:flutter/material.dart';
@@ -88,11 +88,11 @@ class GeoPackageTile extends ConsumerWidget {
       children: [
         LongPressDraggable<GeoPackageNode>(
           data: node,
-          dragAnchorStrategy: (_, __, ___) => const Offset(0, 0),
+          dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
           feedback: DragFeedbackCard(node: node),
           childWhenDragging: Opacity(opacity: 0.4, child: headerTile),
           onDragStarted: () => onDragActiveChanged(node),
-          onDraggableCanceled: (_, __) => onDragActiveChanged(null),
+          onDraggableCanceled: (_, _) => onDragActiveChanged(null),
           onDragEnd: (_) => onDragActiveChanged(null),
           child: headerTile,
         ),
@@ -131,7 +131,7 @@ class GeoPackageTile extends ConsumerWidget {
         onDragTargetChanged(node);
       },
       onLeave: (_) => onDragTargetChanged(null),
-      builder: (context, _, __) {
+      builder: (context, _, _) {
         return Container(
           decoration: isDropTarget
               ? BoxDecoration(

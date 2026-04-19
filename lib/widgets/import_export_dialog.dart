@@ -1,4 +1,4 @@
-﻿// Root Maps: Import/Export Dialog Widget (DEPRECATED)
+// Root Maps: Import/Export Dialog Widget (DEPRECATED)
 // ファイルのインポート・エクスポート機能を提供するダイアログ
 //
 // ⚠️ DEPRECATED: このダイアログは非推奨です
@@ -405,7 +405,7 @@ class _ImportExportDialogState extends ConsumerState<ImportExportDialog> {
   Future<void> _handleFileSelection() async {
     try {
       // ファイル選択ダイアログを表示
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions:
             _importExportService
@@ -611,7 +611,7 @@ class _ImportExportDialogState extends ConsumerState<ImportExportDialog> {
 
     try {
       // 保存先ファイル選択
-      final result = await FilePicker.platform.saveFile(
+      final result = await FilePicker.saveFile(
         dialogTitle: 'Export Layer as Shapefile',
         fileName: '${widget.currentLayer!.name}_pointcloud.shp',
         type: FileType.custom,
@@ -687,4 +687,3 @@ class _ImportExportDialogState extends ConsumerState<ImportExportDialog> {
     }
   }
 }
-

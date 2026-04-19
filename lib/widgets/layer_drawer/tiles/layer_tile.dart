@@ -1,4 +1,4 @@
-﻿/// Root Maps: レイヤタイルウィジェット
+/// Root Maps: レイヤタイルウィジェット
 library;
 
 import 'package:flutter/material.dart';
@@ -71,7 +71,7 @@ class LayerTile extends ConsumerWidget {
 
     return LongPressDraggable<LayerNode>(
       data: node,
-      dragAnchorStrategy: (_, __, ___) => const Offset(0, 0),
+      dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
       feedback: DragFeedbackCard(node: node),
       childWhenDragging: Container(
         decoration: BoxDecoration(
@@ -81,7 +81,7 @@ class LayerTile extends ConsumerWidget {
         child: Opacity(opacity: 0.5, child: tileContent),
       ),
       onDragStarted: () => onDragActiveChanged?.call(node),
-      onDraggableCanceled: (_, __) => onDragActiveChanged?.call(null),
+      onDraggableCanceled: (_, _) => onDragActiveChanged?.call(null),
       onDragEnd: (_) => onDragActiveChanged?.call(null),
       child: tileContent,
     );

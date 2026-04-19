@@ -16,6 +16,31 @@
 - 水平判定時に触覚フィードバック、色による状態表示
 - ポートレート/ランドスケープ両対応のレスポンシブレイアウト
 
+### 🔄 依存パッケージの一括バージョンアップ
+
+- 主要パッケージを最新版に更新（37パッケージ更新）
+  - file_picker 10 → 11（静的メソッドAPI移行）
+  - google_sign_in 6 → 7（シングルトン・イベントベース認証フロー移行）
+  - googleapis 14 → 16、extension_google_sign_in_as_googleapis_auth 2 → 3
+  - geolocator 10 → 14、permission_handler 11 → 12
+  - sensors_plus 6 → 7、trina_grid 1 → 2、nmea 2 → 3
+  - desktop_drop 0.4 → 0.7、riverpod_annotation/generator 3 → 4
+  - flutter_lints 5 → 6
+- Gradle wrapper を 8.11.1 → 8.13 に更新
+- 未使用の flutter_secure_storage を削除（win32バージョン競合を解消）
+
+### 🔐 Googleアカウント切替・サインアウト機能
+
+- 設定画面（Drive同期）にGoogleアカウント管理セクションを追加
+  - アカウント切替: 別のGoogleアカウントに切り替え可能
+  - サインアウト: Credential Managerとの紐付けを解除
+- Drive連携ダイアログにも「アカウント切替」ボタンを追加
+- 日英両語のローカライズ対応済み
+
+### 🛠 バグ修正・メンテナンス
+
+- インポート/エクスポートダイアログ3ファイルの日本語コメント文字化けを修正
+
 ---
 
 ## v0.5.8 — 2026/04/15
@@ -62,6 +87,19 @@
 - 「高度な設定」モードで複数の背景地図をスライダーでブレンド表示可能に
   - 累積補正式でスライダー比率どおりの見た目を保証
   - 例: 標準地図＋赤色立体図で地名と地形を同時見
+
+### 🔄 依存パッケージの一括バージョンアップ
+
+- 主要パッケージを最新版に更新（37パッケージ更新）
+  - file_picker 10 → 11（静的メソッドAPI移行）
+  - google_sign_in 6 → 7（シングルトン・イベントベース認証フロー移行）
+  - googleapis 14 → 16、extension_google_sign_in_as_googleapis_auth 2 → 3
+  - geolocator 10 → 14、permission_handler 11 → 12
+  - sensors_plus 6 → 7、trina_grid 1 → 2、nmea 2 → 3
+  - desktop_drop 0.4 → 0.7、riverpod_annotation/generator 3 → 4
+  - flutter_lints 5 → 6
+- Gradle wrapper を 8.11.1 → 8.13 に更新
+- 未使用の flutter_secure_storage を削除（win32バージョン競合を解消）
 
 ### 🛠️ メンテナンス
 

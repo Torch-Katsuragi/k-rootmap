@@ -1,4 +1,4 @@
-﻿// Root Maps: Google Drive連携ダイアログ
+// Root Maps: Google Drive連携ダイアログ
 // プロジェクトとDriveフォルダの連携・同期を行うダイアログ
 
 import 'package:flutter/material.dart';
@@ -253,10 +253,21 @@ class _DriveConnectDialogState extends State<DriveConnectDialog> {
                     ),
                     TextButton(
                       onPressed: () async {
+                        final success = await _driveService.switchAccount();
+                        if (success) {
+                          await _loadExistingFolders();
+                        } else if (_driveService.authState.status != DriveAuthStatus.authenticated) {
+                          setState(() => _currentStep = _DialogStep.signIn);
+                        }
+                      },
+                      child: Text(t.drive.switchAccount),
+                    ),
+                    TextButton(
+                      onPressed: () async {
                         await _driveService.signOut();
                         setState(() => _currentStep = _DialogStep.signIn);
                       },
-                      child: const Text('Sign out'),
+                      child: Text(t.drive.signOut),
                     ),
                   ],
                 ),

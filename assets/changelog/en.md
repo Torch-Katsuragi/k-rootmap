@@ -16,6 +16,31 @@
 - Haptic feedback on level detection, color-coded status indicators
 - Responsive layout for both portrait and landscape orientations
 
+### 🔄 Bulk Dependency Version Upgrades
+
+- Updated major packages to latest versions (37 packages updated)
+  - file_picker 10 → 11 (migrated to static method API)
+  - google_sign_in 6 → 7 (singleton & event-based auth flow migration)
+  - googleapis 14 → 16, extension_google_sign_in_as_googleapis_auth 2 → 3
+  - geolocator 10 → 14, permission_handler 11 → 12
+  - sensors_plus 6 → 7, trina_grid 1 → 2, nmea 2 → 3
+  - desktop_drop 0.4 → 0.7, riverpod_annotation/generator 3 → 4
+  - flutter_lints 5 → 6
+- Updated Gradle wrapper from 8.11.1 → 8.13
+- Removed unused flutter_secure_storage (resolved win32 version conflict)
+
+### 🔐 Google Account Switch / Sign-out
+
+- Added Google Account management section to Settings (Drive Sync)
+  - Switch Account: sign in with a different Google account
+  - Sign Out: disconnect from Credential Manager
+- Added "Switch Account" button to Drive connect dialog
+- Fully localized in English and Japanese
+
+### 🛠 Bug Fixes & Maintenance
+
+- Fixed mojibake (encoding corruption) in Japanese comments across 3 import/export dialog files
+
 ---
 
 ## v0.5.8 — 2026/04/15
@@ -62,6 +87,19 @@
 - "Advanced Settings" mode enables blending multiple basemaps with sliders
   - Cumulative alpha correction ensures visual weight matches slider ratios
   - Example: overlay standard map + red relief to see both place names and terrain
+
+### 🔄 Bulk Dependency Version Upgrades
+
+- Updated major packages to latest versions (37 packages updated)
+  - file_picker 10 → 11 (migrated to static method API)
+  - google_sign_in 6 → 7 (singleton & event-based auth flow migration)
+  - googleapis 14 → 16, extension_google_sign_in_as_googleapis_auth 2 → 3
+  - geolocator 10 → 14, permission_handler 11 → 12
+  - sensors_plus 6 → 7, trina_grid 1 → 2, nmea 2 → 3
+  - desktop_drop 0.4 → 0.7, riverpod_annotation/generator 3 → 4
+  - flutter_lints 5 → 6
+- Updated Gradle wrapper from 8.11.1 → 8.13
+- Removed unused flutter_secure_storage (resolved win32 version conflict)
 
 ### 🛠️ Maintenance
 

@@ -36,6 +36,8 @@ tags: [index, navigation]
 | [[technical/google-drive-setup]] | Google Drive連携セットアップガイド |
 | [[technical/ui-layer-tree]] | レイヤツリーUI更新ガイド（updateChildren） |
 | [[technical/signing]] | Android署名鍵の管理（保管場所・リリースビルド手順） |
+| [[technical/location-sharing]] | 位置共有（パーティ機能）設計（Firebase RTDB・接続途絶対処・セキュリティ） |
+| [[technical/location-sharing-setup]] | 位置共有 Firebaseセットアップ手順（provisioningランブック） |
 
 ---
 

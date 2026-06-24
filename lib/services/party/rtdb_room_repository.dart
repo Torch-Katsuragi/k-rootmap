@@ -83,19 +83,19 @@ class RtdbRoomRepository {
     for (var attempt = 0; attempt < _maxCodeAttempts; attempt++) {
       final code = _codeGen.generate();
       try {
-        // meta と host の members を atomic に書く。
-        await _db.ref('rooms/$code').update({
-          'meta': {
-            'hostUid': uid,
-            'active': true,
-            'createdAt': ServerValue.timestamp,
-            'expiresAt': expiresAtMs,
-            if (name != null && name.isNotEmpty) 'name': name,
-          },
-          'members/$uid': {
-            'name': (name == null || name.isEmpty) ? 'host' : name,
-            'role': PartyRole.host.wireValue,
-          },
+        // meta を先に書く。members の書き込みルールは root/meta/hostUid を参照するが、
+        // RTDBルールの root は「書き込み前」の状態なので、meta と members を1回の
+        // update で書くと members 側でホスト判定が通らない。順次書き込みにする。
+        await _db.ref('rooms/$code/meta').set({
+          'hostUid': uid,
+          'active': true,
+          'createdAt': ServerValue.timestamp,
+          'expiresAt': expiresAtMs,
+          if (name != null && name.isNotEmpty) 'name': name,
+        });
+        await _db.ref('rooms/$code/members/$uid').set({
+          'name': (name == null || name.isEmpty) ? 'host' : name,
+          'role': PartyRole.host.wireValue,
         });
         return RoomMeta(
           roomCode: code,

@@ -59,6 +59,10 @@ import '../../models/app_notification.dart';
 import '../../providers/notification_providers.dart';
 import '../../providers/ui_state_providers.dart';
 import '../../providers/device_tool_providers.dart';
+import '../../providers/party_providers.dart';
+import '../../models/party/peer_position.dart';
+import '../../models/party/party_room.dart';
+import 'widgets/party_controls.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -349,6 +353,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     // 選択状態を監視（変更時に自動rebuild）
     final selectedFeatures = ref.watch(selectedFeaturesProvider);
 
+    // パーティ位置共有: peers/接続状態の変化で地図マーカーを再描画
+    ref.watch(partySessionProvider);
+
     final folderTree = ref.watch(folderTreeProvider);
     currentNode ??= folderTree;
 
@@ -442,6 +449,9 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                             onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
                             onOpenTrackExtraction: openTrackExtractionDialog,
                           ),
+                        // パーティ位置共有（Android/iOS限定）
+                        if (Platform.isAndroid || Platform.isIOS)
+                          const PartyButton(),
                         const LeftBottomFab(),
                       ],
                     ),
@@ -1339,6 +1349,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         for (int i = 0; i < drawingState.drawingPolygon.length; i++)
           _buildSurveyPointMarker(drawingState.drawingPolygon[i], i, false),
       ],
+      // パーティ位置共有: 他メンバーのマーカー
+      ..._buildPartyPeerMarkers(),
       // 現在位置マーカー — 最上位（常に見える）
       if (currentLocation != null)
         ml.Marker(
@@ -1347,6 +1359,90 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           child: _buildLocationMarkerWithCompass(),
         ),
     ];
+  }
+
+  /// パーティの他メンバー位置マーカー
+  List<ml.Marker> _buildPartyPeerMarkers() {
+    final session = ref.read(partySessionProvider);
+    if (session.peers.isEmpty) return const [];
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final markers = <ml.Marker>[];
+    for (final peer in session.peers.values) {
+      final member = session.members.firstWhere(
+        (m) => m.uid == peer.uid,
+        orElse: () => PartyMember(uid: peer.uid, name: '', role: PartyRole.guest),
+      );
+      markers.add(
+        ml.Marker(
+          point: LatLng(peer.latitude, peer.longitude).toGeographic(),
+          size: const Size(140, 70),
+          child: _buildPeerMarker(peer, member.name, nowMs),
+        ),
+      );
+    }
+    return markers;
+  }
+
+  /// 他メンバー1人のマーカーウィジェット（鮮度で淡色化＋経過時間ラベル）
+  Widget _buildPeerMarker(PeerPosition peer, String name, int nowMs) {
+    final freshness = peer.freshnessAt(nowMs);
+    final double opacity;
+    final Color color;
+    switch (freshness) {
+      case PeerFreshness.fresh:
+        opacity = 1.0;
+        color = Colors.deepOrange;
+      case PeerFreshness.stale:
+        opacity = 0.6;
+        color = Colors.deepOrange;
+      case PeerFreshness.lost:
+        opacity = 0.4;
+        color = Colors.blueGrey;
+    }
+    final displayName = name.isEmpty ? 'メンバー' : name;
+    final label = freshness == PeerFreshness.fresh
+        ? displayName
+        : '$displayName・${_peerAgeLabel(peer.ageAt(nowMs))}';
+    return Opacity(
+      opacity: opacity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 経過時間の短いラベル
+  String _peerAgeLabel(Duration age) {
+    if (age.inMinutes >= 1) return '${age.inMinutes}分前';
+    return '${age.inSeconds}秒前';
   }
 
   /// 描画開始の1点目インジケータ（十字マーク）

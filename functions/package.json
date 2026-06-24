@@ -2,7 +2,7 @@
   "name": "k-rootmap-functions",
   "description": "k-rootmap パーティ位置共有のメンテナンス用 Cloud Functions",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {

@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "876970256789",
+    "firebase_url": "https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "k-rootmap",
+    "storage_bucket": "k-rootmap.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:876970256789:android:d352cc4c5f7dcba453ee9c",
+        "android_client_info": {
+          "package_name": "com.k_root.k_maps"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABBbUulD2cEbVT7cHfRCDLk_R5QBocxDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

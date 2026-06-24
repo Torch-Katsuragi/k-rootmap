@@ -105,6 +105,9 @@ dependencies:
   markdown: ^7.0.0                         # カスタムMarkdownシンタックス用
   device_info_plus: ^12.4.0         # win32 ^5 vs ^6 競合のため据え置き
   image_picker: ^1.2.1
+  firebase_core: ^4.11.0
+  firebase_database: ^12.4.4
+  firebase_auth: ^6.5.4
 
 
 dev_dependencies:

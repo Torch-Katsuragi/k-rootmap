@@ -1035,5 +1035,28 @@
     "levelState": "水平です",
     "compassAccuracy": "コンパス精度",
     "tooltip": "水準器"
+  },
+  "party": {
+    "title": "位置共有パーティ",
+    "displayName": "表示名",
+    "displayNameHint": "例: 田中",
+    "joinPrompt": "参加する場合はコードを入力",
+    "roomCodeLabel": "ルームコード（8文字）",
+    "roomCodeHint": "例: AB23CD45",
+    "join": "参加",
+    "createHost": "新規作成（ホスト）",
+    "roomCode": "ルームコード",
+    "copy": "コピー",
+    "ghostMode": "ゴーストモード",
+    "ghostOn": "自分の位置を共有していません",
+    "ghostOff": "自分の位置を共有中",
+    "members": "メンバー（${count}人）",
+    "endHost": "終了する（ホスト）",
+    "leave": "退出する",
+    "connSharing": "共有中",
+    "connConnecting": "接続中…",
+    "connOffline": "圏外（保留中）",
+    "initFailed": "位置共有を初期化できませんでした",
+    "signInUnconfirmed": "サインインが確認できません"
   }
 }

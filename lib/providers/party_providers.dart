@@ -29,6 +29,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../i18n/strings.g.dart';
 import '../models/party/party_room.dart';
 import '../models/party/peer_position.dart';
 import '../services/gps_history_recorder.dart';
@@ -135,7 +136,7 @@ class PartySession extends Notifier<PartySessionState> {
     if (state.busy || state.active) return;
     state = state.copyWith(busy: true, clearError: true);
     if (!await PartyFirebase.ensureInitialized()) {
-      state = state.copyWith(busy: false, error: '位置共有を初期化できませんでした');
+      state = state.copyWith(busy: false, error: t.party.initFailed);
       return;
     }
     try {
@@ -152,7 +153,7 @@ class PartySession extends Notifier<PartySessionState> {
     final normalized = code.trim().toUpperCase();
     state = state.copyWith(busy: true, clearError: true);
     if (!await PartyFirebase.ensureInitialized()) {
-      state = state.copyWith(busy: false, error: '位置共有を初期化できませんでした');
+      state = state.copyWith(busy: false, error: t.party.initFailed);
       return;
     }
     try {
@@ -167,7 +168,7 @@ class PartySession extends Notifier<PartySessionState> {
   Future<void> _activate(String code, PartyRole role) async {
     final uid = _repository.currentUid;
     if (uid == null) {
-      state = state.copyWith(busy: false, error: 'サインインが確認できません');
+      state = state.copyWith(busy: false, error: t.party.signInUnconfirmed);
       return;
     }
 

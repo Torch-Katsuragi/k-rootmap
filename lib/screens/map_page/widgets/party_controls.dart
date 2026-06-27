@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../i18n/strings.g.dart';
 import '../../../models/party/party_room.dart';
 import '../../../providers/party_providers.dart';
 import '../../../services/party/party_connection_monitor.dart';
@@ -28,11 +29,11 @@ import '../../../services/party/party_connection_monitor.dart';
 String partyConnectionLabel(PartyConnectionState s) {
   switch (s) {
     case PartyConnectionState.online:
-      return '共有中';
+      return t.party.connSharing;
     case PartyConnectionState.connecting:
-      return '接続中…';
+      return t.party.connConnecting;
     case PartyConnectionState.offline:
-      return '圏外（保留中）';
+      return t.party.connOffline;
   }
 }
 
@@ -153,7 +154,7 @@ class _PartyJoinCreateDialogState
     });
 
     return AlertDialog(
-      title: const Text('位置共有パーティ'),
+      title: Text(t.party.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,21 +162,21 @@ class _PartyJoinCreateDialogState
           TextField(
             controller: _nameCtrl,
             maxLength: 40,
-            decoration: const InputDecoration(
-              labelText: '表示名',
-              hintText: '例: 田中',
+            decoration: InputDecoration(
+              labelText: t.party.displayName,
+              hintText: t.party.displayNameHint,
             ),
           ),
           const SizedBox(height: 8),
           const Divider(),
-          const Text('参加する場合はコードを入力', style: TextStyle(fontSize: 12)),
+          Text(t.party.joinPrompt, style: const TextStyle(fontSize: 12)),
           TextField(
             controller: _codeCtrl,
             maxLength: 8,
             textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              labelText: 'ルームコード（8文字）',
-              hintText: '例: AB23CD45',
+            decoration: InputDecoration(
+              labelText: t.party.roomCodeLabel,
+              hintText: t.party.roomCodeHint,
             ),
           ),
           if (session.error != null) ...[
@@ -191,7 +192,7 @@ class _PartyJoinCreateDialogState
       actions: [
         TextButton(
           onPressed: session.busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('キャンセル'),
+          child: Text(t.common.cancel),
         ),
         TextButton(
           onPressed: session.busy
@@ -199,7 +200,7 @@ class _PartyJoinCreateDialogState
               : () => ref
                   .read(partySessionProvider.notifier)
                   .joinRoom(code: _codeCtrl.text, name: _nameCtrl.text),
-          child: const Text('参加'),
+          child: Text(t.party.join),
         ),
         FilledButton(
           onPressed: session.busy
@@ -207,7 +208,7 @@ class _PartyJoinCreateDialogState
               : () => ref
                   .read(partySessionProvider.notifier)
                   .createRoom(name: _nameCtrl.text),
-          child: const Text('新規作成（ホスト）'),
+          child: Text(t.party.createHost),
         ),
       ],
     );
@@ -268,8 +269,8 @@ class _PartyStatusSheet extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Text('ルームコード',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(t.party.roomCode,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Chip(
                   backgroundColor:
@@ -288,7 +289,7 @@ class _PartyStatusSheet extends ConsumerWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy),
-                  tooltip: 'コピー',
+                  tooltip: t.party.copy,
                   onPressed: () => Clipboard.setData(
                       ClipboardData(text: session.roomCode ?? '')),
                 ),
@@ -303,9 +304,9 @@ class _PartyStatusSheet extends ConsumerWidget {
                 session.ghost ? Icons.visibility_off : Icons.visibility,
                 color: session.ghost ? Colors.deepPurple : null,
               ),
-              title: const Text('ゴーストモード'),
+              title: Text(t.party.ghostMode),
               subtitle: Text(
-                session.ghost ? '自分の位置を共有していません' : '自分の位置を共有中',
+                session.ghost ? t.party.ghostOn : t.party.ghostOff,
                 style: const TextStyle(fontSize: 12),
               ),
               value: session.ghost,
@@ -313,7 +314,7 @@ class _PartyStatusSheet extends ConsumerWidget {
                   ref.read(partySessionProvider.notifier).setGhost(v),
             ),
             const Divider(),
-            Text('メンバー（${session.members.length}人）',
+            Text(t.party.members(count: session.members.length),
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             ...session.members.map((m) {
@@ -336,7 +337,9 @@ class _PartyStatusSheet extends ConsumerWidget {
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: Colors.red),
                 icon: const Icon(Icons.logout),
-                label: Text(session.role == PartyRole.host ? '終了する（ホスト）' : '退出する'),
+                label: Text(session.role == PartyRole.host
+                    ? t.party.endHost
+                    : t.party.leave),
                 onPressed: () =>
                     ref.read(partySessionProvider.notifier).leave(),
               ),

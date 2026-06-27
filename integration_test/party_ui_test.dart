@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:root_maps/firebase_options.dart';
+import 'package:root_maps/i18n/strings.g.dart';
 import 'package:root_maps/providers/party_providers.dart';
 import 'package:root_maps/screens/map_page/widgets/party_controls.dart';
 
@@ -18,6 +19,8 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
+    // パーティUIのJP文言を検証するため日本語ロケールに固定。
+    LocaleSettings.setLocaleSync(AppLocale.ja);
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );

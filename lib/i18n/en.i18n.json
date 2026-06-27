@@ -1035,5 +1035,28 @@
     "levelState": "Level",
     "compassAccuracy": "Compass Accuracy",
     "tooltip": "Spirit Level"
+  },
+  "party": {
+    "title": "Location Sharing Party",
+    "displayName": "Display name",
+    "displayNameHint": "e.g. Tanaka",
+    "joinPrompt": "To join, enter a code",
+    "roomCodeLabel": "Room code (8 chars)",
+    "roomCodeHint": "e.g. AB23CD45",
+    "join": "Join",
+    "createHost": "Create (Host)",
+    "roomCode": "Room code",
+    "copy": "Copy",
+    "ghostMode": "Ghost mode",
+    "ghostOn": "Your location is hidden",
+    "ghostOff": "Sharing your location",
+    "members": "Members (${count})",
+    "endHost": "End (Host)",
+    "leave": "Leave",
+    "connSharing": "Sharing",
+    "connConnecting": "Connecting…",
+    "connOffline": "Offline (queued)",
+    "initFailed": "Could not initialize location sharing",
+    "signInUnconfirmed": "Sign-in could not be confirmed"
   }
 }

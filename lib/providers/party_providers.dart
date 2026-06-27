@@ -31,9 +31,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/party/party_room.dart';
 import '../models/party/peer_position.dart';
+import '../services/gps_history_recorder.dart';
 import '../services/internal_gps_location_store.dart';
 import '../services/party/battery_monitor.dart';
 import '../services/party/connectivity_interface_monitor.dart';
+import '../services/party/gps_history_gap_provider.dart';
 import '../services/party/party_connection_monitor.dart';
 import '../services/party/party_firebase.dart';
 import '../services/party/party_location_store.dart';
@@ -186,6 +188,8 @@ class PartySession extends Notifier<PartySessionState> {
       ownPositions: InternalGpsLocationStore().positionStream,
       selfUid: uid,
       batteryProvider: () => battery.level,
+      // 復帰時、圏外区間の軌跡を常時記録のGPS履歴からbackfillする。
+      gapProvider: gpsHistoryGapProvider(GpsHistoryRecorder()),
     )..start();
 
     _source = source;

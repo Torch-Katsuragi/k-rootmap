@@ -34,6 +34,7 @@ import '../models/party/peer_position.dart';
 import '../services/internal_gps_location_store.dart';
 import '../services/party/connectivity_interface_monitor.dart';
 import '../services/party/party_connection_monitor.dart';
+import '../services/party/party_firebase.dart';
 import '../services/party/party_location_store.dart';
 import '../services/party/rtdb_peer_source.dart';
 import '../services/party/rtdb_room_repository.dart';
@@ -122,6 +123,10 @@ class PartySession extends Notifier<PartySessionState> {
   Future<void> createRoom({String? name}) async {
     if (state.busy || state.active) return;
     state = state.copyWith(busy: true, clearError: true);
+    if (!await PartyFirebase.ensureInitialized()) {
+      state = state.copyWith(busy: false, error: '位置共有を初期化できませんでした');
+      return;
+    }
     try {
       final meta = await _repository.createRoom(name: name);
       await _activate(meta.roomCode, PartyRole.host);
@@ -135,6 +140,10 @@ class PartySession extends Notifier<PartySessionState> {
     if (state.busy || state.active) return;
     final normalized = code.trim().toUpperCase();
     state = state.copyWith(busy: true, clearError: true);
+    if (!await PartyFirebase.ensureInitialized()) {
+      state = state.copyWith(busy: false, error: '位置共有を初期化できませんでした');
+      return;
+    }
     try {
       await _repository.joinRoom(code: normalized, name: name);
       await _activate(normalized, PartyRole.guest);

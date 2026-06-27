@@ -13,13 +13,13 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+import 'dart:async';
+
 import 'package:root_maps/utils/app_logger.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'firebase_options.dart';
+import 'services/party/party_firebase.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -65,19 +65,11 @@ void main() async {
   // 言語設定: 保存値があればそれを使用、なければ端末の言語設定を自動検出
   await _initLocale();
 
-  // 位置共有(パーティ機能)用のFirebase初期化。
-  // firebase_database/firebase_auth はWindows未対応のためAndroid/iOS限定。
-  if (Platform.isAndroid || Platform.isIOS) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      // 圏外中の書き込みをローカルに溜め、再接続時に自動フラッシュ（store-and-forward）
-      FirebaseDatabase.instance.setPersistenceEnabled(true);
-    } catch (e, st) {
-      AppLogger.error('Firebase初期化に失敗しました', e, st);
-    }
-  }
+  // 位置共有(パーティ機能)用のFirebase初期化を**非ブロッキングで**温める。
+  // 山岳=常時オフライン前提のため、await せず起動クリティカルパスから外す
+  // （runAppをブロックしない＝オフラインでも地図画面まで確実に到達できる）。
+  // 実際の完了待ちはパーティ機能の入口（createRoom/joinRoom）で行う。
+  unawaited(PartyFirebase.ensureInitialized());
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();

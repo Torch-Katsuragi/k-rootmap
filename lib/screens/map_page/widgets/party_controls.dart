@@ -214,6 +214,30 @@ class _PartyJoinCreateDialogState
   }
 }
 
+/// メンバーのバッテリー残量バッジ
+class _BatteryBadge extends StatelessWidget {
+  final int percent;
+  const _BatteryBadge({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final low = percent <= 20;
+    final color = low ? Colors.red : Colors.grey.shade600;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          low ? Icons.battery_alert : Icons.battery_full,
+          size: 16,
+          color: color,
+        ),
+        const SizedBox(width: 2),
+        Text('$percent%', style: TextStyle(fontSize: 12, color: color)),
+      ],
+    );
+  }
+}
+
 /// 参加中のステータスシート
 Future<void> _showStatusSheet(BuildContext context, WidgetRef ref) async {
   await showModalBottomSheet<void>(
@@ -292,14 +316,20 @@ class _PartyStatusSheet extends ConsumerWidget {
             Text('メンバー（${session.members.length}人）',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            ...session.members.map((m) => ListTile(
-                  dense: true,
-                  leading: Icon(
-                    m.role == PartyRole.host ? Icons.star : Icons.person,
-                    color: m.role == PartyRole.host ? Colors.amber : null,
-                  ),
-                  title: Text(m.name),
-                )),
+            ...session.members.map((m) {
+              final battery = session.peers[m.uid]?.battery;
+              return ListTile(
+                dense: true,
+                leading: Icon(
+                  m.role == PartyRole.host ? Icons.star : Icons.person,
+                  color: m.role == PartyRole.host ? Colors.amber : null,
+                ),
+                title: Text(m.name),
+                trailing: battery == null
+                    ? null
+                    : _BatteryBadge(percent: battery),
+              );
+            }),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,

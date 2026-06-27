@@ -32,6 +32,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/party/party_room.dart';
 import '../models/party/peer_position.dart';
 import '../services/internal_gps_location_store.dart';
+import '../services/party/battery_monitor.dart';
 import '../services/party/connectivity_interface_monitor.dart';
 import '../services/party/party_connection_monitor.dart';
 import '../services/party/party_firebase.dart';
@@ -113,6 +114,7 @@ class PartySession extends Notifier<PartySessionState> {
   RtdbPeerSource? _source;
   PartyConnectionMonitor? _monitor;
   PartyLocationStore? _store;
+  BatteryMonitor? _battery;
   StreamSubscription<Map<String, PeerPosition>>? _peersSub;
   StreamSubscription<PartyConnectionState>? _connSub;
   StreamSubscription<List<PartyMember>>? _membersSub;
@@ -175,16 +177,21 @@ class PartySession extends Notifier<PartySessionState> {
       requestOnline: source.goOnline,
       requestOffline: source.goOffline,
     );
+    // バッテリー残量モニタ（送信ペイロード＋低残量時の送信間引きに使う）。
+    final battery = BatteryMonitor();
+    unawaited(battery.start());
     final store = PartyLocationStore(
       peerSource: source,
       monitor: monitor,
       ownPositions: InternalGpsLocationStore().positionStream,
       selfUid: uid,
+      batteryProvider: () => battery.level,
     )..start();
 
     _source = source;
     _monitor = monitor;
     _store = store;
+    _battery = battery;
 
     _peersSub = store.peersStream
         .listen((peers) => state = state.copyWith(peers: peers));
@@ -235,6 +242,7 @@ class PartySession extends Notifier<PartySessionState> {
     await _store?.dispose();
     await _monitor?.dispose();
     await _source?.dispose();
+    await _battery?.dispose();
     _peersSub = null;
     _connSub = null;
     _membersSub = null;
@@ -242,5 +250,6 @@ class PartySession extends Notifier<PartySessionState> {
     _store = null;
     _monitor = null;
     _source = null;
+    _battery = null;
   }
 }

@@ -59,6 +59,9 @@ class PartySessionState {
   /// 処理中（作成/参加の最中）
   final bool busy;
 
+  /// ゴーストモード（自分の位置を共有しない）
+  final bool ghost;
+
   /// 直近のエラーメッセージ
   final String? error;
 
@@ -69,6 +72,7 @@ class PartySessionState {
     this.peers = const {},
     this.members = const [],
     this.busy = false,
+    this.ghost = false,
     this.error,
   });
 
@@ -82,6 +86,7 @@ class PartySessionState {
     Map<String, PeerPosition>? peers,
     List<PartyMember>? members,
     bool? busy,
+    bool? ghost,
     String? error,
     bool clearError = false,
   }) {
@@ -92,6 +97,7 @@ class PartySessionState {
       peers: peers ?? this.peers,
       members: members ?? this.members,
       busy: busy ?? this.busy,
+      ghost: ghost ?? this.ghost,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -110,6 +116,7 @@ class PartySession extends Notifier<PartySessionState> {
   StreamSubscription<Map<String, PeerPosition>>? _peersSub;
   StreamSubscription<PartyConnectionState>? _connSub;
   StreamSubscription<List<PartyMember>>? _membersSub;
+  StreamSubscription<bool>? _ghostSub;
 
   @override
   PartySessionState build() {
@@ -186,14 +193,22 @@ class PartySession extends Notifier<PartySessionState> {
     _membersSub = _repository
         .watchMembers(code)
         .listen((m) => state = state.copyWith(members: m));
+    _ghostSub =
+        store.ghostStream.listen((g) => state = state.copyWith(ghost: g));
 
     state = state.copyWith(
       roomCode: code,
       role: role,
       busy: false,
+      ghost: store.ghost,
       connection: monitor.state,
       clearError: true,
     );
+  }
+
+  /// ゴーストモードを切り替える（自分の位置共有を一時停止/再開）
+  Future<void> setGhost(bool on) async {
+    await _store?.setGhost(on);
   }
 
   /// 退出（host の場合はルームを終了）
@@ -216,12 +231,14 @@ class PartySession extends Notifier<PartySessionState> {
     await _peersSub?.cancel();
     await _connSub?.cancel();
     await _membersSub?.cancel();
+    await _ghostSub?.cancel();
     await _store?.dispose();
     await _monitor?.dispose();
     await _source?.dispose();
     _peersSub = null;
     _connSub = null;
     _membersSub = null;
+    _ghostSub = null;
     _store = null;
     _monitor = null;
     _source = null;

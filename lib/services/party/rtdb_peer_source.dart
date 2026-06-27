@@ -112,6 +112,9 @@ class RtdbPeerSource implements PeerSource {
   }
 
   @override
+  Future<void> clearPosition() async => _selfLiveRef.remove();
+
+  @override
   Future<void> publishTrack({
     required String encodedPolyline,
     required int fromMs,

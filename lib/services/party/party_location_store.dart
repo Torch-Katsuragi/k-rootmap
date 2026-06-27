@@ -94,6 +94,11 @@ class PartyLocationStore {
   final StreamController<Map<String, PeerPosition>> _peersController =
       StreamController<Map<String, PeerPosition>>.broadcast();
 
+  /// ゴーストモード（自分の位置を共有しない＝他メンバーから見えない）
+  bool _ghost = false;
+  final StreamController<bool> _ghostController =
+      StreamController<bool>.broadcast();
+
   LatLng? _lastSent;
   DateTime? _lastSentAt;
   GpsPositionRecord? _lastOwn;
@@ -115,6 +120,12 @@ class PartyLocationStore {
 
   /// 現在のピアスナップショット（同期アクセス）
   Map<String, PeerPosition> get peers => _peers;
+
+  /// ゴーストモードの状態変化
+  Stream<bool> get ghostStream => _ghostController.stream;
+
+  /// ゴーストモード中か（同期アクセス）
+  bool get ghost => _ghost;
 
   /// 接続状態
   PartyConnectionState get connectionState => monitor.state;
@@ -149,8 +160,36 @@ class PartyLocationStore {
     }
   }
 
+  /// ゴーストモードを切り替える。
+  ///
+  /// ON: 以後の送信を止め、サーバー上の自分の位置を即削除（他メンバーから消える）。
+  /// OFF: online かつ直近の自位置があれば即再送信して姿を戻す。
+  Future<void> setGhost(bool on) async {
+    if (_ghost == on) return;
+    _ghost = on;
+    _ghostController.add(on);
+    if (on) {
+      // 次回復帰時に必ず再送信されるよう、送信履歴をリセット。
+      _lastSent = null;
+      _lastSentAt = null;
+      try {
+        await peerSource.clearPosition();
+      } catch (e) {
+        AppLogger.debug('$_logTag: clearPosition失敗: $e');
+      }
+    } else {
+      // 解除時、online なら直近位置を即送信して即座に姿を戻す。
+      final own = _lastOwn;
+      if (own != null && monitor.state == PartyConnectionState.online) {
+        _publish(own, _clock());
+      }
+    }
+  }
+
   void _onOwnPosition(GpsPositionRecord rec) {
     _lastOwn = rec;
+    // ゴーストモード中は送信しない（位置取得・記録自体は継続）。
+    if (_ghost) return;
     // 送信は online の時のみ（圏外は送信ゼロ）。
     if (monitor.state != PartyConnectionState.online) return;
     _maybePublish(rec);
@@ -196,6 +235,11 @@ class PartyLocationStore {
 
   /// 「復帰の瞬間」: 最新位置を即送信し、圏外区間を backfill する。
   Future<void> _onRecovered() async {
+    // ゴーストモード中は復帰時も送信・backfillしない（姿を見せない）。
+    if (_ghost) {
+      _offlineSinceMs = null;
+      return;
+    }
     final now = _clock();
     // 1. 最新位置を最優先で送信。
     final own = _lastOwn;
@@ -229,5 +273,6 @@ class PartyLocationStore {
     await _recoveredSub?.cancel();
     await _stateSub?.cancel();
     await _peersController.close();
+    await _ghostController.close();
   }
 }

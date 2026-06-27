@@ -14,6 +14,7 @@ class _FakePeerSource implements PeerSource {
   final tracks = <Map<String, Object?>>[];
   int onlineCalls = 0;
   int offlineCalls = 0;
+  int clearCalls = 0;
 
   @override
   Stream<Map<String, PeerPosition>> get peers => peersCtrl.stream;
@@ -22,6 +23,8 @@ class _FakePeerSource implements PeerSource {
   @override
   Future<void> publishPosition(PeerPosition position) async =>
       published.add(position);
+  @override
+  Future<void> clearPosition() async => clearCalls++;
   @override
   Future<void> publishTrack({
     required String encodedPolyline,
@@ -121,6 +124,65 @@ void main() {
       ownCtrl.add(_rec(35.0, 139.0));
       await pumpEventQueue();
       expect(source.published, isEmpty);
+    });
+
+    test('ゴーストON で送信を止め、サーバー上の自位置を消す', () async {
+      store = build();
+      store.start();
+      await goOnline();
+      ownCtrl.add(_rec(35.0, 139.0));
+      await pumpEventQueue();
+      expect(source.published, hasLength(1));
+
+      // ゴーストON: clearPosition が呼ばれ、以後は送信しない
+      await store.setGhost(true);
+      expect(store.ghost, isTrue);
+      expect(source.clearCalls, 1);
+
+      ownCtrl.add(_rec(35.01, 139.01));
+      await pumpEventQueue();
+      expect(source.published, hasLength(1), reason: 'ゴースト中は送信しない');
+    });
+
+    test('ゴーストOFF で online なら直近位置を即再送信する', () async {
+      store = build();
+      store.start();
+      await goOnline();
+      ownCtrl.add(_rec(35.0, 139.0));
+      await pumpEventQueue();
+      await store.setGhost(true);
+      // ゴースト中も最新の自位置は追跡される
+      ownCtrl.add(_rec(35.5, 139.5));
+      await pumpEventQueue();
+      final before = source.published.length;
+
+      await store.setGhost(false);
+      expect(store.ghost, isFalse);
+      expect(source.published.length, before + 1, reason: '解除時に即再送信');
+      expect(source.published.last.latitude, 35.5);
+    });
+
+    test('ゴースト中は復帰時も backfill しない', () async {
+      var gapCalls = 0;
+      store = build(gapProvider: (from, to) async {
+        gapCalls++;
+        return GapTrack(encodedPolyline: 'abc', fromMs: from, toMs: to);
+      });
+      store.start();
+      await goOnline();
+      ownCtrl.add(_rec(35.0, 139.0));
+      await pumpEventQueue();
+      await store.setGhost(true);
+      final before = source.published.length;
+
+      // 圏外→復帰
+      source.srvCtrl.add(false);
+      await pumpEventQueue();
+      source.srvCtrl.add(true);
+      await pumpEventQueue();
+
+      expect(gapCalls, 0, reason: 'ゴースト中は backfill しない');
+      expect(source.published.length, before, reason: 'ゴースト中は復帰送信もしない');
     });
 
     test('復帰時に最新位置を送信し圏外区間を backfill する', () async {

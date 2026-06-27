@@ -271,6 +271,24 @@ class _PartyStatusSheet extends ConsumerWidget {
               ],
             ),
             const Divider(),
+            // ゴーストモード: 自分の位置を一時的に隠す
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(
+                session.ghost ? Icons.visibility_off : Icons.visibility,
+                color: session.ghost ? Colors.deepPurple : null,
+              ),
+              title: const Text('ゴーストモード'),
+              subtitle: Text(
+                session.ghost ? '自分の位置を共有していません' : '自分の位置を共有中',
+                style: const TextStyle(fontSize: 12),
+              ),
+              value: session.ghost,
+              onChanged: (v) =>
+                  ref.read(partySessionProvider.notifier).setGhost(v),
+            ),
+            const Divider(),
             Text('メンバー（${session.members.length}人）',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),

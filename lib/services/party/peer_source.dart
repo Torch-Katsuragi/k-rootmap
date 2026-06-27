@@ -41,6 +41,11 @@ abstract class PeerSource {
   /// サーバー時刻は実装側が付与する（[PeerPosition.serverTimeMs] は無視）。
   Future<void> publishPosition(PeerPosition position);
 
+  /// 自分の現在位置をサーバーから削除する（ゴーストモード=即時に姿を消す）。
+  ///
+  /// 鮮度劣化を待たず、他メンバーの地図から自分のマーカーを消す用途。
+  Future<void> clearPosition();
+
   /// 圏外区間の軌跡（gap backfill）を publish する。
   ///
   /// [encodedPolyline] は間引き済みのエンコード済みポリライン。

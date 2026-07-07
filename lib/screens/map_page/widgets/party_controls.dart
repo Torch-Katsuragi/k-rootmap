@@ -148,9 +148,13 @@ class _PartyJoinCreateDialogState
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(partySessionProvider);
-    // 参加成立でダイアログを閉じる
+    // 参加成立の「瞬間」だけダイアログを閉じる。
+    // active中は members/connection ストリームが更新を流し続けるため、
+    // 遷移(false→true)でガードしないと maybePop が連発し、地図ページまで
+    // pop してしまう（＝作成後にホーム画面へ戻る不具合）。
     ref.listen(partySessionProvider, (prev, next) {
-      if (next.active && mounted) Navigator.of(context).maybePop();
+      final becameActive = next.active && !(prev?.active ?? false);
+      if (becameActive && mounted) Navigator.of(context).maybePop();
     });
 
     return AlertDialog(
@@ -253,9 +257,11 @@ class _PartyStatusSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(partySessionProvider);
-    // 退出でシートを閉じる
+    // 退出の「瞬間」(true→false)だけシートを閉じる。遷移でガードしないと
+    // maybePop が連発して背後の地図ページまで pop する恐れがある。
     ref.listen(partySessionProvider, (prev, next) {
-      if (!next.active) Navigator.of(context).maybePop();
+      final becameInactive = !next.active && (prev?.active ?? true);
+      if (becameInactive) Navigator.of(context).maybePop();
     });
 
     if (!session.active) return const SizedBox.shrink();

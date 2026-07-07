@@ -25,8 +25,10 @@ library;
 
 import 'dart:io';
 
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../firebase_options.dart';
 import '../../utils/app_logger.dart';
@@ -55,6 +57,22 @@ class PartyFirebase {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
+      }
+      // App Check: 非正規クライアントからのRTDBアクセスを抑止する。
+      // デバッグビルドは debug プロバイダ（起動時にlogcatへ出るデバッグトークンを
+      // コンソールに登録して検証）、リリースは Play Integrity / App Attest。
+      // コンソール側が monitor の間はブロックしないため、先に入れて段階導入する。
+      try {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: kDebugMode
+              ? AndroidDebugProvider()
+              : AndroidPlayIntegrityProvider(),
+          providerApple: kDebugMode
+              ? AppleDebugProvider()
+              : AppleAppAttestProvider(),
+        );
+      } catch (e) {
+        AppLogger.debug('[Party] App Check activate をスキップ: $e');
       }
       // 圏外中の書き込みをローカルに溜め、再接続時に自動フラッシュ（store-and-forward）。
       // DB初回利用前に呼ぶ必要があるが、失敗しても致命的でない（最適化）ので握りつぶす。

@@ -109,6 +109,7 @@ dependencies:
   firebase_database: ^12.4.4
   firebase_auth: ^6.5.4
   battery_plus: ^7.1.0
+  firebase_app_check: ^0.4.5
 
 
 dev_dependencies:

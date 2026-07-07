@@ -4,10 +4,12 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
+  battery_plus
   charset_converter
   connectivity_plus
   desktop_drop
   file_selector_windows
+  firebase_app_check
   firebase_auth
   firebase_core
   firebase_database

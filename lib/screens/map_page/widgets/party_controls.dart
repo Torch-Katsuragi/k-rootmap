@@ -37,7 +37,7 @@ String partyConnectionLabel(PartyConnectionState s) {
   }
 }
 
-Color _partyConnectionColor(PartyConnectionState s) {
+Color partyConnectionColor(PartyConnectionState s) {
   switch (s) {
     case PartyConnectionState.online:
       return Colors.green;
@@ -48,7 +48,18 @@ Color _partyConnectionColor(PartyConnectionState s) {
   }
 }
 
-/// 左下FAB列に置く「パーティ（位置共有）」入口ボタン
+/// パーティ機能の入口。参加中はステータスシート、未参加は作成/参加ダイアログを開く。
+///
+/// AppBarメニュー・FABなど、どこからでも同じ導線を開くための共通エントリ。
+void showPartyEntry(BuildContext context, WidgetRef ref) {
+  if (ref.read(partySessionProvider).active) {
+    _showStatusSheet(context, ref);
+  } else {
+    _showJoinCreateDialog(context, ref);
+  }
+}
+
+/// パーティ（位置共有）入口ボタン（現在は統合テスト用途。本番導線はAppBarメニュー）
 class PartyButton extends ConsumerWidget {
   const PartyButton({super.key});
 
@@ -57,7 +68,7 @@ class PartyButton extends ConsumerWidget {
     final session = ref.watch(partySessionProvider);
     final active = session.active;
     final color = active
-        ? _partyConnectionColor(session.connection)
+        ? partyConnectionColor(session.connection)
         : Colors.white;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -280,7 +291,7 @@ class _PartyStatusSheet extends ConsumerWidget {
                 const Spacer(),
                 Chip(
                   backgroundColor:
-                      _partyConnectionColor(session.connection).withValues(alpha: 0.15),
+                      partyConnectionColor(session.connection).withValues(alpha: 0.15),
                   label: Text(partyConnectionLabel(session.connection)),
                 ),
               ],

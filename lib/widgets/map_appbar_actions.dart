@@ -14,10 +14,9 @@
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 地図画面のAppBarアクションボタン群
+// 水準器（コンパス）と設定は AppBar の ≡ メニュー（MapMenuButton）へ移動した。
 import 'package:flutter/material.dart';
 import '../i18n/strings.g.dart';
-import '../screens/settings_screen.dart';
-import '../screens/level_screen.dart';
 import 'notification/notification_bell.dart';
 
 /// 地図画面AppBarの右側アクションボタン群を生成する関数
@@ -29,28 +28,7 @@ List<Widget> buildMapAppBarActions({
   required VoidCallback onDrawerToggle,
 }) {
   return [
-    // 水準器ボタン
-    IconButton(
-      icon: const Icon(Icons.explore),
-      tooltip: t.level.tooltip,
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const LevelScreen()),
-        );
-      },
-    ),
     const NotificationBell(),
-    IconButton(
-      icon: const Icon(Icons.settings),
-      tooltip: t.common.settings,
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SettingsScreen()),
-        );
-      },
-    ),
     // 属性テーブルボタン
     IconButton(
       icon: Icon(

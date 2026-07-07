@@ -26,7 +26,8 @@
     "tiles": "$count tiles",
     "seconds": "$count sec ago",
     "minutes": "$count min ago",
-    "settings": "Settings"
+    "settings": "Settings",
+    "menu": "Menu"
   },
   "home": {
     "title": "Root Maps",

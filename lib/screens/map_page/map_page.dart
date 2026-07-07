@@ -62,7 +62,7 @@ import '../../providers/device_tool_providers.dart';
 import '../../providers/party_providers.dart';
 import '../../models/party/peer_position.dart';
 import '../../models/party/party_room.dart';
-import 'widgets/party_controls.dart';
+import 'widgets/map_menu_button.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -390,6 +390,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                 });
               },
             ),
+            // ≡ メニュー（パーティ・水準器・設定を集約）
+            const MapMenuButton(),
           ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(36),
@@ -449,9 +451,6 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
                             onStopLongPressGpsSurvey: stopLongPressGpsSurvey,
                             onOpenTrackExtraction: openTrackExtractionDialog,
                           ),
-                        // パーティ位置共有（Android/iOS限定）
-                        if (Platform.isAndroid || Platform.isIOS)
-                          const PartyButton(),
                         const LeftBottomFab(),
                       ],
                     ),

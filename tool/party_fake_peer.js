@@ -58,6 +58,17 @@ async function del(path, idToken) {
   await fetch(`${DB}/${path}.json?auth=${idToken}`, { method: 'DELETE' });
 }
 
+async function get(path, idToken) {
+  const res = await fetch(`${DB}/${path}.json?auth=${idToken}`);
+  if (!res.ok) return null;
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function randomCode(len = 8) {
   let s = '';
   for (let i = 0; i < len; i++) {
@@ -74,6 +85,8 @@ async function main() {
   let name;
   let centerLat = 33.9312;
   let centerLng = 135.9633;
+  let follow = false; // ホスト（ユーザー）の位置を毎tick読み直して中心にする
+  let hostUid = null;
 
   if (mode === 'create') {
     name = args[1] || 'FakeHost';
@@ -97,10 +110,25 @@ async function main() {
     if (!code) die('ルームコードを指定してください: join <CODE> [name] [lat] [lng]');
     code = code.toUpperCase();
     name = args[2] || 'FakeGuest';
-    if (args[3]) centerLat = parseFloat(args[3]);
-    if (args[4]) centerLng = parseFloat(args[4]);
+    // join <CODE> <name> follow  … ホスト位置を追従して周回
+    // join <CODE> <name> <lat> <lng> … 固定中心で周回
+    if (args[3] === 'follow') {
+      follow = true;
+    } else {
+      if (args[3]) centerLat = parseFloat(args[3]);
+      if (args[4]) centerLng = parseFloat(args[4]);
+    }
     await put(`rooms/${code}/members/${uid}`, { name, role: 'guest' }, idToken);
     console.log(`ルーム ${code} に参加: ${name}`);
+    if (follow) {
+      hostUid = await get(`rooms/${code}/meta/hostUid`, idToken);
+      const hp = hostUid ? await get(`rooms/${code}/live/${hostUid}`, idToken) : null;
+      if (hp && typeof hp.lat === 'number') {
+        centerLat = hp.lat;
+        centerLng = hp.lng;
+      }
+      console.log(`follow モード: host=${hostUid} の周りを周回`);
+    }
   } else {
     die('mode は create か join。例: node tool/party_fake_peer.js join ABCD2345 Fake太郎');
   }
@@ -119,14 +147,24 @@ async function main() {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  // 位置を publish するループ（中心の周りを半径~100mで周回）。
+  // 位置を publish するループ（中心の周りを円運動で周回）。
   let t = 0;
   let battery = 88;
-  const R = 0.0009; // 度。緯度で約100m。
+  const R = follow ? 0.0005 : 0.0009; // 度。follow時は約55mで近くを周回。
   const tick = async () => {
     t++;
+    // follow: 毎tickでホスト（ユーザー）の最新位置を読み直して中心にする。
+    if (follow && hostUid) {
+      const hp = await get(`rooms/${code}/live/${hostUid}`, idToken);
+      if (hp && typeof hp.lat === 'number' && typeof hp.lng === 'number') {
+        centerLat = hp.lat;
+        centerLng = hp.lng;
+      }
+    }
     const lat = centerLat + R * Math.sin(t / 6);
-    const lng = centerLng + R * Math.cos(t / 6);
+    // 経度は緯度で縮むので cos(lat) で割って画面上で真円にする。
+    const lng =
+      centerLng + (R * Math.cos(t / 6)) / Math.cos((centerLat * Math.PI) / 180);
     const bearing = (t * 18) % 360;
     if (t % 20 === 0 && battery > 5) battery--;
     await put(

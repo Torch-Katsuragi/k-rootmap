@@ -31,6 +31,18 @@ subprojects {
     }
 }
 
+// flutter_bluetooth_serial等の古いプラグインが compileSdk < 31 のままだと
+// androidx.core の android:attr/lStar 解決に失敗するため、31未満なら引き上げる
+subprojects {
+    afterEvaluate {
+        extensions.findByType<com.android.build.gradle.LibraryExtension>()?.apply {
+            if ((compileSdk ?: 0) < 31) {
+                compileSdk = 35
+            }
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

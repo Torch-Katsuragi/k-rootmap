@@ -32,6 +32,13 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# ソースをUTF-8として解釈させる。
+# 日本語ロケール(CP932)のMSVCでは、UTF-8のプラグインソース(firebase_database等)が
+# C4819を出し、下の /WX によりビルドエラーになる。
+# add_compile_options はこれ以降の add_subdirectory 配下にも伝播するため、
+# 自前ターゲットと生成プラグインの両方を一括でカバーする。
+add_compile_options("/utf-8")
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

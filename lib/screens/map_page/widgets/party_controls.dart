@@ -67,15 +67,16 @@ class PartyButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(partySessionProvider);
     final active = session.active;
-    final color = active
-        ? partyConnectionColor(session.connection)
-        : Colors.white;
+    final color =
+        active ? partyConnectionColor(session.connection) : Colors.white;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
-        onTap: () => active
-            ? _showStatusSheet(context, ref)
-            : _showJoinCreateDialog(context, ref),
+        onTap:
+            () =>
+                active
+                    ? _showStatusSheet(context, ref)
+                    : _showJoinCreateDialog(context, ref),
         child: Container(
           width: 56,
           height: 56,
@@ -113,7 +114,10 @@ class PartyButton extends ConsumerWidget {
                       color: Colors.red,
                       shape: BoxShape.circle,
                     ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
                     child: Text(
                       '${session.peers.length}',
                       textAlign: TextAlign.center,
@@ -170,39 +174,43 @@ class _PartyJoinCreateDialogState
 
     return AlertDialog(
       title: Text(t.party.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _nameCtrl,
-            maxLength: 40,
-            decoration: InputDecoration(
-              labelText: t.party.displayName,
-              hintText: t.party.displayNameHint,
+      // 縦に積む要素が多く、ソフトキーボードが出ると高さが足りなくなる。
+      // スクロールさせないと RenderFlex overflow でエラー表示になる。
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              maxLength: 40,
+              decoration: InputDecoration(
+                labelText: t.party.displayName,
+                hintText: t.party.displayNameHint,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(),
-          Text(t.party.joinPrompt, style: const TextStyle(fontSize: 12)),
-          TextField(
-            controller: _codeCtrl,
-            maxLength: 8,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(
-              labelText: t.party.roomCodeLabel,
-              hintText: t.party.roomCodeHint,
-            ),
-          ),
-          if (session.error != null) ...[
             const SizedBox(height: 8),
-            Text(session.error!, style: const TextStyle(color: Colors.red)),
+            const Divider(),
+            Text(t.party.joinPrompt, style: const TextStyle(fontSize: 12)),
+            TextField(
+              controller: _codeCtrl,
+              maxLength: 8,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: t.party.roomCodeLabel,
+                hintText: t.party.roomCodeHint,
+              ),
+            ),
+            if (session.error != null) ...[
+              const SizedBox(height: 8),
+              Text(session.error!, style: const TextStyle(color: Colors.red)),
+            ],
+            if (session.busy) ...[
+              const SizedBox(height: 12),
+              const Center(child: CircularProgressIndicator()),
+            ],
           ],
-          if (session.busy) ...[
-            const SizedBox(height: 12),
-            const Center(child: CircularProgressIndicator()),
-          ],
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -210,19 +218,21 @@ class _PartyJoinCreateDialogState
           child: Text(t.common.cancel),
         ),
         TextButton(
-          onPressed: session.busy
-              ? null
-              : () => ref
-                  .read(partySessionProvider.notifier)
-                  .joinRoom(code: _codeCtrl.text, name: _nameCtrl.text),
+          onPressed:
+              session.busy
+                  ? null
+                  : () => ref
+                      .read(partySessionProvider.notifier)
+                      .joinRoom(code: _codeCtrl.text, name: _nameCtrl.text),
           child: Text(t.party.join),
         ),
         FilledButton(
-          onPressed: session.busy
-              ? null
-              : () => ref
-                  .read(partySessionProvider.notifier)
-                  .createRoom(name: _nameCtrl.text),
+          onPressed:
+              session.busy
+                  ? null
+                  : () => ref
+                      .read(partySessionProvider.notifier)
+                      .createRoom(name: _nameCtrl.text),
           child: Text(t.party.createHost),
         ),
       ],
@@ -286,12 +296,15 @@ class _PartyStatusSheet extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Text(t.party.roomCode,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  t.party.roomCode,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 Chip(
-                  backgroundColor:
-                      partyConnectionColor(session.connection).withValues(alpha: 0.15),
+                  backgroundColor: partyConnectionColor(
+                    session.connection,
+                  ).withValues(alpha: 0.15),
                   label: Text(partyConnectionLabel(session.connection)),
                 ),
               ],
@@ -302,13 +315,18 @@ class _PartyStatusSheet extends ConsumerWidget {
                 SelectableText(
                   session.roomCode ?? '',
                   style: const TextStyle(
-                      fontSize: 28, letterSpacing: 4, fontWeight: FontWeight.bold),
+                    fontSize: 28,
+                    letterSpacing: 4,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy),
                   tooltip: t.party.copy,
-                  onPressed: () => Clipboard.setData(
-                      ClipboardData(text: session.roomCode ?? '')),
+                  onPressed:
+                      () => Clipboard.setData(
+                        ClipboardData(text: session.roomCode ?? ''),
+                      ),
                 ),
               ],
             ),
@@ -327,12 +345,14 @@ class _PartyStatusSheet extends ConsumerWidget {
                 style: const TextStyle(fontSize: 12),
               ),
               value: session.ghost,
-              onChanged: (v) =>
-                  ref.read(partySessionProvider.notifier).setGhost(v),
+              onChanged:
+                  (v) => ref.read(partySessionProvider.notifier).setGhost(v),
             ),
             const Divider(),
-            Text(t.party.members(count: session.members.length),
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              t.party.members(count: session.members.length),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
             ...session.members.map((m) {
               final battery = session.peers[m.uid]?.battery;
@@ -343,9 +363,8 @@ class _PartyStatusSheet extends ConsumerWidget {
                   color: m.role == PartyRole.host ? Colors.amber : null,
                 ),
                 title: Text(m.name),
-                trailing: battery == null
-                    ? null
-                    : _BatteryBadge(percent: battery),
+                trailing:
+                    battery == null ? null : _BatteryBadge(percent: battery),
               );
             }),
             const SizedBox(height: 8),
@@ -354,11 +373,13 @@ class _PartyStatusSheet extends ConsumerWidget {
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: Colors.red),
                 icon: const Icon(Icons.logout),
-                label: Text(session.role == PartyRole.host
-                    ? t.party.endHost
-                    : t.party.leave),
-                onPressed: () =>
-                    ref.read(partySessionProvider.notifier).leave(),
+                label: Text(
+                  session.role == PartyRole.host
+                      ? t.party.endHost
+                      : t.party.leave,
+                ),
+                onPressed:
+                    () => ref.read(partySessionProvider.notifier).leave(),
               ),
             ),
           ],

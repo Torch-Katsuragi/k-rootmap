@@ -39,6 +39,7 @@ tags: [index, navigation]
 | [[technical/location-sharing]] | 位置共有（パーティ機能）設計（Firebase RTDB・接続途絶対処・セキュリティ） |
 | [[technical/location-sharing-setup]] | 位置共有 Firebaseセットアップ手順（provisioningランブック） |
 | [[technical/testing]] | テスト構成（Windows/Android両対応・地図バックエンド契約テスト） |
+| [[technical/qgis-interop]] | QGIS相互運用（トリガー復元・範囲/件数の同期） |
 
 ---
 

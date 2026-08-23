@@ -28,13 +28,14 @@ import 'geopackage_connection.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 
-
 /// compute()用パラメータ
 class _GeometryParseParams {
   final List<Map<String, dynamic>> rows;
   final GeometryType geomType;
+
   /// re-projection用: ソースCRSのProjection（nullならWGS84で変換不要）
   final Projection? sourceProjection;
+
   /// re-projection用: 軸入替が必要か
   final bool needsAxisSwap;
   _GeometryParseParams(
@@ -69,8 +70,7 @@ List<Map<String, dynamic>> _parseGeometryBatchInIsolate(
     final metadataStr = row['kmaps_metadata'] as String?;
     if (metadataStr != null && metadataStr.isNotEmpty) {
       try {
-        row['kmaps_metadata'] =
-            jsonDecode(metadataStr) as Map<String, dynamic>;
+        row['kmaps_metadata'] = jsonDecode(metadataStr) as Map<String, dynamic>;
       } catch (_) {}
     }
   }
@@ -165,13 +165,16 @@ class FeatureRepository {
 
         // SpatiaLite関数を使っているトリガーを検出
         final usesSpatialiteFunction = spatialiteFunctions.any(
-            (fn) => sql.contains(fn));
+          (fn) => sql.contains(fn),
+        );
 
         // rtree仮想テーブルを参照するトリガーを検出
         // (DELETE時のrtreeクリーンアップ等、ST_関数を使わないものも含む)
         final referencesRtree = name.startsWith('rtree_');
 
         if (usesSpatialiteFunction || referencesRtree) {
+          // ⚠ 落とす前に定義を控える（クローズ時に復元してQGISへ返す）
+          spatialIndex.qgisInterop.rememberTrigger(name, sql);
           triggersToRemove.add(name);
         }
       }
@@ -189,9 +192,7 @@ class FeatureRepository {
         '${triggersToRemove.join(", ")})',
       );
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] ⚠️ トリガー除去エラー: $tableName - $e',
-      );
+      AppLogger.debug('[FeatureRepository] ⚠️ トリガー除去エラー: $tableName - $e');
     }
   }
 
@@ -217,7 +218,7 @@ class FeatureRepository {
   }
 
   ({double minX, double minY, double maxX, double maxY})?
-      _calculatePolygonEnvelope(List<List<LatLng>> rings) {
+  _calculatePolygonEnvelope(List<List<LatLng>> rings) {
     final allPoints = rings.expand((ring) => ring).toList();
     return _calculateEnvelope(allPoints);
   }
@@ -301,9 +302,7 @@ class FeatureRepository {
       final affectedRows = await db.rawUpdate(sql, updateValues);
       return affectedRows > 0;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] _updateFeatureGeometry: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] _updateFeatureGeometry: エラー発生 - $e');
       return false;
     }
   }
@@ -331,15 +330,13 @@ class FeatureRepository {
         line.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
       ]);
 
-  geo.MultiPolygon _buildGeoMultiPolygon(List<List<LatLng>> rings) =>
-      geo.MultiPolygon.from([
-        rings.map(
-          (ring) =>
-              ring.map(
-                (p) => geo.Geographic(lon: p.longitude, lat: p.latitude),
-              ),
-        ),
-      ]);
+  geo.MultiPolygon _buildGeoMultiPolygon(List<List<LatLng>> rings) => geo
+      .MultiPolygon.from([
+    rings.map(
+      (ring) =>
+          ring.map((p) => geo.Geographic(lon: p.longitude, lat: p.latitude)),
+    ),
+  ]);
 
   // ============================================================
   // フィーチャ追加（WithAttributes版）
@@ -357,10 +354,14 @@ class FeatureRepository {
       final geom = _buildGeoPoint(point);
 
       // 非WGS84の場合はWGS84→ソースCRSに逆変換
-      final targetGeom = (!crs.isWgs84 && crs.projection != null)
-          ? GeometryReprojector.reprojectFromWgs84(
-              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-          : geom;
+      final targetGeom =
+          (!crs.isWgs84 && crs.projection != null)
+              ? GeometryReprojector.reprojectFromWgs84(
+                geom,
+                crs.projection!,
+                needsAxisSwap: crs.needsAxisSwap,
+              )
+              : geom;
 
       if (!crs.isWgs84 && targetGeom is geo.Point) {
         AppLogger.debug(
@@ -402,10 +403,14 @@ class FeatureRepository {
       final crs = await _getLayerCrs(tableName);
       final geom = _buildGeoMultiLineString(line);
 
-      final targetGeom = (!crs.isWgs84 && crs.projection != null)
-          ? GeometryReprojector.reprojectFromWgs84(
-              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-          : geom;
+      final targetGeom =
+          (!crs.isWgs84 && crs.projection != null)
+              ? GeometryReprojector.reprojectFromWgs84(
+                geom,
+                crs.projection!,
+                needsAxisSwap: crs.needsAxisSwap,
+              )
+              : geom;
 
       final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
@@ -435,10 +440,14 @@ class FeatureRepository {
       final crs = await _getLayerCrs(tableName);
       final geom = _buildGeoMultiPolygon(polygon);
 
-      final targetGeom = (!crs.isWgs84 && crs.projection != null)
-          ? GeometryReprojector.reprojectFromWgs84(
-              geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-          : geom;
+      final targetGeom =
+          (!crs.isWgs84 && crs.projection != null)
+              ? GeometryReprojector.reprojectFromWgs84(
+                geom,
+                crs.projection!,
+                needsAxisSwap: crs.needsAxisSwap,
+              )
+              : geom;
 
       final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
 
@@ -528,10 +537,14 @@ class FeatureRepository {
     final crs = await _getLayerCrs(tableName);
     final geom = _buildGeoPoint(pt);
 
-    final targetGeom = (!crs.isWgs84 && crs.projection != null)
-        ? GeometryReprojector.reprojectFromWgs84(
-            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-        : geom;
+    final targetGeom =
+        (!crs.isWgs84 && crs.projection != null)
+            ? GeometryReprojector.reprojectFromWgs84(
+              geom,
+              crs.projection!,
+              needsAxisSwap: crs.needsAxisSwap,
+            )
+            : geom;
 
     final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     _validateAndLogWkb(wkb, 'updatePoint - ${pt.latitude}, ${pt.longitude}');
@@ -557,10 +570,14 @@ class FeatureRepository {
     final crs = await _getLayerCrs(tableName);
     final geom = _buildGeoMultiLineString(line);
 
-    final targetGeom = (!crs.isWgs84 && crs.projection != null)
-        ? GeometryReprojector.reprojectFromWgs84(
-            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-        : geom;
+    final targetGeom =
+        (!crs.isWgs84 && crs.projection != null)
+            ? GeometryReprojector.reprojectFromWgs84(
+              geom,
+              crs.projection!,
+              needsAxisSwap: crs.needsAxisSwap,
+            )
+            : geom;
 
     final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     return _updateFeatureGeometry(
@@ -585,10 +602,14 @@ class FeatureRepository {
     final crs = await _getLayerCrs(tableName);
     final geom = _buildGeoMultiPolygon(rings);
 
-    final targetGeom = (!crs.isWgs84 && crs.projection != null)
-        ? GeometryReprojector.reprojectFromWgs84(
-            geom, crs.projection!, needsAxisSwap: crs.needsAxisSwap)
-        : geom;
+    final targetGeom =
+        (!crs.isWgs84 && crs.projection != null)
+            ? GeometryReprojector.reprojectFromWgs84(
+              geom,
+              crs.projection!,
+              needsAxisSwap: crs.needsAxisSwap,
+            )
+            : geom;
 
     final wkb = createGpkgWkb(targetGeom, srsId: crs.srsId);
     return _updateFeatureGeometry(
@@ -626,9 +647,10 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause = pkColumn == 'rowid'
-          ? 'SELECT rowid, * FROM "$tableName" WHERE rowid = ?'
-          : 'SELECT * FROM "$tableName" WHERE "$pkColumn" = ?';
+      final selectClause =
+          pkColumn == 'rowid'
+              ? 'SELECT rowid, * FROM "$tableName" WHERE rowid = ?'
+              : 'SELECT * FROM "$tableName" WHERE "$pkColumn" = ?';
 
       final rows = await db.rawQuery(selectClause, [rowId]);
       if (rows.isEmpty) return null;
@@ -666,9 +688,10 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause = pkColumn == 'rowid'
-          ? 'SELECT rowid, * FROM "$tableName"'
-          : 'SELECT * FROM "$tableName"';
+      final selectClause =
+          pkColumn == 'rowid'
+              ? 'SELECT rowid, * FROM "$tableName"'
+              : 'SELECT * FROM "$tableName"';
 
       final rows = await db.rawQuery(selectClause);
       return rows.map((row) {
@@ -692,9 +715,10 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause = pkColumn == 'rowid'
-          ? 'SELECT rowid, * FROM "$tableName"'
-          : 'SELECT * FROM "$tableName"';
+      final selectClause =
+          pkColumn == 'rowid'
+              ? 'SELECT rowid, * FROM "$tableName"'
+              : 'SELECT * FROM "$tableName"';
 
       final rows = await db.rawQuery(selectClause);
 
@@ -770,17 +794,14 @@ class FeatureRepository {
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
       final columnList = columns?.join(', ') ?? '*';
-      final orderByClause = pkColumn == 'rowid'
-          ? 'ORDER BY rowid'
-          : 'ORDER BY "$pkColumn"';
+      final orderByClause =
+          pkColumn == 'rowid' ? 'ORDER BY rowid' : 'ORDER BY "$pkColumn"';
 
       return await db.rawQuery(
         'SELECT $columnList FROM "$tableName" $orderByClause',
       );
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] getAllFeatureAttributes エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] getAllFeatureAttributes エラー発生 - $e');
       return [];
     }
   }
@@ -804,9 +825,7 @@ class FeatureRepository {
       );
       return result.isNotEmpty ? result.first[attributeName] : null;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] getFeatureAttribute: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] getFeatureAttribute: エラー発生 - $e');
       return null;
     }
   }
@@ -823,13 +842,9 @@ class FeatureRepository {
         where: whereClause,
         whereArgs: [rowId],
       );
-      return result.isNotEmpty
-          ? Map<String, dynamic>.from(result.first)
-          : null;
+      return result.isNotEmpty ? Map<String, dynamic>.from(result.first) : null;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] getFeatureAttributes: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] getFeatureAttributes: エラー発生 - $e');
       return null;
     }
   }
@@ -849,9 +864,7 @@ class FeatureRepository {
       );
       return rowsUpdated > 0;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] updateFeatureAttribute: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] updateFeatureAttribute: エラー発生 - $e');
       return false;
     }
   }
@@ -874,9 +887,7 @@ class FeatureRepository {
 
         if (_isReservedColumn(key, pkColumn)) continue;
         if (!existingColumns.contains(key)) {
-          AppLogger.debug(
-            '[FeatureRepository] カラム未存在のためスキップ: $key',
-          );
+          AppLogger.debug('[FeatureRepository] カラム未存在のためスキップ: $key');
           continue;
         }
         if (_isSupportedType(value)) {
@@ -890,8 +901,9 @@ class FeatureRepository {
 
       if (filteredAttributes.isEmpty) return true;
 
-      final columnAssignments =
-          filteredAttributes.keys.map((key) => '"$key" = ?').join(', ');
+      final columnAssignments = filteredAttributes.keys
+          .map((key) => '"$key" = ?')
+          .join(', ');
       final values = [...filteredAttributes.values, rowId];
       final whereClause = await schema.buildWhereClause(tableName);
       final sql =
@@ -974,35 +986,32 @@ class FeatureRepository {
   Future<List<int>> addPointsBatch(
     String tableName,
     List<Map<String, dynamic>> pointData,
-  ) =>
-      _addGeometryBatch<LatLng>(
-        tableName,
-        pointData,
-        'point',
-        (point) => createGpkgWkb(_buildGeoPoint(point)),
-      );
+  ) => _addGeometryBatch<LatLng>(
+    tableName,
+    pointData,
+    'point',
+    (point) => createGpkgWkb(_buildGeoPoint(point)),
+  );
 
   Future<List<int>> addLinesBatch(
     String tableName,
     List<Map<String, dynamic>> lineData,
-  ) =>
-      _addGeometryBatch<List<LatLng>>(
-        tableName,
-        lineData,
-        'line',
-        (line) => createGpkgWkb(_buildGeoMultiLineString(line)),
-      );
+  ) => _addGeometryBatch<List<LatLng>>(
+    tableName,
+    lineData,
+    'line',
+    (line) => createGpkgWkb(_buildGeoMultiLineString(line)),
+  );
 
   Future<List<int>> addPolygonsBatch(
     String tableName,
     List<Map<String, dynamic>> polygonData,
-  ) =>
-      _addGeometryBatch<List<List<LatLng>>>(
-        tableName,
-        polygonData,
-        'rings',
-        (rings) => createGpkgWkb(_buildGeoMultiPolygon(rings)),
-      );
+  ) => _addGeometryBatch<List<List<LatLng>>>(
+    tableName,
+    polygonData,
+    'rings',
+    (rings) => createGpkgWkb(_buildGeoMultiPolygon(rings)),
+  );
 
   /// WHERE句でフィルタしたフィーチャのrowIdリストを取得
   Future<List<int>> getFilteredFeatureIds(
@@ -1013,19 +1022,21 @@ class FeatureRepository {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
 
-      final selectClause = pkColumn == 'rowid'
-          ? 'SELECT rowid FROM "$tableName" WHERE $whereClause'
-          : 'SELECT "$pkColumn" FROM "$tableName" WHERE $whereClause';
+      final selectClause =
+          pkColumn == 'rowid'
+              ? 'SELECT rowid FROM "$tableName" WHERE $whereClause'
+              : 'SELECT "$pkColumn" FROM "$tableName" WHERE $whereClause';
 
       final rows = await db.rawQuery(selectClause);
-      return rows.map((row) {
-        final val = row.values.first;
-        return val is int ? val : 0;
-      }).where((id) => id != 0).toList();
+      return rows
+          .map((row) {
+            final val = row.values.first;
+            return val is int ? val : 0;
+          })
+          .where((id) => id != 0)
+          .toList();
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] getFilteredFeatureIds: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] getFilteredFeatureIds: エラー発生 - $e');
       return [];
     }
   }
@@ -1041,9 +1052,7 @@ class FeatureRepository {
       );
       return (result.first['cnt'] as int?) ?? 0;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] countFilteredFeatures: エラー発生 - $e',
-      );
+      AppLogger.debug('[FeatureRepository] countFilteredFeatures: エラー発生 - $e');
       return -1;
     }
   }
@@ -1056,9 +1065,10 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert = sourceColumns
-          .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-          .toList();
+      final columnsToInsert =
+          sourceColumns
+              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
+              .toList();
 
       if (columnsToInsert.isEmpty) return 0;
 
@@ -1077,9 +1087,7 @@ class FeatureRepository {
       );
       return copiedCount;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] duplicateFilteredFeatures エラー: $e',
-      );
+      AppLogger.debug('[FeatureRepository] duplicateFilteredFeatures エラー: $e');
       return 0;
     }
   }
@@ -1091,9 +1099,10 @@ class FeatureRepository {
     try {
       final db = await connection.getDatabase();
       final sourceColumns = await schema.getTableColumns(sourceTable);
-      final columnsToInsert = sourceColumns
-          .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
-          .toList();
+      final columnsToInsert =
+          sourceColumns
+              .where((c) => c.toLowerCase() != 'id' && c.toLowerCase() != 'fid')
+              .toList();
 
       if (columnsToInsert.isEmpty) {
         AppLogger.debug('[FeatureRepository] コピー可能なカラムがありません');
@@ -1113,9 +1122,7 @@ class FeatureRepository {
       );
       return copiedCount;
     } catch (e) {
-      AppLogger.debug(
-        '[FeatureRepository] copyFeaturesBetweenLayers エラー: $e',
-      );
+      AppLogger.debug('[FeatureRepository] copyFeaturesBetweenLayers エラー: $e');
       return 0;
     }
   }
@@ -1158,12 +1165,9 @@ class FeatureRepository {
     final metadataStr = row['kmaps_metadata'] as String?;
     if (metadataStr != null && metadataStr.isNotEmpty) {
       try {
-        row['kmaps_metadata'] =
-            jsonDecode(metadataStr) as Map<String, dynamic>;
+        row['kmaps_metadata'] = jsonDecode(metadataStr) as Map<String, dynamic>;
       } catch (e) {
-        AppLogger.debug(
-          '[FeatureRepository] メタデータのJSONパースエラー - $e',
-        );
+        AppLogger.debug('[FeatureRepository] メタデータのJSONパースエラー - $e');
       }
     }
   }

@@ -17,12 +17,16 @@
 // R-Tree操作、エンベロープ更新、SpatiaLiteトリガー処理を担当
 import '../../utils/app_logger.dart';
 import 'geopackage_connection.dart';
+import 'qgis_interop.dart';
 
 /// 空間インデックスを管理するクラス
 /// 責務: R-Tree空間インデックス、レイヤエンベロープ、SpatiaLiteトリガー対応
 class SpatialIndexManager {
   /// DB接続への参照
   final GeoPackageConnection connection;
+
+  /// QGIS相互運用（落としたトリガーを控えて、クローズ時に戻す）
+  final QgisInterop qgisInterop = QgisInterop();
 
   /// コンストラクタ
   SpatialIndexManager(this.connection);
@@ -90,10 +94,7 @@ class SpatialIndexManager {
       );
 
       if (tables.isNotEmpty) {
-        await db.execute(
-          'DELETE FROM "$rtreeTable" WHERE id = ?',
-          [rowId],
-        );
+        await db.execute('DELETE FROM "$rtreeTable" WHERE id = ?', [rowId]);
       }
     } catch (e) {
       AppLogger.debug('[WARNING] SpatialIndexManager.removeFromRTreeIndex: $e');
@@ -129,18 +130,22 @@ class SpatialIndexManager {
       }
 
       // エンベロープを拡張
-      final newMinX = currentMinX != null
-          ? (currentMinX < minX ? currentMinX : minX)
-          : minX;
-      final newMinY = currentMinY != null
-          ? (currentMinY < minY ? currentMinY : minY)
-          : minY;
-      final newMaxX = currentMaxX != null
-          ? (currentMaxX > maxX ? currentMaxX : maxX)
-          : maxX;
-      final newMaxY = currentMaxY != null
-          ? (currentMaxY > maxY ? currentMaxY : maxY)
-          : maxY;
+      final newMinX =
+          currentMinX != null
+              ? (currentMinX < minX ? currentMinX : minX)
+              : minX;
+      final newMinY =
+          currentMinY != null
+              ? (currentMinY < minY ? currentMinY : minY)
+              : minY;
+      final newMaxX =
+          currentMaxX != null
+              ? (currentMaxX > maxX ? currentMaxX : maxX)
+              : maxX;
+      final newMaxY =
+          currentMaxY != null
+              ? (currentMaxY > maxY ? currentMaxY : maxY)
+              : maxY;
 
       // エンベロープを更新
       await db.update(
@@ -181,6 +186,9 @@ class SpatialIndexManager {
         if (triggerName != null &&
             sql != null &&
             _containsSpatiaLiteFunctions(sql)) {
+          // ⚠ 落とす前に定義を控える。落としたまま返すとQGIS側で
+          //    空間インデックスが更新されなくなる（クローズ時に復元する）。
+          qgisInterop.rememberTrigger(triggerName, sql);
           await db.execute('DROP TRIGGER IF EXISTS "$triggerName"');
           removedCount++;
           AppLogger.debug(
@@ -195,7 +203,9 @@ class SpatialIndexManager {
         );
       }
     } catch (e) {
-      AppLogger.debug('[ERROR] SpatialIndexManager.removeSpatiaLiteTriggers: $e');
+      AppLogger.debug(
+        '[ERROR] SpatialIndexManager.removeSpatiaLiteTriggers: $e',
+      );
     }
   }
 
@@ -220,4 +230,3 @@ class SpatialIndexManager {
     return spatialiteFunctions.any((f) => upperSql.contains(f.toUpperCase()));
   }
 }
-

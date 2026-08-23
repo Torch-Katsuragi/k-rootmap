@@ -19,10 +19,12 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import '../../utils/app_logger.dart';
 import '../../utils/background_save_manager.dart';
 import '../../i18n/strings.g.dart';
 import '../geometry_type.dart';
 import 'geopackage_connection.dart';
+import 'qgis_interop.dart';
 import 'geopackage_schema.dart';
 import 'spatial_index_manager.dart';
 import 'feature_repository.dart';
@@ -116,8 +118,28 @@ class GeoPackageFile {
     // BackgroundSaveManagerから変更キューをクリア
     BackgroundSaveManager.instance.clearPendingChanges(this);
 
+    // QGIS/GDALへ返す前の整合処理（書き込みが全部終わったこの位置で行う）
+    await _finalizeForQgis();
+
     // データベースを閉じる
     await _connection.dispose();
+  }
+
+  /// QGIS/GDAL と行き来しても壊れない状態にしてから閉じる
+  ///
+  /// - `gpkg_contents` の範囲と `gpkg_ogr_contents` の件数を実データに合わせる
+  /// - 書き込みのために落としていた SpatiaLiteトリガーを復元する
+  ///
+  /// ⚠ トリガー復元は**必ず最後**。復元後に書き込むと sqflite に ST_ 関数が無く落ちる。
+  /// 失敗してもクローズ自体は続行する（ファイルを開けたままにしない）。
+  Future<void> _finalizeForQgis() async {
+    try {
+      final db = await _connection.getDatabase();
+      await QgisInterop.syncAllLayers(db);
+      await _spatial.qgisInterop.restoreTriggers(db);
+    } catch (e) {
+      AppLogger.debug('[GeoPackageFile] QGIS向けの整合処理に失敗: $e');
+    }
   }
 
   /// ファイル自体を削除（物理削除）
@@ -524,7 +546,9 @@ class GeoPackageFile {
   ) async {
     final db = await _connection.getDatabase();
     final sanitizedNew = _schema.sanitizeColumnName(newName);
-    if (sanitizedNew.isEmpty) throw Exception(t.services.invalidColumnName(name: newName));
+    if (sanitizedNew.isEmpty) {
+      throw Exception(t.services.invalidColumnName(name: newName));
+    }
     await db.execute(
       'ALTER TABLE "$tableName" RENAME COLUMN "$oldName" TO "$sanitizedNew"',
     );
@@ -598,7 +622,9 @@ class GeoPackageFile {
     if (searchText.isEmpty) return 0;
     final db = await _connection.getDatabase();
     final sanitized = _schema.sanitizeColumnName(columnName);
-    if (sanitized.isEmpty) throw Exception(t.services.invalidColumnName(name: columnName));
+    if (sanitized.isEmpty) {
+      throw Exception(t.services.invalidColumnName(name: columnName));
+    }
     final result = await db.rawUpdate(
       'UPDATE "$tableName" SET "$sanitized" = REPLACE(CAST("$sanitized" AS TEXT), ?, ?) '
       'WHERE CAST("$sanitized" AS TEXT) LIKE ?',

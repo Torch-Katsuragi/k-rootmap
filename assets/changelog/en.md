@@ -19,6 +19,13 @@
 - Fixed camera operations (move, rotate, fit bounds) being silently dropped
   when called before the map was ready
 
+### 🔗 Better QGIS Interoperability
+
+- GeoPackages edited in RootMap now keep working in QGIS
+  - Spatial index auto-update, temporarily removed while editing, is restored on save
+  - Layer extent is updated to match the actual data (so "Zoom to Layer" works)
+  - Feature count is kept in sync
+
 ### 🔧 For Developers
 
 - Added a single command to run the test suite on both Windows and Android

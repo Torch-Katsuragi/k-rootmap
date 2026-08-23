@@ -85,7 +85,6 @@ class GeoPackageConnection {
 
   /// データベース初期化の実体
   Future<void> _initializeDatabaseImpl() async {
-
     // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
     final String absPath;
     if (absolutePath != null) {
@@ -248,14 +247,21 @@ class GeoPackageConnection {
       final missingTables = requiredTables.difference(tableNames);
 
       if (missingTables.isNotEmpty) {
-        AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables');
-        AppLogger.debug('[GeoPackageConnection] ⚠️ これはRoot Maps標準形式ではない可能性があります。');
+        AppLogger.debug(
+          '[GeoPackageConnection] ⚠️ 警告: GeoPackage標準テーブルが不足しています: $missingTables',
+        );
+        AppLogger.debug(
+          '[GeoPackageConnection] ⚠️ これはRoot Maps標準形式ではない可能性があります。',
+        );
         return;
       }
 
       // gpkg_contentsテーブルの構造チェック
-      final contentsColumns = await _database!.rawQuery('PRAGMA table_info("gpkg_contents");');
-      final contentsColumnNames = contentsColumns.map((row) => row['name'] as String).toSet();
+      final contentsColumns = await _database!.rawQuery(
+        'PRAGMA table_info("gpkg_contents");',
+      );
+      final contentsColumnNames =
+          contentsColumns.map((row) => row['name'] as String).toSet();
 
       final requiredContentsColumns = {
         'table_name',
@@ -264,10 +270,14 @@ class GeoPackageConnection {
         'srs_id',
       };
 
-      final missingContentsColumns = requiredContentsColumns.difference(contentsColumnNames);
+      final missingContentsColumns = requiredContentsColumns.difference(
+        contentsColumnNames,
+      );
 
       if (missingContentsColumns.isNotEmpty) {
-        AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns');
+        AppLogger.debug(
+          '[GeoPackageConnection] ⚠️ 警告: gpkg_contentsテーブルの構造が不正です。不足カラム: $missingContentsColumns',
+        );
         AppLogger.debug('[GeoPackageConnection] ⚠️ このファイルは破損している可能性があります。');
       }
 
@@ -280,19 +290,29 @@ class GeoPackageConnection {
         );
         for (final row in srsRows) {
           final srsId = row['srs_id'] as int?;
-          if (srsId != null && srsId != 4326 && srsId != 0 && srsId != -1 && srsId != 6668) {
+          if (srsId != null &&
+              srsId != 4326 &&
+              srsId != 0 &&
+              srsId != -1 &&
+              srsId != 6668) {
             final name = row['srs_name'] ?? 'Unknown';
             final org = row['organization'] ?? '';
             final orgId = row['organization_coordsys_id'] ?? srsId;
-            AppLogger.debug('[GeoPackageConnection] 🌍 非WGS84レイヤ検出: $org:$orgId ($name) - 読み込み時にWGS84にre-projection');
+            AppLogger.debug(
+              '[GeoPackageConnection] 🌍 非WGS84レイヤ検出: $org:$orgId ($name) - 読み込み時にWGS84にre-projection',
+            );
           }
         }
       } catch (_) {
         // CRS検出はオプショナル - 失敗してもDB初期化には影響しない
       }
     } catch (e) {
-      AppLogger.debug('[GeoPackageConnection] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e');
-      AppLogger.debug('[GeoPackageConnection] ⚠️ このファイルは標準的なGeoPackage形式ではない可能性があります。');
+      AppLogger.debug(
+        '[GeoPackageConnection] ⚠️ 警告: GeoPackage構造の検証中にエラーが発生しました: $e',
+      );
+      AppLogger.debug(
+        '[GeoPackageConnection] ⚠️ このファイルは標準的なGeoPackage形式ではない可能性があります。',
+      );
     }
   }
 
@@ -334,7 +354,9 @@ class GeoPackageConnection {
         absPath = absolutePath!;
       } else {
         if (projectRootDir == null) {
-          AppLogger.debug('[GeoPackageConnection] deleteFile: projectRootDirが未設定');
+          AppLogger.debug(
+            '[GeoPackageConnection] deleteFile: projectRootDirが未設定',
+          );
           return false;
         }
         absPath = p.joinAll([projectRootDir!, ...pathList]);
@@ -342,7 +364,9 @@ class GeoPackageConnection {
       final file = File(absPath);
 
       if (!file.existsSync()) {
-        AppLogger.debug('[GeoPackageConnection] deleteFile: ファイルが存在しません - $absPath');
+        AppLogger.debug(
+          '[GeoPackageConnection] deleteFile: ファイルが存在しません - $absPath',
+        );
         return true; // 既に存在しないので成功とみなす
       }
 
@@ -356,4 +380,3 @@ class GeoPackageConnection {
     }
   }
 }
-

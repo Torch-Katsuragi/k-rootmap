@@ -38,7 +38,7 @@ class GeoPackageSchema {
   GeoPackageSchema(this.connection);
 
   /// PRIMARY KEYカラム名を動的に取得（キャッシュ機能付き）
-  /// 
+  ///
   /// Root Maps標準形式（新規作成）: fid INTEGER PRIMARY KEY AUTOINCREMENT（QGIS互換）
   /// 旧Root Maps形式: id INTEGER PRIMARY KEY AUTOINCREMENT（後方互換性のため対応）
   /// PRIMARY KEYがない外部ファイル: fid を自動追加、または rowid フォールバック
@@ -67,9 +67,13 @@ class GeoPackageSchema {
     if (primaryKeyColumn != null) {
       if (primaryKeyColumn != 'fid') {
         if (primaryKeyColumn == 'id') {
-          AppLogger.debug('[GeoPackageSchema] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のRoot Maps標準は "fid"）');
+          AppLogger.debug(
+            '[GeoPackageSchema] ℹ️ 旧形式PRIMARY KEY検出: テーブル "$tableName" は "id" を使用（現在のRoot Maps標準は "fid"）',
+          );
         } else {
-          AppLogger.debug('[GeoPackageSchema] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用');
+          AppLogger.debug(
+            '[GeoPackageSchema] ℹ️ 非標準PRIMARY KEY検出: テーブル "$tableName" は "$primaryKeyColumn" を使用',
+          );
         }
       }
       _primaryKeyCache[tableName] = primaryKeyColumn;
@@ -77,12 +81,16 @@ class GeoPackageSchema {
     }
 
     // PRIMARY KEYがない場合の処理
-    AppLogger.debug('[GeoPackageSchema] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！');
+    AppLogger.debug(
+      '[GeoPackageSchema] ⚠️ 警告: テーブル "$tableName" にPRIMARY KEYが見つかりません！',
+    );
     AppLogger.debug('[GeoPackageSchema] ⚠️ データが破損している可能性があります。');
 
     try {
       // テーブルのレコード数をチェック
-      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM "$tableName";');
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM "$tableName";',
+      );
       final rowCount = countResult.first['count'] as int? ?? 0;
 
       // fid または id カラムが既に存在するかチェック
@@ -92,30 +100,34 @@ class GeoPackageSchema {
       // QGIS互換性のため、fid カラムを優先的に使用・追加
       if (!hasFidColumn && !hasIdColumn) {
         if (rowCount > 10000) {
-          AppLogger.debug('[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...');
+          AppLogger.debug(
+            '[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ、処理に時間がかかる場合があります）...',
+          );
         } else {
-          AppLogger.debug('[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...');
+          AppLogger.debug(
+            '[GeoPackageSchema] 🔧 fidカラムを自動追加します（$rowCount行のデータ）...',
+          );
         }
 
         // fidカラムを追加（QGIS標準）
-        await db.execute(
-          'ALTER TABLE "$tableName" ADD COLUMN fid INTEGER;',
-        );
+        await db.execute('ALTER TABLE "$tableName" ADD COLUMN fid INTEGER;');
 
         // rowidから値をコピー
-        await db.execute(
-          'UPDATE "$tableName" SET fid = rowid;',
-        );
+        await db.execute('UPDATE "$tableName" SET fid = rowid;');
 
         AppLogger.debug('[GeoPackageSchema] ✓ fidカラムを追加し、rowidから値をコピーしました。');
         _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else if (hasFidColumn) {
-        AppLogger.debug('[GeoPackageSchema] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        AppLogger.debug(
+          '[GeoPackageSchema] ℹ️ fidカラムは存在しますが、PRIMARY KEYとして定義されていません。',
+        );
         _primaryKeyCache[tableName] = 'fid';
         return 'fid';
       } else {
-        AppLogger.debug('[GeoPackageSchema] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。');
+        AppLogger.debug(
+          '[GeoPackageSchema] ℹ️ idカラムは存在しますが、PRIMARY KEYとして定義されていません。',
+        );
         _primaryKeyCache[tableName] = 'id';
         return 'id';
       }
@@ -134,7 +146,9 @@ class GeoPackageSchema {
         _primaryKeyCache[tableName] = 'id';
         return 'id';
       } else {
-        AppLogger.debug('[GeoPackageSchema] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。');
+        AppLogger.debug(
+          '[GeoPackageSchema] ⚠️ 緊急フォールバック: rowidを使用します。このファイルは読み込み専用としてのみ使用してください。',
+        );
         _primaryKeyCache[tableName] = 'rowid';
         return 'rowid';
       }
@@ -169,7 +183,9 @@ class GeoPackageSchema {
       }
 
       if (getAll) return filteredColumns;
-      return filteredColumns.where((c) => supportedAttributes.contains(c)).toList();
+      return filteredColumns
+          .where((c) => supportedAttributes.contains(c))
+          .toList();
     } catch (e) {
       AppLogger.debug('[GeoPackageSchema] getColumnNames: エラー発生 - $e');
       return [];
@@ -288,4 +304,3 @@ class GeoPackageSchema {
     _primaryKeyCache.clear();
   }
 }
-

@@ -193,7 +193,9 @@ class LayerRepository {
   Future<int> getFeatureCount(String tableName) async {
     try {
       final db = await connection.getDatabase();
-      final result = await db.rawQuery('SELECT COUNT(*) as count FROM "$tableName"');
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM "$tableName"',
+      );
       return (result.first['count'] as int?) ?? 0;
     } catch (e) {
       AppLogger.debug('[LayerRepository] getFeatureCount: エラー発生 - $e');
@@ -201,4 +203,3 @@ class LayerRepository {
     }
   }
 }
-

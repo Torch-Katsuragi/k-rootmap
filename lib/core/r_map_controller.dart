@@ -24,6 +24,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre/maplibre.dart' as ml;
+import '../utils/app_logger.dart';
 import '../utils/geo_converter.dart';
 
 /// flutter_map互換のカメラ情報
@@ -41,8 +42,7 @@ class KMapCamera {
   double get pitch => _controller.getCamera().pitch;
 
   /// 画面座標 → 地図座標
-  LatLng offsetToCrs(Offset offset) =>
-      _controller.toLngLat(offset).toLatLng();
+  LatLng offsetToCrs(Offset offset) => _controller.toLngLat(offset).toLatLng();
 
   /// 地図座標 → 画面座標
   Offset latLngToScreenOffset(LatLng latlng) =>
@@ -58,14 +58,49 @@ class RMapController {
   Timer? _fitDebounceTimer;
   bool _isCameraAnimating = false;
 
+  /// attach 前に呼ばれたカメラ操作の保留分（最後の1件だけ持つ）。
+  ///
+  /// 地図の生成（プラットフォームビューの立ち上げ・WebView2の起動）は重く、
+  /// GPSの初回フィックスのほうが先に届くことがある。その場合に操作を
+  /// 黙って捨てると「起動時に現在地へ飛ばない」という形で表面化する
+  /// （Android・Windows のどちらでも起きる）。
+  /// ここに退避しておき、attach された時点で実行する。
+  ///
+  /// 複数たまった場合は最後の1件だけを実行する（カメラ操作は上書きが正しい）。
+  void Function()? _pendingCameraAction;
+
   /// maplibreのMapControllerをセット
+  ///
+  /// ⚠ ここではまだ保留分を流さない。`onMapCreated` の意味がバックエンドで違うため。
+  /// - MapLibre Native（Android/iOS）: この時点で地図は操作できる
+  /// - maplibre_webview（Windows/macOS）: **WebViewができただけ**で、
+  ///   中のMapLibre JSオブジェクトはまだ存在しない。ここで moveCamera すると
+  ///   `Null check operator used on a null value` で落ちる
+  ///
+  /// 両方で確実に操作できるのは onStyleLoaded 以降なので、
+  /// 保留分は [attachStyle] で流す。
   void attach(ml.MapController controller) {
     _controller = controller;
   }
 
+  /// 地図が使える状態か（コントローラとスタイルの両方が揃っているか）
+  bool get isAttached => _controller != null && _styleController != null;
+
   /// StyleControllerをセット
+  ///
+  /// 地図が実際に操作可能になる時点。ここで保留分のカメラ操作を流す。
   void attachStyle(ml.StyleController style) {
     _styleController = style;
+
+    final pending = _pendingCameraAction;
+    _pendingCameraAction = null;
+    if (pending == null) return;
+    try {
+      pending();
+    } on Object catch (e) {
+      // 保留分で落ちても地図の初期化自体は続行させる
+      AppLogger.debug('[RMapController] 保留カメラ操作の実行に失敗: $e');
+    }
   }
 
   /// 生のmaplibreコントローラ（maplibre固有API用）
@@ -81,20 +116,34 @@ class RMapController {
   }
 
   /// カメラ移動（同期的にfire-and-forget）
-  void move(LatLng center, double zoom) {
-    _controller?.moveCamera(
-      center: center.toGeographic(),
-      zoom: zoom,
-    );
+  ///
+  /// Returns: 即座に反映されたら true。attach 前だった場合は false を返し、
+  /// attach 後に実行されるよう保留する（呼び出しは失われない）。
+  bool move(LatLng center, double zoom) {
+    final controller = _controller;
+    if (controller == null) {
+      _pendingCameraAction = () => move(center, zoom);
+      return false;
+    }
+    controller.moveCamera(center: center.toGeographic(), zoom: zoom);
+    return true;
   }
 
   /// カメラ移動 + 回転
-  void moveAndRotate(LatLng center, double zoom, double rotation) {
-    _controller?.moveCamera(
+  ///
+  /// Returns: [move] と同じ。attach 前なら false を返して保留する。
+  bool moveAndRotate(LatLng center, double zoom, double rotation) {
+    final controller = _controller;
+    if (controller == null) {
+      _pendingCameraAction = () => moveAndRotate(center, zoom, rotation);
+      return false;
+    }
+    controller.moveCamera(
       center: center.toGeographic(),
       zoom: zoom,
       bearing: rotation,
     );
+    return true;
   }
 
   /// アニメーション付きカメラ移動
@@ -106,6 +155,18 @@ class RMapController {
     double? bearing,
     double? pitch,
   }) async {
+    if (_controller == null) {
+      // attach 前。保留してから attach 時に実行する。
+      _pendingCameraAction =
+          () => animateTo(
+            center: center,
+            zoom: zoom,
+            bearing: bearing,
+            pitch: pitch,
+          );
+      return;
+    }
+
     _fitDebounceTimer?.cancel();
     _cancelOngoingAnimation();
 
@@ -117,6 +178,11 @@ class RMapController {
         bearing: bearing,
         pitch: pitch,
       );
+      // バックエンドによっては animateCamera の Future がアニメーション完了を
+      // 待たずに即座に返る（maplibre_webview は 15ms で返り、カメラはその後
+      // 1秒ほどかけて動く。maplibre_android は着地まで待つ）。
+      // 呼び出し側が「戻ってきたら着地済み」を前提にできるよう、ここで揃える。
+      await _awaitCameraSettled(center: center, zoom: zoom, bearing: bearing);
     } on Exception catch (_) {
       // moveCamera によるキャンセル時に "Map camera movement cancelled." が
       // スローされるが、意図的なキャンセルなので無視する
@@ -125,12 +191,59 @@ class RMapController {
     }
   }
 
+  /// カメラが目標値に到達するまで待つ（上限付き）。
+  ///
+  /// [_cancelOngoingAnimation] で `_isCameraAnimating` が倒されたら即座に抜ける。
+  Future<void> _awaitCameraSettled({
+    LatLng? center,
+    double? zoom,
+    double? bearing,
+    Duration timeout = const Duration(seconds: 3),
+    Duration step = const Duration(milliseconds: 32),
+  }) async {
+    if (_controller == null) return;
+    if (center == null && zoom == null && bearing == null) return;
+
+    final deadline = DateTime.now().add(timeout);
+    while (_isCameraAnimating && DateTime.now().isBefore(deadline)) {
+      if (_isCameraAtTarget(center: center, zoom: zoom, bearing: bearing)) {
+        return;
+      }
+      await Future<void>.delayed(step);
+    }
+  }
+
+  /// 現在のカメラが目標値とみなせる範囲に入っているか
+  bool _isCameraAtTarget({LatLng? center, double? zoom, double? bearing}) {
+    final controller = _controller;
+    if (controller == null) return true;
+    final cam = controller.getCamera();
+
+    if (zoom != null && (cam.zoom - zoom).abs() > 0.05) return false;
+    if (bearing != null && (cam.bearing - bearing).abs() > 0.5) return false;
+    if (center != null) {
+      final c = cam.center.toLatLng();
+      if ((c.latitude - center.latitude).abs() > 1e-3) return false;
+      if ((c.longitude - center.longitude).abs() > 1e-3) return false;
+    }
+    return true;
+  }
+
   /// 座標リストに合わせてカメラをフィット
   ///
   /// 短時間の連続呼び出しはデバウンスし、最後の呼び出しのみ実行する。
   /// 進行中のアニメーションがあれば即キャンセルしてから開始する。
-  void fitCoordinates(List<LatLng> coordinates, {EdgeInsets padding = EdgeInsets.zero}) {
-    if (_controller == null || coordinates.isEmpty) return;
+  void fitCoordinates(
+    List<LatLng> coordinates, {
+    EdgeInsets padding = EdgeInsets.zero,
+  }) {
+    if (coordinates.isEmpty) return;
+    if (_controller == null) {
+      // attach 前。保留してから attach 時に実行する。
+      _pendingCameraAction =
+          () => fitCoordinates(coordinates, padding: padding);
+      return;
+    }
 
     // デバウンス: 短時間の連続ダブルタップをまとめて最後の1つだけ実行
     _fitDebounceTimer?.cancel();
@@ -208,6 +321,7 @@ class RMapController {
 
   void dispose() {
     _fitDebounceTimer?.cancel();
+    _pendingCameraAction = null;
     _controller = null;
     _styleController = null;
   }

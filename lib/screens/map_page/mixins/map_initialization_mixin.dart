@@ -157,8 +157,13 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
       final fontDir = await TileServer.ensureFontCache();
 
-      // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用
-      basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
+      // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用。
+      // WebViewで描くプラットフォームは file:// を読めないので、
+      // グリフをTileServer経由で配るために port を渡す。
+      basemapStyleUri = await TileServer.ensureLocalStyle(
+        fontDir: fontDir,
+        port: PlatformCapabilities.mapRendersInWebView ? tileServer.port : null,
+      );
 
       baseMapService.addListener(onBaseMapServiceUpdate);
       if (mapControllerInstance.style != null) onBaseMapServiceUpdate();
@@ -250,8 +255,14 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
           triggerSetState(() {
             currentLocation = LatLng(record.latitude, record.longitude);
             if (!movedToCurrentLocationOnce && currentLocation != null) {
-              mapController.move(currentLocation!, 16.0);
+              // 地図の生成より先にGPSの初回フィックスが届くことがある。
+              // その場合 move() は false を返して保留され、
+              // onMapCreated（attach）の時点で実行される。
+              final applied = mapController.move(currentLocation!, 16.0);
               movedToCurrentLocationOnce = true;
+              if (!applied) {
+                AppLogger.debug('[GPS] 地図が未生成のため初回ジャンプを保留（attach後に実行）');
+              }
             }
           });
         },

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:root_maps/providers/app_container.dart';
 import 'package:root_maps/providers/project_providers.dart';
 import 'package:root_maps/utils/background_save_manager.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   group('BackgroundSaveManager Tests', () {
@@ -16,6 +17,11 @@ void main() {
     late BackgroundSaveManager saveManager;
 
     setUpAll(() async {
+      // ホストVM上のテストでは sqflite の実装が無いため FFI 版を差し込む
+      // （main.dart のデスクトップ分岐と同じ初期化）
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+
       // テスト用の一時ディレクトリを作成
       tempDir = await Directory.systemTemp.createTemp('k_maps_test');
       // プロバイダーコンテナを初期化
@@ -27,11 +33,21 @@ void main() {
 
     setUp(() async {
       // 各テストで新しいGeoPackageFileを作成
-      geoPackageFile = GeoPackageFile(['test_file.gpkg']);
+      // projectRootDir はコンストラクタ引数で明示的に渡す（プロバイダ経由ではない）
+      geoPackageFile = GeoPackageFile(
+        ['test_file.gpkg'],
+        projectRootDir: tempDir.path,
+      );
       await geoPackageFile.createEmptyDatabase();
 
       // テスト用レイヤーを作成
+      // addLayer は fid/geom のみ作る（QGIS互換の最小スキーマ）ので、
+      // 属性カラムは明示的に足す。アプリ側も同じ手順を踏む。
       await geoPackageFile.addLayer('test_points', GeometryType.point);
+      await geoPackageFile.addAttributeColumns('test_points', {
+        'name': 'TEXT',
+        'description': 'TEXT',
+      });
     });
 
     tearDown(() async {
@@ -120,9 +136,16 @@ void main() {
 
     test('複数のGeoPackageFileの同時管理', () async {
       // 2つ目のGeoPackageFileを作成
-      final geoPackageFile2 = GeoPackageFile(['test_file2.gpkg']);
+      final geoPackageFile2 = GeoPackageFile(
+        ['test_file2.gpkg'],
+        projectRootDir: tempDir.path,
+      );
       await geoPackageFile2.createEmptyDatabase();
       await geoPackageFile2.addLayer('test_points2', GeometryType.point);
+      await geoPackageFile2.addAttributeColumns('test_points2', {
+        'name': 'TEXT',
+        'description': 'TEXT',
+      });
 
       try {
         // 両方のファイルに点を追加

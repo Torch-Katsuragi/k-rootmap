@@ -113,10 +113,18 @@ void main() {
       expect(feature.geometry, isA<turf.Point>());
 
       // Feature → rowData変換
+      // featureToRowData は属性のみを返す契約。ジオメトリは feature.geometry 側に
+      // 残るため rowData には載らない（geometry/geom キーは意図的に除外される）。
       final convertedRowData = TurfConverter.featureToRowData(feature);
       expect(convertedRowData, isNotNull);
       expect(convertedRowData!['name'], equals('Test Point'));
-      expect(convertedRowData['geometry'], isA<List<LatLng>>());
+      expect(convertedRowData.containsKey('geometry'), isFalse);
+      expect(convertedRowData.containsKey('geom'), isFalse);
+
+      // ジオメトリは専用の変換で取り出す
+      final latlng = TurfConverter.pointToLatlng(feature.geometry as turf.Point);
+      expect(latlng.latitude, closeTo(35.6895, 1e-6));
+      expect(latlng.longitude, closeTo(139.6917, 1e-6));
 
       // ignore: avoid_print
       print('[TEST] RowData⇄Feature変換テスト成功');

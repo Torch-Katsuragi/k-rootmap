@@ -1,0 +1,62 @@
+# Windows / Android の両対応を壊さないためのCI。
+#
+# 端末が要る段（integration_test の実機実行）はCIでは回さない。
+# それはローカルの tool/test_matrix.ps1 の担当。
+# ここは「片方のプラットフォームだけ壊す変更」を最短で検出するためのゲートに絞る。
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.41.6'
+
+jobs:
+  analyze-and-unit:
+    name: analyze + unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  build-windows:
+    name: build (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # Windows版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
+      # 2026-08-21 時点では地図バックエンドが無いだけで、ビルド自体は通る。
+      - run: flutter build windows --debug
+
+  build-android:
+    name: build (android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug

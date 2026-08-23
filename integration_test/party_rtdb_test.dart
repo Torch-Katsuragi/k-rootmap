@@ -15,16 +15,23 @@ import 'package:root_maps/models/party/peer_position.dart';
 import 'package:root_maps/services/party/rtdb_peer_source.dart';
 import 'package:root_maps/services/party/rtdb_room_repository.dart';
 
+import 'support/harness.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // Windows/Linux では firebase_options.dart に設定が無く initializeApp が投げる。
+  // 設定を足したら harness.dart の hasFirebaseConfig を更新すれば走り出す。
+  final skipReason = skipUnless(hasFirebaseConfig, 'Firebase設定が未生成');
+
   setUpAll(() async {
+    if (skipReason != false) return;
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   });
 
-  test('host: 作成→位置publish→読み戻し→track→後片付け', () async {
+  test('host: 作成→位置publish→読み戻し→track→後片付け', skip: skipReason, () async {
     final repo = RtdbRoomRepository();
     final uid = await repo.ensureSignedIn();
     expect(uid, isNotEmpty);
@@ -57,11 +64,18 @@ void main() {
     final self = peers[uid]!;
     expect(self.latitude, closeTo(35.681, 1e-4));
     expect(self.longitude, closeTo(139.767, 1e-4));
-    expect(self.serverTimeMs, greaterThan(0),
-        reason: 'サーバー時刻(ServerValue.timestamp)が付与されるはず');
+    expect(
+      self.serverTimeMs,
+      greaterThan(0),
+      reason: 'サーバー時刻(ServerValue.timestamp)が付与されるはず',
+    );
 
     // track（gap backfill）も書けること
-    await source.publishTrack(encodedPolyline: '_p~iF~ps|U', fromMs: 1, toMs: 2);
+    await source.publishTrack(
+      encodedPolyline: '_p~iF~ps|U',
+      fromMs: 1,
+      toMs: 2,
+    );
 
     // 後片付け（順序が重要: active=trueのうちに退出 → その後host終了）
     await source.dispose();

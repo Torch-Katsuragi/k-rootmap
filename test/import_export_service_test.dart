@@ -28,31 +28,36 @@ void main() {
 
     test('FileFormat.isImportSupported should return correct values', () {
       expect(FileFormat.shapefile.isImportSupported, isTrue);
-      expect(FileFormat.geojson.isImportSupported, isFalse); // 将来実装予定
-      expect(FileFormat.kml.isImportSupported, isFalse);
-      expect(FileFormat.csv.isImportSupported, isFalse);
-      expect(FileFormat.gpx.isImportSupported, isFalse);
+      expect(FileFormat.geojson.isImportSupported, isTrue);
+      expect(FileFormat.kml.isImportSupported, isFalse); // 将来実装予定
+      expect(FileFormat.csv.isImportSupported, isFalse); // 将来実装予定
+      expect(FileFormat.gpx.isImportSupported, isFalse); // 将来実装予定
       expect(FileFormat.unknown.isImportSupported, isFalse);
     });
 
     test('FileFormat.isExportSupported should return correct values', () {
-      // 現在、すべてのエクスポート機能は未実装
-      for (final format in FileFormat.values) {
-        expect(format.isExportSupported, isFalse);
-      }
+      expect(FileFormat.shapefile.isExportSupported, isTrue);
+      expect(FileFormat.geojson.isExportSupported, isTrue);
+      expect(FileFormat.kml.isExportSupported, isTrue);
+      expect(FileFormat.csv.isExportSupported, isTrue);
+      expect(FileFormat.gpx.isExportSupported, isFalse); // 将来実装予定
+      expect(FileFormat.unknown.isExportSupported, isFalse);
     });
 
     test('getSupportedImportFormats should return only supported formats', () {
       final supportedFormats = service.getSupportedImportFormats();
       expect(supportedFormats, contains(FileFormat.shapefile));
-      expect(supportedFormats, isNot(contains(FileFormat.geojson))); // 未実装
+      expect(supportedFormats, contains(FileFormat.geojson));
+      expect(supportedFormats, isNot(contains(FileFormat.gpx))); // 未実装
     });
 
     test('getSupportedImportExtensions should return correct extensions', () {
       final extensions = service.getSupportedImportExtensions();
       expect(extensions, contains('.shp'));
+      expect(extensions, contains('.geojson'));
+      expect(extensions, contains('.json')); // GeoJSONは.jsonも受理する
       // 将来実装される形式はこの時点では含まれない
-      expect(extensions, isNot(contains('.geojson')));
+      expect(extensions, isNot(contains('.gpx')));
     });
 
     test('ImportExportResult factory methods should work correctly', () {
@@ -81,9 +86,10 @@ void main() {
 
   group('Shapefile Analysis Tests', () {
     test('GeometryType enum should have correct values', () {
-      expect(GeometryType.point.value, equals('POINT'));
-      expect(GeometryType.linestring.value, equals('LINESTRING'));
-      expect(GeometryType.polygon.value, equals('POLYGON'));
+      // GeometryType の value は MULTI 系が既定（Single も透過的に扱う設計）
+      expect(GeometryType.point.value, equals('MULTIPOINT'));
+      expect(GeometryType.linestring.value, equals('MULTILINESTRING'));
+      expect(GeometryType.polygon.value, equals('MULTIPOLYGON'));
     });
 
     test('GeometryType fromString should work correctly', () {
@@ -93,10 +99,14 @@ void main() {
         equals(GeometryType.linestring),
       );
       expect(GeometryType.fromString('POLYGON'), equals(GeometryType.polygon));
+      // MULTI 系も同じ型に落ちる
+      expect(GeometryType.fromString('MULTIPOINT'), equals(GeometryType.point));
       expect(
-        GeometryType.fromString('UNKNOWN'),
-        equals(GeometryType.point),
-      ); // デフォルト
+        GeometryType.fromString('MULTIPOLYGON'),
+        equals(GeometryType.polygon),
+      );
+      // 未知の文字列は null（呼び出し側でフォールバックを決める）
+      expect(GeometryType.fromString('UNKNOWN'), isNull);
     });
 
     test('should handle basic file operations', () async {

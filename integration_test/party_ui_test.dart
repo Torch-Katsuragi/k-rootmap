@@ -15,10 +15,17 @@ import 'package:root_maps/i18n/strings.g.dart';
 import 'package:root_maps/providers/party_providers.dart';
 import 'package:root_maps/screens/map_page/widgets/party_controls.dart';
 
+import 'support/harness.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // Windows/Linux では firebase_options.dart に設定が無く initializeApp が投げる。
+  // 設定を足したら harness.dart の hasFirebaseConfig を更新すれば走り出す。
+  final skipReason = skipUnless(hasFirebaseConfig, 'Firebase設定が未生成');
+
   setUpAll(() async {
+    if (skipReason != false) return;
     // パーティUIのJP文言を検証するため日本語ロケールに固定。
     LocaleSettings.setLocaleSync(AppLocale.ja);
     await Firebase.initializeApp(
@@ -26,51 +33,54 @@ void main() {
     );
   });
 
-  testWidgets('PartyButton タップ→作成→セッションactive', (tester) async {
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(body: Center(child: PartyButton())),
+  // testWidgets の skip は bool しか取れないため、理由つきの skip は group 側に置く。
+  group('パーティUI', () {
+    testWidgets('PartyButton タップ→作成→セッションactive', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(body: Center(child: PartyButton())),
+          ),
         ),
-      ),
-    );
+      );
 
-    // 入口ボタンをタップ → 作成/参加ダイアログ
-    await tester.tap(find.byType(PartyButton));
-    await tester.pumpAndSettle();
-    expect(find.text('位置共有パーティ'), findsOneWidget);
+      // 入口ボタンをタップ → 作成/参加ダイアログ
+      await tester.tap(find.byType(PartyButton));
+      await tester.pumpAndSettle();
+      expect(find.text('位置共有パーティ'), findsOneWidget);
 
-    // 表示名を入力（最初のTextFieldが名前）
-    await tester.enterText(find.byType(TextField).first, 'UIテスト太郎');
-    await tester.pump();
+      // 表示名を入力（最初のTextFieldが名前）
+      await tester.enterText(find.byType(TextField).first, 'UIテスト太郎');
+      await tester.pump();
 
-    // 新規作成（ホスト）
-    await tester.tap(find.text('新規作成（ホスト）'));
+      // 新規作成（ホスト）
+      await tester.tap(find.text('新規作成（ホスト）'));
 
-    // 作成完了（ネットワーク）を待つ。pumpAndSettleはCircularProgressで
-    // 終わらないので固定pumpでポーリングする。
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(MaterialApp)),
-    );
-    var active = false;
-    for (var i = 0; i < 20; i++) {
-      await tester.pump(const Duration(seconds: 1));
-      final s = container.read(partySessionProvider);
-      if (s.active) {
-        active = true;
-        break;
+      // 作成完了（ネットワーク）を待つ。pumpAndSettleはCircularProgressで
+      // 終わらないので固定pumpでポーリングする。
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      var active = false;
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        final s = container.read(partySessionProvider);
+        if (s.active) {
+          active = true;
+          break;
+        }
+        if (s.error != null) fail('createRoom error: ${s.error}');
       }
-      if (s.error != null) fail('createRoom error: ${s.error}');
-    }
-    expect(active, isTrue, reason: 'ルーム作成でセッションがactiveになるはず');
+      expect(active, isTrue, reason: 'ルーム作成でセッションがactiveになるはず');
 
-    final state = container.read(partySessionProvider);
-    expect(state.roomCode, isNotNull);
-    expect(state.roomCode!.length, 8);
-    expect(state.role!.name, 'host');
+      final state = container.read(partySessionProvider);
+      expect(state.roomCode, isNotNull);
+      expect(state.roomCode!.length, 8);
+      expect(state.role!.name, 'host');
 
-    // 後片付け
-    await container.read(partySessionProvider.notifier).leave();
-    await FirebaseAuth.instance.signOut();
-  });
+      // 後片付け
+      await container.read(partySessionProvider.notifier).leave();
+      await FirebaseAuth.instance.signOut();
+    });
+  }, skip: skipReason);
 }

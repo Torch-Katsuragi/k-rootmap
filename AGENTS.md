@@ -36,6 +36,14 @@ Flutter製の地図アプリ（root_maps）。Windows/Android対応。
 - `docs/` - 設計書・技術資料（[[docs/index|目次]]）
 - `.agent/skills/` - エージェントスキル
 
+## テスト
+
+- **Windows と Android の両方で通すこと**。片方だけ緑の変更は入れない
+  （Windows版復活作業では「Windowsを直したらAndroidが壊れた」が最大のリスク）
+- 一発で回す: `pwsh tool/test_matrix.ps1`（端末不要の段だけなら `-Only analyze,unit`）
+- 詳細・落とし穴は [[docs/technical/testing|テスト構成]] を読む
+- 地図まわりを触ったら `integration_test/map_contract_test.dart` を両プラットフォームで回す
+
 ## よく使うパターン
 
 - UI更新: [[docs/technical/ui-layer-tree|レイヤツリー更新ガイド]] - `updateChildren()` の使い方

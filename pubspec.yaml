@@ -97,6 +97,10 @@ dependencies:
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
   maplibre: ^0.3.5
+  # Windows/macOS 版の地図実装（maplibre 本体は endorse していないので明示的に入れる）。
+  # 2026-04 に性能不足で一度外したが、Windows版復活のため再評価中。
+  # 判定は integration_test/map_contract_test.dart が両プラットフォームで緑になるか。
+  maplibre_webview: ^0.3.5
   supercluster: ^3.2.0
   geobase: ^1.5.0
   exif: ^3.3.0

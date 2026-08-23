@@ -34,4 +34,13 @@ class PlatformCapabilities {
 
   /// Bluetooth経由の外部GNSS機器 — モバイルのみ
   static bool get supportsBluetoothGnss => Platform.isAndroid || Platform.isIOS;
+
+  /// 地図をWebView（maplibre_webview）で描画するプラットフォームか。
+  ///
+  /// true のとき、地図はページのオリジンから fetch する。そのため
+  /// - ローカルTileServerはCORSヘッダーを返す必要がある
+  /// - `file://` は読めないので、グリフもTileServer経由（http）で配る必要がある
+  ///   （Windowsのパスは file://C: から始まる不正なURIにもなる）
+  static bool get mapRendersInWebView =>
+      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 }

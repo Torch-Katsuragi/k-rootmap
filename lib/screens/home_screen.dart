@@ -27,6 +27,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/launch_options.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../providers/project_providers.dart';
@@ -49,7 +50,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   String? _projectDir;
   bool _permissionsGranted = false;
   bool _isCheckingPermissions = false; // 権限チェック中フラグ
@@ -58,6 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   String _openingProjectStatus = '';
   bool _initCompleted = false; // 初期化（オンボーディング含む）完了フラグ
   bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
+  bool _autoOpenAttempted = false; // --dart-define=PROJECT_DIR の自動オープンを試したか
 
   @override
   void initState() {
@@ -80,13 +83,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChangelogScreen(
-          onRead: () {
-            if (mounted) {
-              setState(() => _hasUnreadChangelog = false);
-            }
-          },
-        ),
+        builder:
+            (_) => ChangelogScreen(
+              onRead: () {
+                if (mounted) {
+                  setState(() => _hasUnreadChangelog = false);
+                }
+              },
+            ),
       ),
     );
   }
@@ -106,7 +110,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     }
     // オンボーディング完了後（または不要の場合）、通常の権限チェックを実行
     _initCompleted = true;
-    _checkPermissions();
+    await _checkPermissions();
+    await _maybeAutoOpenProjectDir();
+  }
+
+  /// `--dart-define=PROJECT_DIR=...` が指定されていれば、フォルダ選択を挟まずに開く。
+  ///
+  /// 開発・デバッグ用。起動〜地図描画までを一発で通したいときに使う。
+  /// 指定が無い／パスが存在しない／権限が無い場合は何もしない（通常の選択画面のまま）。
+  Future<void> _maybeAutoOpenProjectDir() async {
+    if (_autoOpenAttempted) return;
+    _autoOpenAttempted = true;
+
+    if (!LaunchOptions.hasProjectDir) return;
+    if (!_permissionsGranted) {
+      AppLogger.debug('[HomeScreen] PROJECT_DIR: 権限が無いため自動オープンを見送り');
+      return;
+    }
+
+    final dir = LaunchOptions.projectDir;
+    if (!Directory(dir).existsSync()) {
+      AppLogger.debug('[HomeScreen] PROJECT_DIR: パスが存在しない ($dir)');
+      return;
+    }
+
+    AppLogger.debug('[HomeScreen] PROJECT_DIR: 自動オープン ($dir)');
+    await _openProjectDir(dir);
   }
 
   @override
@@ -150,7 +179,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       // Android 11 (API level 30) 以降での権限管理
       final manageStorageGranted =
           await Permission.manageExternalStorage.isGranted;
-      AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted');
+      AppLogger.debug(
+        '[HomeScreen] MANAGE_EXTERNAL_STORAGE権限状態: $manageStorageGranted',
+      );
 
       if (manageStorageGranted) {
         AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が既に許可済み');
@@ -173,7 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         // 権限が恒久的に拒否された場合、設定画面を開く
         _showPermissionDeniedDialog();
       } else {
-        AppLogger.debug('[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行');
+        AppLogger.debug(
+          '[HomeScreen] MANAGE_EXTERNAL_STORAGE権限が拒否されました。従来の権限を試行',
+        );
         // 従来のストレージ権限を試行
         await _requestLegacyStoragePermissions();
       }
@@ -233,7 +266,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     // Android 12以降で必要な権限
     final bluetoothScan = await Permission.bluetoothScan.status;
     final bluetoothConnect = await Permission.bluetoothConnect.status;
-    
+
     AppLogger.debug('[HomeScreen] BLUETOOTH_SCAN状態: $bluetoothScan');
     AppLogger.debug('[HomeScreen] BLUETOOTH_CONNECT状態: $bluetoothConnect');
 
@@ -248,17 +281,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     // 複数の権限を一度にリクエスト（プラグイン側が適切に管理）
     AppLogger.debug('[HomeScreen] Bluetooth権限をリクエスト中...');
-    
-    final statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-    ].request();
-    
+
+    final statuses =
+        await [Permission.bluetoothScan, Permission.bluetoothConnect].request();
+
     AppLogger.debug('[HomeScreen] Bluetooth権限リクエスト結果: $statuses');
 
     // 結果を確認
     final scanGranted = statuses[Permission.bluetoothScan]?.isGranted ?? false;
-    final connectGranted = statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+    final connectGranted =
+        statuses[Permission.bluetoothConnect]?.isGranted ?? false;
     final bluetoothGranted = scanGranted && connectGranted;
 
     if (bluetoothGranted) {
@@ -267,13 +299,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         _permissionsGranted = true;
       });
     } else {
-      AppLogger.debug('[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)');
+      AppLogger.debug(
+        '[HomeScreen] 一部のBluetooth権限が拒否されました (SCAN: $scanGranted, CONNECT: $connectGranted)',
+      );
       // Bluetooth権限がなくてもアプリは動作可能なので、警告のみ表示してストレージ権限で起動許可
-      ref.read(notificationCenterProvider.notifier).add(
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
             title: t.permissions.bluetoothRequired,
             level: NotificationLevel.warning,
           );
-      
+
       // ストレージ権限があれば、基本機能は使える
       setState(() {
         _permissionsGranted = true;
@@ -288,9 +324,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       builder:
           (context) => AlertDialog(
             title: Text(t.permissions.storageRequired),
-            content: Text(
-              t.permissions.storageRequiredDesc,
-            ),
+            content: Text(t.permissions.storageRequiredDesc),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -332,10 +366,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       if (projectDir != null) {
         final warning = checkContainmentRelation(globalPath, projectDir);
         if (warning != null) {
-          ref.read(notificationCenterProvider.notifier).add(
-                title: warning,
-                level: NotificationLevel.warning,
-              );
+          ref
+              .read(notificationCenterProvider.notifier)
+              .add(title: warning, level: NotificationLevel.warning);
         }
       }
 
@@ -364,7 +397,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     if (!_permissionsGranted) {
       AppLogger.debug('[HomeScreen] 権限が許可されていません');
-      ref.read(notificationCenterProvider.notifier).add(
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
             title: t.permissions.storageNotGranted,
             level: NotificationLevel.error,
           );
@@ -376,42 +411,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {
-      if (!mounted) return;
-      setState(() {
-        _projectDir = dir;
-        _isOpeningProject = true;
-        _openingProjectStatus = t.home.initializingProject;
-      });
-      AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
-      ref.read(projectRootDirProvider.notifier).set(dir);
-      AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
-      final rootNode = await FolderNode.createRootNode(dir);
-      ref.read(folderTreeProvider.notifier).set(rootNode);
-      AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
+      await _openProjectDir(dir);
+    }
+  }
 
-      setState(() {
-        _openingProjectStatus = t.home.preparingSharedFolder;
-      });
-      await _initializeGlobalFolder();
-      AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
+  /// プロジェクトフォルダを開いて地図画面へ遷移する
+  ///
+  /// フォルダの出所（ピッカー / `--dart-define=PROJECT_DIR`）に依らず同じ経路を通す。
+  Future<void> _openProjectDir(String dir) async {
+    if (!mounted) return;
+    setState(() {
+      _projectDir = dir;
+      _isOpeningProject = true;
+      _openingProjectStatus = t.home.initializingProject;
+    });
+    AppLogger.debug('[HomeScreen] フォルダ選択完了、初期化を開始');
+    ref.read(projectRootDirProvider.notifier).set(dir);
+    AppLogger.debug('[HomeScreen] projectRootDirProvider 設定完了');
+    final rootNode = await FolderNode.createRootNode(dir);
+    ref.read(folderTreeProvider.notifier).set(rootNode);
+    AppLogger.debug('[HomeScreen] rootNode 設定完了 (${rootNode.runtimeType})');
 
-      // フォルダ選択後すぐ地図編集画面へ遷移
-      if (mounted) {
-        AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
-        // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
-        _navigatedToMapPage = true;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
-        ).then((_) {
-          if (!mounted) return;
-          setState(() {
-            _navigatedToMapPage = false;
-            _isOpeningProject = false;
-            _openingProjectStatus = '';
-          });
+    setState(() {
+      _openingProjectStatus = t.home.preparingSharedFolder;
+    });
+    await _initializeGlobalFolder();
+    AppLogger.debug('[HomeScreen] GlobalFolder 初期化完了');
+
+    // フォルダ選択後すぐ地図編集画面へ遷移
+    if (mounted) {
+      AppLogger.debug('[HomeScreen] 地図画面に遷移中...');
+      // マップ画面遷移後は権限チェックを無効化（GPS権限リクエストとの競合防止）
+      _navigatedToMapPage = true;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
+      ).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _navigatedToMapPage = false;
+          _isOpeningProject = false;
+          _openingProjectStatus = '';
         });
-      }
+      });
     }
   }
 
@@ -429,9 +471,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const UserGuideScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const UserGuideScreen()),
               );
             },
           ),
@@ -444,117 +484,163 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
         ],
       ),
       body: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          padding: const EdgeInsets.all(20.0),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: math.max(0, constraints.maxHeight - 40),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-            const Icon(Icons.map, size: 100, color: Colors.blue),
-            const SizedBox(height: 32),
-            Text(
-              'RootMap GIS',
-              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              t.home.subtitle,
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            // 更新通知バナー（未読時のみ表示）
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: _hasUnreadChangelog
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: _UpdateBanner(onTap: _openChangelog),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 48),
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
+        builder:
+            (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: math.max(0, constraints.maxHeight - 40),
+                ),
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.folder_open,
-                      size: 48,
-                      color: Colors.orange,
+                    const Icon(Icons.map, size: 100, color: Colors.blue),
+                    const SizedBox(height: 32),
+                    Text(
+                      'RootMap GIS',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      t.home.startProject,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      t.home.selectProjectFolder,
-                      style: const TextStyle(color: Colors.grey),
+                      t.home.subtitle,
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed:
-                          (_permissionsGranted && !_isOpeningProject)
-                              ? _pickProjectDir
-                              : null,
-                      icon: Icon(
-                        _isOpeningProject
-                            ? Icons.hourglass_top
-                            : (_permissionsGranted ? Icons.folder : Icons.warning),
-                      ),
-                      label: Text(
-                        _isOpeningProject
-                            ? t.home.launching
-                            : (_permissionsGranted ? t.home.selectFolder : t.home.permissionRequired),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            (_permissionsGranted && !_isOpeningProject)
-                                ? Colors.blue
-                                : Colors.grey,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 16,
+                    // 更新通知バナー（未読時のみ表示）
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child:
+                          _hasUnreadChangelog
+                              ? Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: _UpdateBanner(onTap: _openChangelog),
+                              )
+                              : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 48),
+                    Card(
+                      elevation: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          children: [
+                            const Icon(
+                              Icons.folder_open,
+                              size: 48,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              t.home.startProject,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              t.home.selectProjectFolder,
+                              style: const TextStyle(color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed:
+                                  (_permissionsGranted && !_isOpeningProject)
+                                      ? _pickProjectDir
+                                      : null,
+                              icon: Icon(
+                                _isOpeningProject
+                                    ? Icons.hourglass_top
+                                    : (_permissionsGranted
+                                        ? Icons.folder
+                                        : Icons.warning),
+                              ),
+                              label: Text(
+                                _isOpeningProject
+                                    ? t.home.launching
+                                    : (_permissionsGranted
+                                        ? t.home.selectFolder
+                                        : t.home.permissionRequired),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    (_permissionsGranted && !_isOpeningProject)
+                                        ? Colors.blue
+                                        : Colors.grey,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 16,
+                                ),
+                                textStyle: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            if (_isOpeningProject) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                _openingProjectStatus,
+                                style: const TextStyle(color: Colors.grey),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              const LinearProgressIndicator(),
+                            ],
+                            if (!_permissionsGranted) ...[
+                              const SizedBox(height: 16),
+                              TextButton.icon(
+                                onPressed: _checkPermissions,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(t.home.recheckPermission),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.blue,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        textStyle: const TextStyle(fontSize: 16),
                       ),
                     ),
-                    if (_isOpeningProject) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _openingProjectStatus,
-                        style: const TextStyle(color: Colors.grey),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      const LinearProgressIndicator(),
-                    ],
-                    if (!_permissionsGranted) ...[
+                    if (_projectDir != null) ...[
                       const SizedBox(height: 16),
-                      TextButton.icon(
-                        onPressed: _checkPermissions,
-                        icon: const Icon(Icons.refresh),
-                        label: Text(t.home.recheckPermission),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.blue,
+                      Card(
+                        color: Colors.green[50],
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                                size: 24,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                t.common.selectedFolder,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _projectDir!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -562,42 +648,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                 ),
               ),
             ),
-            if (_projectDir != null) ...[
-              const SizedBox(height: 16),
-              Card(
-                color: Colors.green[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 24,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        t.common.selectedFolder,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _projectDir!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -631,10 +681,7 @@ class _UpdateBannerState extends State<_UpdateBanner>
       parent: _controller,
       curve: Curves.elasticOut,
     );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeIn,
-    );
+    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     // 少し遅らせてアニメーション開始（画面描画完了後に注目させる）
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) _controller.forward();

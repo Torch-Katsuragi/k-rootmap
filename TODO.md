@@ -1,5 +1,55 @@
 # TODO List
 
+## Windows版の復活（2026-08-21〜）
+
+> 前提: 2026-04-16 に maplibre_webview を外して凍結（`6e0ecda`）。
+> 「maplibre のネイティブWindows対応を待つ」方針だったが、
+> maplibre は 0.3.5（2026-04-11）で更新が止まっており上流待ちは成立しない。
+
+- [x] Windows版のビルドを復旧（CP932環境で C4819 → `/WX` によりビルド不能だった。`windows/CMakeLists.txt` に `/utf-8` を追加）
+- [x] Windows/Android 両対応のテスト基盤（`tool/test_matrix.ps1` / [[docs/technical/testing|テスト構成]]）
+- [x] 地図バックエンド契約テスト（`integration_test/map_contract_test.dart`）
+- [x] 腐っていたユニットテスト12件を修復（API変更にテストが追随していなかった）
+- [x] パーティの作成/参加ダイアログのオーバーフロー修正（Android実機で182px。テスト基盤が検出）
+- [/] 地図バックエンドの選定 — 実測して決める
+  - [x] 案B: maplibre_webview 0.3.5 を再導入し、現時点の性能を実測 → **受け入れ条件を満たした**
+    - 性能は問題なし（全項目で同等〜Windows優位。⚠Android側はエミュ計測）
+    - 挙動差3点のうち `animateTo` の早期解決は `RMapController` で吸収、残り2件は実害なしと確認
+    - Android release APK への影響は +0.4MB
+  - [x] 実アプリで目視確認 — release版で1万ポリゴン実用範囲。タイル・ポリゴン・GPSマーカーの描画を確認
+  - [x] 実起動でしか出ない不具合を修正（TileServerのCORS欠落／グリフの `file://` 不正URI）
+  - [x] 起動時に現在地へジャンプしない積年のバグを修正（attach前の `move()` 握りつぶし）
+  - [ ] ペン描画の座標ズレ確認 — WebViewは座標をキャッシュで返すので、カメラ移動中に古い値を返しうる
+  - [ ] `setMinZoom` のJSエラー — `window.map` 未生成の段階で MapOptions を適用している（上流）
+  - [ ] 上流に issue/PR（josxha/flutter-maplibre）: `map_state.dart:559` の `mounted` 漏れ、`removeLayer` の `_fetchLayerIds()` 漏れ
+  - ~~案A: maplibre-native の Windows ビルドを Flutter Texture プラグイン化~~（案Bで足りれば不要）
+  - ~~案C: Windowsだけ flutter_map に回帰~~（不要）
+- [ ] Windows用 Firebase 設定（`flutterfire configure` に windows を追加）— パーティ機能のWindows対応
+  - Firebase C++ SDK for Windows のビルドは通ることを確認済み
+- [ ] 死んだ依存 `flutter_map` を pubspec から外す（案Cを採らない場合）
+
+## web版（調査済み・2026-08-21）
+
+> `flutter build web` は**エラー0件で通る**。落ちるのは実行時の `UnsupportedError`。
+> Dart は `dart:io` を「コンパイルは通るが呼ぶと落ちるスタブ」として web に出しているため、
+> 「webで到達する呼び出しを1つずつ塞ぐ」作業になる。詳細は [[docs/technical/testing|テスト構成]] ではなく
+> Vault の案件md（Windows版復活_2026-08-21）を参照。
+
+- [x] **クリティカルパス: WASM SQLite の性能PoC** → **通過**。全件読み538ms / UPDATE 1件1ms /
+      書き戻し14ms / deserialize 5ms。8.5MBなら全部メモリに載せる選択肢も取れる
+- [ ] `Platform.isXxx` 30箇所を `kIsWeb` ガード（機械的）
+- [ ] **`File(` / `Directory(` 173箇所 / 49ファイル** をファイルシステム抽象経由に（本丸）
+- [ ] GeoPackage を `sqlite3` WASM + OPFS へ。チェックアウト/チェックイン方式になる
+- [ ] File System Access API で「プロジェクトフォルダを選択」
+- [ ] PWA + Service Worker + タイルキャッシュ（オフライン対応）
+- [ ] 公開ビューア（PMTiles/GeoJSONを静的ホスティング、URLで共有）
+
+> [!NOTE] 方針
+> - web版はWindows版を**置き換えられる**（Windows版の機能集合は web で再現可能な範囲に収まっている）
+> - サーバ権威型のWebGISは**自分ではやらない**。OSS なので利用者側で構築してもらう
+
+---
+
 ## 🔥 直近のアクション
 
 - [/] アプリ名を「RootMap GIS」に改名

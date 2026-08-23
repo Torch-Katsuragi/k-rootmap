@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### 🖥️ Windows Support Restored
+
+- Map rendering works again on Windows (paused since April 2026)
+  - Fixed a build failure on Japanese-locale systems
+  - Fixed map tiles not loading
+  - Fixed map labels not rendering
+- Verified with 10,000 polygons in a release build
+
+### 🐛 Bug Fixes
+
+- Fixed the map sometimes not jumping to your current location on startup
+  (both Android and Windows)
+  - The camera move was lost when the first GPS fix arrived before the map was ready
+- Fixed the party create/join dialog overflowing the screen
+- Fixed camera operations (move, rotate, fit bounds) being silently dropped
+  when called before the map was ready
+
+### 🔧 For Developers
+
+- Added a single command to run the test suite on both Windows and Android
+- Added a map backend contract test (same assertions on both platforms)
+- The project folder can now be passed as a launch option
+
 ## v0.6.0 — 2026/04/16
 
 ### 📐 Spirit Level Tool

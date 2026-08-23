@@ -50,21 +50,22 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyABBbUulD2cEbVT7cHfRCDLk_R5QBocxDA',
-    appId: '1:876970256789:android:d352cc4c5f7dcba453ee9c',
-    messagingSenderId: '876970256789',
-    projectId: 'k-rootmap',
-    databaseURL: 'https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'k-rootmap.firebasestorage.app',
+    apiKey: 'AIzaSyABB0YHs-KSUE7_t047WFkQ8v9GRe3LQjs',
+    appId: '1:348302294570:android:b8e5b42b56014d34044d53',
+    messagingSenderId: '348302294570',
+    projectId: 'nemurigi-kobo',
+    databaseURL: 'https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'nemurigi-kobo.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDvS8WA1Bh-jZ7HQHZH8Tfji6oGXQHzleU',
-    appId: '1:876970256789:ios:f4994e0010310fb553ee9c',
-    messagingSenderId: '876970256789',
-    projectId: 'k-rootmap',
-    databaseURL: 'https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app',
-    storageBucket: 'k-rootmap.firebasestorage.app',
+    apiKey: 'AIzaSyADHpeZKQlPv_i1BnzX6W0kdz851sdwV4s',
+    appId: '1:348302294570:ios:484ebda2f76caf23044d53',
+    messagingSenderId: '348302294570',
+    projectId: 'nemurigi-kobo',
+    databaseURL: 'https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'nemurigi-kobo.firebasestorage.app',
     iosBundleId: 'com.example.kMaps',
   );
+
 }

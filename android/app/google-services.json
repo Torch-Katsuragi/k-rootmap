@@ -1,14 +1,14 @@
 {
   "project_info": {
-    "project_number": "876970256789",
-    "firebase_url": "https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "k-rootmap",
-    "storage_bucket": "k-rootmap.firebasestorage.app"
+    "project_number": "348302294570",
+    "firebase_url": "https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "nemurigi-kobo",
+    "storage_bucket": "nemurigi-kobo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:876970256789:android:d352cc4c5f7dcba453ee9c",
+        "mobilesdk_app_id": "1:348302294570:android:b8e5b42b56014d34044d53",
         "android_client_info": {
           "package_name": "com.k_root.k_maps"
         }
@@ -16,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyABBbUulD2cEbVT7cHfRCDLk_R5QBocxDA"
+          "current_key": "AIzaSyABB0YHs-KSUE7_t047WFkQ8v9GRe3LQjs"
         }
       ],
       "services": {

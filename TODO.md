@@ -28,6 +28,17 @@
   - Firebase C++ SDK for Windows のビルドは通ることを確認済み
 - [ ] 死んだ依存 `flutter_map` を pubspec から外す（案Cを採らない場合）
 
+## プロジェクト形式の設計（2026-08-21・設計のみ）
+
+> 設計は [[docs/technical/project-format-design|プロジェクト形式の設計]] に集約。
+> **web版が全ての前提**なので、下の web 版が終わるまで着手しない。
+
+- [ ] **View の導入** — Layer の下に「フィルタ＋スタイルの集合体」を置く。QGISのレイヤと1:1対応
+- [ ] **`.qgs` ライター** — dir/gpkg/layer をレイヤグループ、View をレイヤとして出力
+- [ ] `.qgs` インポータ（root外参照を破棄・グループはdir構造に置換・捨てたものを必ず報告）
+- [ ] web側のQR発行（受け側の `cloneFromDrive` と QRスキャンは実装済み）
+- [ ] ~~`layer_styles`~~ → **優先度を下げた**。`.qgs` にレンダラを書けば冗長。gpkg単体を渡す場合の保険のみ
+
 ## web版（調査済み・2026-08-21）
 
 > `flutter build web` は**エラー0件で通る**。落ちるのは実行時の `UnsupportedError`。

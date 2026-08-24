@@ -40,6 +40,7 @@ tags: [index, navigation]
 | [[technical/location-sharing-setup]] | 位置共有 Firebaseセットアップ手順（provisioningランブック） |
 | [[technical/testing]] | テスト構成（Windows/Android両対応・地図バックエンド契約テスト） |
 | [[technical/qgis-interop]] | QGIS相互運用（トリガー復元・範囲/件数の同期） |
+| [[technical/project-format-design]] | プロジェクト形式の設計（View / .qgs / 共有単位）※未実装 |
 
 ---
 

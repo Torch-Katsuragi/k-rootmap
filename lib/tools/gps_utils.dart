@@ -20,8 +20,8 @@
 // Windowsではgeolocatorやnmeaが未対応の場合、将来的な拡張やモック実装も考慮
 
 import 'dart:async';
-import 'dart:io' show Platform;
 
+import 'package:root_maps/core/platform_capabilities.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:nmea/nmea.dart'; // NMEA0183パーサ
 import 'package:geolocator/geolocator.dart';
@@ -122,20 +122,18 @@ class GpsUtils {
   /// 現在地取得
   /// Windowsでは未対応の場合nullを返す
   Future<dynamic> getCurrentPosition() async {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (PlatformCapabilities.isMobile) {
       // return await Geolocator.getCurrentPosition();
       return null; // TODO: 実装
-    } else if (Platform.isWindows) {
-      // Windows用の実装（未対応の場合はnull）
-      return null;
     } else {
+      // Windows / web は未対応
       return null;
     }
   }
 
   /// 位置情報ストリーム購読
   Stream<dynamic> getPositionStream() {
-    if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
+    if (PlatformCapabilities.supportsGpsLocation) {
       // geolocatorのストリームをGpsPositionに変換
       return Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
@@ -203,7 +201,7 @@ class GpsUtils {
 
   /// 権限確認・リクエスト
   Future<bool> checkAndRequestPermission() async {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (PlatformCapabilities.isMobile) {
       // 位置情報サービスが有効かチェック
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -232,23 +230,21 @@ class GpsUtils {
 
       AppLogger.debug('[DEBUG] GPS: Permission granted: $permission');
       return true;
-    } else if (Platform.isWindows) {
-      return true;
     } else {
-      return false;
+      // Windows / web は権限APIを持たない（ブラウザは取得時にプロンプトを出す）
+      return true;
     }
   }
 
   /// サービス有効化確認
   Future<bool> isLocationServiceEnabled() async {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (PlatformCapabilities.isMobile) {
       bool enabled = await Geolocator.isLocationServiceEnabled();
       AppLogger.debug('[DEBUG] GPS: Location service enabled: $enabled');
       return enabled;
-    } else if (Platform.isWindows) {
-      return true;
     } else {
-      return false;
+      // Windows / web はサービスの有効無効という概念を持たない
+      return true;
     }
   }
 }

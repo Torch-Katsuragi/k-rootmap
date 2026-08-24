@@ -16,8 +16,9 @@
 /// Root Maps: フォルダタイルウィジェット
 library;
 
-import 'dart:io' show Directory, Platform;
+import 'dart:io' show Directory;
 import 'package:flutter/material.dart';
+import '../../../core/platform_capabilities.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../models/nodes/folder_node.dart';
@@ -50,7 +51,7 @@ class FolderTile extends ConsumerWidget {
     this.onDeleteDrive,
   });
 
-  static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  static bool get _isMobile => PlatformCapabilities.isMobile;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

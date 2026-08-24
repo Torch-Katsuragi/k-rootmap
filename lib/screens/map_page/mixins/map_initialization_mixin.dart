@@ -31,6 +31,7 @@ import '../../../models/nodes/layer_node.dart';
 import '../../../services/google_drive/index.dart';
 import '../../../services/google_drive/auto_sync_service.dart';
 import '../../../services/tile_server.dart';
+import '../../../services/basemap_style_json.dart';
 import '../map_page_state_base.dart';
 import '../../../utils/geo_converter.dart';
 import '../../layer_style_settings_screen.dart' show layerStyleSettings;
@@ -152,18 +153,30 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
   Future<void> initializeBaseMapService() async {
     try {
       await baseMapService.initialize();
-      await tileServer.start();
 
-      // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
-      final fontDir = await TileServer.ensureFontCache();
+      if (PlatformCapabilities.supportsLocalTileServer) {
+        await tileServer.start();
 
-      // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用。
-      // WebViewで描くプラットフォームは file:// を読めないので、
-      // グリフをTileServer経由で配るために port を渡す。
-      basemapStyleUri = await TileServer.ensureLocalStyle(
-        fontDir: fontDir,
-        port: PlatformCapabilities.mapRendersInWebView ? tileServer.port : null,
-      );
+        // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
+        final fontDir = await TileServer.ensureFontCache();
+
+        // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用。
+        // WebViewで描くプラットフォームは file:// を読めないので、
+        // グリフをTileServer経由で配るために port を渡す。
+        basemapStyleUri = await TileServer.ensureLocalStyle(
+          fontDir: fontDir,
+          port:
+              PlatformCapabilities.mapRendersInWebView ? tileServer.port : null,
+        );
+      } else {
+        // web: TileServerは立てられず（`dart:io` の HttpServer が無い）、
+        // そして不要。MapLibre GL JS がタイルURLを直接叩く。
+        // 背景地図はスタイルJSONに焼き込む — 理由は
+        // [[../../../services/basemap_style_json]] を読むこと。
+        basemapStyleUri = buildBasemapStyleJson(
+          layers: baseMapService.activeLayerConfig,
+        );
+      }
 
       baseMapService.addListener(onBaseMapServiceUpdate);
       if (mapControllerInstance.style != null) onBaseMapServiceUpdate();

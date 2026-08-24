@@ -25,6 +25,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
+import '../core/platform_capabilities.dart';
 import '../models/basemap_provider.dart';
 import '../utils/app_logger.dart';
 import 'basemap_service.dart';
@@ -201,7 +202,14 @@ class TileServer {
   TileServer(this._baseMapService);
 
   /// サーバー起動（ポート0でOS自動割り当て）
+  ///
+  /// web では何もしない（`dart:io` の `HttpServer` が使えず、かつ不要。
+  /// MapLibre GL JS がタイルURLを直接叩く）。
   Future<void> start() async {
+    if (!PlatformCapabilities.supportsLocalTileServer) {
+      AppLogger.debug('[TileServer] skipped (web: 不要)');
+      return;
+    }
     if (_server != null) return;
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     AppLogger.debug('[TileServer] started on port $port');

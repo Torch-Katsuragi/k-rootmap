@@ -39,7 +39,10 @@
     "launching": "起動中...",
     "recheckPermission": "権限を再確認",
     "initializingProject": "プロジェクトを初期化しています...",
-    "preparingSharedFolder": "共有フォルダを準備しています..."
+    "preparingSharedFolder": "共有フォルダを準備しています...",
+    "webPreviewTitle": "地図プレビュー（web版）",
+    "webPreviewDesc": "web版はまだプロジェクトフォルダを開けません。背景地図の表示だけ確認できます。",
+    "openMap": "地図を開く"
   },
   "permissions": {
     "storageRequired": "ストレージ権限が必要です",
@@ -118,7 +121,7 @@
       "uiScaleLabels": {
         "0": "XS",
         "1": "S",
-        "2": "M\u2212",
+        "2": "M−",
         "3": "M",
         "4": "M+",
         "5": "L",

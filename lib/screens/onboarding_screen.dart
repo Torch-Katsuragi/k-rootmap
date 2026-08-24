@@ -16,13 +16,13 @@
 // Root Maps: 初回起動オンボーディング画面
 // 権限設定を順序立てて案内するフルスクリーンUI
 // Google Play Prominent Disclosure準拠
-import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../i18n/strings.g.dart';
+import '../core/platform_capabilities.dart';
 import '../utils/app_logger.dart';
 
 /// オンボーディング完了フラグのSharedPreferencesキー
@@ -40,8 +40,8 @@ class OnboardingScreen extends StatefulWidget {
 
   /// オンボーディングが必要かどうかを判定
   static Future<bool> shouldShow() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      return false; // デスクトップでは不要
+    if (!PlatformCapabilities.showsOnboarding) {
+      return false; // デスクトップ・web では不要
     }
     final prefs = await SharedPreferences.getInstance();
     return !(prefs.getBool(kOnboardingCompletedKey) ?? false);

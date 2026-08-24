@@ -28,6 +28,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/launch_options.dart';
+import '../core/platform_capabilities.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
 import '../providers/project_providers.dart';
@@ -157,7 +158,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   /// ストレージ権限の確認・リクエスト
   Future<void> _checkPermissions() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (!PlatformCapabilities.needsRuntimePermissions) {
       if (mounted) {
         setState(() {
           _permissionsGranted = true;
@@ -457,6 +458,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  /// web版の入口カード（プロジェクトフォルダを開かず地図だけ見る）
+  ///
+  /// ⚠ 暫定。web版はファイルシステム抽象（段2）が入るまでフォルダを開けない。
+  /// 段2で `canOpenLocalProject` が true になれば、このカードは出なくなる。
+  Widget _buildWebPreviewCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            const Icon(Icons.public, size: 48, color: Colors.blue),
+            const SizedBox(height: 16),
+            Text(
+              t.home.webPreviewTitle,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              t.home.webPreviewDesc,
+              style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _openMapWithoutProject,
+              icon: const Icon(Icons.map),
+              label: Text(t.home.openMap),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// プロジェクトフォルダを開かずに地図画面へ遷移する。
+  ///
+  /// `projectRootDirProvider` は null のまま。ツリーは空のルートだけになり、
+  /// `PathResolver` が全て null を返すのでファイルには一切触らない。
+  void _openMapWithoutProject() {
+    // ⚠ ツリーは**遷移前に**入れておく。MapPage の initState は
+    //   folderTreeProvider が null だと自分で set しようとするが、
+    //   それは build 中のプロバイダ変更にあたって riverpod が例外を投げる
+    //   （プロジェクトを開く経路では HomeScreen が事前に set 済みなので露出しない）。
+    ref
+        .read(folderTreeProvider.notifier)
+        .set(FolderNode('Home', visible: true));
+
+    _navigatedToMapPage = true;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RootMapsHomePage()),
+    ).then((_) {
+      if (!mounted) return;
+      setState(() => _navigatedToMapPage = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -527,89 +598,92 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               : const SizedBox.shrink(),
                     ),
                     const SizedBox(height: 48),
-                    Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.folder_open,
-                              size: 48,
-                              color: Colors.orange,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              t.home.startProject,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                    if (!PlatformCapabilities.canOpenLocalProject)
+                      _buildWebPreviewCard()
+                    else
+                      Card(
+                        elevation: 4,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.folder_open,
+                                size: 48,
+                                color: Colors.orange,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              t.home.selectProjectFolder,
-                              style: const TextStyle(color: Colors.grey),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed:
-                                  (_permissionsGranted && !_isOpeningProject)
-                                      ? _pickProjectDir
-                                      : null,
-                              icon: Icon(
-                                _isOpeningProject
-                                    ? Icons.hourglass_top
-                                    : (_permissionsGranted
-                                        ? Icons.folder
-                                        : Icons.warning),
-                              ),
-                              label: Text(
-                                _isOpeningProject
-                                    ? t.home.launching
-                                    : (_permissionsGranted
-                                        ? t.home.selectFolder
-                                        : t.home.permissionRequired),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    (_permissionsGranted && !_isOpeningProject)
-                                        ? Colors.blue
-                                        : Colors.grey,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 32,
-                                  vertical: 16,
-                                ),
-                                textStyle: const TextStyle(fontSize: 16),
-                              ),
-                            ),
-                            if (_isOpeningProject) ...[
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
                               Text(
-                                _openingProjectStatus,
+                                t.home.startProject,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                t.home.selectProjectFolder,
                                 style: const TextStyle(color: Colors.grey),
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 12),
-                              const LinearProgressIndicator(),
-                            ],
-                            if (!_permissionsGranted) ...[
-                              const SizedBox(height: 16),
-                              TextButton.icon(
-                                onPressed: _checkPermissions,
-                                icon: const Icon(Icons.refresh),
-                                label: Text(t.home.recheckPermission),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.blue,
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed:
+                                    (_permissionsGranted && !_isOpeningProject)
+                                        ? _pickProjectDir
+                                        : null,
+                                icon: Icon(
+                                  _isOpeningProject
+                                      ? Icons.hourglass_top
+                                      : (_permissionsGranted
+                                          ? Icons.folder
+                                          : Icons.warning),
+                                ),
+                                label: Text(
+                                  _isOpeningProject
+                                      ? t.home.launching
+                                      : (_permissionsGranted
+                                          ? t.home.selectFolder
+                                          : t.home.permissionRequired),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      (_permissionsGranted && !_isOpeningProject)
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 16,
+                                  ),
+                                  textStyle: const TextStyle(fontSize: 16),
                                 ),
                               ),
+                              if (_isOpeningProject) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _openingProjectStatus,
+                                  style: const TextStyle(color: Colors.grey),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                const LinearProgressIndicator(),
+                              ],
+                              if (!_permissionsGranted) ...[
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _checkPermissions,
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(t.home.recheckPermission),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.blue,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
                     if (_projectDir != null) ...[
                       const SizedBox(height: 16),
                       Card(

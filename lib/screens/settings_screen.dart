@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../i18n/strings.g.dart';
+import '../core/platform_capabilities.dart';
 import '../main.dart' show kAppLocaleKey;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -137,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isMobile)
       .toList();
 
-  static bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  static bool get _isMobile => PlatformCapabilities.isMobile;
 
   /// 狭い画面（スマホ等）用レイアウト
   Widget _buildNarrowLayout() {
@@ -293,14 +293,17 @@ class FeedbackScreen extends ConsumerWidget {
   /// デバイスモデル名を取得
   Future<String> _getDeviceModel() async {
     final deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
+    if (PlatformCapabilities.isAndroid) {
       final android = await deviceInfo.androidInfo;
       return '${android.manufacturer} ${android.model}';
-    } else if (Platform.isWindows) {
+    } else if (PlatformCapabilities.isWindows) {
       final windows = await deviceInfo.windowsInfo;
       return 'Windows (${windows.computerName})';
+    } else if (PlatformCapabilities.isWeb) {
+      final web = await deviceInfo.webBrowserInfo;
+      return 'Web (${web.browserName.name})';
     }
-    return Platform.operatingSystem;
+    return PlatformCapabilities.operatingSystem;
   }
 
   Future<void> _openFeedbackForm(WidgetRef ref) async {
@@ -519,7 +522,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  static bool get _isMobileDevice => Platform.isAndroid || Platform.isIOS;
+  static bool get _isMobileDevice => PlatformCapabilities.isMobile;
 
   Future<void> _loadPermissions() async {
     final storage = await Permission.manageExternalStorage.isGranted;

@@ -174,7 +174,7 @@ Drive連携dir/            ← 共有の単位。QRで配れる
 
 | 段 | 内容 | 状態 |
 |---|---|---|
-| 1 | **web: 起動して地図が出るまで**（`Platform.is` 30箇所を `kIsWeb` ガード / TileServer を web で起動しない） | 未着手 |
+| 1 | **web: 起動して地図が出るまで**（`Platform.is` 30箇所を capability に集約 / TileServer を web で起動しない） | **完了**（2026-08-24） |
 | 2 | **web: ファイルシステム抽象**（`File`/`Directory` 173箇所・49ファイル） | 未着手 |
 | 3 | **web: GeoPackage を WASM SQLite に**（PoC通過済み） | 未着手 |
 | 4 | **View の導入** | 未着手 |

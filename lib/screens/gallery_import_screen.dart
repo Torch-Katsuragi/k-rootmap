@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
 import '../models/nodes/folder_node.dart';
+import '../core/platform_capabilities.dart';
 import '../models/nodes/image_node.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
@@ -106,7 +107,8 @@ class GalleryImporter {
   /// 非 Android や identifier が無い場合は File.copy でフォールバック。
   static Future<bool> _copyFile(PlatformFile file, String destPath) async {
     // Android: content URI が取れればネイティブ側で実ファイルコピー
-    if (Platform.isAndroid && file.identifier != null) {
+    if (PlatformCapabilities.supportsNativeGalleryCopy &&
+        file.identifier != null) {
       try {
         final success = await _channel.invokeMethod<bool>('copyOriginal', {
           'uri': file.identifier,

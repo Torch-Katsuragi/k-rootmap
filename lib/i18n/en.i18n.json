@@ -39,7 +39,10 @@
     "launching": "Launching...",
     "recheckPermission": "Recheck Permissions",
     "initializingProject": "Initializing project...",
-    "preparingSharedFolder": "Preparing shared folder..."
+    "preparingSharedFolder": "Preparing shared folder...",
+    "webPreviewTitle": "Map preview (web)",
+    "webPreviewDesc": "The web build can't open project folders yet. Only the base map is available.",
+    "openMap": "Open map"
   },
   "permissions": {
     "storageRequired": "Storage permission is required",
@@ -118,7 +121,7 @@
       "uiScaleLabels": {
         "0": "XS",
         "1": "S",
-        "2": "M\u2212",
+        "2": "M−",
         "3": "M",
         "4": "M+",
         "5": "L",

@@ -15,25 +15,76 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 /// プラットフォーム差異を capability として集約する。
+///
+/// > [!IMPORTANT] web では `dart:io` の `Platform` を**呼んだ瞬間に** `UnsupportedError`
+/// > が飛ぶ（コンパイルは通るスタブとして出力されるため、静的には気づけない）。
+/// > そのため `Platform.isXxx` は必ず `kIsWeb` の後ろに置き、`&&` の短絡評価で
+/// > web から到達させないこと。この規約を守る場所をこのファイル1枚に閉じ込める。
 class PlatformCapabilities {
   const PlatformCapabilities._();
 
-  static bool get supportsCompass => Platform.isAndroid || Platform.isIOS;
+  // =============================================
+  // プラットフォーム判定（web安全）
+  // =============================================
+  // 「機能」ではなく素のプラットフォーム判定が必要な場所（ネイティブAPIの直叩き等）
+  // のために公開する。判定で分岐したい内容が機能なら下の capability を足すこと。
 
-  static bool get supportsDriveSyncStatusCheck =>
-      Platform.isAndroid || Platform.isIOS;
+  /// ブラウザ上で動いているか
+  static bool get isWeb => kIsWeb;
 
-  static bool get supportsNativeLocationRender =>
-      Platform.isAndroid || Platform.isIOS;
+  static bool get isAndroid => !kIsWeb && Platform.isAndroid;
 
-  static bool get supportsGpsTracking => Platform.isAndroid || Platform.isIOS;
+  static bool get isIOS => !kIsWeb && Platform.isIOS;
 
-  /// GPS位置取得（マーカー・初回ジャンプ）— 全プラットフォーム対応
-  static bool get supportsGpsLocation => true;
+  static bool get isWindows => !kIsWeb && Platform.isWindows;
 
-  /// Bluetooth経由の外部GNSS機器 — モバイルのみ
-  static bool get supportsBluetoothGnss => Platform.isAndroid || Platform.isIOS;
+  static bool get isMacOS => !kIsWeb && Platform.isMacOS;
+
+  static bool get isLinux => !kIsWeb && Platform.isLinux;
+
+  /// モバイル（Android / iOS）
+  static bool get isMobile => isAndroid || isIOS;
+
+  /// デスクトップ（Windows / macOS / Linux）。web は含まない
+  static bool get isDesktop => isWindows || isMacOS || isLinux;
+
+  /// プラットフォーム名。ログ・フィードバック送信等の表示用
+  static String get operatingSystem =>
+      kIsWeb ? 'web' : Platform.operatingSystem;
+
+  // =============================================
+  // ファイル・ストレージ
+  // =============================================
+
+  /// `dart:io` の `File` / `Directory` が使えるか。
+  ///
+  /// web は false。ファイルシステム抽象（段2）が入るまで、web では
+  /// ローカルファイルに触る処理を**丸ごとスキップ**する。
+  static bool get hasLocalFileSystem => !kIsWeb;
+
+  /// OSのランタイム権限（ストレージ・位置情報・Bluetooth）を要求する必要があるか
+  static bool get needsRuntimePermissions => isMobile;
+
+  /// sqflite をFFI実装（`sqflite_common_ffi`）で動かすプラットフォームか
+  static bool get usesSqfliteFfi => isDesktop;
+
+  /// 背景地図タイルをローカルにキャッシュできるか（MBTiles / キャッシュディレクトリ）。
+  ///
+  /// web は false（ブラウザのHTTPキャッシュに任せる）。
+  static bool get hasTileCache => hasLocalFileSystem;
+
+  /// オフライン時に `mbtiles://` を直接読ませられるか
+  static bool get supportsOfflineMBTiles => isAndroid;
+
+  /// ギャラリー取り込みで content URI からネイティブ実ファイルコピー（EXIF保持）ができるか
+  static bool get supportsNativeGalleryCopy => isAndroid;
+
+  // =============================================
+  // 地図
+  // =============================================
 
   /// 地図をWebView（maplibre_webview）で描画するプラットフォームか。
   ///
@@ -41,6 +92,66 @@ class PlatformCapabilities {
   /// - ローカルTileServerはCORSヘッダーを返す必要がある
   /// - `file://` は読めないので、グリフもTileServer経由（http）で配る必要がある
   ///   （Windowsのパスは file://C: から始まる不正なURIにもなる）
-  static bool get mapRendersInWebView =>
-      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  ///
+  /// ⚠ web は false。maplibre_web は maplibre-gl-js を**ページに直接**載せるので
+  /// シムを挟まない（そしてローカルTileServerがそもそも無い）。
+  static bool get mapRendersInWebView => isDesktop;
+
+  /// ローカルHTTPタイルサーバー（`dart:io` の `HttpServer`）を立てられるか。
+  ///
+  /// web は false。かつ web では**不要**で、MapLibre GL JS が
+  /// タイルURLを直接叩く（[[docs/technical/project-format-design]] 段1）。
+  static bool get supportsLocalTileServer => !kIsWeb;
+
+  // =============================================
+  // センサー・デバイス
+  // =============================================
+
+  static bool get supportsCompass => isMobile;
+
+  static bool get supportsDriveSyncStatusCheck => isMobile;
+
+  static bool get supportsNativeLocationRender => isMobile;
+
+  static bool get supportsGpsTracking => isMobile;
+
+  /// GPS位置取得（マーカー・初回ジャンプ）— 全プラットフォーム対応
+  static bool get supportsGpsLocation => true;
+
+  /// 位置情報の権限・サービス有効状態をランタイムに問い合わせる必要があるか。
+  ///
+  /// Windows は Geolocator の権限APIが常に許可を返すため問い合わせない。
+  /// web はブラウザが取得時に自前でプロンプトを出すので同様に問い合わせない。
+  static bool get needsLocationPermissionCheck => !isWindows && !kIsWeb;
+
+  /// Bluetooth経由の外部GNSS機器 — モバイルのみ
+  static bool get supportsBluetoothGnss => isMobile;
+
+  /// GPSをフォアグラウンドサービスに委譲できるか（delegatedモード）
+  static bool get supportsForegroundGpsService => isMobile;
+
+  // =============================================
+  // 機能単位
+  // =============================================
+
+  /// 位置共有（パーティ）— Firebase の設定があるプラットフォームのみ
+  static bool get supportsPartySharing => isMobile;
+
+  /// Google Drive連携
+  static bool get supportsDriveSync => isMobile;
+
+  /// カメラでのQRコードスキャン
+  static bool get supportsQrScan => isMobile;
+
+  /// Androidのナビゲーションバー（◁□○）を隠す制御を行うか
+  static bool get hidesSystemNavigationBar => isAndroid;
+
+  /// 初回起動オンボーディング（権限説明）を出すか
+  static bool get showsOnboarding => needsRuntimePermissions;
+
+  /// ローカルのプロジェクトフォルダを開けるか。
+  ///
+  /// ⚠ web は段2（ファイルシステム抽象 / File System Access API）まで false。
+  /// それまで web は「プロジェクト無しで地図だけ見る」経路で起動する。
+  static bool get canOpenLocalProject => hasLocalFileSystem;
 }

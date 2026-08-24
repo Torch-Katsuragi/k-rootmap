@@ -25,7 +25,6 @@
 library;
 
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
@@ -33,6 +32,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/gps_position_record.dart';
 import '../utils/app_logger.dart';
 import '../i18n/strings.g.dart';
+import '../core/platform_capabilities.dart';
 import 'foreground_service.dart';
 
 /// 内蔵GPS位置情報ストア（シングルトン）
@@ -98,7 +98,7 @@ class InternalGpsLocationStore {
     }
 
     try {
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (PlatformCapabilities.supportsForegroundGpsService) {
         await _startDelegated();
       } else {
         // Windows等
@@ -159,8 +159,8 @@ class InternalGpsLocationStore {
   Future<void> _startDirect() async {
     _isDelegated = false;
 
-    // 権限チェック（Windows以外）
-    if (!Platform.isWindows) {
+    // 権限チェック（Windows・web以外。どちらもOS/ブラウザ側が面倒を見る）
+    if (PlatformCapabilities.needsLocationPermissionCheck) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         throw Exception(t.gps.locationServiceDisabled);

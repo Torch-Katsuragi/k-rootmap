@@ -73,13 +73,50 @@ Windows版の地図バックエンドを差し替えたとき、Androidと同じ
 
 | フラグ | 意味 | 現状 |
 |---|---|---|
-| `hasMapBackend` | maplibre のプラットフォーム実装があるか | android / ios のみ |
+| `hasMapBackend` | maplibre のプラットフォーム実装があるか | android / ios / windows / **web** |
 | `hasFirebaseConfig` | `firebase_options.dart` に設定があるか | android / ios のみ |
 
 Windows対応で前提が変わったら、このファイルの1行を直せば対象テストが走り出す。
 
+> [!IMPORTANT] web では `Platform` を**先に**踏まないこと
+> `dart:io` は web でも**コンパイルは通る**が、`Platform.isAndroid` などを
+> 呼んだ瞬間に `UnsupportedError` を投げる。harness も `kIsWeb` を先に見る形にしてある。
+> アプリ側の同じ規約は `lib/core/platform_capabilities.dart` に集約している。
+
 `pumpUntil()` も同ファイル。地図はプラットフォームビューで常時アニメーションが走るため
 `pumpAndSettle()` は永久に settle しない。地図まわりでは必ず `pumpUntil()` を使う。
+
+## web版のテスト
+
+`flutter test <file> -d chrome` は
+**`Web devices are not supported for integration tests yet.` で断られる。**
+web だけは `flutter drive` 経由になり、chromedriver（Chrome と同じメジャーバージョン）が要る。
+
+```powershell
+chromedriver --port=4444
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/map_contract_test.dart -d web-server --browser-name=chrome
+```
+
+> [!WARNING] 未検証（2026-08-24 時点）
+> このマシンに chromedriver が入っていないため、**まだ一度も回せていない**。
+> `integration_test/support/harness.dart` の `hasMapBackend` には web を足してあるので、
+> chromedriver さえ入れれば9件が対象になる。
+
+`tool/test_matrix.ps1` にはまだ web の段を入れていない（段2以降で機能が乗ってから）。
+地図バックエンドを触ったときは手で回す。
+
+### 画面を目で見るとき
+
+```powershell
+flutter build web --release
+python -m http.server 8110 --directory build\web --bind 127.0.0.1
+```
+
+> [!WARNING] `flutter run -d chrome` のデバッグサーバは別ブラウザから開くと不安定
+> DWDS はクライアントを1つしか面倒を見ないので、`flutter run` が起動した Chrome とは
+> 別のタブから同じポートを開くとモジュールの読み込みが止まることがある。
+> 画面を機械的に確認したいときは `flutter build web --release` して
+> `build/web` を静的配信するほうが速くて確実。
 
 ## 既知の落とし穴
 

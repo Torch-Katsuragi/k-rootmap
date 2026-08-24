@@ -16,8 +16,8 @@
 // Root Maps: フォルダ種類選択ダイアログ
 // 新規フォルダ作成時に「通常フォルダ」か「Drive連携フォルダ」かを選択
 
-import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../core/platform_capabilities.dart';
 import '../../i18n/strings.g.dart';
 
 /// フォルダ追加の種類
@@ -67,7 +67,7 @@ class _AddFolderTypeDialogState extends State<AddFolderTypeDialog> {
 
   /// Driveオプションを表示するか
   bool get _showDriveOption =>
-      widget.allowDrive && (Platform.isAndroid || Platform.isIOS);
+      widget.allowDrive && PlatformCapabilities.supportsDriveSync;
 
   @override
   void dispose() {

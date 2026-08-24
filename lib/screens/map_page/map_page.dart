@@ -16,7 +16,6 @@
 // Root Maps: Map and edit screen
 // Main UI for map display and layer/feature editing
 // maplibre移行: FlutterMap → MapLibreMap
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../i18n/strings.g.dart';
 import 'package:flutter/gestures.dart';
@@ -26,6 +25,7 @@ import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
 import '../../services/map_source_manager.dart';
+import '../../core/platform_capabilities.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/geo_converter.dart';
 import '../../providers/project_providers.dart';
@@ -608,6 +608,15 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     ml.StyleController style, {
     String? belowLayerId,
   }) async {
+    // web は `StyleController.addSource()` で RasterSource を登録できない
+    // （maplibre_web 0.3.5 のバグ。詳細は basemap_style_json.dart）。
+    // 代わりに初期スタイルJSONへ焼き込み済みなので、ここは何もしない。
+    // ⚠ そのぶん背景地図の切り替えは web では即時反映されない（再読み込みが要る）。
+    if (!PlatformCapabilities.supportsLocalTileServer) {
+      AppLogger.debug('[MAP] addBasemapSource: skipped (web: スタイルJSONに焼き込み済み)');
+      return;
+    }
+
     final layers = baseMapService.activeLayerConfig;
     if (layers.isEmpty) return;
 
@@ -618,7 +627,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       ml.RasterSource source;
 
       // Android + オフライン → mbtiles:// 直接読み込み
-      if (Platform.isAndroid && !baseMapService.isNetworkAvailable) {
+      if (PlatformCapabilities.supportsOfflineMBTiles &&
+          !baseMapService.isNetworkAvailable) {
         final mbtilesPath = baseMapService.getMBTilesPath(provider.id);
         if (mbtilesPath != null) {
           source = ml.RasterSource(

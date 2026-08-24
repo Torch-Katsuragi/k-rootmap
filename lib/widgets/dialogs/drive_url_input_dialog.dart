@@ -16,8 +16,8 @@
 // Root Maps: Drive URL入力ダイアログ
 // Google DriveフォルダのURLを入力またはQRスキャンしてクローンする
 
-import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../core/platform_capabilities.dart';
 import 'package:flutter/services.dart';
 import '../../i18n/strings.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -418,8 +418,8 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   /// QRスキャンタブ
   Widget _buildQrScanTab() {
-    // PCではQRスキャン非対応
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    // PC・webではQRスキャン非対応
+    if (!PlatformCapabilities.supportsQrScan) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

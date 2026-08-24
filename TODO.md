@@ -45,15 +45,40 @@
 > Dart は `dart:io` を「コンパイルは通るが呼ぶと落ちるスタブ」として web に出しているため、
 > 「webで到達する呼び出しを1つずつ塞ぐ」作業になる。詳細は [[docs/technical/testing|テスト構成]] ではなく
 > Vault の案件md（Windows版復活_2026-08-21）を参照。
+>
+> **段1は 2026-08-24 に完了。** ブラウザで起動して背景地図（OSM）まで出る。
+> プラットフォーム判定は `lib/core/platform_capabilities.dart` に集約したので、
+> 以降 `Platform.is` を直に書かないこと。
 
 - [x] **クリティカルパス: WASM SQLite の性能PoC** → **通過**。全件読み538ms / UPDATE 1件1ms /
       書き戻し14ms / deserialize 5ms。8.5MBなら全部メモリに載せる選択肢も取れる
-- [ ] `Platform.isXxx` 30箇所を `kIsWeb` ガード（機械的）
+- [x] **段1: 起動して地図が出るまで**（2026-08-24 完了）
+  - [x] `Platform.isXxx` 30箇所を `lib/core/platform_capabilities.dart` の capability 経由に
+  - [x] webではTileServerを起動しない（`HttpServer` が無く、かつ不要）
+  - [x] `web/index.html` に maplibre-gl-js を追加（maplibre_web は script を注入しない）
+  - [x] プロジェクトを開かずに地図だけ見る入口（web限定・段2までの暫定）
+  - [x] `integration_test/support/harness.dart` の `hasMapBackend` に web を追加
+- [ ] **web版の `map_contract_test` をまだ回せていない**（chromedriver 未インストール）
+  - `flutter test -d chrome` は非対応。`flutter drive` + chromedriver が要る
+  - ドライバ（`test_driver/integration_test.dart`）と手順は用意済み → [[docs/technical/testing]]
 - [ ] **`File(` / `Directory(` 173箇所 / 49ファイル** をファイルシステム抽象経由に（本丸）
 - [ ] GeoPackage を `sqlite3` WASM + OPFS へ。チェックアウト/チェックイン方式になる
 - [ ] File System Access API で「プロジェクトフォルダを選択」
 - [ ] PWA + Service Worker + タイルキャッシュ（オフライン対応）
 - [ ] 公開ビューア（PMTiles/GeoJSONを静的ホスティング、URLで共有）
+
+### 段1 の積み残し
+
+- [ ] **webで背景地図を切り替えても即時反映されない**（再読み込みが要る）
+  - 原因は上流。maplibre_web 0.3.5 の `StyleController.addSource()` が `RasterSource` の
+    `tiles` と `url` を**両方**JSに書くため、片方が必ず null になり
+    maplibre-gl のバリデータが `url: string expected, null found` で弾く。
+    例外もリクエストも出ないので**無言で背景地図が消える**
+  - 段1では初期スタイルJSONに焼き込んで回避（`lib/services/basemap_style_json.dart`）
+  - 直すなら: 上流に報告 / `MapController.setStyle()` でスタイルごと差し替え
+    （`MapSourceManager` に再初期化の口が無いので、そのままだとフィーチャが消える）
+- [ ] **webで地図が右のレイヤドロワーに透けて見える**
+  - Flutter web のプラットフォームビュー合成の問題。Windows/Android では出ない
 
 > [!NOTE] 方針
 > - web版はWindows版を**置き換えられる**（Windows版の機能集合は web で再現可能な範囲に収まっている）

@@ -8,10 +8,15 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 
 /// 現在のプラットフォーム名（テスト出力のラベル用）
+///
+/// ⚠ `Platform` は web では**呼んだ瞬間に** `UnsupportedError` を投げるので、
+/// 必ず `kIsWeb` を先に見ること（`lib/core/platform_capabilities.dart` と同じ規約）。
 String get platformName {
+  if (kIsWeb) return 'web';
   if (Platform.isAndroid) return 'android';
   if (Platform.isIOS) return 'ios';
   if (Platform.isWindows) return 'windows';
@@ -24,16 +29,16 @@ String get platformName {
 ///
 /// `lib/firebase_options.dart` は android / ios ぶんしか生成されておらず、
 /// それ以外では `DefaultFirebaseOptions.currentPlatform` が UnsupportedError を投げる。
-/// Windows対応時に `flutterfire configure` へ windows を足したら、ここを更新する。
-bool get hasFirebaseConfig => Platform.isAndroid || Platform.isIOS;
+/// Windows/web対応時に `flutterfire configure` へ足したら、ここを更新する。
+bool get hasFirebaseConfig => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
 /// maplibre のプラットフォーム実装が存在するか。
 ///
-/// maplibre 0.3.5 が endorse しているのは android / ios / web のみ。
+/// maplibre 0.3.5 が endorse しているのは android / ios / web。
 /// Windows/macOS は maplibre_webview を直接依存に入れて opt-in する
 /// （2026-08-21 に再導入。案Bの再評価中）。
 bool get hasMapBackend =>
-    Platform.isAndroid || Platform.isIOS || Platform.isWindows;
+    kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isWindows;
 
 /// スキップ理由つきの `skip` 値を作る。
 ///

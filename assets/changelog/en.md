@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### 🌐 The Web Build Starts Up and Shows a Map
+
+- Opening the app in a browser now gets you as far as a rendered base map (stage 1)
+  - Platform checks are collected in one place, closing the calls that crashed on web
+  - No local tile server on web — the browser fetches tiles directly
+- Not yet available: opening a project folder, reading or writing GeoPackages
+  (file handling comes in the next stage)
+- Known limitation: on web, switching the base map only takes effect after a reload
+
 ### 🖥️ Windows Support Restored
 
 - Map rendering works again on Windows (paused since April 2026)

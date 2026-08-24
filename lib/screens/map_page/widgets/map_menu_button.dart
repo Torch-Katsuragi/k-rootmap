@@ -16,12 +16,12 @@
 /// 地図画面AppBarの「≡」メニュー: パーティ・水準器（コンパス）・設定を集約。
 library;
 
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/strings.g.dart';
+import '../../../core/platform_capabilities.dart';
 import '../../../providers/party_providers.dart';
 import '../../level_screen.dart';
 import '../../settings_screen.dart';
@@ -41,7 +41,7 @@ class MapMenuButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(partySessionProvider);
-    final partySupported = Platform.isAndroid || Platform.isIOS;
+    final partySupported = PlatformCapabilities.supportsPartySharing;
     final partyActive = partySupported && session.active;
 
     const menuIcon = Icon(Icons.menu);

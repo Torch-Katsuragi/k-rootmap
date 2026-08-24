@@ -23,11 +23,11 @@ import 'services/party/party_firebase.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'dart:io';
 import 'i18n/strings.g.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
 import 'core/path_resolver.dart';
+import 'core/platform_capabilities.dart';
 import 'providers/project_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'providers/selection_providers.dart';
@@ -45,7 +45,7 @@ void main() async {
   _setupDebugPrintFilter();
 
   // Android: ナビゲーションバー（◁□○）を非表示にする（ステータスバーは維持）
-  if (Platform.isAndroid) {
+  if (PlatformCapabilities.hidesSystemNavigationBar) {
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: [SystemUiOverlay.top],
@@ -71,7 +71,7 @@ void main() async {
   // 実際の完了待ちはパーティ機能の入口（createRoom/joinRoom）で行う。
   unawaited(PartyFirebase.ensureInitialized());
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  if (PlatformCapabilities.usesSqfliteFfi) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }

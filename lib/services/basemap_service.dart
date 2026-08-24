@@ -33,6 +33,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:image/image.dart' as img;
+import '../core/platform_capabilities.dart';
 import '../models/basemap_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'tile_cache_mbtiles.dart';
@@ -191,11 +192,17 @@ class BaseMapService extends ChangeNotifier {
   /// サービス初期化
   Future<void> initialize() async {
     try {
-      // キャッシュディレクトリの設定
-      await _initializeCacheDirectory();
+      // タイルキャッシュはローカルファイルシステムが前提。
+      // web には無いので飛ばす（ブラウザのHTTPキャッシュに任せる）。
+      // ⚠ ここで例外を投げると _loadSettings まで到達せず、
+      //   _providerWeights が空＝背景地図が1枚も出なくなる。
+      if (PlatformCapabilities.hasTileCache) {
+        // キャッシュディレクトリの設定
+        await _initializeCacheDirectory();
 
-      // GeoPackageキャッシュの初期化
-      await _initializeTileCacheDatabase();
+        // GeoPackageキャッシュの初期化
+        await _initializeTileCacheDatabase();
+      }
 
       // 設定の読み込み
       await _loadSettings();

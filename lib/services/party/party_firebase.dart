@@ -23,7 +23,6 @@
 /// Android/iOS 限定（firebase_database / firebase_auth は Windows/desktop 未対応）。
 library;
 
-import 'dart:io';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -32,6 +31,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../firebase_options.dart';
 import '../../utils/app_logger.dart';
+import '../../core/platform_capabilities.dart';
 
 /// パーティ機能用 Firebase の初期化を一度だけ実行する遅延ゲート。
 class PartyFirebase {
@@ -41,7 +41,7 @@ class PartyFirebase {
   static Future<bool>? _future;
 
   /// パーティ機能（Firebase）を利用できるプラットフォームか。
-  static bool get isSupported => Platform.isAndroid || Platform.isIOS;
+  static bool get isSupported => PlatformCapabilities.supportsPartySharing;
 
   /// Firebase 初期化を保証する。成功で true、未対応/失敗で false。
   ///

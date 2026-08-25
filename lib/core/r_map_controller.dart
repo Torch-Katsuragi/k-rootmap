@@ -13,10 +13,13 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// flutter_map互換のMapControllerラッパー
+/// かつての `flutter_map` 互換のMapControllerラッパー
+///
+/// ⚠ `flutter_map` への依存は 2026-08-26 に外した。このAPIの形が
+/// maplibre 寄りでないのは移行時の名残であって、現役の互換要件ではない。
 ///
 /// maplibreのMapControllerを内包し、既存コードが使う
-/// flutter_map風のAPIを提供する。座標はLatLng(latlong2)を維持。
+/// 旧 `flutter_map` 風のAPIを提供する。座標はLatLng(latlong2)を維持。
 library;
 
 import 'dart:async';
@@ -27,7 +30,7 @@ import 'package:maplibre/maplibre.dart' as ml;
 import '../utils/app_logger.dart';
 import '../utils/geo_converter.dart';
 
-/// flutter_map互換のカメラ情報
+/// 旧 `flutter_map` 互換のカメラ情報
 class KMapCamera {
   final ml.MapController _controller;
 
@@ -36,7 +39,7 @@ class KMapCamera {
   double get zoom => _controller.getCamera().zoom;
   LatLng get center => _controller.getCamera().center.toLatLng();
 
-  /// bearing (maplibre) = rotation (flutter_map) として扱う
+  /// bearing (maplibre) = rotation (旧 flutter_map) として扱う
   double get rotation => _controller.getCamera().bearing;
   double get bearing => _controller.getCamera().bearing;
   double get pitch => _controller.getCamera().pitch;
@@ -49,7 +52,7 @@ class KMapCamera {
       _controller.toScreenLocation(latlng.toGeographic());
 }
 
-/// maplibreのMapControllerをラップし、flutter_map互換APIを提供
+/// maplibreのMapControllerをラップし、旧 flutter_map 互換APIを提供
 class RMapController {
   ml.MapController? _controller;
   ml.StyleController? _styleController;

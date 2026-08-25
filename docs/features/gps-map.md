@@ -28,8 +28,8 @@ tags: [features, gps, map]
 
 ## 背景地図
 
-- `flutter_map` を利用 (OpenStreetMapなど各種タイルソースに対応)
-- オフラインタイルマップ (MBTilesなど、flutter_mapの機能で対応)
+- `maplibre` を利用 (OpenStreetMapなど各種タイルソースに対応)
+- オフラインタイルマップ (MBTiles。⚠ Android のみ — web には端末内タイルキャッシュが無い)
 
 ## 地図操作
 

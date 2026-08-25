@@ -50,7 +50,7 @@ abstract class IMapState {
   /// ポリゴンのリングを閉じる（始点と終点を一致させる）
   List<LatLng> closeRing(List<LatLng> points);
 
-  /// 地図コントローラー（flutter_map互換ラッパー）
+  /// 地図コントローラー（旧 flutter_map 互換ラッパー）
   RMapController get mapController;
 
   /// StateがWidgetツリーにマウントされているか

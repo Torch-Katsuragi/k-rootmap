@@ -7,7 +7,10 @@
 
 ## プロジェクト概要
 
-Flutter製の地図アプリ（root_maps）。Windows/Android対応。
+Flutter製の地図アプリ（RootMap GIS）。**Android と web** の2プラットフォーム。
+
+> [!IMPORTANT] デスクトップ版（Windows / macOS / Linux）は 2026-08-25 に撤去した
+> 事務所側の役割は web版が引き継いでいる。経緯は [[docs/features/concept#プラットフォームの役割分担]]。
 
 ## 開発フロー
 
@@ -38,11 +41,13 @@ Flutter製の地図アプリ（root_maps）。Windows/Android対応。
 
 ## テスト
 
-- **Windows と Android の両方で通すこと**。片方だけ緑の変更は入れない
-  （Windows版復活作業では「Windowsを直したらAndroidが壊れた」が最大のリスク）
+- **Android と web の両方で通すこと**。片方だけ緑の変更は入れない
+  （web対応作業では「webを直したらAndroidが壊れた」が最大のリスク）
 - 一発で回す: `pwsh tool/test_matrix.ps1`（端末不要の段だけなら `-Only analyze,unit`）
+- **Androidの検証は実機で行う。エミュレータは不可**（Pixel 9 が常時接続されている）
+- webの検証は `flutter build web --release` → ローカルHTTPサーバ → Chrome（`flutter run -d chrome` は不安定）
 - 詳細・落とし穴は [[docs/technical/testing|テスト構成]] を読む
-- 地図まわりを触ったら `integration_test/map_contract_test.dart` を両プラットフォームで回す
+- 地図まわりを触ったら `integration_test/map_contract_test.dart` を回す
 
 ## よく使うパターン
 

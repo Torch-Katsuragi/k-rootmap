@@ -22,7 +22,8 @@ tags: [technical, stack, flutter]
 
 ## 地図表示
 
-- `flutter_map`: 高いカスタマイズ性を持つ地図ライブラリ。オフライン対応や多様なタイルソース利用に適している。
+- `maplibre`: MapLibre GL の Flutter バインディング。Android はネイティブSDK、web は maplibre-gl-js が直接動く。
+  2026-03 に `flutter_map` から移行した（GPU描画のため）。
 
 ## GPS
 
@@ -65,7 +66,7 @@ tags: [technical, stack, flutter]
 ## 座標管理
 
 - 描画中の座標は一時的なリスト（例: `List<Offset>`）に保持する。
-- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`flutter_map`の機能を利用)。
+- 地図のズームレベルや表示範囲の変更に対応するため、画面座標と地理座標（緯度経度）の相互変換が必要 (`RMapController` 経由で maplibre に投げる)。
 
 ## 線の平滑化 (オプション)
 

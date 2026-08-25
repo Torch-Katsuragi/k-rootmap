@@ -30,7 +30,7 @@ GPSストリームは常時稼働し、`GpsHistoryRecorder` が全座標を自�
 ```
 InternalGpsLocationStore (常時稼働)
   └─→ positionStream
-       ├─→ flutter_map マーカー (map_initialization_mixin)
+       ├─→ maplibre マーカー (map_initialization_mixin)
        ├─→ GpsHistoryRecorder
        │    ├─→ Raw Buffer (gps_raw_buffer.gpkg) ← Point逐次INSERT
        │    ├─→ Memory Cache (todayPoints) ← 即時追加

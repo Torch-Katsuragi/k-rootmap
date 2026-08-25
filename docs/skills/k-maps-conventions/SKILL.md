@@ -93,7 +93,7 @@ if (accuracy < threshold) return;
 
 プロジェクトで使用している主要パッケージ（新機能実装時に参照）：
 
-- `flutter_map`: 地図表示
+- `maplibre`: 地図表示（MapLibre GL）
 - `geolocator`: GPS位置情報
 - `sqflite`: SQLiteデータベース
 - `path_provider`: ファイルパス取得

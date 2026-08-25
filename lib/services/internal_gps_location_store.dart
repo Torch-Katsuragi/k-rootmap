@@ -20,7 +20,7 @@
 ///   Android → delegated (ForegroundService経由、常時稼働)
 ///   Windows → direct (自前Geolocator)
 ///
-/// 全ての利用者（flutter_mapマーカー、GPS情報バー、追跡mixin等）は
+/// 全ての利用者（地図マーカー、GPS情報バー、追跡mixin等）は
 /// このStoreの [positionStream] から座標を取得する。
 library;
 

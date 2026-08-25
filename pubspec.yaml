@@ -36,8 +36,7 @@ dependencies:
   slang_flutter: ^4.5.0                 # i18n: Flutter統合（TranslationProvider等）
   flutter_riverpod: ^3.0.3 # 状態管理 (v3 + code generation)
   riverpod_annotation: ^4.0.0 # @riverpod アノテーション
-  flutter_map: ^8.1.1 # 地図表示用（最新版にアップデート）
-  latlong2: ^0.9.0 # 緯度経度座標型
+  latlong2: ^0.9.0 # 緯度経度座標型（maplibre 移行後も座標型として使い続けている）
   geolocator: ^14.0.0 # GPS位置情報取得
   file_picker: ^11.0.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用

@@ -11,7 +11,7 @@ tags: [technical, development, roadmap]
 - プロジェクトフォルダのルートに配置された単一のGeoPackageファイルの読み込み・作成（点レイヤーのみ）。
 - 地図上への点フィーチャ描画・属性（テキスト1つ）入力。
 - GPSによる現在位置表示。
-- `flutter_map` を用いた背景地図表示 (OpenStreetMapなど)。
+- `maplibre` を用いた背景地図表示 (OpenStreetMapなど)。
 - ローカルへのプロジェクト保存・読み込み。
 - 基本的なレイヤー表示（GeoPackage内のレイヤーリスト）。
 
@@ -35,7 +35,7 @@ tags: [technical, development, roadmap]
 
 ## 4. フェーズ4以降
 
-- オフラインマップ対応 (`flutter_map`の機能を活用)。
+- オフラインマップ対応 (MBTiles / PMTiles)。
 - 計測ツール。
 - UI/UXのさらなる洗練。
 - Git連携の検討・実装。

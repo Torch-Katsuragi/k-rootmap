@@ -62,7 +62,7 @@ mixin MapPageStateBase<T extends ConsumerStatefulWidget>
   /// 初回の現在位置移動フラグ
   bool movedToCurrentLocationOnce = false;
 
-  /// 地図コントローラー（flutter_map互換ラッパー）
+  /// 地図コントローラー（旧 flutter_map 互換ラッパー）
   final RMapController mapControllerInstance = RMapController();
 
   @override

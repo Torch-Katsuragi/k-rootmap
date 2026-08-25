@@ -11,6 +11,14 @@
   (file handling comes in the next stage)
 - Known limitation: on web, switching the base map only takes effect after a reload
 
+### 📂 Project Folders on Web
+
+- Pick a folder in the browser and its subfolders, GeoPackages and photos appear in the layer list
+- ⚠ **Requires Google Chrome or Microsoft Edge.** Firefox and Safari have no way to open
+  a folder, so they only show the base map
+- ⚠ GeoPackage contents (layers) cannot be read yet — that comes next
+- ⚠ The chosen folder is forgotten on reload; pick it again
+
 ### 📍 Faster Current Location (Web / Windows)
 
 - The location marker used to take over a minute to appear on web; it is now almost immediate

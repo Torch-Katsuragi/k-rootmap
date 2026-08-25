@@ -17,6 +17,8 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'fs/project_folder_picker.dart';
+
 /// プラットフォーム差異を capability として集約する。
 ///
 /// > [!IMPORTANT] web では `dart:io` の `Platform` を**呼んだ瞬間に** `UnsupportedError`
@@ -164,7 +166,8 @@ class PlatformCapabilities {
 
   /// ローカルのプロジェクトフォルダを開けるか。
   ///
-  /// ⚠ web は段2（ファイルシステム抽象 / File System Access API）まで false。
-  /// それまで web は「プロジェクト無しで地図だけ見る」経路で起動する。
-  static bool get canOpenLocalProject => hasLocalFileSystem;
+  /// ⚠ web は**ブラウザによる**。File System Access API を持つ
+  /// Chrome / Edge だけ true で、Firefox / Safari は false。
+  /// false のときは「プロジェクト無しで地図だけ見る」経路になる。
+  static bool get canOpenLocalProject => canPickProjectFolder;
 }

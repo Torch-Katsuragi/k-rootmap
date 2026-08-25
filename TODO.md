@@ -66,11 +66,14 @@
         `lib/core/fs/` に `KFileSystem`（**同期メソッドは意図的に無し**）と io / web 実装。
         `path_resolver` / `kmeta` / `kmeta_service` / `folder_node` / `geopackage_node` /
         `image_node` / `global_folder_node` / `geopackage_connection` を移行。173 → 156箇所
-  - [ ] **段2後半: web実装（File System Access API）＋フォルダ選択**
-        いまの `k_file_system_web.dart` は「何も無いファイルシステム」の仮実装
+  - [x] **段2後半: web実装（File System Access API）＋フォルダ選択**（2026-08-25 完了）
+        Chrome/Edge でフォルダを選ぶとツリー（サブフォルダ・.gpkg・画像）が出るところまで到達。
+        ⚠ Firefox/Safari は `showDirectoryPicker` が無いので「地図プレビュー」のまま
   - [ ] 残り156箇所（Drive同期・shapefile・GeoTIFF・TileServer 等）。
         web で通らない経路なので、必要になった段で個別に移す
-- [ ] GeoPackage を `sqlite3` WASM + OPFS へ。チェックアウト/チェックイン方式になる
+- [ ] **段3: GeoPackage を `sqlite3` WASM + OPFS へ。** チェックアウト/チェックイン方式になる
+  - web はツリーに `.gpkg` が並ぶが**中のレイヤは0件**。`GeoPackageConnection` が
+    `fs.hasRealPaths` で止まる（sqfliteに実パスを渡せない）。ここを外すのが段3
 - [ ] PWA + Service Worker + タイルキャッシュ（オフライン対応）
 - [ ] 公開ビューア（PMTiles/GeoJSONを静的ホスティング、URLで共有）
 
@@ -86,6 +89,12 @@
     （`MapSourceManager` に再初期化の口が無いので、そのままだとフィーチャが消える）
 - [ ] **webで地図が右のレイヤドロワーに透けて見える**
   - Flutter web のプラットフォームビュー合成の問題。Windows/Android では出ない
+- [ ] **web: 同じフォルダを3回列挙している**
+  - `FolderNode` / `GeoPackageNode` / `ImageNode` の `loadNodes` がそれぞれ
+    `fs.list()` を呼ぶため。native では syscall 3回で済むが、web はハンドル走査3回。
+    フォルダあたり1回にまとめれば速くなる
+- [ ] **web: 選んだフォルダがリロードで失われる**
+  - ハンドルは IndexedDB に入れれば永続化できる（再許可のプロンプトは要る）
 
 > [!NOTE] 方針
 > - web版はWindows版を**置き換えられる**（Windows版の機能集合は web で再現可能な範囲に収まっている）

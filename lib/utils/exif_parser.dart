@@ -17,10 +17,10 @@
 // 画像ファイルからGPS座標やメタデータを抽出する共通処理
 // ImageNodeとGlobalImageNodeで使用
 
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:exif/exif.dart';
 import 'package:latlong2/latlong.dart';
+import '../core/fs/k_file_system.dart';
 import 'app_logger.dart';
 
 /// 画像のEXIFデータから抽出した情報
@@ -56,10 +56,8 @@ class ExifParser {
   /// GPS座標が含まれていない場合はnullを返す
   static Future<ExifImageData?> extractFromFile(String filePath) async {
     try {
-      final file = File(filePath);
-      if (!await file.exists()) return null;
-
-      final stats = await file.stat();
+      final fileSize = await fs.length(filePath);
+      if (fileSize == null) return null;
 
       // 電子小黒板等のメタデータが大きい画像にも対応するため1MBまで読む
       final bytes = await _readFileHeader(filePath, 1024 * 1024);
@@ -73,7 +71,7 @@ class ExifParser {
         location: location,
         takenAt: _extractDateTime(tags),
         metadata: ImageMetadata(
-          fileSize: stats.size,
+          fileSize: fileSize,
           width: _extractInt(tags, 'EXIF ExifImageWidth') ??
               _extractInt(tags, 'Image ImageWidth'),
           height: _extractInt(tags, 'EXIF ExifImageLength') ??
@@ -88,17 +86,15 @@ class ExifParser {
     }
   }
 
+  /// 先頭 [maxBytes] だけ読む。
+  ///
+  /// ⚠ 以前は `RandomAccessFile` で部分読みしていたが、ファイルシステム抽象には
+  /// 部分読みが無い（File System Access API 側も Blob.slice 経由になり、
+  /// 抽象に載せると面倒が増える）。EXIFを見るのは高々1MBなので全部読んで切る。
   static Future<Uint8List> _readFileHeader(String filePath, int maxBytes) async {
-    final file = File(filePath);
-    final fileSize = await file.length();
-    final bytesToRead = fileSize < maxBytes ? fileSize : maxBytes;
-
-    final raf = await file.open(mode: FileMode.read);
-    try {
-      return Uint8List.fromList(await raf.read(bytesToRead));
-    } finally {
-      await raf.close();
-    }
+    final bytes = await fs.readAsBytes(filePath);
+    if (bytes.length <= maxBytes) return bytes;
+    return Uint8List.sublistView(bytes, 0, maxBytes);
   }
 
   static LatLng? _extractGpsLocation(Map<String, IfdTag> tags) {

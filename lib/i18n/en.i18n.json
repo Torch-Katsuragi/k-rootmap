@@ -42,7 +42,9 @@
     "preparingSharedFolder": "Preparing shared folder...",
     "webPreviewTitle": "Map preview (web)",
     "webPreviewDesc": "The web build can't open project folders yet. Only the base map is available.",
-    "openMap": "Open map"
+    "openMap": "Open map",
+    "webUnsupportedBrowserTitle": "This browser can't open folders",
+    "webUnsupportedBrowserDesc": "Open the app in Google Chrome or Microsoft Edge to use project folders. Other browsers can only display the base map."
   },
   "permissions": {
     "storageRequired": "Storage permission is required",

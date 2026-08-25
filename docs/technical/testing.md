@@ -112,11 +112,50 @@ flutter build web --release
 python -m http.server 8110 --directory build\web --bind 127.0.0.1
 ```
 
+### フォルダを開く経路を、OSのダイアログ無しで試す
+
+`showDirectoryPicker()` はOSのフォルダ選択ダイアログを出すので、自動操作から
+完了させられない。**OPFS のディレクトリハンドルを返すスタブに差し替える**と、
+アプリ側のコード（`WebFileSystem` → ツリー構築）をそのまま通して確認できる。
+ブラウザのコンソールで、アプリを読み込んだ直後に:
+
+```js
+const opfs = await navigator.storage.getDirectory();
+const root = await opfs.getDirectoryHandle('テストプロジェクト', {create: true});
+await root.getDirectoryHandle('林小班', {create: true});
+const fh = await root.getFileHandle('路網.gpkg', {create: true});
+const w = await fh.createWritable(); await w.write('dummy'); await w.close();
+window.showDirectoryPicker = async () => root;   // ← これでピッカーを乗っ取る
+```
+
+> [!WARNING] `debugPrint` はスロットリングされる
+> web の release ビルドでログを見ていると、**数十秒遅れてまとめて出てくる**。
+> 「ログが出ない＝処理が止まった」と即断しないこと（実際に一度誤診した）。
+> 待てば出る。`console.log` を配列に溜めておいて後から読むのが確実。
+
 > [!WARNING] `flutter run -d chrome` のデバッグサーバは別ブラウザから開くと不安定
 > DWDS はクライアントを1つしか面倒を見ないので、`flutter run` が起動した Chrome とは
 > 別のタブから同じポートを開くとモジュールの読み込みが止まることがある。
 > 画面を機械的に確認したいときは `flutter build web --release` して
 > `build/web` を静的配信するほうが速くて確実。
+
+## 既知のフレーク
+
+> [!IMPORTANT] `e2e:windows` の `map_contract_test` は**たまに落ちる**（master でも）
+> 症状は必ずこれ:
+> ```
+> setState() called after dispose(): MapLibreMapStateWebView#xxxxx
+>   at MapLibreMapStateWebView._onWebSocketData (package:maplibre_webview/src/map_state.dart)
+> ```
+> **9件中8件は通り、落ちるテストは毎回違う。** テスト本体ではなく
+> `maplibre_webview` パッケージ内部の後始末レース（WebViewのWebSocketが
+> ウィジェット破棄後にメッセージを届ける）。
+>
+> 2026-08-25 に master で実測: 1回目 7/9で失敗 → 2回目 9/9でPASS。
+> **自分の変更のせいだと即断しないこと。** 疑わしいときは
+> `git stash` して master で2〜3回回すのが早い（実際3回この切り分けをした）。
+>
+> 直すなら上流に `mounted` チェックを入れてもらう必要がある。
 
 ## 既知の落とし穴
 

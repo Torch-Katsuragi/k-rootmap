@@ -21,13 +21,13 @@ import 'dart:math' as math;
 
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/launch_options.dart';
+import '../core/fs/project_folder_picker.dart';
 import '../core/platform_capabilities.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/global_folder_node.dart';
@@ -346,6 +346,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// グローバルフォルダの初期化
   /// SharedPreferencesにカスタムパスがあればそちらを使用、なければデフォルト
   Future<void> _initializeGlobalFolder() async {
+    // ⚠ グローバルフォルダは「アプリのドキュメント領域」に置く仕組みで、
+    // web にはその概念が無い（path_provider が未対応）。
+    // web でプロジェクトを開いたときは黙って飛ばす。
+    if (!PlatformCapabilities.hasLocalFileSystem) {
+      AppLogger.debug('[HomeScreen] GlobalFolder: skipped (web)');
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final customPath = prefs.getString(kGlobalFolderCustomPathKey);
@@ -408,7 +415,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     AppLogger.debug('[HomeScreen] ファイルピッカーを開いています...');
-    String? dir = await FilePicker.getDirectoryPath();
+    // native は OS のピッカー、web は File System Access API
+    String? dir = await pickProjectFolder();
     AppLogger.debug('[HomeScreen] 選択されたディレクトリ: $dir');
 
     if (dir != null) {
@@ -458,10 +466,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
-  /// web版の入口カード（プロジェクトフォルダを開かず地図だけ見る）
+  /// フォルダを開けない環境向けの入口カード（地図だけ見る）
   ///
-  /// ⚠ 暫定。web版はファイルシステム抽象（段2）が入るまでフォルダを開けない。
-  /// 段2で `canOpenLocalProject` が true になれば、このカードは出なくなる。
+  /// いま該当するのは **File System Access API を持たないブラウザ**
+  /// （Firefox / Safari）だけ。Chrome / Edge なら通常のフォルダ選択が出る。
   Widget _buildWebPreviewCard() {
     return Card(
       elevation: 4,
@@ -472,7 +480,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             const Icon(Icons.public, size: 48, color: Colors.blue),
             const SizedBox(height: 16),
             Text(
-              t.home.webPreviewTitle,
+              t.home.webUnsupportedBrowserTitle,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -480,7 +488,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              t.home.webPreviewDesc,
+              t.home.webUnsupportedBrowserDesc,
               style: const TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),

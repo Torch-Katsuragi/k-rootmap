@@ -133,6 +133,51 @@ class GoogleDriveService {
     }
   }
 
+  /// GoogleSignInException が「本当のユーザーキャンセル」かどうかを判定
+  ///
+  /// google_sign_in v7（Credential Manager）は設定系エラー（無効な
+  /// serverClientId、SHA-1未登録、OAuthクライアント削除等）を
+  /// code=canceled で返すことがあるため、code だけで silent 扱いにせず、
+  /// description に設定エラーの兆候がある場合はエラーとして扱う。
+  static bool isUserCancellation(GoogleSignInException e) {
+    if (e.code != GoogleSignInExceptionCode.canceled) return false;
+
+    final desc = e.description?.toLowerCase() ?? '';
+    if (desc.isEmpty) return true;
+
+    // 設定エラー・認証情報なしを示すキーワード（silent にしない）
+    const configErrorMarkers = [
+      'developer console', // 例: [28444] Developer console is not set up correctly
+      'deleted_client', // OAuthクライアント削除
+      'invalid_client',
+      'unregistered',
+      'client id',
+      'clientid', // serverClientId 等
+      'sha-1',
+      'sha1',
+      'certificate',
+      'api exception',
+      'apiexception',
+      'no credential', // 認証情報なし系
+      'credential is unavailable',
+      'reauth',
+    ];
+    if (configErrorMarkers.any(desc.contains)) return false;
+
+    // GMS/GISのステータスコード付きメッセージ
+    // （10: DEVELOPER_ERROR、16: 内部エラー/ブロック、28444: コンソール未設定）
+    if (RegExp(r'\[?\b(10|16|28444)\b[\]:]').hasMatch(desc)) return false;
+
+    return true;
+  }
+
+  /// GoogleSignInException を通知用メッセージに整形（code と description を必ず含める）
+  static String formatSignInError(GoogleSignInException e) {
+    final desc = e.description;
+    if (desc == null || desc.isEmpty) return e.code.name;
+    return '${e.code.name}: $desc';
+  }
+
   /// サインイン
   Future<bool> signIn() async {
     if (!_isInitialized) {
@@ -147,15 +192,18 @@ class GoogleDriveService {
       // 認証イベントハンドラが呼ばれて状態が更新される
       return authState.status == DriveAuthStatus.authenticated;
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
+      if (isUserCancellation(e)) {
+        AppLogger.info(
+            '[GoogleDriveService] サインインキャンセル: code=${e.code.name} description=${e.description}');
         authState.setUnauthenticated();
         return false;
       }
-      AppLogger.debug('[GoogleDriveService] サインインエラー: ${e.code} ${e.description}');
-      authState.setError(t.services.signInFailed(error: e.description ?? e.code.toString()));
+      AppLogger.info(
+          '[GoogleDriveService] サインインエラー: code=${e.code.name} description=${e.description}');
+      authState.setError(t.services.signInFailed(error: formatSignInError(e)));
       return false;
     } catch (e) {
-      AppLogger.debug('[GoogleDriveService] サインインエラー: $e');
+      AppLogger.info('[GoogleDriveService] サインインエラー: $e');
       authState.setError(t.services.signInFailed(error: e.toString()));
       return false;
     }
@@ -192,15 +240,18 @@ class GoogleDriveService {
       // 認証イベントハンドラが呼ばれて状態が更新される
       return authState.status == DriveAuthStatus.authenticated;
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
+      if (isUserCancellation(e)) {
+        AppLogger.info(
+            '[GoogleDriveService] アカウント切替キャンセル: code=${e.code.name} description=${e.description}');
         authState.setUnauthenticated();
         return false;
       }
-      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: ${e.code} ${e.description}');
-      authState.setError(t.services.signInFailed(error: e.description ?? e.code.toString()));
+      AppLogger.info(
+          '[GoogleDriveService] アカウント切替エラー: code=${e.code.name} description=${e.description}');
+      authState.setError(t.services.signInFailed(error: formatSignInError(e)));
       return false;
     } catch (e) {
-      AppLogger.debug('[GoogleDriveService] アカウント切替エラー: $e');
+      AppLogger.info('[GoogleDriveService] アカウント切替エラー: $e');
       authState.setError(t.services.signInFailed(error: e.toString()));
       return false;
     }

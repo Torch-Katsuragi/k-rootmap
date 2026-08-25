@@ -334,8 +334,9 @@ class DriveSyncOperations {
       return true;
     }
 
+    // 設定エラー等は authState.errorMessage に詳細（code/description）が入る
     ref.read(notificationCenterProvider.notifier).add(
-          title: t.drive.signInFailed,
+          title: driveService.authState.errorMessage ?? t.drive.signInFailed,
           level: NotificationLevel.error,
         );
     return false;

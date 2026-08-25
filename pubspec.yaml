@@ -125,6 +125,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   test: ^1.25.15
+  google_sign_in_platform_interface: ^3.1.0 # テスト用: GoogleSignInPlatformのフェイク差し替え
   flutter_launcher_icons: ^0.14.4
   riverpod_generator: ^4.0.0 # @riverpod コード生成
   slang_build_runner: ^4.5.0 # i18n: slangコード生成用

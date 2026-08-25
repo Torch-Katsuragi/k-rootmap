@@ -1,27 +1,45 @@
 {
   "project_info": {
-    "project_number": "876970256789",
-    "firebase_url": "https://k-rootmap-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "k-rootmap",
-    "storage_bucket": "k-rootmap.firebasestorage.app"
+    "project_number": "348302294570",
+    "firebase_url": "https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "nemurigi-kobo",
+    "storage_bucket": "nemurigi-kobo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:876970256789:android:d352cc4c5f7dcba453ee9c",
+        "mobilesdk_app_id": "1:348302294570:android:b8e5b42b56014d34044d53",
         "android_client_info": {
           "package_name": "com.k_root.k_maps"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "348302294570-4904l80j4grv93pa0pp0mh6rh6q7gnse.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.k_root.k_maps",
+            "certificate_hash": "df49685d61b386d66c4a88bbbbb141f8646b69ed"
+          }
+        },
+        {
+          "client_id": "348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyABBbUulD2cEbVT7cHfRCDLk_R5QBocxDA"
+          "current_key": "AIzaSyABB0YHs-KSUE7_t047WFkQ8v9GRe3LQjs"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

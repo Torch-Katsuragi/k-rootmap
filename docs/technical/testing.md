@@ -112,6 +112,16 @@ flutter build web --release
 python -m http.server 8110 --directory build\web --bind 127.0.0.1
 ```
 
+### web の GeoPackage に必要なファイル
+
+`web/sqlite3.wasm` と `web/sqflite_sw.js` はリポジトリに入れてある
+（`sqflite_common_ffi_web` が要求する）。**消すと web で GeoPackage が一切開けない。**
+再生成はこれ:
+
+```powershell
+dart run sqflite_common_ffi_web:setup
+```
+
 ### フォルダを開く経路を、OSのダイアログ無しで試す
 
 `showDirectoryPicker()` はOSのフォルダ選択ダイアログを出すので、自動操作から
@@ -127,6 +137,12 @@ const fh = await root.getFileHandle('路網.gpkg', {create: true});
 const w = await fh.createWritable(); await w.write('dummy'); await w.close();
 window.showDirectoryPicker = async () => root;   // ← これでピッカーを乗っ取る
 ```
+
+`.gpkg` を用意したいが geopandas が無いときは、標準ライブラリだけで最小の
+GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない）。
+`gpkg_spatial_ref_sys` / `gpkg_contents` / `gpkg_geometry_columns` の3表と、
+`fid`+`geom` を持つ実テーブルがあれば読める。ジオメトリは
+`'GP' + version + flags + srs_id(LE int32)` のヘッダ + WKB。
 
 > [!WARNING] `debugPrint` はスロットリングされる
 > web の release ビルドでログを見ていると、**数十秒遅れてまとめて出てくる**。

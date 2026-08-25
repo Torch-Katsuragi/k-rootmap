@@ -43,6 +43,7 @@ dependencies:
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
   sqflite_common_ffi: ^2.3.0 # デスクトップ環境用sqfliteサポート
+  sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
   path: ^1.8.3 # パス操作用
   nmea: ^3.3.3
   proj4dart: ^2.1.0  # 座標変換用（geobase ^1.5.0 が ^2.0.0 を要求するため据え置き）

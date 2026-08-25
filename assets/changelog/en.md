@@ -16,8 +16,12 @@
 - Pick a folder in the browser and its subfolders, GeoPackages and photos appear in the layer list
 - ⚠ **Requires Google Chrome or Microsoft Edge.** Firefox and Safari have no way to open
   a folder, so they only show the base map
-- ⚠ GeoPackage contents (layers) cannot be read yet — that comes next
 - ⚠ The chosen folder is forgotten on reload; pick it again
+
+### 🗂️ Reading and Writing GeoPackages on Web
+
+- Layers and features now display and can be edited
+- Edits are written back to the original `.gpkg` automatically, as on Android and Windows
 
 ### 📍 Faster Current Location (Web / Windows)
 

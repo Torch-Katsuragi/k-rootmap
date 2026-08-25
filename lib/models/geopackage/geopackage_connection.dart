@@ -18,6 +18,11 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+
 import 'package:path/path.dart' as p;
 
 import '../../core/fs/k_file_system.dart';
@@ -84,18 +89,118 @@ class GeoPackageConnection {
     }
   }
 
+  /// 元ファイル → sqlite3 WASM（チェックアウト）
+  ///
+  /// web には「ファイルパスを渡して sqlite に開かせる」経路が無いので、
+  /// 中身をバイト列で渡して sqflite 側のストレージに置いてから開く。
+  /// native は sqflite が実ファイルを直接開くので何もしない。
+  ///
+  /// ⚠ 新規作成（元ファイルがまだ無い）ときは何も流し込まない。
+  /// 空のDBとして開かれ、`onCreate` が走る。
+  Future<void> _checkOut(String absPath) async {
+    if (fs.hasRealPaths) return;
+    final bytes = await fs.readAsBytes(absPath).catchError((_) => Uint8List(0));
+    if (bytes.isEmpty) return;
+    await databaseFactory.writeDatabaseBytes(_databaseKey(absPath), bytes);
+    AppLogger.debug(
+      '[GeoPackageConnection] チェックアウト: $absPath (${bytes.length}バイト)',
+    );
+  }
+
+  /// 書き戻し監視タイマー（web のみ）
+  Timer? _checkInTimer;
+
+  /// 最後にチェックインした時点の `total_changes()`
+  int _checkedInChanges = 0;
+
+  /// 書き込みを検知して自動で書き戻す監視を始める（web のみ）。
+  ///
+  /// > [!IMPORTANT] なぜポーリングなのか
+  /// > 書き込み経路が一箇所ではないため。フィーチャ追加は
+  /// > `PointFeatureNode` が直接DBへ書き、属性編集は `BackgroundSaveManager`
+  /// > 経由、レイヤ作成やQGIS整合処理はまた別。個別にフックを刺すと**必ず取りこぼす**
+  /// > （実際 BackgroundSaveManager だけに刺して、フィーチャ追加を取りこぼした）。
+  /// >
+  /// > `total_changes()` は接続を開いてからの INSERT/UPDATE/DELETE 累計なので、
+  /// > これを見ていれば経路によらず「書かれた」ことが分かる。
+  void _startCheckInWatcher() {
+    if (fs.hasRealPaths) return;
+    _checkInTimer?.cancel();
+    _checkInTimer = Timer.periodic(_checkInInterval, (_) => _checkInIfDirty());
+  }
+
+  static const _checkInInterval = Duration(seconds: 2);
+
+  bool _checkInInProgress = false;
+
+  Future<void> _checkInIfDirty() async {
+    if (_checkInInProgress) return;
+    final db = _database;
+    if (db == null || !_isInitialized) return;
+    _checkInInProgress = true;
+    try {
+      final rows = await db.rawQuery('SELECT total_changes() AS c');
+      final changes = (rows.first['c'] as num).toInt();
+      if (changes == _checkedInChanges) return;
+      await checkIn();
+      _checkedInChanges = changes;
+    } catch (e) {
+      AppLogger.debug('[GeoPackageConnection] 自動チェックイン失敗: $e');
+    } finally {
+      _checkInInProgress = false;
+    }
+  }
+
+  /// sqlite3 WASM → 元ファイル（チェックイン）
+  ///
+  /// web で加えた変更を、ユーザーが選んだフォルダの `.gpkg` に書き戻す。
+  /// native は sqflite が実ファイルを直接更新しているので何もしない。
+  ///
+  /// 呼ぶのは `BackgroundSaveManager` の保存後。
+  /// ⚠ ここを呼ばないと、web の編集はタブを閉じた時点で消える。
+  Future<void> checkIn() async {
+    if (fs.hasRealPaths) return;
+    if (!_isInitialized || _database == null) return;
+    final absPath = _resolveAbsolutePath();
+    if (absPath == null) return;
+    try {
+      final bytes = await databaseFactory.readDatabaseBytes(_databaseKey(absPath));
+      await fs.writeAsBytes(absPath, bytes);
+      AppLogger.debug(
+        '[GeoPackageConnection] チェックイン: $absPath (${bytes.length}バイト)',
+      );
+    } catch (e) {
+      AppLogger.debug('[GeoPackageConnection] チェックイン失敗: $absPath - $e');
+      rethrow;
+    }
+  }
+
+  /// sqflite に渡すデータベース識別子。
+  ///
+  /// native は**実ファイルのパスそのもの**（sqflite が直接そのファイルを開く）。
+  /// web は実パスが無く、これは sqlite3 WASM 側ストレージ上の名前でしかないので、
+  /// 仮想パス（`/フォルダ名/林小班.gpkg`）をそのまま渡さず、
+  /// スラッシュも非ASCIIも含まない安全な名前に潰す。
+  String _databaseKey(String absPath) {
+    if (fs.hasRealPaths) return absPath;
+    final digest = sha1.convert(utf8.encode(absPath)).toString();
+    return 'gpkg_$digest.db';
+  }
+
+  /// このGeoPackageの絶対パス（未設定なら null）
+  String? _resolveAbsolutePath() {
+    if (absolutePath != null) return absolutePath;
+    if (projectRootDir == null) return null;
+    return p.joinAll([projectRootDir!, ...pathList]);
+  }
+
   /// データベース初期化の実体
   Future<void> _initializeDatabaseImpl() async {
     // 絶対パスが指定されている場合はそれを使用（グローバルフォルダ用）
-    final String absPath;
-    if (absolutePath != null) {
-      absPath = absolutePath!;
-    } else {
-      if (projectRootDir == null) {
-        AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
-        return;
-      }
-      absPath = p.joinAll([projectRootDir!, ...pathList]);
+    final absPath = _resolveAbsolutePath();
+    if (absPath == null) {
+      AppLogger.debug('[GeoPackageConnection] 初期化失敗: projectRootDirが未設定');
+      return;
     }
 
     final dirPath = p.dirname(absPath);
@@ -110,21 +215,16 @@ class GeoPackageConnection {
       }
     }
 
-    // ⚠ ここから先は sqflite に**実ファイルのパスを渡して**開かせる。
-    // KFileSystem では肩代わりできないので、実パスを持たないプラットフォーム
-    // （web）は入れない。web の GeoPackage は WASM SQLite 化（段3）が要る。
-    if (!fs.hasRealPaths) {
-      AppLogger.debug(
-        '[GeoPackageConnection] 初期化失敗: このプラットフォームは実ファイルパスを持たない（段3待ち）',
-      );
-      return;
-    }
+    // 実パスを持たないプラットフォーム（web）は、sqflite にパスを渡して
+    // 開かせることができない。代わりに**チェックアウト**する
+    // （元ファイルの中身を sqlite3 WASM 側へ流し込んでから開く）。
+    await _checkOut(absPath);
 
     try {
       WidgetsFlutterBinding.ensureInitialized();
 
       _database = await openDatabase(
-        absPath,
+        _databaseKey(absPath),
         version: 1,
         onCreate: _createDatabase,
         onUpgrade: _upgradeDatabase,
@@ -134,6 +234,9 @@ class GeoPackageConnection {
       await _validateGeoPackageStructure();
 
       _isInitialized = true;
+
+      // web: 以降の書き込みを監視して元ファイルへ書き戻す
+      _startCheckInWatcher();
     } catch (e, stack) {
       AppLogger.debug('[GeoPackageConnection] 初期化時にエラー発生:');
       AppLogger.debug('  パス: $absPath');
@@ -349,6 +452,8 @@ class GeoPackageConnection {
       await _database!.close();
       _database = null;
     }
+    _checkInTimer?.cancel();
+    _checkInTimer = null;
     _isInitialized = false;
     _initCompleter = null;
   }

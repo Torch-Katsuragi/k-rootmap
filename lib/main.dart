@@ -22,10 +22,10 @@ import 'package:flutter/services.dart';
 import 'services/party/party_firebase.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'i18n/strings.g.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_page/map_page.dart';
+import 'core/db/database_factory_setup.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'providers/project_providers.dart';
@@ -71,10 +71,8 @@ void main() async {
   // 実際の完了待ちはパーティ機能の入口（createRoom/joinRoom）で行う。
   unawaited(PartyFirebase.ensureInitialized());
 
-  if (PlatformCapabilities.usesSqfliteFfi) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
+  // sqflite の実装をプラットフォームごとに選ぶ（web は sqlite3 WASM）
+  setupDatabaseFactory();
 
   runApp(
     TranslationProvider(

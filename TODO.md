@@ -71,11 +71,23 @@
         ⚠ Firefox/Safari は `showDirectoryPicker` が無いので「地図プレビュー」のまま
   - [ ] 残り156箇所（Drive同期・shapefile・GeoTIFF・TileServer 等）。
         web で通らない経路なので、必要になった段で個別に移す
-- [ ] **段3: GeoPackage を `sqlite3` WASM + OPFS へ。** チェックアウト/チェックイン方式になる
-  - web はツリーに `.gpkg` が並ぶが**中のレイヤは0件**。`GeoPackageConnection` が
-    `fs.hasRealPaths` で止まる（sqfliteに実パスを渡せない）。ここを外すのが段3
+- [x] **段3: GeoPackage を sqlite3 WASM へ**（2026-08-25 完了）
+  - `sqflite_common_ffi_web` を採用。既存の `rawQuery` / `transaction` はそのまま動く
+  - チェックアウト（元ファイル→WASM）／チェックイン（WASM→元ファイル）を
+    `GeoPackageConnection` に実装。書き戻しは `total_changes()` の監視で自動
+  - ⚠ OPFSは使っていない（sqflite_common_ffi_web が IndexedDB を使う）。
+    ユーザーのフォルダとの受け渡しは File System Access API 側で行う
 - [ ] PWA + Service Worker + タイルキャッシュ（オフライン対応）
 - [ ] 公開ビューア（PMTiles/GeoJSONを静的ホスティング、URLで共有）
+      ⚠ **自分のデータを自分のホストから配る初めての機能**。着手時に転送量を見積もる
+
+### 公開・運用（2026-08-25 方針決定 → [[docs/features/concept#配布と運用コスト]]）
+
+- [ ] Firebase Hosting へデプロイして**普通に公開**（ルーム機能が形になってから）
+- [ ] 予算アラートを設定（同時接続数とダウンロード量）
+- [ ] 寄付導線を置く（露骨にしない）
+- [ ] セルフホスト手順を書く（既定にはしない。大口向けの選択肢）
+- [ ] web版でルーム機能を使えるように（`flutterfire configure` に web を追加）
 
 ### 段1 の積み残し
 

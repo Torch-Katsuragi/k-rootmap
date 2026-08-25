@@ -100,6 +100,12 @@ class GeoPackageFile {
   /// データベース接続を直接取得（非空間テーブル操作等の高度な用途向け）
   Future<Database> getDatabase() => _connection.getDatabase();
 
+  /// 変更を元ファイルへ書き戻す（web のみ実体がある）。
+  ///
+  /// native は sqflite が実ファイルを直接更新しているので何もしない。
+  /// ⚠ web ではこれを呼ばないと編集がタブを閉じた時点で消える。
+  Future<void> checkIn() => _connection.checkIn();
+
   /// 空のGeoPackageファイルを明示的に作成（即座に初期化）
   Future<bool> createEmptyDatabase() async {
     final result = await _connection.createEmptyDatabase();
@@ -120,6 +126,10 @@ class GeoPackageFile {
 
     // QGIS/GDALへ返す前の整合処理（書き込みが全部終わったこの位置で行う）
     await _finalizeForQgis();
+
+    // ⚠ 閉じる前に書き戻す。web はここを飛ばすと _finalizeForQgis() の
+    // 成果（空間インデックス復元・範囲更新）が元ファイルに残らない
+    await checkIn();
 
     // データベースを閉じる
     await _connection.dispose();

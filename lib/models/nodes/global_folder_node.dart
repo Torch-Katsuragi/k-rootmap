@@ -20,9 +20,10 @@
 // NOTE: 将来的にはFolderNode + GlobalPathResolverで代替予定
 // 現在はPathResolverを注入してisGlobalNodeを自動判定
 
-import 'dart:io';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
+
+import '../../core/fs/k_file_system.dart';
 import 'package:root_maps/utils/app_logger.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
@@ -79,9 +80,8 @@ class GlobalFolderNode extends FolderNode {
   @override
   Future<void> updateChildren() async {
     // ディレクトリが存在しなければ作成
-    final dir = Directory(globalPath);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
+    if (!await fs.isDirectory(globalPath)) {
+      await fs.createDirectory(globalPath);
       AppLogger.debug('[GlobalFolderNode] Created global folder: $globalPath');
     }
 
@@ -139,19 +139,13 @@ class GlobalFolderNode extends FolderNode {
   /// グローバルフォルダ直下のサブフォルダを読み込み
   Future<List<LayerTreeNode>> _loadGlobalSubFolders() async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(globalPath);
-    if (!await dir.exists()) return nodes;
-
-    final directories = <Directory>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is Directory) {
-        directories.add(entity);
-      }
-    }
-    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = (await fs.list(globalPath))
+        .where((e) => e.isDirectory)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in directories) {
-      final name = p.basename(entity.path);
+      final name = entity.name;
       // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
         entity.path, name, globalPath, this,
@@ -176,19 +170,13 @@ class GlobalFolderNode extends FolderNode {
   /// グローバルフォルダ直下のGeoPackageノードを読み込み
   Future<List<LayerTreeNode>> _loadGeoPackageNodes() async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(globalPath);
-    if (!await dir.exists()) return nodes;
-
-    final gpkgFiles = <File>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is File && entity.path.endsWith('.gpkg')) {
-        gpkgFiles.add(entity);
-      }
-    }
-    gpkgFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final gpkgFiles = (await fs.list(globalPath))
+        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in gpkgFiles) {
-      final fileName = p.basename(entity.path);
+      final fileName = entity.name;
       // 絶対パスモードでGeoPackageFileを作成
       final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
       nodes.add(
@@ -202,19 +190,13 @@ class GlobalFolderNode extends FolderNode {
   /// グローバルフォルダ直下の画像ノードを読み込み
   Future<List<LayerTreeNode>> _loadImageNodes() async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(globalPath);
-    if (!await dir.exists()) return nodes;
-
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = <File>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final ext = p.extension(entity.path).toLowerCase();
-      if (supportedExtensions.contains(ext)) {
-        imageFiles.add(entity);
-      }
-    }
-    imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final imageFiles = (await fs.list(globalPath))
+        .where((e) =>
+            !e.isDirectory &&
+            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in imageFiles) {
       final ext = p.extension(entity.path).toLowerCase();
@@ -223,12 +205,12 @@ class GlobalFolderNode extends FolderNode {
       // GeoTIFFタグの判定（.tifファイルのみ）
       KMetaImageOverlay? overlayParams;
       if (isTiff) {
-        final bytes = await entity.readAsBytes();
+        final bytes = await fs.readAsBytes(entity.path);
         overlayParams = GeoTiffService.readGeoTiffParams(bytes);
       }
 
       if (overlayParams != null) {
-        final node = GlobalOverlayImageNode._fromGeoTiff(
+        final node = await GlobalOverlayImageNode._fromGeoTiff(
           entity.path, overlayParams, parent: this,
         );
         nodes.add(node);
@@ -240,20 +222,9 @@ class GlobalFolderNode extends FolderNode {
     return nodes;
   }
 
-  /// グローバルフォルダ内に新しいフォルダを作成
-  static GlobalSubFolderNode? createIn(GlobalFolderNode parent, String name) {
-    final newDir = Directory(p.join(parent.globalPath, name));
-    if (!newDir.existsSync()) {
-      newDir.createSync();
-    }
-    final node = GlobalSubFolderNode(
-      name,
-      basePath: parent.globalPath,
-      parent: parent,
-    );
-    parent.addChild(node);
-    return node;
-  }
+  // 2026-08-25: createIn() を削除した。どこからも呼ばれておらず、
+  // 同期I/O（existsSync/createSync）だったため web に持ち込めない。
+  // 必要になったら `fs` 経由の非同期版として足すこと。
 }
 
 /// グローバルフォルダ内のサブフォルダノード
@@ -292,8 +263,7 @@ class GlobalSubFolderNode extends FolderNode {
     final absPath = getAbsoluteFilePath();
     if (absPath == null) return;
 
-    final dir = Directory(absPath);
-    if (!await dir.exists()) return;
+    if (!await fs.isDirectory(absPath)) return;
 
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
@@ -338,19 +308,13 @@ class GlobalSubFolderNode extends FolderNode {
 
   Future<List<LayerTreeNode>> _loadSubFolders(String absPath) async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(absPath);
-    if (!await dir.exists()) return nodes;
-
-    final directories = <Directory>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is Directory) {
-        directories.add(entity);
-      }
-    }
-    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = (await fs.list(absPath))
+        .where((e) => e.isDirectory)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in directories) {
-      final name = p.basename(entity.path);
+      final name = entity.name;
       // .kmeta.jsonにDrive連携情報があればGlobalDriveFolderNodeとして作成
       final driveNode = await _tryCreateGlobalDriveNode(
         entity.path, name, basePath, this,
@@ -374,19 +338,13 @@ class GlobalSubFolderNode extends FolderNode {
 
   Future<List<LayerTreeNode>> _loadGeoPackageNodes(String absPath) async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(absPath);
-    if (!await dir.exists()) return nodes;
-
-    final gpkgFiles = <File>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is File && entity.path.endsWith('.gpkg')) {
-        gpkgFiles.add(entity);
-      }
-    }
-    gpkgFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final gpkgFiles = (await fs.list(absPath))
+        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in gpkgFiles) {
-      final fileName = p.basename(entity.path);
+      final fileName = entity.name;
       // 絶対パスモードでGeoPackageFileを作成
       final gpkgFile = GeoPackageFile([fileName], absolutePath: entity.path);
       nodes.add(
@@ -398,19 +356,13 @@ class GlobalSubFolderNode extends FolderNode {
 
   Future<List<LayerTreeNode>> _loadImageNodes(String absPath) async {
     final nodes = <LayerTreeNode>[];
-    final dir = Directory(absPath);
-    if (!await dir.exists()) return nodes;
-
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = <File>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final ext = p.extension(entity.path).toLowerCase();
-      if (supportedExtensions.contains(ext)) {
-        imageFiles.add(entity);
-      }
-    }
-    imageFiles.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final imageFiles = (await fs.list(absPath))
+        .where((e) =>
+            !e.isDirectory &&
+            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in imageFiles) {
       final ext = p.extension(entity.path).toLowerCase();
@@ -419,12 +371,12 @@ class GlobalSubFolderNode extends FolderNode {
       // GeoTIFFタグの判定（.tifファイルのみ）
       KMetaImageOverlay? overlayParams;
       if (isTiff) {
-        final bytes = await entity.readAsBytes();
+        final bytes = await fs.readAsBytes(entity.path);
         overlayParams = GeoTiffService.readGeoTiffParams(bytes);
       }
 
       if (overlayParams != null) {
-        final node = GlobalOverlayImageNode._fromGeoTiff(
+        final node = await GlobalOverlayImageNode._fromGeoTiff(
           entity.path, overlayParams, parent: this,
         );
         nodes.add(node);
@@ -436,23 +388,9 @@ class GlobalSubFolderNode extends FolderNode {
     return nodes;
   }
 
-  /// サブフォルダ内に新しいフォルダを作成
-  static GlobalSubFolderNode? createIn(GlobalSubFolderNode parent, String name) {
-    final parentPath = parent.getAbsoluteFilePath();
-    if (parentPath == null) return null;
-    
-    final newDir = Directory(p.join(parentPath, name));
-    if (!newDir.existsSync()) {
-      newDir.createSync();
-    }
-    final node = GlobalSubFolderNode(
-      name,
-      basePath: parent.basePath,
-      parent: parent,
-    );
-    parent.addChild(node);
-    return node;
-  }
+  // 2026-08-25: createIn() を削除した。どこからも呼ばれておらず、
+  // 同期I/O（existsSync/createSync）だったため web に持ち込めない。
+  // 必要になったら `fs` 経由の非同期版として足すこと。
 }
 
 /// グローバルフォルダ用のGeoPackageノード
@@ -494,15 +432,15 @@ class GlobalImageNode extends ImageNode {
     String absolutePath, {
     LayerTreeNode? parent,
   }) async {
-    final file = File(absolutePath);
-    if (!file.existsSync()) return null;
+    if (!await fs.exists(absolutePath)) return null;
 
     try {
       final exifData = await ExifParser.extractFromFile(absolutePath);
       return GlobalImageNode._(
         absolutePath,
         exifData?.location,
-        exifData?.metadata ?? ImageMetadata(fileSize: file.lengthSync()),
+        exifData?.metadata ??
+            ImageMetadata(fileSize: await fs.length(absolutePath) ?? 0),
         takenAt: exifData?.takenAt,
         direction: exifData?.direction,
         visible: true,
@@ -528,16 +466,15 @@ class GlobalOverlayImageNode extends OverlayImageNode {
   });
 
   /// GeoTIFFタグから読み取ったパラメータでGlobalOverlayImageNodeを作成
-  static GlobalOverlayImageNode _fromGeoTiff(
+  static Future<GlobalOverlayImageNode> _fromGeoTiff(
     String absolutePath,
     KMetaImageOverlay overlayParams, {
     LayerTreeNode? parent,
-  }) {
-    final file = File(absolutePath);
+  }) async {
     return GlobalOverlayImageNode._(
       absolutePath,
       LatLng(overlayParams.centerLat, overlayParams.centerLng),
-      ImageMetadata(fileSize: file.existsSync() ? file.lengthSync() : 0),
+      ImageMetadata(fileSize: await fs.length(absolutePath) ?? 0),
       overlayParams: overlayParams,
       visible: true,
       parent: parent,

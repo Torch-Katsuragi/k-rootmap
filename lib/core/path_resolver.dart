@@ -16,7 +16,6 @@
 // Root Maps: パス解決のためのインターフェースと実装
 // Strategy Patternを使用して、プロジェクトフォルダとグローバルフォルダのパス解決を統一
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// パス解決のためのインターフェース
@@ -36,29 +35,11 @@ abstract class PathResolver {
   
   /// このリゾルバがグローバルフォルダ用かどうか
   bool get isGlobal;
-  
-  /// パスが存在するかどうかを確認
-  bool pathExists(List<String> segments) {
-    final path = resolvePath(segments);
-    if (path == null) return false;
-    return Directory(path).existsSync() || File(path).existsSync();
-  }
-  
-  /// ディレクトリを作成（存在しない場合）
-  bool ensureDirectoryExists(List<String> segments) {
-    final path = resolvePath(segments);
-    if (path == null) return false;
-    final dir = Directory(path);
-    if (!dir.existsSync()) {
-      try {
-        dir.createSync(recursive: true);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-    return true;
-  }
+
+  // 2026-08-25: pathExists() / ensureDirectoryExists() を削除した。
+  // どこからも呼ばれておらず、かつ同期のファイルI/O（existsSync/createSync）を
+  // 持っていたため web に持ち込めない。必要になったら `fs`（KFileSystem）経由の
+  // 非同期版として足すこと。
 }
 
 /// プロジェクトフォルダ用のパスリゾルバ

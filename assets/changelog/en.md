@@ -44,6 +44,7 @@
 
 ### 🔧 For Developers
 
+- File access now goes through a single filesystem abstraction, groundwork for web
 - Added a single command to run the test suite on both Windows and Android
 - Added a map backend contract test (same assertions on both platforms)
 - The project folder can now be passed as a launch option

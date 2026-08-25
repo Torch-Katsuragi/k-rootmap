@@ -16,9 +16,8 @@
 // Root Maps: フォルダノードクラス
 // ファイルシステムのフォルダに対応するレイヤツリーノード
 
-import 'dart:io';
 import 'package:root_maps/utils/app_logger.dart';
-import 'package:path/path.dart' as p;
+import '../../core/fs/k_file_system.dart';
 import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'image_node.dart';
@@ -177,20 +176,15 @@ class FolderNode extends LayerTreeNode {
     if (parent == null) return nodes;
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
-    final dir = Directory(absPath);
 
-    // Windows でのUI停止を避けるため、同期走査は使わない
-    final directories = <Directory>[];
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is Directory) {
-        directories.add(entity);
-      }
-    }
-    directories.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = (await fs.list(absPath))
+        .where((e) => e.isDirectory)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (final entity in directories) {
       final folderPath = entity.path;
-      final folderName = p.basename(folderPath);
+      final folderName = entity.name;
 
       // .kmeta.jsonをチェックしてDrive連携情報があるか確認
       final driveNode = await tryCreateDriveFolderNode(
@@ -300,20 +294,9 @@ class FolderNode extends LayerTreeNode {
     await super.dispose();
   }
 
-  /// 指定したparentフォルダの下に新しいフォルダを作成し、FolderNodeインスタンスを返す
-  /// 失敗時はnullを返す
-  static FolderNode? createIn(LayerTreeNode parent, String name) {
-    // 親がFolderNodeでなければ不可
-    if (parent is! FolderNode) return null;
-    final parentPath = parent.getAbsoluteFilePath();
-    if (parentPath == null) return null;
-    final newDir = Directory(p.join(parentPath, name));
-    if (!newDir.existsSync()) {
-      newDir.createSync();
-    }
-    final node = FolderNode(name, parent: parent);
-    parent.addChild(node);
-    return node;
-  }
+  // 2026-08-25: createIn() を削除した。
+  // どこからも呼ばれていない（フォルダ作成は LayerDrawerService.createLocalFolder
+  // が担当）うえ、同期のファイルI/O（existsSync/createSync）を持っていて
+  // web に持ち込めなかった。必要になったら `fs` 経由の非同期版として足すこと。
 }
 

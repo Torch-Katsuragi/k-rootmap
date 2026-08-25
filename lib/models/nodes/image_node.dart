@@ -16,9 +16,10 @@
 // Root Maps: 画像ノードクラス
 // 位置情報付き画像ファイルに対応するレイヤツリーノード
 
-import 'dart:io';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
+
+import '../../core/fs/k_file_system.dart';
 import 'package:latlong2/latlong.dart';
 import 'layer_tree_node.dart';
 import 'folder_node.dart';
@@ -110,8 +111,8 @@ class ImageNode extends LayerTreeNode {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  /// 画像ファイルが存在するかチェック
-  bool get fileExists => File(filePath).existsSync();
+  // 2026-08-25: fileExists ゲッターを削除した。未使用のうえ同期I/O
+  // （existsSync）だったため web に持ち込めない。要るなら `fs.exists()` を直接呼ぶ。
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
   /// GeoTIFFタグ（ModelTransformationTag）を持つ.tifファイルはOverlayImageNodeとして生成
@@ -122,17 +123,14 @@ class ImageNode extends LayerTreeNode {
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    final dir = Directory(absPath);
-    if (!dir.existsSync()) return nodes;
-
     const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
 
-    final imageFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => supportedExtensions.contains(p.extension(f.path).toLowerCase()))
+    final imageFiles = (await fs.list(absPath))
+        .where((e) =>
+            !e.isDirectory &&
+            supportedExtensions.contains(p.extension(e.path).toLowerCase()))
         .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (var entity in imageFiles) {
       try {
@@ -142,7 +140,7 @@ class ImageNode extends LayerTreeNode {
         // GeoTIFFタグの判定（.tifファイルのみ）
         KMetaImageOverlay? overlayParams;
         if (isTiff) {
-          final bytes = await entity.readAsBytes();
+          final bytes = await fs.readAsBytes(entity.path);
           overlayParams = GeoTiffService.readGeoTiffParams(bytes);
         }
 
@@ -151,7 +149,7 @@ class ImageNode extends LayerTreeNode {
           nodes.add(OverlayImageNode(
             entity.path,
             LatLng(overlayParams.centerLat, overlayParams.centerLng),
-            ImageMetadata(fileSize: entity.lengthSync()),
+            ImageMetadata(fileSize: await fs.length(entity.path) ?? 0),
             overlayParams: overlayParams,
             visible: true,
             parent: parent,
@@ -159,7 +157,8 @@ class ImageNode extends LayerTreeNode {
         } else {
           // 通常画像
           final exifData = await ExifParser.extractFromFile(entity.path);
-          final meta = exifData?.metadata ?? ImageMetadata(fileSize: entity.lengthSync());
+          final meta = exifData?.metadata ??
+              ImageMetadata(fileSize: await fs.length(entity.path) ?? 0);
           nodes.add(ImageNode(
             entity.path,
             exifData?.location,
@@ -185,8 +184,7 @@ class ImageNode extends LayerTreeNode {
   Future<void> rename(String newName) async {
     AppLogger.debug('[DEBUG] ImageNode.rename: 開始 - $name → $newName');
     try {
-      final file = File(filePath);
-      if (!file.existsSync()) {
+      if (!await fs.exists(filePath)) {
         throw Exception(t.services.fileNotFound(path: filePath));
       }
 
@@ -197,11 +195,11 @@ class ImageNode extends LayerTreeNode {
 
       AppLogger.debug('[DEBUG] ImageNode.rename: $filePath → $newPath');
 
-      if (File(newPath).existsSync()) {
+      if (await fs.exists(newPath)) {
         throw Exception(t.services.fileAlreadyExists(name: newFileName));
       }
 
-      await file.rename(newPath);
+      await fs.rename(filePath, newPath);
       AppLogger.debug('[DEBUG] ImageNode.rename: ファイルリネーム完了');
       
       if (parent != null) {
@@ -226,9 +224,8 @@ class ImageNode extends LayerTreeNode {
     AppLogger.debug('[DEBUG] ImageNode.dispose: disposing image $name');
     
     try {
-      final file = File(filePath);
-      if (file.existsSync()) {
-        await file.delete();
+      if (await fs.exists(filePath)) {
+        await fs.delete(filePath);
         AppLogger.debug('[DEBUG] ImageNode.dispose: deleted file $filePath');
       } else {
         AppLogger.debug('[DEBUG] ImageNode.dispose: file not found $filePath');

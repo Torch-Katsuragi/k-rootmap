@@ -16,8 +16,8 @@
 // Root Maps: フォルダメタデータサービス
 // 継承チェーン解決・保存処理を担当
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../core/fs/k_file_system.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../utils/app_logger.dart';
@@ -351,10 +351,8 @@ class KMetaService {
   }
 
   /// フォルダが.kmeta.jsonを持っているか確認
-  Future<bool> hasMetaFile(String folderPath) async {
-    final file = File('$folderPath/$kMetaFileName');
-    return file.exists();
-  }
+  Future<bool> hasMetaFile(String folderPath) =>
+      fs.exists('$folderPath/$kMetaFileName');
 
   /// 新しい.kmeta.jsonを初期化（存在しない場合のみ）
   Future<KMeta?> initializeMetaIfNeeded(String folderPath) async {

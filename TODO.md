@@ -61,9 +61,16 @@
 - [ ] **web版の `map_contract_test` をまだ回せていない**（chromedriver 未インストール）
   - `flutter test -d chrome` は非対応。`flutter drive` + chromedriver が要る
   - ドライバ（`test_driver/integration_test.dart`）と手順は用意済み → [[docs/technical/testing]]
-- [ ] **`File(` / `Directory(` 173箇所 / 49ファイル** をファイルシステム抽象経由に（本丸）
+- [/] **`File(` / `Directory(` をファイルシステム抽象経由に**（本丸）
+  - [x] **段2前半: 抽象を作ってツリー経路を載せ替え**（2026-08-25 完了・挙動不変）
+        `lib/core/fs/` に `KFileSystem`（**同期メソッドは意図的に無し**）と io / web 実装。
+        `path_resolver` / `kmeta` / `kmeta_service` / `folder_node` / `geopackage_node` /
+        `image_node` / `global_folder_node` / `geopackage_connection` を移行。173 → 156箇所
+  - [ ] **段2後半: web実装（File System Access API）＋フォルダ選択**
+        いまの `k_file_system_web.dart` は「何も無いファイルシステム」の仮実装
+  - [ ] 残り156箇所（Drive同期・shapefile・GeoTIFF・TileServer 等）。
+        web で通らない経路なので、必要になった段で個別に移す
 - [ ] GeoPackage を `sqlite3` WASM + OPFS へ。チェックアウト/チェックイン方式になる
-- [ ] File System Access API で「プロジェクトフォルダを選択」
 - [ ] PWA + Service Worker + タイルキャッシュ（オフライン対応）
 - [ ] 公開ビューア（PMTiles/GeoJSONを静的ホスティング、URLで共有）
 

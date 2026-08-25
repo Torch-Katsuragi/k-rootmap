@@ -16,10 +16,11 @@
 // Root Maps: GeoPackage DB接続管理クラス
 // DB接続の初期化、クローズ、バリデーションを担当
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+
+import '../../core/fs/k_file_system.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
 
@@ -97,17 +98,26 @@ class GeoPackageConnection {
       absPath = p.joinAll([projectRootDir!, ...pathList]);
     }
 
-    final file = File(absPath);
-    final dir = file.parent;
+    final dirPath = p.dirname(absPath);
 
-    if (!dir.existsSync()) {
-      AppLogger.debug('[GeoPackageConnection] 親ディレクトリを作成: ${dir.path}');
+    if (!await fs.isDirectory(dirPath)) {
+      AppLogger.debug('[GeoPackageConnection] 親ディレクトリを作成: $dirPath');
       try {
-        dir.createSync(recursive: true);
+        await fs.createDirectory(dirPath);
       } catch (e) {
         AppLogger.debug('[GeoPackageConnection] 初期化失敗: 親ディレクトリ作成エラー - $e');
         return;
       }
+    }
+
+    // ⚠ ここから先は sqflite に**実ファイルのパスを渡して**開かせる。
+    // KFileSystem では肩代わりできないので、実パスを持たないプラットフォーム
+    // （web）は入れない。web の GeoPackage は WASM SQLite 化（段3）が要る。
+    if (!fs.hasRealPaths) {
+      AppLogger.debug(
+        '[GeoPackageConnection] 初期化失敗: このプラットフォームは実ファイルパスを持たない（段3待ち）',
+      );
+      return;
     }
 
     try {
@@ -131,8 +141,9 @@ class GeoPackageConnection {
       AppLogger.debug('  スタックトレース: $stack');
 
       try {
-        final dirWritable = await Directory(dir.path).stat();
-        AppLogger.debug('  親ディレクトリ情報: ${dirWritable.type}');
+        AppLogger.debug(
+          '  親ディレクトリ: $dirPath (存在: ${await fs.isDirectory(dirPath)})',
+        );
       } catch (dirError) {
         AppLogger.debug('  親ディレクトリアクセスエラー: $dirError');
       }
@@ -361,16 +372,14 @@ class GeoPackageConnection {
         }
         absPath = p.joinAll([projectRootDir!, ...pathList]);
       }
-      final file = File(absPath);
-
-      if (!file.existsSync()) {
+      if (!await fs.exists(absPath)) {
         AppLogger.debug(
           '[GeoPackageConnection] deleteFile: ファイルが存在しません - $absPath',
         );
         return true; // 既に存在しないので成功とみなす
       }
 
-      await file.delete();
+      await fs.delete(absPath);
       AppLogger.debug('[GeoPackageConnection] deleteFile: ファイル削除完了 - $absPath');
       return true;
     } catch (e, stack) {

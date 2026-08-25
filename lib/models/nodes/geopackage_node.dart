@@ -16,9 +16,10 @@
 // Root Maps: GeoPackageノードクラス
 // GeoPackageファイルに対応するレイヤツリーノード
 
-import 'dart:io';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:path/path.dart' as p;
+
+import '../../core/fs/k_file_system.dart';
 import 'layer_tree_node.dart';
 import 'layer_node.dart';
 import '../geopackage/geopackage_file.dart';
@@ -128,19 +129,14 @@ class GeoPackageNode extends LayerTreeNode {
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    final dir = Directory(absPath);
-    if (!dir.existsSync()) return nodes;
-
-    final gpkgFiles = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.gpkg'))
+    final gpkgFiles = (await fs.list(absPath))
+        .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
         .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (var entity in gpkgFiles) {
       final gpkgFile = GeoPackageFile(
-        [p.basename(entity.path)],
+        [entity.name],
         absolutePath: entity.path,
       );
       nodes.add(GeoPackageNode(gpkgFile, visible: true, parent: parent));
@@ -161,8 +157,7 @@ class GeoPackageNode extends LayerTreeNode {
 
       final currentPath = p.joinAll([projectRootDir, ...geoPackageFile.pathList]);
       
-      final file = File(currentPath);
-      if (!file.existsSync()) {
+      if (!await fs.exists(currentPath)) {
         throw Exception(t.services.fileNotFound(path: currentPath));
       }
 
@@ -172,12 +167,12 @@ class GeoPackageNode extends LayerTreeNode {
       final newFileName = newName.endsWith(extension) ? newName : '$newName$extension';
       final newPath = p.join(directory, newFileName);
 
-      if (File(newPath).existsSync()) {
+      if (await fs.exists(newPath)) {
         throw Exception(t.services.fileAlreadyExists(name: newFileName));
       }
 
       // リネーム実行
-      await file.rename(newPath);
+      await fs.rename(currentPath, newPath);
       
       // 注意: parent.updateChildren()は呼び出し元で行う
       // これにより、呼び出し元で展開状態の管理などを適切に行える

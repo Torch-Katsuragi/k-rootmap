@@ -17,8 +17,8 @@
 // 各フォルダに配置される.kmeta.jsonの読み書き・継承マージを担当
 
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import '../core/fs/k_file_system.dart';
 import '../utils/app_logger.dart';
 
 /// .kmeta.jsonファイル名
@@ -679,11 +679,11 @@ class KMeta {
   /// ファイルから読み込み
   static Future<KMeta?> loadFromFile(String folderPath) async {
     try {
-      final file = File('$folderPath/$kMetaFileName');
-      if (!await file.exists()) {
+      final path = '$folderPath/$kMetaFileName';
+      if (!await fs.exists(path)) {
         return null;
       }
-      final content = await file.readAsString();
+      final content = await fs.readAsString(path);
       final json = jsonDecode(content) as Map<String, dynamic>;
       return KMeta.fromJson(json);
     } catch (e) {
@@ -695,10 +695,9 @@ class KMeta {
   /// ファイルに保存
   Future<bool> saveToFile(String folderPath) async {
     try {
-      final file = File('$folderPath/$kMetaFileName');
       final json = toJson();
       final content = const JsonEncoder.withIndent('  ').convert(json);
-      await file.writeAsString(content);
+      await fs.writeAsString('$folderPath/$kMetaFileName', content);
       AppLogger.debug('[KMeta] Saved to $folderPath');
       return true;
     } catch (e) {

@@ -42,7 +42,6 @@ dependencies:
   file_picker: ^11.0.0 # ファイル・ディレクトリ選択用（最新版に更新）
   file_selector: ^1.0.3 # 新しいファイル選択・保存ダイアログ用
   sqflite: ^2.3.0 # GeoPackageファイル操作用（sqlite3から移行）
-  sqflite_common_ffi: ^2.3.0 # デスクトップ環境用sqfliteサポート
   sqflite_common_ffi_web: ^1.1.1     # web版: sqlite3 WASM でGeoPackageを開く
   path: ^1.8.3 # パス操作用
   nmea: ^3.3.3
@@ -98,10 +97,9 @@ dependencies:
   mobile_scanner: ^7.1.4
   package_info_plus: ^9.0.0         # win32 ^5 vs ^6 競合のため据え置き
   maplibre: ^0.3.5
-  # Windows/macOS 版の地図実装（maplibre 本体は endorse していないので明示的に入れる）。
-  # 2026-04 に性能不足で一度外したが、Windows版復活のため再評価中。
-  # 判定は integration_test/map_contract_test.dart が両プラットフォームで緑になるか。
-  maplibre_webview: ^0.3.5
+  # ⚠ maplibre_webview（デスクトップのWebView実装）は 2026-08-25 に外した。
+  #    デスクトップ版の撤去にあわせて不要になり、推移的に入っていた
+  #    flutter_inappwebview も Android APK から落ちる。
   supercluster: ^3.2.0
   geobase: ^1.5.0
   exif: ^3.3.0
@@ -131,6 +129,9 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   test: ^1.25.15
+  # ホストVMのユニットテストで sqflite を動かすために要る
+  # （アプリ本体はモバイル=標準実装 / web=ffi_web なので、これはテスト専用）。
+  sqflite_common_ffi: ^2.3.0
   flutter_launcher_icons: ^0.14.4
   riverpod_generator: ^4.0.0 # @riverpod コード生成
   slang_build_runner: ^4.5.0 # i18n: slangコード生成用

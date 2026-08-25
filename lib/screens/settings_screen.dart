@@ -296,9 +296,6 @@ class FeedbackScreen extends ConsumerWidget {
     if (PlatformCapabilities.isAndroid) {
       final android = await deviceInfo.androidInfo;
       return '${android.manufacturer} ${android.model}';
-    } else if (PlatformCapabilities.isWindows) {
-      final windows = await deviceInfo.windowsInfo;
-      return 'Windows (${windows.computerName})';
     } else if (PlatformCapabilities.isWeb) {
       final web = await deviceInfo.webBrowserInfo;
       return 'Web (${web.browserName.name})';

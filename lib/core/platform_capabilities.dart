@@ -41,17 +41,13 @@ class PlatformCapabilities {
 
   static bool get isIOS => !kIsWeb && Platform.isIOS;
 
-  static bool get isWindows => !kIsWeb && Platform.isWindows;
-
-  static bool get isMacOS => !kIsWeb && Platform.isMacOS;
-
-  static bool get isLinux => !kIsWeb && Platform.isLinux;
+  // 2026-08-25: isWindows / isMacOS / isLinux / isDesktop を削除した。
+  // デスクトップ版を撤去し、その役割は web 版が担う
+  // （[[docs/features/concept#プラットフォームの役割分担]]）。
+  // ⚠ 復活させるなら、まず対象プラットフォームのビルドを戻すこと。
 
   /// モバイル（Android / iOS）
   static bool get isMobile => isAndroid || isIOS;
-
-  /// デスクトップ（Windows / macOS / Linux）。web は含まない
-  static bool get isDesktop => isWindows || isMacOS || isLinux;
 
   /// プラットフォーム名。ログ・フィードバック送信等の表示用
   static String get operatingSystem =>
@@ -70,9 +66,6 @@ class PlatformCapabilities {
   /// OSのランタイム権限（ストレージ・位置情報・Bluetooth）を要求する必要があるか
   static bool get needsRuntimePermissions => isMobile;
 
-  /// sqflite をFFI実装（`sqflite_common_ffi`）で動かすプラットフォームか
-  static bool get usesSqfliteFfi => isDesktop;
-
   /// 背景地図タイルをローカルにキャッシュできるか（MBTiles / キャッシュディレクトリ）。
   ///
   /// web は false（ブラウザのHTTPキャッシュに任せる）。
@@ -87,17 +80,6 @@ class PlatformCapabilities {
   // =============================================
   // 地図
   // =============================================
-
-  /// 地図をWebView（maplibre_webview）で描画するプラットフォームか。
-  ///
-  /// true のとき、地図はページのオリジンから fetch する。そのため
-  /// - ローカルTileServerはCORSヘッダーを返す必要がある
-  /// - `file://` は読めないので、グリフもTileServer経由（http）で配る必要がある
-  ///   （Windowsのパスは file://C: から始まる不正なURIにもなる）
-  ///
-  /// ⚠ web は false。maplibre_web は maplibre-gl-js を**ページに直接**載せるので
-  /// シムを挟まない（そしてローカルTileServerがそもそも無い）。
-  static bool get mapRendersInWebView => isDesktop;
 
   /// ローカルHTTPタイルサーバー（`dart:io` の `HttpServer`）を立てられるか。
   ///
@@ -122,9 +104,8 @@ class PlatformCapabilities {
 
   /// 位置情報の権限・サービス有効状態をランタイムに問い合わせる必要があるか。
   ///
-  /// Windows は Geolocator の権限APIが常に許可を返すため問い合わせない。
-  /// web はブラウザが取得時に自前でプロンプトを出すので同様に問い合わせない。
-  static bool get needsLocationPermissionCheck => !isWindows && !kIsWeb;
+  /// web はブラウザが取得時に自前でプロンプトを出すので問い合わせない。
+  static bool get needsLocationPermissionCheck => !kIsWeb;
 
   /// GNSS受信機による高精度測位（`enableHighAccuracy`）を要求してよいか。
   ///

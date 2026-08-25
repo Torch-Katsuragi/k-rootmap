@@ -29,9 +29,9 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
-  build-windows:
-    name: build (windows)
-    runs-on: windows-latest
+  build-web:
+    name: build (web)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -40,9 +40,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      # Windows版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
-      # 2026-08-21 時点では地図バックエンドが無いだけで、ビルド自体は通る。
-      - run: flutter build windows --debug
+      # web版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
+      # ⚠ ビルドが通っても実行時に落ちうる（`dart:io` は web で
+      #    「コンパイルは通るが呼ぶと落ちるスタブ」として出力されるため）。
+      #    実行時の確認は手動（docs/technical/testing 参照）。
+      - run: flutter build web --release
 
   build-android:
     name: build (android)

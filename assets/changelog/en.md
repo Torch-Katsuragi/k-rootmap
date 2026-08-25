@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 🖥️ Windows Support Discontinued
+
+- Windows, macOS and Linux builds are gone; **the web build replaces them**
+  - The web build now handles project folders and GeoPackages, so it took over the role
+- ⚠ **Distribution is now a URL** (open it in a browser, or install it as a PWA).
+  It is no longer an application you download and run
+- Android is unchanged
+
 ### 🌐 The Web Build Starts Up and Shows a Map
 
 - Opening the app in a browser now gets you as far as a rendered base map (stage 1)

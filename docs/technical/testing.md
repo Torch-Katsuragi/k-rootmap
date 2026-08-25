@@ -1,12 +1,13 @@
 ---
-title: テスト構成（Windows / Android 両対応）
-tags: [technical, testing, windows, android]
+title: テスト構成（Android / web）
+tags: [technical, testing, android, web]
 ---
 
 # テスト構成
 
-Windows版の復活作業で一番怖いのは「Windowsを直したらAndroidが壊れた」である。
-片方だけ緑になっても意味がないので、テストは常に両プラットフォームで同じものを回す。
+> [!NOTE] 2026-08-25 にデスクトップ版を撤去した
+> 対象は **Android と web**。Windows/macOS/Linux の段は無くなった。
+> 経緯は [[../features/concept#プラットフォームの役割分担]]。
 
 ## 一発で回す
 
@@ -20,8 +21,6 @@ pwsh tool/test_matrix.ps1
 |---|---|---|
 | `analyze` | `flutter analyze` | 不要 |
 | `unit` | `test/` 配下（ホストVM） | 不要 |
-| `build:windows` | Windowsのコンパイルゲート | 不要 |
-| `e2e:windows` | `integration_test/` を Windows デスクトップで実行 | Windows本体 |
 | `build:android` | debug APK のコンパイルゲート | 不要 |
 | `e2e:android` | `integration_test/` を実機/エミュで実行 | Android |
 
@@ -29,7 +28,6 @@ pwsh tool/test_matrix.ps1
 
 ```powershell
 pwsh tool/test_matrix.ps1 -Only analyze,unit   # 端末不要の段だけ
-pwsh tool/test_matrix.ps1 -SkipAndroid         # Windowsだけ
 pwsh tool/test_matrix.ps1 -Emulator Medium_Phone_API_36
 ```
 
@@ -45,9 +43,10 @@ pwsh tool/test_matrix.ps1 -Emulator Medium_Phone_API_36
 ## 地図バックエンド契約テスト
 
 [[map_contract_test|integration_test/map_contract_test.dart]] が本命。
-Windows版の地図バックエンドを差し替えたとき、Androidと同じ振る舞いを保っているかを
-機械的に検証する。2026-04にWindows版を凍結した理由が
-「maplibre_webview と maplibre本体の挙動差が大きい」だったので、その差をここで数値に固定した。
+地図バックエンドを差し替えたとき、振る舞いが変わっていないかを機械的に検証する。
+もともとは Windows(maplibre_webview) と Android(maplibre-native) の挙動差を数値に
+固定するために書かれた。デスクトップ撤去後も、**Android と web で同じ契約が成り立つか**
+を見る網として有効。
 
 検証している契約:
 
@@ -61,10 +60,6 @@ Windows版の地図バックエンドを差し替えたとき、Androidと同じ
 - `fitCoordinates()` が全座標を画面内に収める
 - GeoJSONソース／レイヤの追加・更新・削除が `getLayerIds()` に反映される
 
-> [!IMPORTANT]
-> **このファイルが Windows と Android の両方で緑になることが、Windows版地図バックエンド採用の受け入れ条件。**
-> 現状 Windows では [[harness|integration_test/support/harness.dart]] の `hasMapBackend` が false なので
-> 理由つきスキップになる。バックエンドを入れたらこのフラグを立てるだけでテストが走り出す。
 
 ## プラットフォーム前提の宣言
 
@@ -73,10 +68,10 @@ Windows版の地図バックエンドを差し替えたとき、Androidと同じ
 
 | フラグ | 意味 | 現状 |
 |---|---|---|
-| `hasMapBackend` | maplibre のプラットフォーム実装があるか | android / ios / windows / **web** |
+| `hasMapBackend` | maplibre のプラットフォーム実装があるか | android / ios / web |
 | `hasFirebaseConfig` | `firebase_options.dart` に設定があるか | android / ios のみ |
 
-Windows対応で前提が変わったら、このファイルの1行を直せば対象テストが走り出す。
+前提が変わったら、このファイルの1行を直せば対象テストが走り出す。
 
 > [!IMPORTANT] web では `Platform` を**先に**踏まないこと
 > `dart:io` は web でも**コンパイルは通る**が、`Platform.isAndroid` などを
@@ -155,24 +150,6 @@ GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない�
 > 画面を機械的に確認したいときは `flutter build web --release` して
 > `build/web` を静的配信するほうが速くて確実。
 
-## 既知のフレーク
-
-> [!IMPORTANT] `e2e:windows` の `map_contract_test` は**たまに落ちる**（master でも）
-> 症状は必ずこれ:
-> ```
-> setState() called after dispose(): MapLibreMapStateWebView#xxxxx
->   at MapLibreMapStateWebView._onWebSocketData (package:maplibre_webview/src/map_state.dart)
-> ```
-> **9件中8件は通り、落ちるテストは毎回違う。** テスト本体ではなく
-> `maplibre_webview` パッケージ内部の後始末レース（WebViewのWebSocketが
-> ウィジェット破棄後にメッセージを届ける）。
->
-> 2026-08-25 に master で実測: 1回目 7/9で失敗 → 2回目 9/9でPASS。
-> **自分の変更のせいだと即断しないこと。** 疑わしいときは
-> `git stash` して master で2〜3回回すのが早い（実際3回この切り分けをした）。
->
-> 直すなら上流に `mounted` チェックを入れてもらう必要がある。
-
 ## 既知の落とし穴
 
 - **integration_test はファイル単位で起動する。**
@@ -205,32 +182,10 @@ GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない�
   1500MB を切っていたらその場で止める。
   詰まったら `adb shell pm list packages -3` で残骸を探して消す。
 
-## Windows版の画面を撮る
-
-```powershell
-pwsh tool/capture_window.ps1                      # .temp/window_capture.png
-pwsh tool/capture_window.ps1 -Out .temp/map.png
-```
-
-対象ウィンドウだけをPNGに落とす（デスクトップ全体は撮らない）。
-既定は `PrintWindow(PW_RENDERFULLCONTENT)` で、**前面に出ていなくても撮れる**。
-中身がほぼ単色なら画面切り出し（`-Mode Screen`）に自動で落ちる。
-
-> [!IMPORTANT] Flutter側のスクショ手段は地図が写らない
-> | 手段 | 結果 |
-> |---|---|
-> | `flutter screenshot --type=device` | `Screenshot not supported for Windows.`（Android/iOS専用） |
-> | `flutter screenshot --type=skia` | 撮れるが `.skp`。Flutterのレイヤツリーだけ |
-> | `RepaintBoundary.toImage()` / `takeScreenshot()` | 同上 |
->
-> Windows版の地図は **WebView2 のネイティブサーフェス**で、Flutterのラスタライズ外で
-> 合成されている。Flutter由来の手段では**一番見たい地図が空で写る**。
-> 地図を確認したいならOSレベルのウィンドウキャプチャを使うこと。
-
 ## 起動時にプロジェクトを自動で開く
 
 ```bash
-flutter run -d windows --dart-define=PROJECT_DIR=C:/Users/you/project
+flutter run -d chrome --dart-define=PROJECT_DIR=/プロジェクト名
 ```
 
 フォルダピッカーを手で操作しないと地図画面に入れないと、起動〜描画の検証が回せないので用意した
@@ -245,7 +200,8 @@ flutter run -d windows --dart-define=PROJECT_DIR=C:/Users/you/project
 `.github/workflows/ci.yml` で以下を回す。端末が要る段はCIでは扱わない。
 
 - `analyze + unit`（ubuntu）
-- `build (windows)` — Windows版が「コンパイルすら通らない」状態に戻るのを防ぐゲート
+- `build (web)` — web版が「コンパイルすら通らない」状態に戻るのを防ぐゲート
+  ⚠ ビルドが通っても実行時に落ちうる（`dart:io` はwebでスタブとして出るため）
 - `build (android)`
 
 ## 関連

@@ -13,16 +13,10 @@
 // You should have received a copy of the GNU General Public License along
 // with this program; if not, write to the Free Software Foundation, Inc.,
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-/// native の sqflite セットアップ。
-library;
-
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-import '../platform_capabilities.dart';
-
-void setupDatabaseFactory() {
-  // モバイルは標準実装がそのまま使える
-  if (!PlatformCapabilities.usesSqfliteFfi) return;
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-}
+/// native（Android / iOS）の sqflite セットアップ。
+///
+/// 標準実装（`sqflite` プラグイン）がそのまま使えるので何もしない。
+///
+/// 2026-08-25 まではデスクトップ向けに `sqflite_common_ffi` を差していたが、
+/// デスクトップ版の撤去にあわせて外した。
+void setupDatabaseFactory() {}

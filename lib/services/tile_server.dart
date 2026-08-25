@@ -142,11 +142,12 @@ class TileServer {
   /// 空のローカルスタイルJSONをファイルに書き出しパスを返す。
   /// オフラインでも onStyleLoaded を確実に発火させるための最小スタイル。
   ///
-  /// [port] を渡すと glyphs URL をこのTileServer経由（http）にする。
-  /// Windows版はWebViewで地図を描くため file:// を読めないので必ず port を渡す。
-  /// [fontDir] のみなら glyphs URL を file:// パスにする（MapLibre Native用）。
-  /// どちらも無ければオンラインフォールバック URL を使用。
-  static Future<String> ensureLocalStyle({String? fontDir, int? port}) async {
+  /// [fontDir] があれば glyphs URL を file:// パスにする（MapLibre Native用）。
+  /// 無ければオンラインフォールバック URL を使用。
+  ///
+  /// 2026-08-25 まではWebViewで描くデスクトップ版のために `port` を受けて
+  /// グリフをhttpで配れるようにしていたが、デスクトップ版の撤去にあわせて外した。
+  static Future<String> ensureLocalStyle({String? fontDir}) async {
     // 毎回再生成（ポート・フォントパスが変わる可能性があるため）
     _localStyleUri = null;
 
@@ -160,14 +161,10 @@ class TileServer {
       final file = File('${dir.path}/k_maps_style.json');
 
       // glyphs URL の優先順位:
-      // 1. http://127.0.0.1 (Windows: WebViewは file:// を読めない。
-      //    Windowsのパスは 'file://C:\Users\...' という不正なURIにもなる)
-      // 2. file:// (Android/iOS: MapLibre Nativeが直接ファイルを読む)
-      // 3. https://demotiles (フォールバック)
+      // 1. file:// (Android/iOS: MapLibre Nativeが直接ファイルを読む)
+      // 2. https://demotiles (フォールバック)
       String glyphsUrl;
-      if (port != null) {
-        glyphsUrl = 'http://127.0.0.1:$port/font/{fontstack}/{range}.pbf';
-      } else if (fontDir != null) {
+      if (fontDir != null) {
         glyphsUrl = 'file://$fontDir/{fontstack}/{range}.pbf';
       } else {
         glyphsUrl =
@@ -242,11 +239,9 @@ class TileServer {
   /// リクエスト処理
   Future<void> _handleRequest(HttpRequest request) async {
     // CORSヘッダー。
-    // Windows版は地図をWebView（maplibre_webview）で描くため、
-    // ページのオリジンからこのローカルサーバへの fetch がCORSで弾かれる。
-    // これが無いとタイルが1枚も出ない（画面は真っ白で、コンソールに
-    // "AJAXError: Failed to fetch (0)" が並ぶ）。
-    // MapLibre Native（Android/iOS）はCORSを見ないので付けても無害。
+    // MapLibre Native（Android/iOS）はCORSを見ないので今は不要だが、
+    // ページのオリジンから fetch する描画方式に戻したときに要るので残す
+    // （撤去したデスクトップ版のWebViewがこれを必要としていた）。
     request.response.headers
       ..set('Access-Control-Allow-Origin', '*')
       ..set('Access-Control-Allow-Methods', 'GET');

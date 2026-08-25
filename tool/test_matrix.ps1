@@ -1,18 +1,17 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-  Windows と Android の両方でテストを回し、結果を一覧で出す。
+  テストを段ごとに回し、結果を一覧で出す。
 
 .DESCRIPTION
-  Windows版の復活作業では「Windowsを直したらAndroidが壊れた」が最大のリスクなので、
-  片方だけ緑になっても意味がない。このスクリプトは両プラットフォームを1コマンドで
-  通し、どの段で落ちたかを表で示す。
+  どの段で落ちたかを表で示す。
+
+  2026-08-25 にデスクトップ版を撤去したので、対象は Android のみになった
+  （web は integration_test が非対応で、別手順。docs/technical/testing 参照）。
 
   段:
     analyze        静的解析（プラットフォーム非依存）
     unit           test/ 配下のユニットテスト（ホストVM）
-    build:windows  Windowsのコンパイルゲート
-    e2e:windows    integration_test/ を Windows デスクトップで実行
     build:android  Androidのコンパイルゲート（debug APK）
     e2e:android    integration_test/ を Android 実機/エミュで実行
 
@@ -21,9 +20,6 @@
 
 .PARAMETER SkipAndroid
   Android の段をすべて飛ばす
-
-.PARAMETER SkipWindows
-  Windows の段をすべて飛ばす
 
 .PARAMETER Emulator
   Android実機が繋がっていないときに起動するエミュレータID
@@ -39,7 +35,6 @@
 param(
   [string[]]$Only,
   [switch]$SkipAndroid,
-  [switch]$SkipWindows,
   [string]$Emulator
 )
 
@@ -136,16 +131,6 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 Invoke-Stage 'analyze' { flutter analyze } 'analyze'
 Invoke-Stage 'unit' { flutter test } 'unit'
-
-# --- Windows -----------------------------------------------------------------
-
-if ($SkipWindows) {
-  foreach ($s in 'build:windows', 'e2e:windows') { Add-Result $s 'SKIP' 0 '-SkipWindows' }
-}
-else {
-  Invoke-Stage 'build:windows' { flutter build windows --debug } 'build_windows'
-  Invoke-Stage 'e2e:windows' { Invoke-IntegrationTests -DeviceId 'windows' } 'e2e_windows'
-}
 
 # --- Android -----------------------------------------------------------------
 

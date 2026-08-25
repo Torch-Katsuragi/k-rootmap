@@ -1,9 +1,9 @@
-/// 統合テストをWindows/Androidの両方で走らせるための共通ヘルパ。
+/// 統合テストの共通ヘルパ。
 ///
-/// Windows版の復活作業では「Windowsを直したらAndroidが壊れた」という事故が
-/// 最大のリスクになる。そのため統合テストは原則として **同じテストを両方の
-/// プラットフォームで走らせる**。プラットフォーム固有の前提が揃っていない
-/// 項目だけを、ここで明示的に宣言してスキップする（暗黙に落とさない）。
+/// プラットフォーム固有の前提が揃っていない項目を、ここで明示的に宣言して
+/// スキップする（暗黙に落とさない）。
+///
+/// 2026-08-25 にデスクトップ版を撤去。対象は Android と web。
 library;
 
 import 'dart:io';
@@ -29,16 +29,14 @@ String get platformName {
 ///
 /// `lib/firebase_options.dart` は android / ios ぶんしか生成されておらず、
 /// それ以外では `DefaultFirebaseOptions.currentPlatform` が UnsupportedError を投げる。
-/// Windows/web対応時に `flutterfire configure` へ足したら、ここを更新する。
+/// web対応時に `flutterfire configure` へ web を足したら、ここを更新する。
 bool get hasFirebaseConfig => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
 /// maplibre のプラットフォーム実装が存在するか。
 ///
 /// maplibre 0.3.5 が endorse しているのは android / ios / web。
-/// Windows/macOS は maplibre_webview を直接依存に入れて opt-in する
-/// （2026-08-21 に再導入。案Bの再評価中）。
-bool get hasMapBackend =>
-    kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isWindows;
+/// 2026-08-25 にデスクトップ版を撤去したので、対象はこの3つだけになった。
+bool get hasMapBackend => kIsWeb || Platform.isAndroid || Platform.isIOS;
 
 /// スキップ理由つきの `skip` 値を作る。
 ///

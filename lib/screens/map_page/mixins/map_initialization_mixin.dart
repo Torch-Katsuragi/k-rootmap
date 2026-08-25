@@ -160,14 +160,9 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
         // フォントPBFをキャッシュ（初回オンライン時にダウンロード）
         final fontDir = await TileServer.ensureFontCache();
 
-        // fontDir が null（オフライン初回等）でも ensureLocalStyle はオンラインフォールバックを使用。
-        // WebViewで描くプラットフォームは file:// を読めないので、
-        // グリフをTileServer経由で配るために port を渡す。
-        basemapStyleUri = await TileServer.ensureLocalStyle(
-          fontDir: fontDir,
-          port:
-              PlatformCapabilities.mapRendersInWebView ? tileServer.port : null,
-        );
+        // fontDir が null（オフライン初回等）でも ensureLocalStyle は
+        // オンラインフォールバックを使用する。
+        basemapStyleUri = await TileServer.ensureLocalStyle(fontDir: fontDir);
       } else {
         // web: TileServerは立てられず（`dart:io` の HttpServer が無い）、
         // そして不要。MapLibre GL JS がタイルURLを直接叩く。

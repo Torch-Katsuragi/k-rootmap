@@ -66,6 +66,7 @@ class GalleryImporter {
     }
 
     int imported = 0;
+    final gpsLossNames = <String>[];
     for (final file in result.files) {
       try {
         // 拡張子を name から取得（identifier 経由だと srcPath が無い場合がある）
@@ -77,8 +78,8 @@ class GalleryImporter {
 
         // Android: content URI からネイティブ側で実ファイルを直接コピー（EXIF 保持）
         // 非 Android: 従来の File.copy フォールバック
-        final copied = await _copyFile(file, destPath);
-        if (!copied) {
+        final copyResult = await _copyFile(file, destPath);
+        if (!copyResult.copied) {
           AppLogger.debug('[GalleryImport] Failed to copy ${file.name}');
           continue;
         }
@@ -86,6 +87,12 @@ class GalleryImporter {
         final node = await _createImageNode(destPath, targetFolder);
         targetFolder.addChild(node);
         imported++;
+
+        // フォールバックコピー（EXIF保持を保証できない経路）で、かつ
+        // 位置情報が取得できなかった場合、GPSが失われた可能性がある
+        if (!copyResult.native && node.location == null) {
+          gpsLossNames.add(file.name);
+        }
       } catch (e) {
         AppLogger.debug('[GalleryImport] Error importing ${file.name}: $e');
       }
@@ -97,6 +104,18 @@ class GalleryImporter {
         level: NotificationLevel.success,
       );
     }
+
+    if (gpsLossNames.isNotEmpty && ref != null) {
+      ref.read(notificationCenterProvider.notifier).add(
+        title:
+            '${gpsLossNames.length}枚の写真でGPS位置情報が失われた可能性があります',
+        detail:
+            'Android写真ピッカーの仕様により、コピー時にGPS情報が削除された可能性があります: '
+            '${gpsLossNames.join(', ')}',
+        level: NotificationLevel.warning,
+      );
+    }
+
     return imported > 0;
   }
 
@@ -104,7 +123,12 @@ class GalleryImporter {
   /// Android では MethodChannel 経由で content URI から実ファイルを直接コピーし、
   /// EXIF メタデータを完全保持する。
   /// 非 Android や identifier が無い場合は File.copy でフォールバック。
-  static Future<bool> _copyFile(PlatformFile file, String destPath) async {
+  /// [native] が false の場合、キャッシュコピー経由のためGPS等のEXIFが
+  /// 失われている可能性がある。
+  static Future<({bool copied, bool native})> _copyFile(
+    PlatformFile file,
+    String destPath,
+  ) async {
     // Android: content URI が取れればネイティブ側で実ファイルコピー
     if (Platform.isAndroid && file.identifier != null) {
       try {
@@ -112,7 +136,7 @@ class GalleryImporter {
           'uri': file.identifier,
           'destPath': destPath,
         });
-        if (success == true) return true;
+        if (success == true) return (copied: true, native: true);
       } catch (e) {
         AppLogger.debug('[GalleryImport] Native copy failed, falling back: $e');
       }
@@ -120,9 +144,9 @@ class GalleryImporter {
 
     // フォールバック: file_picker のキャッシュパスからコピー
     final srcPath = file.path;
-    if (srcPath == null) return false;
+    if (srcPath == null) return (copied: false, native: false);
     await File(srcPath).copy(destPath);
-    return true;
+    return (copied: true, native: false);
   }
 
   /// EXIF から位置情報・メタデータを読み取って ImageNode を生成

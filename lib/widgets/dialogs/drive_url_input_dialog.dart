@@ -116,7 +116,9 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
       if (success) {
         _isSignedIn = true;
       } else {
-        _errorMessage = t.drive.signInFailed;
+        // 設定エラー等は authState.errorMessage に詳細（code/description）が入る
+        _errorMessage =
+            _driveService.authState.errorMessage ?? t.drive.signInFailed;
       }
     } catch (e) {
       _errorMessage = t.drive.signInError(error: e.toString());

@@ -43,4 +43,10 @@ class AppLogger {
       debugPrint('[DEBUG] $message');
     }
   }
+
+  /// 情報レベルのログ出力
+  /// リリースビルドでも出力される（サインイン失敗等、運用調査に必要なイベント向け）
+  static void info(Object? message) {
+    debugPrint('[INFO] $message');
+  }
 }

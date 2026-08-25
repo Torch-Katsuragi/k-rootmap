@@ -131,6 +131,17 @@ python -m http.server 8110 --directory build\web --bind 127.0.0.1
   （`main.dart` のデスクトップ分岐と同じ）。
 - **`addLayer()` は `fid` と `geom` しか作らない**（QGIS互換の最小スキーマ）。
   属性を扱うテストは `addAttributeColumns()` で明示的にカラムを足す。
+- **`e2e:android` が無反応で固まったら、まず adb サーバを立て直す。**
+  端末側ではなくPC側が詰まっていることがある（APKのインストールまでログが出て、
+  そこから先が永久に進まない）。2026-08-24 に20分ハングした実例あり。
+  ```powershell
+  adb kill-server; adb start-server; adb devices
+  ```
+  残った `dart.exe` / `dartvm.exe` が掴んでいることもあるので、先に落としておく。
+- ⚠ **Git Bash から `adb shell df -h /data` を打つと嘘をつく。**
+  `/data` が `C:/Program Files/Git/data` に変換されて `No such file or directory` になり、
+  端末のストレージが壊れているように見える。`MSYS_NO_PATHCONV=1` を付けるか
+  PowerShell から叩くこと。
 - **エミュレータの空き容量に注意**（実機を使えば回避できる）。
   debug APK は230MB超あり、テストはファイルごとに入れ直すので使い回したエミュはすぐ埋まる。
   `INSTALL_FAILED_INSUFFICIENT_STORAGE` だけでなく

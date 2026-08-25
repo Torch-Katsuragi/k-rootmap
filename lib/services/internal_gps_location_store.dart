@@ -184,8 +184,10 @@ class InternalGpsLocationStore {
     }
 
     // Geolocatorストリーム開始
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
+    final locationSettings = LocationSettings(
+      accuracy: PlatformCapabilities.supportsHighAccuracyGps
+          ? LocationAccuracy.high
+          : LocationAccuracy.medium,
       distanceFilter: 0,
     );
 
@@ -201,7 +203,36 @@ class InternalGpsLocationStore {
       },
     );
 
+    // ストリームの初回フィックスを待たずに暫定位置を出す（awaitしない）
+    unawaited(_seedInitialPosition(locationSettings));
+
     AppLogger.debug('$_logTag: directモード開始（Geolocatorストリーム）');
+  }
+
+  /// ストリームの初回フィックスより先に、単発取得で暫定位置を流す。
+  ///
+  /// `watchPosition` は本来「位置が**変わったら**通知する」APIなので、
+  /// 据え置きのPCだと初回コールバックがいつ来るか保証がない。来るまでは
+  /// 「取得中」のままで、**壊れているのと見分けがつかない**。
+  /// 購読と並行して単発を一発撃ち、マーカーと初回ジャンプだけ先に成立させる。
+  ///
+  /// あくまで保険なので、失敗しても黙って諦める（本命はストリーム）。
+  Future<void> _seedInitialPosition(LocationSettings settings) async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: settings,
+      );
+
+      // ⚠ ストリームが先に届いていたら上書きしない（座標を巻き戻さない）
+      if (_latestRecord != null) return;
+      // 取得を待っている間に stop() された
+      if (!_isActive) return;
+
+      _onPositionReceived(GpsPositionRecord.fromPosition(position));
+      AppLogger.debug('$_logTag: 暫定位置を先出し（単発取得）');
+    } catch (e) {
+      AppLogger.debug('$_logTag: 暫定位置の先出しに失敗（ストリーム待ちに委ねる）: $e');
+    }
   }
 
   // ==============================

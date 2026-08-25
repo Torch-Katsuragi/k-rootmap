@@ -11,6 +11,13 @@
   (file handling comes in the next stage)
 - Known limitation: on web, switching the base map only takes effect after a reload
 
+### 📍 Faster Current Location (Web / Windows)
+
+- The location marker used to take over a minute to appear on web; it is now almost immediate
+  - A PC has no GPS receiver, so the browser derives your location from Wi-Fi and similar.
+    Asking it for high accuracy did not improve the result, it only made you wait longer
+- While a location is being acquired, a rough position is now shown straight away
+
 ### 🖥️ Windows Support Restored
 
 - Map rendering works again on Windows (paused since April 2026)

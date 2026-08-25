@@ -124,6 +124,19 @@ class PlatformCapabilities {
   /// web はブラウザが取得時に自前でプロンプトを出すので同様に問い合わせない。
   static bool get needsLocationPermissionCheck => !isWindows && !kIsWeb;
 
+  /// GNSS受信機による高精度測位（`enableHighAccuracy`）を要求してよいか。
+  ///
+  /// ⚠ web は false。ブラウザ経由のWi-Fi/IP測位しか無いので、高精度を要求しても
+  /// 精度は上がらないまま**初回フィックスだけが伸びる**。
+  /// 2026-08-24 実測（同一PC・同一ブラウザ）:
+  /// high は初回まで60〜90秒で精度1500m、medium は0.2秒で精度369m。
+  static bool get supportsHighAccuracyGps => !kIsWeb;
+
+  /// `Geolocator.getLastKnownPosition()` を呼べるか。
+  ///
+  /// ⚠ geolocator_web 4.1.3 は未実装で例外を投げる。
+  static bool get supportsLastKnownPosition => !kIsWeb;
+
   /// Bluetooth経由の外部GNSS機器 — モバイルのみ
   static bool get supportsBluetoothGnss => isMobile;
 

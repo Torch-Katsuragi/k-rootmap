@@ -1093,6 +1093,13 @@
     "written": "project.qgs を書き出しました（$count レイヤ）",
     "writeFailed": "QGISプロジェクトを書き出せませんでした",
     "skipped": "$count 件は書き出していません: $names",
-    "noProject": "プロジェクトが開かれていません"
+    "noProject": "プロジェクトが開かれていません",
+    "importProject": "QGISプロジェクトを読み込む",
+    "importing": "QGISプロジェクトを読み込んでいます...",
+    "imported": "$file から View を $count 個作りました",
+    "importedNothing": "$file から取り込めるレイヤがありませんでした",
+    "notFound": "このフォルダに .qgs がありません",
+    "discarded": "$count 件は取り込んでいません: $names",
+    "importFailed": "QGISプロジェクトを読み込めませんでした"
   }
 }

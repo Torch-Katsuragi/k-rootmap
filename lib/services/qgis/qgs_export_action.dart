@@ -26,8 +26,12 @@ import '../../models/app_notification.dart';
 import '../../models/nodes/folder_node.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../providers/notification_providers.dart';
+import '../../providers/ui_state_providers.dart';
 import '../../utils/app_logger.dart';
+import '../../core/fs/k_file_system.dart';
+import 'qgs_importer.dart';
 import 'qgs_project_builder.dart';
+import 'qgs_writer.dart';
 
 /// [node]（フォルダ）以下を `project.qgs` として書き出し、結果を通知する。
 ///
@@ -76,6 +80,79 @@ Future<void> exportQgsProject(WidgetRef ref, LayerTreeNode? node) async {
     AppLogger.debug('[QGIS] 書き出しに失敗: $e');
     notifier.add(
       title: '${t.qgis.writeFailed}: $e',
+      level: NotificationLevel.error,
+    );
+  }
+}
+
+/// [node]（フォルダ）の中の `.qgs` を読み、View として取り込む。
+///
+/// ファイル選択ダイアログは出さない。**共有の単位は dir** なので、
+/// 「このフォルダの中の `.qgs`」だけを相手にすればよい。
+/// 複数あれば `project.qgs` を優先し、無ければ名前順の先頭を使う。
+Future<void> importQgsProject(WidgetRef ref, LayerTreeNode? node) async {
+  final notifier = ref.read(notificationCenterProvider.notifier);
+
+  if (node is! FolderNode) {
+    notifier.add(title: t.qgis.noProject, level: NotificationLevel.warning);
+    return;
+  }
+  final folderPath = node.getAbsoluteFilePath();
+  if (folderPath == null) {
+    notifier.add(title: t.qgis.noProject, level: NotificationLevel.warning);
+    return;
+  }
+
+  try {
+    final candidates =
+        (await fs.list(folderPath))
+            .where((e) => !e.isDirectory && e.name.toLowerCase().endsWith('.qgs'))
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    if (candidates.isEmpty) {
+      notifier.add(title: t.qgis.notFound, level: NotificationLevel.warning);
+      return;
+    }
+    final target = candidates.firstWhere(
+      (e) => e.name == kQgsFileName,
+      orElse: () => candidates.first,
+    );
+
+    notifier.add(title: t.qgis.importing, level: NotificationLevel.info);
+
+    final result = await const QgsImporter().import(target.path, node);
+
+    if (result.isEmpty) {
+      notifier.add(
+        title: t.qgis.importedNothing(file: target.name),
+        level: NotificationLevel.warning,
+      );
+    } else {
+      notifier.add(
+        title: t.qgis.imported(
+          file: target.name,
+          count: result.importedViewCount,
+        ),
+        level: NotificationLevel.success,
+      );
+      ref.read(featureRefreshTriggerProvider.notifier).trigger();
+    }
+
+    // ⚠ 捨てたものは必ず出す。黙って落とすと
+    //    「QGISでは見えていたのに」になって、原因を追えなくなる
+    if (result.discarded.isNotEmpty) {
+      notifier.add(
+        title: t.qgis.discarded(
+          count: result.discarded.length,
+          names: result.discarded.join(' / '),
+        ),
+        level: NotificationLevel.warning,
+      );
+    }
+  } catch (e) {
+    AppLogger.debug('[QGIS] 読み込みに失敗: $e');
+    notifier.add(
+      title: '${t.qgis.importFailed}: $e',
       level: NotificationLevel.error,
     );
   }

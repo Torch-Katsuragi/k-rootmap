@@ -39,6 +39,7 @@ class MapMenuButton extends ConsumerWidget {
   static const String _party = 'party';
   static const String _level = 'level';
   static const String _exportQgis = 'export_qgis';
+  static const String _importQgis = 'import_qgis';
   static const String _settings = 'settings';
 
   @override
@@ -70,6 +71,8 @@ class MapMenuButton extends ConsumerWidget {
             );
           case _exportQgis:
             exportQgsProject(ref, ref.read(folderTreeProvider));
+          case _importQgis:
+            importQgsProject(ref, ref.read(folderTreeProvider));
           case _settings:
             Navigator.push(
               context,
@@ -99,6 +102,13 @@ class MapMenuButton extends ConsumerWidget {
         PopupMenuItem<String>(
           value: _exportQgis,
           child: _MenuRow(icon: Icons.map_outlined, label: t.qgis.exportProject),
+        ),
+        PopupMenuItem<String>(
+          value: _importQgis,
+          child: _MenuRow(
+            icon: Icons.file_download_outlined,
+            label: t.qgis.importProject,
+          ),
         ),
         PopupMenuItem<String>(
           value: _settings,

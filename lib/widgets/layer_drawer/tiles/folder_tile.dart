@@ -99,6 +99,8 @@ class FolderTile extends ConsumerWidget {
             onRename?.call();
           case 'export_qgis':
             await exportQgsProject(ref, node);
+          case 'import_qgis':
+            await importQgsProject(ref, node);
           case 'delete':
             await _handleDelete(context, ref);
         }
@@ -110,6 +112,10 @@ class FolderTile extends ConsumerWidget {
         PopupMenuItem(
           value: 'export_qgis',
           child: Text(t.qgis.exportProject),
+        ),
+        PopupMenuItem(
+          value: 'import_qgis',
+          child: Text(t.qgis.importProject),
         ),
         PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.folder.delete)),
       ],

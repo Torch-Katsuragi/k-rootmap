@@ -1093,6 +1093,13 @@
     "written": "Wrote project.qgs ($count layers)",
     "writeFailed": "Couldn't write the QGIS project",
     "skipped": "$count item(s) were left out: $names",
-    "noProject": "No project is open"
+    "noProject": "No project is open",
+    "importProject": "Import QGIS project",
+    "importing": "Reading the QGIS project...",
+    "imported": "Created $count view(s) from $file",
+    "importedNothing": "No usable layers in $file",
+    "notFound": "No .qgs file in this folder",
+    "discarded": "$count item(s) were not imported: $names",
+    "importFailed": "Couldn't read the QGIS project"
   }
 }

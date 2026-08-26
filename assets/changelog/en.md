@@ -2,7 +2,19 @@
 
 ## Unreleased
 
-### 🗺️ Export a QGIS project (.qgs)
+### 🗺️ QGIS project (.qgs) export and import
+
+**Import**
+
+- If a folder contains a `.qgs`, views can be created from it
+  ("Import QGIS project" in the ≡ menu or a folder's menu).
+- **If QGIS held the same layer several times with different styles or filters,
+  you get one view for each.**
+- Anything that couldn't be taken in (layers outside the folder, PostGIS
+  connections, …) is reported in a notification.
+- ⚠ Views on the imported layers are replaced, so re-importing doesn't pile up.
+
+**Export**
 
 - From the ≡ menu on the map, or a folder's menu: "Export QGIS project".
 - A `project.qgs` appears in the folder. **Hand the whole folder to someone

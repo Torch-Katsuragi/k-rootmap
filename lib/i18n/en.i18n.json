@@ -1086,5 +1086,13 @@
     "connOffline": "Offline (queued)",
     "initFailed": "Could not initialize location sharing",
     "signInUnconfirmed": "Sign-in could not be confirmed"
+  },
+  "qgis": {
+    "exportProject": "Export QGIS project",
+    "writing": "Writing the QGIS project...",
+    "written": "Wrote project.qgs ($count layers)",
+    "writeFailed": "Couldn't write the QGIS project",
+    "skipped": "$count item(s) were left out: $names",
+    "noProject": "No project is open"
   }
 }

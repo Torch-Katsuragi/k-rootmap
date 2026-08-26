@@ -30,6 +30,51 @@ dispose()
 > 復元後に書き込むと、sqflite に `ST_IsEmpty` 等が無いため落ちる。
 > 順序を入れ替えないこと。
 
+## `.qgs`（QGISプロジェクト）の書き出し
+
+実装は `lib/services/qgis/`、テストは `test/qgs_writer_test.dart`。
+設計の背景は [[project-format-design#View の導入]]。
+
+```
+QgsProjectBuilder   ツリーを辿って QgsProject を組み立てる（DB・FSに触る）
+QgsProject / QgsLayer / QgsGroup   XMLと切り離した表現
+QgsWriter           XMLにする（純粋関数。DBもFSも要らないのでテストしやすい）
+```
+
+対応:
+
+| RootMap | QGIS |
+|---|---|
+| dir | レイヤグループ |
+| GeoPackage | レイヤグループ |
+| Layer | レイヤグループ |
+| **View** | **レイヤ**（`layer-tree-layer` + `maplayer`） |
+
+View だけがレイヤになるので **1:1 対応**が成立する。View のフィルタは OGR の
+データソースURIに `|subset=` として載る（QGIS が subset string を書く場所と同じ）。
+
+出力先は `<dir>/project.qgs`。**連携dirごとに1本**置く。パスは相対
+（`<Absolute type="bool">false</Absolute>`）なので、そのdirを丸ごと渡された人が
+そのdirだけで開ける。
+
+> [!IMPORTANT] レイヤIDは決定的に作る
+> 生成のたびに変わると `.qgs` の差分が毎回出て、Drive同期が無駄に動く。
+> View のキーをサニタイズしたものに、キーのハッシュを添えている。
+
+> [!WARNING] QGISで実際に開けるかは未検証（2026-08-26 時点）
+> 開発機にQGISが入っていないため確かめられていない。テストで見ているのは
+> **XMLの形まで**（グループ構造・IDの一致・subsetの載り方・相対パス）。
+>
+> 確かめたら結果をここに書くこと。落ちるとしたら候補は `renderer-v2` の
+> シンボルXML。スタイル未設定のレイヤにはレンダラを書かない作りなので、
+> 疑わしければ一度スタイルを外して切り分けられる。
+
+書かないもの（`QgsProject.skipped` に入り、通知に出る）:
+
+- 画像・オーバーレイ画像（QGISのラスタレイヤには落とせるが未対応）
+- プロジェクトフォルダの**外**を参照する `.gpkg`
+  （渡された相手の環境には無いので、残すと「レイヤはあるが表示されない」になる）
+
 ## 1. SpatiaLiteトリガーの復元
 
 QGIS/GDAL 製の GeoPackage は RTree を自動更新するトリガーを持ち、

@@ -1086,5 +1086,13 @@
     "connOffline": "圏外（保留中）",
     "initFailed": "位置共有を初期化できませんでした",
     "signInUnconfirmed": "サインインが確認できません"
+  },
+  "qgis": {
+    "exportProject": "QGISプロジェクトを書き出す",
+    "writing": "QGISプロジェクトを書き出しています...",
+    "written": "project.qgs を書き出しました（$count レイヤ）",
+    "writeFailed": "QGISプロジェクトを書き出せませんでした",
+    "skipped": "$count 件は書き出していません: $names",
+    "noProject": "プロジェクトが開かれていません"
   }
 }

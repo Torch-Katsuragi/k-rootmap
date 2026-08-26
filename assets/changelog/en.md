@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### 🗺️ Export a QGIS project (.qgs)
+
+- From the ≡ menu on the map, or a folder's menu: "Export QGIS project".
+- A `project.qgs` appears in the folder. **Hand the whole folder to someone
+  and they can open it in QGIS as-is** (paths are written relative).
+- Folders, GeoPackages and layers become QGIS layer groups;
+  **views become QGIS layers**, filters included.
+- Anything left out (photos, GeoPackages referenced from outside the folder)
+  is reported in a notification.
+- ⚠ **Not yet verified against QGIS itself.** Please report if it won't open.
+
 ### 🔍 Layers can now have "views"
 
 - Give one layer **several ways of showing it**, each with its own condition.

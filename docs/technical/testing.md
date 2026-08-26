@@ -23,11 +23,15 @@ pwsh tool/test_matrix.ps1
 | `unit` | `test/` 配下（ホストVM） | 不要 |
 | `build:android` | debug APK のコンパイルゲート | 不要 |
 | `e2e:android` | `integration_test/` を実機/エミュで実行 | Android |
+| `build:web` | release web のコンパイルゲート | 不要 |
+| `e2e:web` | `integration_test/` を Chrome で実行 | chromedriver |
 
 よく使うオプション:
 
 ```powershell
 pwsh tool/test_matrix.ps1 -Only analyze,unit   # 端末不要の段だけ
+pwsh tool/test_matrix.ps1 -Only e2e:web        # webのe2eだけ
+pwsh tool/test_matrix.ps1 -SkipWeb             # Androidだけ
 pwsh tool/test_matrix.ps1 -Emulator Medium_Phone_API_36
 ```
 
@@ -92,13 +96,27 @@ chromedriver --port=4444
 flutter drive --driver=test_driver/integration_test.dart --target=integration_test/map_contract_test.dart -d web-server --browser-name=chrome
 ```
 
-> [!WARNING] 未検証（2026-08-24 時点）
-> このマシンに chromedriver が入っていないため、**まだ一度も回せていない**。
-> `integration_test/support/harness.dart` の `hasMapBackend` には web を足してあるので、
-> chromedriver さえ入れれば9件が対象になる。
+`tool/test_matrix.ps1` の `e2e:web` 段が chromedriver の起動・停止まで面倒を見るので、
+普段は手で叩かなくてよい（2026-08-26 に全件PASSを確認）。
 
-`tool/test_matrix.ps1` にはまだ web の段を入れていない（段2以降で機能が乗ってから）。
-地図バックエンドを触ったときは手で回す。
+### chromedriver の入れ方
+
+**Chrome と同じビルド番号のものが要る。** バージョンがずれると
+`session not created: This version of ChromeDriver only supports Chrome version NN` で落ちる。
+Chrome は勝手に更新されるので、落ちたら入れ直す前提でいる。
+
+```powershell
+# 1. いま入っている Chrome のバージョンを見る
+(Get-ItemProperty 'HKCU:\Software\Google\Chrome\BLBeacon').version
+
+# 2. Chrome for Testing の一覧から、同じビルドの win64 版URLを引く
+#    https://googlechromelabs.github.io/chrome-for-testing/latest-patch-versions-per-build-with-downloads.json
+
+# 3. .temp/ に展開する（PATH は汚さない。test_matrix.ps1 がここを見る）
+```
+
+置き場は `.temp/chromedriver-win64/chromedriver.exe`。`.gitignore` 済みなので
+コミットされない。別の場所に置くなら `-ChromeDriver <path>` で渡す。
 
 ### 画面を目で見るとき
 

@@ -10,6 +10,10 @@
   - ⚠ The browser will ask for access permission again when reopening.
 - Opening a folder is faster (it used to be scanned three times).
 
+### 🗺️ Fixed map animations stopping short of their destination
+
+- On the web build, the map could stop before reaching the target location.
+
 ### 🎨 The layer list and attribute table are now opaque
 
 - The map used to show through them, which made text hard to read over aerial imagery.

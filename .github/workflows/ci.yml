@@ -1,8 +1,13 @@
-# Windows / Android の両対応を壊さないためのCI。
+# Android / web の両対応を壊さないためのCI。
 #
-# 端末が要る段（integration_test の実機実行）はCIでは回さない。
-# それはローカルの tool/test_matrix.ps1 の担当。
-# ここは「片方のプラットフォームだけ壊す変更」を最短で検出するためのゲートに絞る。
+# **端末が要る段（Androidの integration_test）はCIでは回さない。**
+# それはローカルの tool/test_matrix.ps1 の担当（実機縛りのため）。
+# ここは「片方のプラットフォームだけ壊す変更」を最短で検出するためのゲート。
+#
+# web の integration_test はブラウザさえあれば回るので、ここで回している。
+# `flutter build web` は通っても実行時に落ちうる（`dart:io` が
+# 「コンパイルは通るが呼ぶと落ちるスタブ」として出るため）ので、
+# コンパイルゲートだけでは足りない。
 name: CI
 
 on:
@@ -41,10 +46,36 @@ jobs:
           cache: true
       - run: flutter pub get
       # web版が「コンパイルすら通らない」状態に戻るのを防ぐゲート。
-      # ⚠ ビルドが通っても実行時に落ちうる（`dart:io` は web で
-      #    「コンパイルは通るが呼ぶと落ちるスタブ」として出力されるため）。
-      #    実行時の確認は手動（docs/technical/testing 参照）。
+      # 実行時の振る舞いは下の e2e-web が見る。
       - run: flutter build web --release
+
+  e2e-web:
+    name: e2e (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # ubuntu-latest には Chrome と chromedriver が同梱されている。
+      # バージョンずれで落ちたときはここを見ること。
+      - name: chromedriver のバージョンを記録
+        run: |
+          google-chrome --version
+          chromedriver --version
+      - name: chromedriver を起動
+        run: chromedriver --port=4444 &
+      # integration_test/ を1本ずつ回す（ディレクトリ指定は2本目以降が
+      # 起動に失敗する。tool/test_matrix.ps1 と同じ理由）。
+      - name: integration_test を Chrome で実行
+        run: |
+          for f in integration_test/*_test.dart; do
+            echo "--- $f ---"
+            flutter drive               --driver=test_driver/integration_test.dart               --target="$f"               -d web-server --browser-name=chrome --driver-port=4444
+          done
 
   build-android:
     name: build (android)

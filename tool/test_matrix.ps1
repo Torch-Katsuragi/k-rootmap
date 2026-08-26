@@ -6,20 +6,32 @@
 .DESCRIPTION
   どの段で落ちたかを表で示す。
 
-  2026-08-25 にデスクトップ版を撤去したので、対象は Android のみになった
-  （web は integration_test が非対応で、別手順。docs/technical/testing 参照）。
+  2026-08-25 にデスクトップ版を撤去したので、対象は Android と web。
 
   段:
     analyze        静的解析（プラットフォーム非依存）
     unit           test/ 配下のユニットテスト（ホストVM）
     build:android  Androidのコンパイルゲート（debug APK）
     e2e:android    integration_test/ を Android 実機/エミュで実行
+    build:web      webのコンパイルゲート（release）
+    e2e:web        integration_test/ を Chrome で実行
+
+  ⚠ e2e:web には chromedriver が要る。`flutter test -d chrome` は
+    "Web devices are not supported for integration tests yet." で断られるため、
+    web だけ `flutter drive` 経由になる。取得手順は docs/technical/testing 参照。
+    既定の探索先は .temp/chromedriver-win64/chromedriver.exe → PATH。
 
 .PARAMETER Only
   実行する段をカンマ区切りで指定する（例: -Only analyze,unit）
 
 .PARAMETER SkipAndroid
   Android の段をすべて飛ばす
+
+.PARAMETER SkipWeb
+  web の段をすべて飛ばす
+
+.PARAMETER ChromeDriver
+  chromedriver.exe のパス（既定: .temp/chromedriver-win64/chromedriver.exe → PATH）
 
 .PARAMETER Emulator
   Android実機が繋がっていないときに起動するエミュレータID
@@ -35,7 +47,9 @@
 param(
   [string[]]$Only,
   [switch]$SkipAndroid,
-  [string]$Emulator
+  [switch]$SkipWeb,
+  [string]$Emulator,
+  [string]$ChromeDriver
 )
 
 $ErrorActionPreference = 'Continue'
@@ -239,6 +253,99 @@ else {
   }
   else {
     Add-Result 'e2e:android' 'SKIP' 0 '-Only で対象外'
+  }
+}
+
+# --- web ---------------------------------------------------------------------
+
+# chromedriver を探す。.temp/ に置いたもの → PATH の順。
+function Resolve-ChromeDriver {
+  if ($ChromeDriver) { return $ChromeDriver }
+  $local = Join-Path $repoRoot '.temp/chromedriver-win64/chromedriver.exe'
+  if (Test-Path $local) { return $local }
+  $onPath = Get-Command chromedriver -ErrorAction SilentlyContinue
+  if ($onPath) { return $onPath.Source }
+  return $null
+}
+
+# integration_test/ を1ファイルずつ Chrome で実行する。
+#
+# ⚠ web は `flutter test -d chrome` が使えない（integration_test 非対応）。
+#    `flutter drive` + chromedriver で回す。ドライバは test_driver/integration_test.dart。
+function Invoke-WebIntegrationTests {
+  param([Parameter(Mandatory)][string]$DriverPort)
+
+  $files = Get-ChildItem -Path (Join-Path $repoRoot 'integration_test') -Filter '*_test.dart' -File |
+    Sort-Object Name
+  if ($files.Count -eq 0) {
+    Write-Host 'integration_test/ にテストが無い'
+    $global:LASTEXITCODE = 0
+    return
+  }
+
+  $anyFailed = $false
+  foreach ($f in $files) {
+    $rel = 'integration_test/' + $f.Name
+    Write-Host ''
+    Write-Host "--- $rel (chrome) ---" -ForegroundColor DarkCyan
+    flutter drive --driver=test_driver/integration_test.dart --target=$rel `
+      -d web-server --browser-name=chrome --driver-port=$DriverPort
+    if ($LASTEXITCODE -ne 0) {
+      $anyFailed = $true
+      Write-Host "FAILED: $rel" -ForegroundColor Red
+    }
+  }
+  $global:LASTEXITCODE = if ($anyFailed) { 1 } else { 0 }
+}
+
+if ($SkipWeb) {
+  foreach ($s in 'build:web', 'e2e:web') { Add-Result $s 'SKIP' 0 '-SkipWeb' }
+}
+else {
+  Invoke-Stage 'build:web' { flutter build web --release } 'build_web'
+
+  if (Test-Wanted 'e2e:web') {
+    $driverExe = Resolve-ChromeDriver
+    if (-not $driverExe) {
+      Add-Result 'e2e:web' 'SKIP' 0 'chromedriver が無い（docs/technical/testing 参照）'
+    }
+    else {
+      $port = 4444
+      $proc = Start-Process -FilePath $driverExe -ArgumentList "--port=$port" `
+        -PassThru -WindowStyle Hidden
+      try {
+        # 起動待ち（最大15秒）
+        $ready = $false
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline) {
+          try {
+            $r = Invoke-RestMethod -Uri "http://localhost:$port/status" -TimeoutSec 2
+            if ($r.value.ready) { $ready = $true; break }
+          }
+          catch { Start-Sleep -Milliseconds 500 }
+        }
+        if (-not $ready) {
+          Add-Result 'e2e:web' 'FAIL' 0 'chromedriver が起動しない'
+        }
+        else {
+          Write-Host ''
+          Write-Host "=== e2e:web (chromedriver $port) ===" -ForegroundColor Cyan
+          $logPath = Join-Path $logDir 'e2e_web.log'
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          Invoke-WebIntegrationTests -DriverPort $port 2>&1 | Tee-Object -FilePath $logPath
+          $code = $LASTEXITCODE
+          $sw.Stop()
+          if ($code -eq 0) { Add-Result 'e2e:web' 'PASS' $sw.Elapsed.TotalSeconds }
+          else { Add-Result 'e2e:web' 'FAIL' $sw.Elapsed.TotalSeconds "exit=$code / $logPath" }
+        }
+      }
+      finally {
+        if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+      }
+    }
+  }
+  else {
+    Add-Result 'e2e:web' 'SKIP' 0 '-Only で対象外'
   }
 }
 

@@ -48,9 +48,13 @@
   - [x] `web/index.html` に maplibre-gl-js を追加（maplibre_web は script を注入しない）
   - [x] プロジェクトを開かずに地図だけ見る入口（web限定・段2までの暫定）
   - [x] `integration_test/support/harness.dart` の `hasMapBackend` に web を追加
-- [ ] **web版の `map_contract_test` をまだ回せていない**（chromedriver 未インストール）
-  - `flutter test -d chrome` は非対応。`flutter drive` + chromedriver が要る
-  - ドライバ（`test_driver/integration_test.dart`）と手順は用意済み → [[docs/technical/testing]]
+- [x] **web版の `map_contract_test`**（2026-08-26 全件PASS）
+  - `tool/test_matrix.ps1` に `build:web` / `e2e:web` 段を追加（chromedriverの
+    起動・停止まで面倒を見る）。CI にも `e2e (web)` ジョブを足した
+  - 通すために2箇所直した:
+    - `RMapController.animateTo` が、maplibre_web の「キャンセル」例外で
+      着地を待たずに返っていた（web はリサイズ由来の `moveend` でもここに来る）
+    - 契約テストの `pumpMap` が、地図がコンテナのサイズを取り込む前に走っていた
 - [/] **`File(` / `Directory(` をファイルシステム抽象経由に**（本丸）
   - [x] **段2前半: 抽象を作ってツリー経路を載せ替え**（2026-08-25 完了・挙動不変）
         `lib/core/fs/` に `KFileSystem`（**同期メソッドは意図的に無し**）と io / web 実装。

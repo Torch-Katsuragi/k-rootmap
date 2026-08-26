@@ -188,7 +188,20 @@ class RMapController {
       await _awaitCameraSettled(center: center, zoom: zoom, bearing: bearing);
     } on Exception catch (_) {
       // moveCamera によるキャンセル時に "Map camera movement cancelled." が
-      // スローされるが、意図的なキャンセルなので無視する
+      // スローされる。こちらから止めたのだから無視してよい。
+      //
+      // > [!IMPORTANT] web は「止めていないのに」ここへ来る
+      // > maplibre_web は flyTo の完了を `moveend` **1発**で判定し、その時点の
+      // > カメラが目標と許容差 1e-7 で一致しなければ CancellationException を
+      // > 投げる。飛行中に別の理由（コンテナのリサイズ等）で moveend が来ると
+      // > これに落ちる。カメラはまだ飛んでいるので、ここで抜けると
+      // > 「Future が返った＝着地済み」という契約が破れる。
+      // >
+      // > こちらから止めた場合は `_cancelOngoingAnimation()` が
+      // > `_isCameraAnimating` を倒しているので、それで区別できる。
+      if (_isCameraAnimating) {
+        await _awaitCameraSettled(center: center, zoom: zoom, bearing: bearing);
+      }
     } finally {
       _isCameraAnimating = false;
     }

@@ -1,17 +1,18 @@
-// 地図バックエンドの契約テスト（Windows / Android 共通）
+// 地図バックエンドの契約テスト（Android / web 共通）
 //
 // 実行:
-//   flutter test integration_test/map_contract_test.dart -d windows
 //   flutter test integration_test/map_contract_test.dart -d <android device>
 //
-// 目的:
-//   Windows版の地図バックエンドを差し替えたとき、Androidと同じ振る舞いを
-//   保っているかを機械的に検証する。2026-04にWindows版を凍結した理由が
-//   「maplibre_webview と maplibre本体の挙動差が大きい」だったので、
-//   その「挙動差」をここで数値として固定する。
+//   web だけは `flutter test -d chrome` が使えない。chromedriver を立てて
+//   `flutter drive` を使う（手順は [[docs/technical/testing]]）:
+//     chromedriver --port=4444
+//     flutter drive --driver=test_driver/integration_test.dart //       --target=integration_test/map_contract_test.dart //       -d web-server --browser-name=chrome
 //
-//   このファイルが両プラットフォームで緑になることが、
-//   Windows版地図バックエンド採用の受け入れ条件。
+// 目的:
+//   地図バックエンドが**プラットフォームごとに別物**（Android はネイティブSDK、
+//   web は maplibre-gl-js）なので、その挙動差をここで数値として固定する。
+//   もとは Windows版（maplibre_webview）の受け入れ条件として作ったもので、
+//   デスクトップ撤去後は web が同じ役目を引き継いでいる。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -75,6 +76,23 @@ void main() {
         () => styleLoaded,
         reason: 'onStyleLoaded が発火しない（地図バックエンドが動いていない）',
       );
+
+      // > [!IMPORTANT] web は生成直後、まだコンテナのサイズを取り込んでいない
+      // > maplibre-gl は ResizeObserver でコンテナの縮小に気づくが、それは
+      // > 非同期。それまで投影はページ幅を基準にした値を返す
+      // > （400pxのウィジェットなのに中心の dx が 789 になる）。
+      // >
+      // > さらに厄介なことに、この遅れてくる `resize()` は `moveend` を撒く。
+      // > 飛行中に来ると maplibre_web が flyTo を「キャンセルされた」と判定し、
+      // > カメラが途中で止まる。**地図が落ち着く前にテストを始めない。**
+      await pumpUntil(
+        tester,
+        () =>
+            (controller.toScreenLocation(kTestCenter).dx - kMapSize.width / 2)
+                .abs() <
+            2.0,
+        reason: '地図がウィジェットのサイズを取り込まない',
+      );
     }
 
     testWidgets('スタイルが読み込まれ、初期カメラが指定どおりになる', (tester) async {
@@ -136,7 +154,7 @@ void main() {
 
       final offset = controller.toScreenLocation(kTestCenter);
       // 論理ピクセルでウィジェット中央。バックエンドがDPRを二重適用すると
-      // ここが 2 倍ズレるため、Windows実装で最初に壊れやすい箇所。
+      // ここが 2 倍ズレる。
       expect(
         offset.dx,
         closeTo(kMapSize.width / 2, 2.0),

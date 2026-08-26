@@ -26,6 +26,7 @@ import '../../../models/nodes/drive_folder_node.dart';
 import '../../../providers/ui_state_providers.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../../services/qgis/qgs_export_action.dart';
+import '../../dialogs/drive_qr_dialog.dart';
 import '../common_dialogs.dart';
 import '../sync_merge_dialog.dart';
 import 'node_visibility_icon.dart';
@@ -72,6 +73,9 @@ class FolderTile extends ConsumerWidget {
     }
 
     if (node is DriveFolderNode) {
+      // 同期はモバイル専用だが、**渡すことはできる**。
+      // 事務所（web）で整えたdirを現場（Android）に渡す出口がここ。
+      final driveNode = node as DriveFolderNode;
       return ListTile(
         leading: Icon(Icons.cloud, color: Colors.blue.shade600),
         title: Text(node.name),
@@ -80,6 +84,16 @@ class FolderTile extends ConsumerWidget {
           style: const TextStyle(fontSize: 10, color: Colors.grey),
         ),
         onTap: onTap,
+        trailing: IconButton(
+          icon: const Icon(Icons.qr_code_2),
+          tooltip: t.driveQr.menu,
+          onPressed:
+              () => DriveQrDialog.show(
+                context,
+                folderName: driveNode.name,
+                driveUrl: driveNode.driveUrl,
+              ),
+        ),
       );
     }
 
@@ -178,6 +192,12 @@ class FolderTile extends ConsumerWidget {
             await onSyncMerge?.call(context, driveNode, mode: SyncMode.download);
           case 'refresh':
             await onRefreshSync?.call(driveNode);
+          case 'qr':
+            await DriveQrDialog.show(
+              context,
+              folderName: driveNode.name,
+              driveUrl: driveNode.driveUrl,
+            );
           case 'unlink':
             await onUnlinkDrive?.call(context, driveNode);
           case 'delete':
@@ -207,6 +227,15 @@ class FolderTile extends ConsumerWidget {
           child: ListTile(
             leading: const Icon(Icons.refresh, color: Colors.blue),
             title: Text(t.layerDrawer.folder.refreshStatus),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        // 連携dirは自己完結した共有単位。QRで丸ごと渡せる
+        PopupMenuItem(
+          value: 'qr',
+          child: ListTile(
+            leading: const Icon(Icons.qr_code_2, color: Colors.blueGrey),
+            title: Text(t.driveQr.menu),
             contentPadding: EdgeInsets.zero,
           ),
         ),

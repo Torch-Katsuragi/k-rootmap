@@ -1101,5 +1101,13 @@
     "notFound": "このフォルダに .qgs がありません",
     "discarded": "$count 件は取り込んでいません: $names",
     "importFailed": "QGISプロジェクトを読み込めませんでした"
+  },
+  "driveQr": {
+    "menu": "QRコードで渡す",
+    "title": "このフォルダを渡す",
+    "description": "受け取る端末の RootMap GIS で「フォルダを追加」→「QRコードをスキャン」から読み取ってください。",
+    "copyUrl": "URLをコピー",
+    "copied": "URLをコピーしました",
+    "noUrl": "このフォルダにはDriveのURLがありません"
   }
 }

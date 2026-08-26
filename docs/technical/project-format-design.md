@@ -187,7 +187,14 @@ Drive連携dir/            ← 共有の単位。QRで配れる
 「DriveフォルダのURLを入力するか、QRコードをスキャン」というUI文言もある。
 `SyncEngine.cloneFromDrive()` も実装済み。
 
-**足りないのは web 側が QR を出すこと**だけ。
+出す側も 2026-08-26 に実装した（`lib/widgets/dialogs/drive_qr_dialog.dart`、
+`qr_flutter`）。Drive連携フォルダの行にQRボタンが出る。**web でも出る**。
+
+> [!WARNING] ただし web版はDrive連携を「作れない」
+> `PlatformCapabilities.supportsDriveSync` はモバイル限定のまま。
+> いま web でQRを出せるのは「モバイルで連携済みのフォルダを開いたとき」だけで、
+> 「事務所（web）で一から作って現場に渡す」には web版のGoogle認証が要る。
+> ここが段7の残り。
 
 ## QGISプロジェクトのインポート（寛容側）
 
@@ -230,9 +237,9 @@ Drive連携dir/            ← 共有の単位。QRで配れる
 | 2 | **web: ファイルシステム抽象** + File System Access API | **完了**（2026-08-25） |
 | 3 | **web: GeoPackage を WASM SQLite に** | **完了**（2026-08-25） |
 | 4 | **View の導入** | **モデル・永続化・フィルタは完了**（2026-08-26）。⚠ スタイルは未反映 |
-| 5 | **`.qgs` ライター** | 未着手 |
-| 6 | `.qgs` インポータ（寛容・root外破棄） | 未着手 |
-| 7 | web側のQR発行（受け側は実装済み） | 未着手 |
+| 5 | **`.qgs` ライター** | **完了**（2026-08-26）。⚠ QGISでの実開封は未検証 |
+| 6 | `.qgs` インポータ（寛容・root外破棄） | **完了**（2026-08-26）。⚠ QGIS製ファイルでは未検証 |
+| 7 | web側のQR発行（受け側は実装済み） | QRを出す口は完了。⚠ web版のDrive連携が残り |
 
 ⚠ **`layer_styles`（gpkg内スタイル）の優先度は下がった。**
 `.qgs` にレンダラを書けばQGISはそれで読むので冗長。

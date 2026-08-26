@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 📱 Hand over a Drive-linked folder with a QR code
+
+- "Share via QR code" from a linked folder's row.
+- The receiving device picks it up with "Add folder" → "Scan QR code"
+  (data, styles and `project.qgs` all at once — no server involved).
+- ⚠ On the web build this works for folders **already linked on mobile**.
+  Creating a new Drive link from the web build isn't possible yet.
+
 ### 🗺️ QGIS project (.qgs) export and import
 
 **Import**

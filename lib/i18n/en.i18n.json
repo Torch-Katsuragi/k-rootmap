@@ -1101,5 +1101,13 @@
     "notFound": "No .qgs file in this folder",
     "discarded": "$count item(s) were not imported: $names",
     "importFailed": "Couldn't read the QGIS project"
+  },
+  "driveQr": {
+    "menu": "Share via QR code",
+    "title": "Hand over this folder",
+    "description": "On the receiving device, open RootMap GIS and use \"Add folder\" → \"Scan QR code\".",
+    "copyUrl": "Copy URL",
+    "copied": "URL copied",
+    "noUrl": "This folder has no Drive URL"
   }
 }

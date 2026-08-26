@@ -43,7 +43,13 @@
   - 2026-08-26 実装。RootMap → `.qgs` → RootMap の往復を web で確認済み
   - ⚠ **QGISが実際に書いた `.qgs` では未検証**（QGISが入っていない）。
     古い `<prop>` 形式の読み取りはユニットテストで担保している
-- [ ] web側のQR発行（受け側の `cloneFromDrive` と QRスキャンは実装済み）
+- [/] web側のQR発行（受け側の `cloneFromDrive` と QRスキャンは実装済み）
+  - [x] QRを出す口を作った（`qr_flutter`）。Drive連携フォルダの行に出る。
+        **webでも出る**ので「事務所で整えたdirを現場に渡す」の出口はできた
+  - [ ] ⚠ **web版はDrive連携を作れない**（`supportsDriveSync => isMobile`）。
+        いま web でQRを出せるのは「モバイルで連携済みのフォルダを開いたとき」だけ。
+        webで一から連携するには `google_sign_in` / `googleapis` の web対応が要る
+        → 下の「web版でルーム機能を使えるように」と同じ、web版のGoogle認証の話
 - [ ] ~~`layer_styles`~~ → **優先度を下げた**。`.qgs` にレンダラを書けば冗長。gpkg単体を渡す場合の保険のみ
 
 ## web版（調査済み・2026-08-21）

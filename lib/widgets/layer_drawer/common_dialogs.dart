@@ -32,6 +32,8 @@ class RenameDialog {
     String? label,
     String? hint,
     String submitLabel = '',
+    String? helperText,
+    bool allowEmpty = false,
   }) {
     final effectiveSubmitLabel = submitLabel.isEmpty ? t.layerDrawer.submitRename : submitLabel;
     final controller = TextEditingController(text: currentName);
@@ -47,10 +49,17 @@ class RenameDialog {
               child: TextFormField(
                 controller: controller,
                 autofocus: true,
-                decoration: InputDecoration(labelText: label, hintText: hint),
+                decoration: InputDecoration(
+                  labelText: label,
+                  hintText: hint,
+                  helperText: helperText,
+                  helperMaxLines: 3,
+                ),
+                // [allowEmpty] は「空 = 未設定」に意味がある入力用
+                // （View のフィルタなど）。名前系は従来どおり空を弾く。
                 validator:
                     (v) =>
-                        (v == null || v.trim().isEmpty)
+                        (!allowEmpty && (v == null || v.trim().isEmpty))
                             ? t.common.nameCannotBeEmpty
                             : null,
                 onFieldSubmitted: (_) {

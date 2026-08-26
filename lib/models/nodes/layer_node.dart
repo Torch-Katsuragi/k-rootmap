@@ -25,6 +25,7 @@ import 'layer_tree_node.dart';
 import 'geopackage_node.dart';
 import 'folder_node.dart';
 import 'feature_node.dart';
+import 'view_node.dart';
 import '../geopackage/geopackage_file.dart';
 import '../geometry_type.dart';
 import '../kmeta.dart';
@@ -130,6 +131,106 @@ abstract class LayerNode extends LayerTreeNode {
     }
     final gpkg = geoPackageNode;
     return '${gpkg.name}/$layerName';
+  }
+
+  /// フィーチャを読み直すたびに増える版番号。
+  ///
+  /// 「同じ [LayerNode] なのに中身が入れ替わった」を外から検知するためのもの。
+  /// View のフィルタを変えると件数が変わるので、属性テーブルのように
+  /// フィーチャのリストを抱えている側はこれを見て作り直す。
+  int get featuresRevision => _featuresRevision;
+  int _featuresRevision = 0;
+
+  /// このレイヤの View（＝見せ方）。
+  ///
+  /// > [!WARNING] `children` とは別物。混ぜてはいけない
+  /// > `children` は FeatureNode 専用（`children.cast<FeatureNode>()` を
+  /// > 書いている箇所すらある）。View はデータではないのでこちらに持つ。
+  /// > 詳しい理由は [[view_node]]。
+  ///
+  /// [loadViews] を呼ぶまで空。空リストは「まだ読んでいない」であって
+  /// 「View が無い」ではない（View が無いレイヤにも既定Viewが1枚できる）。
+  final List<ViewNode> views = [];
+
+  /// `.kmeta.json` から View 定義を読み直す。
+  ///
+  /// 定義が無ければ既定View（[kDefaultViewName]）を1枚だけ作る。
+  /// 既定Viewはファイルには書かない — 書くと全プロジェクトに差分が出て
+  /// Drive同期が無駄に動くため。
+  Future<List<ViewNode>> loadViews() async {
+    final loaded = await _buildViews();
+    views
+      ..clear()
+      ..addAll(loaded);
+    return views;
+  }
+
+  Future<List<ViewNode>> _buildViews() async {
+    final folder = folderNode;
+    if (folder == null) return [ViewNode(name: kDefaultViewName, parent: this)];
+
+    final KMeta meta;
+    try {
+      meta = await folder.getMeta();
+    } catch (e) {
+      AppLogger.debug('[LayerNode] View定義を読めない: $e');
+      return [ViewNode(name: kDefaultViewName, parent: this)];
+    }
+
+    final key = layerKey;
+    final defs = meta.getViews(key);
+    if (defs.isEmpty) return [ViewNode(name: kDefaultViewName, parent: this)];
+
+    return [
+      for (final def in defs)
+        ViewNode(
+          name: def.name,
+          parent: this,
+          filter: def.filter,
+          style: def.style,
+          visible: meta.getViewVisibility('$key/${def.name}') ?? true,
+        ),
+    ];
+  }
+
+  /// 表示中の View のフィルタを OR で束ねた WHERE 句。絞り込み不要なら null。
+  ///
+  /// > [!NOTE] なぜ OR なのか
+  /// > View は「同じレイヤを別の条件で何枚も見せる」ためのもので、
+  /// > 見えているぶんの**和**が画面に出るべきものだから。
+  /// > フィルタを持たない View が1枚でも見えていれば、全件が出る（＝WHERE無し）。
+  /// >
+  /// > ⚠ フィーチャは Layer に1組しか無いので、どの View 由来かはここでは分からない。
+  /// > View ごとに見た目を変えるには、フィーチャに所属Viewを持たせる必要がある（段4b）。
+  String? get activeViewFilter {
+    if (views.isEmpty) return null; // 未ロード＝絞り込みなし
+    final visibleViews = views.where((v) => v.visible).toList();
+    if (visibleViews.isEmpty) return null; // 1枚も見えない → 可視判定側で弾く
+    if (visibleViews.any((v) => !v.hasFilter)) return null;
+    return visibleViews.map((v) => '(${v.filter!.trim()})').join(' OR ');
+  }
+
+  /// 表示すべき View が1枚でもあるか。
+  ///
+  /// View を全部消灯したレイヤは、レイヤ自体が可視でも何も描かない。
+  bool get hasVisibleView => views.isEmpty || views.any((v) => v.visible);
+
+  /// 現在の [views] を `.kmeta.json` に書き戻す。
+  ///
+  /// 既定View1枚だけの状態は「View未定義」と同じ意味なので、書かずに消す。
+  Future<void> persistViews() async {
+    final folder = folderNode;
+    if (folder == null) return;
+    final folderPath = folder.getAbsoluteFilePath();
+    if (folderPath == null) return;
+
+    final isJustDefault = views.length == 1 && views.first.isDefaultView;
+    await KMetaService.instance.setViews(
+      folderPath,
+      layerKey,
+      isJustDefault ? const [] : [for (final v in views) v.toKMetaView()],
+    );
+    folder.invalidateMetaCache();
   }
 
   /// KMetaスタイルキャッシュ
@@ -501,6 +602,7 @@ abstract class LayerNode extends LayerTreeNode {
       // 子ノードの変更があったためキャッシュをクリア
       clearColumnNamesCache();
       _markDirty();
+      _featuresRevision++;
       _updateChildrenCompleter!.complete();
     } catch (e) {
       _updateChildrenCompleter!.completeError(e);
@@ -928,8 +1030,12 @@ class PointLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    // 1クエリで全フィーチャをジオメトリパース済みで取得
-    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
+    // 1クエリで全フィーチャをジオメトリパース済みで取得。
+    // 表示中Viewのフィルタがあれば WHERE で絞る（[activeViewFilter]）。
+    final rows = await geoPackageFile.getFeaturesWithGeometry(
+      layerName,
+      where: activeViewFilter,
+    );
     final features = <FeatureNode>[];
 
     for (final row in rows) {
@@ -972,7 +1078,10 @@ class LineLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
+    final rows = await geoPackageFile.getFeaturesWithGeometry(
+      layerName,
+      where: activeViewFilter,
+    );
     final features = <FeatureNode>[];
 
     for (final row in rows) {
@@ -1015,7 +1124,10 @@ class PolygonLayerNode extends LayerNode {
 
   @override
   Future<List<FeatureNode>> _loadFeaturesFromDB() async {
-    final rows = await geoPackageFile.getFeaturesWithGeometry(layerName);
+    final rows = await geoPackageFile.getFeaturesWithGeometry(
+      layerName,
+      where: activeViewFilter,
+    );
     final features = <FeatureNode>[];
 
     for (final row in rows) {

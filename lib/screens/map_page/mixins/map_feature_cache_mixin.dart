@@ -48,7 +48,16 @@ mixin MapFeatureCacheMixin<T extends ConsumerStatefulWidget> on MapPageStateBase
     }
     
     // LayerNodeのみ抽出
-    final layers = visibleLayers.whereType<LayerNode>().toList();
+    final allLayers = visibleLayers.whereType<LayerNode>().toList();
+
+    // View定義の読み込み（未ロードのぶんだけ）。
+    // View はフィーチャのWHERE句を決めるので、DB読み込みより先に要る。
+    await Future.wait(
+      allLayers.where((l) => l.views.isEmpty).map((l) => l.loadViews()),
+    );
+
+    // Viewを全部消灯したレイヤは、レイヤ自体が可視でも何も描かない
+    final layers = allLayers.where((l) => l.hasVisibleView).toList();
 
     // KMetaスタイルの事前読み込みを並列実行
     await Future.wait(

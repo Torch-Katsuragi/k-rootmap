@@ -37,8 +37,10 @@ import '../../../screens/layer_style_settings_screen.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../../services/survey/survey_chain_resolver.dart';
 import '../../../utils/app_logger.dart';
+import '../../../models/nodes/view_node.dart';
 import '../common_dialogs.dart';
 import 'drag_feedback_card.dart';
+import 'view_tile.dart';
 
 /// レイヤノード用 ListTile（選択・可視切り替え・ドラッグ対応）
 class LayerTile extends ConsumerWidget {
@@ -84,7 +86,7 @@ class LayerTile extends ConsumerWidget {
       ),
     );
 
-    return LongPressDraggable<LayerNode>(
+    final draggable = LongPressDraggable<LayerNode>(
       data: node,
       dragAnchorStrategy: (_, _, _) => const Offset(0, 0),
       feedback: DragFeedbackCard(node: node),
@@ -99,6 +101,20 @@ class LayerTile extends ConsumerWidget {
       onDraggableCanceled: (_, _) => onDragActiveChanged?.call(null),
       onDragEnd: (_) => onDragActiveChanged?.call(null),
       child: tileContent,
+    );
+
+    // View が「既定1枚だけ」のレイヤは、View 行を出さない。
+    // 導入前と同じ見た目に保つため（既定Viewはファイルにも書かれていない）。
+    final views = node.views;
+    final showViews = views.length > 1 || (views.length == 1 && !views.first.isDefaultView);
+    if (!showViews) return draggable;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        draggable,
+        for (final view in views) ViewTile(key: ValueKey(view.viewKey), node: view),
+      ],
     );
   }
 
@@ -153,6 +169,8 @@ class LayerTile extends ConsumerWidget {
             await _mergePolygons(context, ref, node as PolygonLayerNode);
           case 'absorb':
             await _absorbMatchingLayers(context, ref);
+          case 'add_view':
+            await _addView(ref);
           case 'delete':
             await _handleDelete(context, ref);
         }
@@ -165,6 +183,10 @@ class LayerTile extends ConsumerWidget {
         PopupMenuItem(
           value: 'style',
           child: Row(children: [const Icon(Icons.palette, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.layer.style)]),
+        ),
+        PopupMenuItem(
+          value: 'add_view',
+          child: Row(children: [const Icon(Icons.filter_alt, size: 16), const SizedBox(width: 8), Text(t.layerDrawer.view.addView)]),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
@@ -186,6 +208,27 @@ class LayerTile extends ConsumerWidget {
         PopupMenuItem(value: 'delete', child: Text(t.layerDrawer.layer.delete)),
       ],
     );
+  }
+
+  // ---------- View 操作 ----------
+
+  /// View を1枚足す。
+  ///
+  /// 既定Viewしか無いレイヤに足すと、既定Viewもファイルに書かれるようになる
+  /// （「Viewが2枚ある」状態は暗黙のままにしておけないため）。
+  Future<void> _addView(WidgetRef ref) async {
+    if (node.views.isEmpty) await node.loadViews();
+
+    final base = t.layerDrawer.view.newViewName;
+    var name = base;
+    var n = 1;
+    while (node.views.any((v) => v.name == name)) {
+      n++;
+      name = '$base $n';
+    }
+    node.views.add(ViewNode(name: name, parent: node));
+    await node.persistViews();
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
   }
 
   // ---------- レイヤー操作 ----------

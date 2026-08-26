@@ -172,11 +172,15 @@ class KMetaVisibility {
   /// 画像ファイル名 → 可視状態
   final Map<String, bool> images;
 
+  /// Viewキー（gpkgName/layerName/viewName形式） → 可視状態
+  final Map<String, bool> views;
+
   const KMetaVisibility({
     this.layers = const {},
     this.geopackages = const {},
     this.folders = const {},
     this.images = const {},
+    this.views = const {},
   });
 
   /// JSONからパース
@@ -187,6 +191,7 @@ class KMetaVisibility {
       geopackages: _parseBoolMap(json['geopackages']),
       folders: _parseBoolMap(json['folders']),
       images: _parseBoolMap(json['images']),
+      views: _parseBoolMap(json['views']),
     );
   }
 
@@ -202,6 +207,7 @@ class KMetaVisibility {
     if (geopackages.isNotEmpty) json['geopackages'] = geopackages;
     if (folders.isNotEmpty) json['folders'] = folders;
     if (images.isNotEmpty) json['images'] = images;
+    if (views.isNotEmpty) json['views'] = views;
     return json;
   }
 
@@ -221,10 +227,62 @@ class KMetaVisibility {
       layers.isEmpty &&
       geopackages.isEmpty &&
       folders.isEmpty &&
-      images.isEmpty;
+      images.isEmpty &&
+      views.isEmpty;
 }
 
 /// スタイル設定（デフォルト＋レイヤー個別）
+/// View: 親レイヤに対する「フィルタ＋スタイル」の集合体。
+///
+/// > [!IMPORTANT] View は見せ方であって、データではない
+/// > フィーチャは Layer に属する。View は同じ Layer を別の条件・別の見た目で
+/// > 何枚も見せるための定義。同じ Layer に対して複数の View を作り、
+/// > 同時に表示できる。並べ替えは**同一 Layer 内でのみ**許す
+/// > （dir構造の拘束を保つため。z順は常に dir 構造から決まる）。
+///
+/// QGIS の「レイヤ」と 1:1 で対応する唯一の概念。
+/// dir / GeoPackage / Layer はすべて QGIS のレイヤグループになる。
+/// 設計の全体像は [[docs/technical/project-format-design]]。
+class KMetaView {
+  const KMetaView({required this.name, this.filter, this.style});
+
+  /// View名。**同一レイヤ内で一意**であること（キーの一部になる）
+  final String name;
+
+  /// フィルタ。SQL の WHERE 句（QGIS の subset string と同じ書き方）。
+  /// null / 空文字なら絞り込み無し。
+  final String? filter;
+
+  /// この View の見た目。null なら親レイヤ／既定のスタイルに従う。
+  final KMetaLayerStyle? style;
+
+  factory KMetaView.fromJson(Map<String, dynamic> json) {
+    final styleJson = json['style'] as Map<String, dynamic>?;
+    return KMetaView(
+      name: json['name'] as String? ?? '',
+      filter: json['filter'] as String?,
+      style: styleJson == null ? null : KMetaLayerStyle.fromJson(styleJson),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{'name': name};
+    if (filter != null && filter!.isNotEmpty) json['filter'] = filter;
+    if (style != null && !style!.isEmpty) json['style'] = style!.toJson();
+    return json;
+  }
+
+  KMetaView copyWith({String? name, String? filter, KMetaLayerStyle? style}) =>
+      KMetaView(
+        name: name ?? this.name,
+        filter: filter ?? this.filter,
+        style: style ?? this.style,
+      );
+
+  @override
+  String toString() => 'KMetaView($name, filter=$filter)';
+}
+
 class KMetaStyles {
   /// デフォルトスタイル
   final KMetaLayerStyle? defaultStyle;
@@ -611,6 +669,13 @@ class KMeta {
   /// 画像オーバーレイ設定（画像ファイル名 → 変換パラメータ）
   final Map<String, KMetaImageOverlay> imageOverlays;
 
+  /// View定義（レイヤキー `gpkgName/layerName` → View の並び）
+  ///
+  /// **順序に意味がある。** 同一レイヤ内の z順はこのリストの順。
+  /// キーが無い＝そのレイヤに View が定義されていない、という意味で、
+  /// そのときアプリは「既定のView」を1つだけ暗黙に持つ（[LayerNode] 参照）。
+  final Map<String, List<KMetaView>> views;
+
   const KMeta({
     this.version = kMetaSchemaVersion,
     this.visibility = const KMetaVisibility(),
@@ -618,6 +683,7 @@ class KMeta {
     this.layout = const KMetaLayout(),
     this.sync = const KMetaSync(),
     this.imageOverlays = const {},
+    this.views = const {},
   });
 
   /// 空のメタデータ
@@ -636,6 +702,20 @@ class KMeta {
       }
     }
 
+    // View定義をパース
+    final viewsJson = json['views'] as Map<String, dynamic>?;
+    final views = <String, List<KMetaView>>{};
+    if (viewsJson != null) {
+      for (final entry in viewsJson.entries) {
+        final list = entry.value;
+        if (list is! List) continue;
+        views[entry.key] = [
+          for (final v in list)
+            if (v is Map<String, dynamic>) KMetaView.fromJson(v),
+        ];
+      }
+    }
+
     return KMeta(
       version: json['version'] as int? ?? kMetaSchemaVersion,
       visibility: KMetaVisibility.fromJson(
@@ -645,6 +725,7 @@ class KMeta {
       layout: KMetaLayout.fromJson(json['layout'] as Map<String, dynamic>?),
       sync: KMetaSync.fromJson(json['sync'] as Map<String, dynamic>?),
       imageOverlays: overlays,
+      views: views,
     );
   }
 
@@ -658,6 +739,11 @@ class KMeta {
     if (imageOverlays.isNotEmpty) {
       json['imageOverlays'] = imageOverlays.map(
         (k, v) => MapEntry(k, v.toJson()),
+      );
+    }
+    if (views.isNotEmpty) {
+      json['views'] = views.map(
+        (k, v) => MapEntry(k, [for (final view in v) view.toJson()]),
       );
     }
     return json;
@@ -709,7 +795,14 @@ class KMeta {
   /// 空かどうか
   bool get isEmpty =>
       visibility.isEmpty && styles.isEmpty && layout.isEmpty && sync.isEmpty &&
-      imageOverlays.isEmpty;
+      imageOverlays.isEmpty && views.isEmpty;
+
+  /// レイヤのView定義。定義が無ければ空リスト（＝既定のView1枚とみなす側の責務）
+  List<KMetaView> getViews(String layerKey) => views[layerKey] ?? const [];
+
+  /// Viewの可視状態を取得
+  /// [viewKey] は `gpkgName/layerName/viewName` 形式
+  bool? getViewVisibility(String viewKey) => visibility.views[viewKey];
 
   /// 特定レイヤーのスタイルを取得（デフォルト適用済み）
   /// [layerKey] はgpkgName/layerName形式（例: "survey.gpkg/points"）
@@ -736,6 +829,7 @@ class KMeta {
     KMetaLayout? layout,
     KMetaSync? sync,
     Map<String, KMetaImageOverlay>? imageOverlays,
+    Map<String, List<KMetaView>>? views,
   }) {
     return KMeta(
       version: version ?? this.version,
@@ -744,6 +838,7 @@ class KMeta {
       layout: layout ?? this.layout,
       sync: sync ?? this.sync,
       imageOverlays: imageOverlays ?? this.imageOverlays,
+      views: views ?? this.views,
     );
   }
 }

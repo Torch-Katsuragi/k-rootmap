@@ -707,10 +707,19 @@ class FeatureRepository {
 
   /// 全フィーチャをジオメトリパース済みで一括取得
   /// 非WGS84のレイヤはWGS84にre-projectionして返す
+  /// [where] は SQL の WHERE 句（QGIS の subset string と同じ書き方）。
+  /// null / 空なら絞り込み無し。View のフィルタがここに来る。
+  ///
+  /// > [!WARNING] [where] は文字列としてSQLに埋め込まれる
+  /// > バインド変数にはできない（条件式そのものだから）。ユーザーが書いた
+  /// > フィルタをそのまま通す QGIS と同じ設計だが、**`.kmeta.json` は
+  /// > Drive経由で他人から届きうる**。文の切り替え（`;`）だけは弾いておく。
+  /// > それ以上は SQLite の `SELECT` の外に出られないので許す。
   Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
     String tableName,
-    GeometryType? geomType,
-  ) async {
+    GeometryType? geomType, {
+    String? where,
+  }) async {
     try {
       final db = await connection.getDatabase();
       final pkColumn = await schema.getPrimaryKeyColumn(tableName);
@@ -720,7 +729,11 @@ class FeatureRepository {
               ? 'SELECT rowid, * FROM "$tableName"'
               : 'SELECT * FROM "$tableName"';
 
-      final rows = await db.rawQuery(selectClause);
+      final sql = StringBuffer(selectClause);
+      final safeWhere = sanitizeFilter(where);
+      if (safeWhere != null) sql.write(' WHERE $safeWhere');
+
+      final rows = await db.rawQuery(sql.toString());
 
       final mutableRows = <Map<String, dynamic>>[];
       for (final row in rows) {
@@ -783,6 +796,19 @@ class FeatureRepository {
       );
       return [];
     }
+  }
+
+  /// フィルタ文字列を検査する。使えないものは null（＝絞り込み無し）にする。
+  ///
+  /// 弾くのは「文を切り替えられる形」だけ。式として書かれている限りは通す。
+  static String? sanitizeFilter(String? filter) {
+    final trimmed = filter?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    if (trimmed.contains(';')) {
+      AppLogger.debug('[FeatureRepository] フィルタに ";" があるので無視: $trimmed');
+      return null;
+    }
+    return trimmed;
   }
 
   Future<List<Map<String, dynamic>>> getAllFeatureAttributes(

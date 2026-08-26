@@ -50,6 +50,8 @@ class NodePresenter {
         return Icons.storage;
       case NodeType.layer:
         return Icons.layers;
+      case NodeType.view:
+        return Icons.filter_alt;
       case NodeType.feature:
         return Icons.location_on;
       case NodeType.image:
@@ -94,6 +96,8 @@ class NodePresenter {
         return Colors.blueGrey;
       case NodeType.layer:
         return Colors.blue;
+      case NodeType.view:
+        return Colors.teal;
       case NodeType.feature:
         return Colors.red;
       case NodeType.image:

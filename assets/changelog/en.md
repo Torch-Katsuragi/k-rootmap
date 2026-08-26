@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### 🔍 Layers can now have "views"
+
+- Give one layer **several ways of showing it**, each with its own condition.
+  - e.g. keep "cedar only" and "cypress only" side by side and show just one.
+- Conditions are written as a SQL WHERE clause (same syntax as a QGIS filter).
+- Add one from the layer menu ("Add view"); each view's own menu has
+  rename, edit filter, duplicate, reorder and delete.
+- ⚠ **Only the filter takes effect for now.** Per-view colours and widths
+  are saved but not yet drawn on the map.
+- Layers without views behave exactly as before.
+
 ### 🌐 Web usability improvements
 
 - **Switching the base map now takes effect immediately** (a reload used to be required).

@@ -521,7 +521,27 @@
     "unlinkDriveConfirm": "$name のDrive連携を解除しますか？\n\nローカルファイルは削除されません。",
     "cloningDrive": "$name をクローン中...",
     "cloneSuccess": "$name をクローンしました",
-    "gpkgRenamed": "GeoPackageをリネームしました: $name"
+    "gpkgRenamed": "GeoPackageをリネームしました: $name",
+    "view": {
+      "addView": "Viewを追加",
+      "newViewName": "新しいView",
+      "rename": "名前の変更",
+      "renameTitle": "View名の変更",
+      "viewName": "View名",
+      "editFilter": "フィルタを編集",
+      "filterTitle": "フィルタ",
+      "filterHint": "SQLのWHERE句（例: 樹種 = 'スギ'）",
+      "filterHelp": "空にすると絞り込みなし。QGISのsubset stringと同じ書き方です。",
+      "duplicate": "複製",
+      "delete": "削除",
+      "deleteConfirm": "View「$name」を削除しますか？\n\nフィーチャは消えません（Viewは見せ方の定義です）。",
+      "cannotDeleteLast": "最後のViewは削除できません",
+      "moveUp": "上へ",
+      "moveDown": "下へ",
+      "nameRequired": "View名を入力してください",
+      "nameDuplicate": "同じ名前のViewが既にあります",
+      "noFilter": "フィルタなし"
+    }
   },
   "map": {
     "toolbar": {

@@ -521,7 +521,27 @@
     "unlinkDriveConfirm": "Unlink Drive for $name?\\n\\nLocal files will not be deleted.",
     "cloningDrive": "Cloning $name...",
     "cloneSuccess": "Cloned $name",
-    "gpkgRenamed": "GeoPackage renamed: $name"
+    "gpkgRenamed": "GeoPackage renamed: $name",
+    "view": {
+      "addView": "Add view",
+      "newViewName": "New view",
+      "rename": "Rename",
+      "renameTitle": "Rename view",
+      "viewName": "View name",
+      "editFilter": "Edit filter",
+      "filterTitle": "Filter",
+      "filterHint": "SQL WHERE clause (e.g. species = 'cedar')",
+      "filterHelp": "Leave empty for no filtering. Same syntax as a QGIS subset string.",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "deleteConfirm": "Delete the view \"$name\"?\n\nNo features are removed — a view is only a way of showing them.",
+      "cannotDeleteLast": "The last view can't be deleted",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "nameRequired": "Enter a view name",
+      "nameDuplicate": "A view with that name already exists",
+      "noFilter": "No filter"
+    }
   },
   "map": {
     "toolbar": {

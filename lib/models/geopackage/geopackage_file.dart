@@ -416,11 +416,13 @@ class GeoPackageFile {
       _features.getFeatures(tableName);
 
   /// 全フィーチャをジオメトリパース済みで一括取得（高速版）
+  /// [where] は SQL の WHERE 句（View のフィルタ）。null なら絞り込み無し。
   Future<List<Map<String, dynamic>>> getFeaturesWithGeometry(
-    String tableName,
-  ) async {
+    String tableName, {
+    String? where,
+  }) async {
     final geomType = await _layers.getGeometryType(tableName);
-    return _features.getFeaturesWithGeometry(tableName, geomType);
+    return _features.getFeaturesWithGeometry(tableName, geomType, where: where);
   }
 
   /// 指定レイヤーの全フィーチャの属性データを一括取得

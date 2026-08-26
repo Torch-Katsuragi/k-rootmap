@@ -163,6 +163,7 @@ class KMetaService {
         geopackages: v.geopackages,
         folders: v.folders,
         images: v.images,
+        views: v.views,
       ),
     );
     return saveMeta(folderPath, updatedMeta);
@@ -182,6 +183,7 @@ class KMetaService {
         geopackages: {...v.geopackages, gpkgName: visible},
         folders: v.folders,
         images: v.images,
+        views: v.views,
       ),
     );
     return saveMeta(folderPath, updatedMeta);
@@ -201,6 +203,7 @@ class KMetaService {
         geopackages: v.geopackages,
         folders: {...v.folders, folderName: visible},
         images: v.images,
+        views: v.views,
       ),
     );
     return saveMeta(folderPath, updatedMeta);
@@ -220,9 +223,50 @@ class KMetaService {
         geopackages: v.geopackages,
         folders: v.folders,
         images: {...v.images, imageName: visible},
+        views: v.views,
       ),
     );
     return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// Viewの可視状態を更新
+  /// [viewKey] は `gpkgName/layerName/viewName` 形式
+  Future<bool> setViewVisibility(
+    String folderPath,
+    String viewKey,
+    bool visible,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final v = rawMeta.visibility;
+    final updatedMeta = rawMeta.copyWith(
+      visibility: KMetaVisibility(
+        layers: v.layers,
+        geopackages: v.geopackages,
+        folders: v.folders,
+        images: v.images,
+        views: {...v.views, viewKey: visible},
+      ),
+    );
+    return saveMeta(folderPath, updatedMeta);
+  }
+
+  /// レイヤのView定義をまるごと差し替える。
+  ///
+  /// **順序に意味がある**（同一レイヤ内の z順）ので、リストごと渡すこと。
+  /// 空リストを渡すとキーごと消える＝「既定のView1枚」に戻る。
+  Future<bool> setViews(
+    String folderPath,
+    String layerKey,
+    List<KMetaView> views,
+  ) async {
+    final rawMeta = await getRawMeta(folderPath) ?? KMeta.empty;
+    final updated = Map<String, List<KMetaView>>.from(rawMeta.views);
+    if (views.isEmpty) {
+      updated.remove(layerKey);
+    } else {
+      updated[layerKey] = views;
+    }
+    return saveMeta(folderPath, rawMeta.copyWith(views: updated));
   }
 
   /// レイヤースタイルを更新

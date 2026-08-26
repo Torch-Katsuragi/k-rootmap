@@ -59,24 +59,32 @@ class _AttributeTableWidgetState extends ConsumerState<AttributeTableWidget> {
   String? _statsColumnName;
   _ViewMode _viewMode = _ViewMode.table;
 
+  /// 表示中のフィーチャを読んだときの [LayerNode.featuresRevision]
+  int _loadedRevision = -1;
+
   @override
   void initState() {
     super.initState();
     _controller = AttributeTableController(widget.layer, ref);
     _controller.addListener(_onControllerChanged);
+    _loadedRevision = widget.layer.featuresRevision;
     _controller.initialize();
   }
 
   @override
   void didUpdateWidget(AttributeTableWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.layer.layerName != widget.layer.layerName) {
+    // レイヤが変わったとき、または同じレイヤのフィーチャが読み直されたとき
+    // （View のフィルタを変えると件数が変わる）は作り直す。
+    if (oldWidget.layer.layerName != widget.layer.layerName ||
+        _loadedRevision != widget.layer.featuresRevision) {
       _controller.removeListener(_onControllerChanged);
       // dispose中のプロバイダ変更を遅延実行
       final oldController = _controller;
       Future.microtask(() => oldController.dispose());
       _controller = AttributeTableController(widget.layer, ref);
       _controller.addListener(_onControllerChanged);
+      _loadedRevision = widget.layer.featuresRevision;
       _controller.initialize();
       _plutoGridKey = UniqueKey();
     }

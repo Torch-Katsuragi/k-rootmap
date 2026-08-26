@@ -21,6 +21,7 @@
 /// 各ノードタイプは以下のカテゴリに分類される：
 /// - コンテナ系: folder, geopackage
 /// - データ系: layer, feature
+/// - 表現系: view（データではなく「見せ方」。[[docs/technical/project-format-design]]）
 /// - メディア系: image
 enum NodeType {
   /// フォルダノード（ファイルシステムのディレクトリに対応）
@@ -31,6 +32,9 @@ enum NodeType {
   
   /// レイヤノード（GeoPackage内のフィーチャテーブルに対応）
   layer('layer'),
+  
+  /// Viewノード（レイヤに対する「フィルタ＋スタイル」。QGISのレイヤと1:1対応）
+  view('view'),
   
   /// フィーチャノード（レイヤ内の個別フィーチャに対応）
   feature('feature'),
@@ -69,6 +73,9 @@ enum NodeType {
   }
   
   /// このノードタイプがコンテナ（子を持てる）かどうか
+  ///
+  /// ⚠ view は Layer にぶら下がるが、`children` には入らない
+  /// （Layer の `children` は FeatureNode 専用。理由は [[lib/models/nodes/view_node]]）。
   bool get isContainer => this == folder || this == geopackage || this == layer;
   
   /// このノードタイプがリーフ（子を持たない）かどうか
@@ -86,6 +93,8 @@ enum NodeType {
         return 'GeoPackage';
       case NodeType.layer:
         return 'レイヤ';
+      case NodeType.view:
+        return 'View';
       case NodeType.feature:
         return 'フィーチャ';
       case NodeType.image:

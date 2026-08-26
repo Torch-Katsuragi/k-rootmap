@@ -89,6 +89,12 @@ class GeoPackageNode extends LayerTreeNode {
     // KMetaの可視性設定をレイヤーに適用
     await _applyMetaVisibility();
 
+    // View定義を読む。ツリーUIは同期的に描くので、ここで揃えておく。
+    // View が定義されていないレイヤにも「既定」View が1枚できる。
+    await Future.wait(
+      children.whereType<LayerNode>().map((l) => l.loadViews()),
+    );
+
     AppLogger.debug('[GeoPackageNode] ${children.length} layers in $name');
   }
 

@@ -11,6 +11,8 @@
 //
 // ツリーに View を差し込む経路は DB とファイルシステムが要るため、
 // integration_test 側の担当（[[docs/technical/qgis-interop]]）。
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/kmeta.dart';
 import 'package:root_maps/services/qgis/qgs_importer.dart';
@@ -165,6 +167,110 @@ void main() {
 </maplayer>
 ''';
       expect(readStyleForTest(weird), isNull);
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // 本物の QGIS が書いたファイル
+  // ---------------------------------------------------------------
+  //
+  // `test/fixtures/qgis_3_44_written.qgs` は **QGIS 3.44.12 に書かせたもの**
+  // （PyQGIS で生成。手順は docs/technical/qgis-interop）。
+  // 手で書いたXMLでは気づけない差がここで出る。実際2件見つかっている:
+  //   - 色に浮動小数表記が付く: `30,144,255,255,rgb:0.1176471,...`
+  //   - `<layer>` の中に `<data_defined_properties>` があり、
+  //     そこにも `name="name"` の `<Option>` が入っている
+  group('QGIS 3.44 が実際に書いた .qgs', () {
+    late XmlDocument doc;
+    late List<XmlElement> mapLayers;
+
+    setUpAll(() {
+      doc = XmlDocument.parse(
+        File('test/fixtures/qgis_3_44_written.qgs').readAsStringSync(),
+      );
+      mapLayers =
+          doc.rootElement
+              .findElements('projectlayers')
+              .single
+              .findElements('maplayer')
+              .toList();
+    });
+
+    XmlElement layerNamed(String name) =>
+        mapLayers.firstWhere((e) => e.findElements('layername').single.innerText == name);
+
+    test('ユーザーのレイヤだけが projectlayers に入っている', () {
+      // ⚠ 文書全体から maplayer を探すと `<main-annotation-layer>` まで拾う
+      expect(
+        mapLayers.map((e) => e.findElements('layername').single.innerText),
+        ['スギ', '全部', 'root外'],
+      );
+    });
+
+    test('データソースとフィルタを読める', () {
+      final source = QgsDataSource.parse(
+        layerNamed('スギ').findElements('datasource').single.innerText,
+      );
+      expect(source!.layerName, 'rinshoban');
+      expect(source.subset, 'area > 105');
+      expect(source.path, endsWith('.gpkg'));
+    });
+
+    test('root外への参照は相対パスで大量の .. になって出てくる', () {
+      final source = QgsDataSource.parse(
+        layerNamed('root外').findElements('datasource').single.innerText,
+      );
+      expect(source!.path, startsWith('..'),
+          reason: 'この形を「root外」と判定できないと、開けない参照を取り込んでしまう');
+    });
+
+    test('色に付く浮動小数表記に引きずられない', () {
+      // QGIS が書くのは `30,144,255,255,rgb:0.1176471,0.5647059,1,1`
+      final style = const QgsImporter().readStyle(layerNamed('スギ'));
+      expect(style, isNotNull);
+      expect(style!.pointColor?.toARGB32(), 0xFF1E90FF);
+    });
+
+    test('data_defined_properties があっても size を読める', () {
+      final style = const QgsImporter().readStyle(layerNamed('スギ'));
+      expect(style!.pointSize, isNotNull, reason: 'size を読めていない');
+      expect(style.pointSize, closeTo(4 * 96 / 25.4 / 2, 0.01));
+    });
+
+    test('入れ子の Option を拾わない', () {
+      // QGIS は `<layer>` の中に `<data_defined_properties>` も書き、
+      // そこにも `<Option name="name">` などが入っている。再帰で読むと
+      // 本物の値を上書きしてしまう。
+      //
+      // 実物では衝突するキー（name / type）を今は使っていないので実害が無いが、
+      // 「入れ子は読まない」を性質として固定しておく。
+      const nested = '''
+<maplayer>
+  <renderer-v2 type="singleSymbol">
+    <symbols>
+      <symbol name="0" type="marker">
+        <layer class="SimpleMarker">
+          <Option type="Map">
+            <Option name="color" type="QString" value="30,144,255,255"/>
+            <Option name="size" type="QString" value="4"/>
+          </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option name="color" type="QString" value="0,0,0,0"/>
+              <Option name="size" type="QString" value="99"/>
+            </Option>
+          </data_defined_properties>
+        </layer>
+      </symbol>
+    </symbols>
+  </renderer-v2>
+</maplayer>
+''';
+      final style = readStyleForTest(nested);
+      expect(style!.pointColor?.toARGB32(), 0xFF1E90FF,
+          reason: 'data_defined_properties の色に上書きされている');
+      expect(style.pointSize, closeTo(4 * 96 / 25.4 / 2, 0.01),
+          reason: 'data_defined_properties の size に上書きされている');
     });
   });
 }

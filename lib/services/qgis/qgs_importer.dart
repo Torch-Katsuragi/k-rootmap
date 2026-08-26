@@ -160,7 +160,13 @@ class QgsImporter {
     // 取り込み対象になったレイヤ。ここに入ったものだけ View を差し替える
     final touched = <LayerNode, List<ViewNode>>{};
 
-    for (final maplayer in doc.rootElement.findAllElements('maplayer')) {
+    // ⚠ `maplayer` は文書全体を探さない。QGIS は `<main-annotation-layer>` の
+    //    ような「ユーザーのレイヤではないもの」も同じ形で書くため、
+    //    `<projectlayers>` の下だけを相手にする。
+    final projectLayers =
+        doc.rootElement.findElements('projectlayers').firstOrNull;
+    for (final maplayer in projectLayers?.findElements('maplayer') ??
+        const <XmlElement>[]) {
       final name = _text(maplayer, 'layername') ?? '(名前なし)';
       final provider = _text(maplayer, 'provider')?.toLowerCase();
 
@@ -333,20 +339,35 @@ class QgsImporter {
   /// **両方読む。** 他人のファイルは古い形式で来る。
   Map<String, String> _readProps(XmlElement symbolLayer) {
     final props = <String, String>{};
-    for (final prop in symbolLayer.findAllElements('prop')) {
+
+    // 旧形式（QGIS 3.x より前）。`<layer>` の直下に並ぶ
+    for (final prop in symbolLayer.findElements('prop')) {
       final k = prop.getAttribute('k');
       final v = prop.getAttribute('v');
       if (k != null && v != null) props[k] = v;
     }
-    for (final option in symbolLayer.findAllElements('Option')) {
-      final name = option.getAttribute('name');
-      final value = option.getAttribute('value');
-      if (name != null && value != null) props[name] = value;
+
+    // 新形式。`<layer>` の**直下の** `<Option type="Map">` の子だけを見る。
+    //
+    // ⚠ 再帰で拾ってはいけない。QGIS は `<layer>` の中に
+    //   `<data_defined_properties>` も書き、そこにも `name="name"` などの
+    //   `<Option>` が入っている。まとめて読むと本物の値を上書きしてしまう
+    //   （QGIS 3.44 の実出力で確認）。
+    for (final map in symbolLayer.findElements('Option')) {
+      if (map.getAttribute('type') != 'Map') continue;
+      for (final option in map.findElements('Option')) {
+        final name = option.getAttribute('name');
+        final value = option.getAttribute('value');
+        if (name != null && value != null) props[name] = value;
+      }
     }
     return props;
   }
 
   /// QGIS の `R,G,B,A`（各0-255）
+  ///
+  /// ⚠ QGIS 3.44 は後ろに浮動小数表記を足してくる:
+  /// `30,144,255,255,rgb:0.1176471,0.5647059,1,1`。先頭4つだけ見ればよい。
   Color? _color(String? value) {
     if (value == null) return null;
     final parts = value.split(',');

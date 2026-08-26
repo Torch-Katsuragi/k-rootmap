@@ -61,13 +61,38 @@ View だけがレイヤになるので **1:1 対応**が成立する。View の�
 > 生成のたびに変わると `.qgs` の差分が毎回出て、Drive同期が無駄に動く。
 > View のキーをサニタイズしたものに、キーのハッシュを添えている。
 
-> [!WARNING] QGISで実際に開けるかは未検証（2026-08-26 時点）
-> 開発機にQGISが入っていないため確かめられていない。テストで見ているのは
-> **XMLの形まで**（グループ構造・IDの一致・subsetの載り方・相対パス）。
->
-> 確かめたら結果をここに書くこと。落ちるとしたら候補は `renderer-v2` の
-> シンボルXML。スタイル未設定のレイヤにはレンダラを書かない作りなので、
-> 疑わしければ一度スタイルを外して切り分けられる。
+> [!NOTE] QGIS 3.44.12 で実開封を確認済み（2026-08-26）
+> ```
+> read() = True
+> --- '既定'        valid=True  count=12  crs=EPSG:4326
+> --- '大きい区画'  valid=True  count=6   subset='area > 105'
+>                   symbol=SimpleMarker color=#1e90ff
+> [group] 林小班.gpkg → [group] rinshoban → [layer] 既定 / 大きい区画
+> ```
+> 相対パスの解決・subsetの適用（12→6）・レンダラの読み取り・グループ構造の
+> いずれも意図どおり。
+
+### QGISで確かめる手順
+
+開発機にはQGISが**インストールされていない**（管理者権限が要るため）。
+代わりにMSIを展開しただけのものを使っている。
+
+```powershell
+# 1. MSIを取得（署名がOSGeo財団のものであることを確認すること）
+curl -L -o .temp/QGIS-LTR.msi https://download.osgeo.org/qgis/win64/QGIS-OSGeo4W-3.44.12-1.msi
+Get-AuthenticodeSignature .temp\QGIS-LTR.msi   # Status が Valid であること
+
+# 2. 管理者権限なしで「展開だけ」する（/a = 管理インストール）
+msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
+
+# 3. PyQGIS で開かせる
+& 'C:\Users\<user>\qgis-extract\QGIS 3.44.12\bin\python-qgis-ltr.bat' `
+    tool/qgis/check_qgs.py <project.qgs>
+```
+
+⚠ `winget install OSGeo.QGIS_LTR` は配信サービス側のエラー（0x8a15006d）で
+落ちることがある。そのときは上のように直接MSIを取る。
+⚠ `msiexec /i` は `Error 1925`（管理者権限が無い）で失敗する。`/a` なら通る。
 
 書かないもの（`QgsProject.skipped` に入り、通知に出る）:
 
@@ -97,6 +122,17 @@ View だけがレイヤになるので **1:1 対応**が成立する。View の�
 
 > [!IMPORTANT] 取り込んだレイヤの View は丸ごと置き換える
 > 何度読んでも増えないようにするため。`.qgs` に出てこなかったレイヤは触らない。
+
+> [!IMPORTANT] テスト用 fixture は QGIS 本体に書かせたもの
+> `test/fixtures/qgis_3_44_written.qgs` は `tool/qgis/write_fixture.py` を
+> PyQGIS で走らせて作った**本物**。手で書いたXMLでは気づけない差がここで出る。
+> 実際、これを入れて2件見つかった:
+>
+> - 色に浮動小数表記が付く: `30,144,255,255,rgb:0.1176471,0.5647059,1,1`
+> - `<layer>` の中に `<data_defined_properties>` があり、そこにも
+>   `name="name"` の `<Option>` が入っている。再帰で読むと本物の値を潰す
+>
+> QGISのバージョンを上げたら fixture を作り直すこと。
 
 > [!NOTE] 読み取りは寛容に
 > - シンボルのプロパティは QGIS 3.x の `<Option name= value=>` と、

@@ -122,14 +122,19 @@ class GeoPackageNode extends LayerTreeNode {
   }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
-  static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
+  ///
+  /// [entries] を渡すと列挙をやり直さない（[FolderNode.loadNodes] と同じ理由）。
+  static Future<List<LayerTreeNode>> loadNodes(
+    LayerTreeNode? parent, {
+    List<KFileEntry>? entries,
+  }) async {
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    final gpkgFiles = (await fs.list(absPath))
+    final gpkgFiles = (entries ?? await fs.list(absPath))
         .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));

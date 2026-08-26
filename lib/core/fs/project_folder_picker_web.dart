@@ -21,3 +21,9 @@ import 'k_file_system_web.dart';
 bool get canPickProjectFolder => WebFileSystem.supportsDirectoryPicker;
 
 Future<String?> pickProjectFolder() => WebFileSystem.instance.pickDirectory();
+
+Future<String?> lastProjectFolderName() =>
+    WebFileSystem.instance.lastDirectoryName();
+
+Future<String?> reopenLastProjectFolder() =>
+    WebFileSystem.instance.reopenLastDirectory();

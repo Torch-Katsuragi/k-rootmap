@@ -32,3 +32,15 @@ bool get canPickProjectFolder => impl.canPickProjectFolder;
 ///
 /// web が返すのはOSのパスではなく、`WebFileSystem` が解決できる**仮想パス**。
 Future<String?> pickProjectFolder() => impl.pickProjectFolder();
+
+/// 前回開いたフォルダの名前。無ければ null。
+///
+/// web のみ意味がある。native は毎回OSのピッカーを出せばよく、
+/// 「最近開いたもの」は別途 `SettingsStore` が持つ話なのでここでは null を返す。
+Future<String?> lastProjectFolderName() => impl.lastProjectFolderName();
+
+/// 前回のフォルダを開き直し、そのパスを返す。開けなければ null。
+///
+/// > [!IMPORTANT] ボタン押下などの**ユーザー操作の中から呼ぶこと**。
+/// > web ではブラウザの再許可プロンプトが要り、それはユーザー操作起点でしか出せない。
+Future<String?> reopenLastProjectFolder() => impl.reopenLastProjectFolder();

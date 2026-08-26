@@ -24,6 +24,7 @@ import 'package:maplibre/maplibre.dart' as ml;
 import 'package:geobase/geobase.dart' as geo;
 import 'package:latlong2/latlong.dart';
 import 'package:turf/turf.dart' as turf;
+import '../../services/basemap_style_json.dart';
 import '../../services/map_source_manager.dart';
 import '../../core/platform_capabilities.dart';
 import 'package:path/path.dart' as p;
@@ -608,21 +609,40 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     ml.StyleController style, {
     String? belowLayerId,
   }) async {
-    // web は `StyleController.addSource()` で RasterSource を登録できない
-    // （maplibre_web 0.3.5 のバグ。詳細は basemap_style_json.dart）。
-    // 代わりに初期スタイルJSONへ焼き込み済みなので、ここは何もしない。
-    // ⚠ そのぶん背景地図の切り替えは web では即時反映されない（再読み込みが要る）。
-    if (!PlatformCapabilities.supportsLocalTileServer) {
-      AppLogger.debug('[MAP] addBasemapSource: skipped (web: スタイルJSONに焼き込み済み)');
-      return;
-    }
-
     final layers = baseMapService.activeLayerConfig;
     if (layers.isEmpty) return;
 
+    // web は `StyleController.addSource()` で RasterSource を登録できない
+    // （maplibre_web 0.3.5 のバグ。詳細は basemap_style_json.dart）。
+    // ソースは初期スタイルJSONに全プロバイダぶん焼き込んであるので、
+    // ここではレイヤを積むだけでよい（`addLayer` は web でも正常に動く）。
+    if (PlatformCapabilities.isWeb) {
+      for (final (provider, opacity) in layers) {
+        final layerId = basemapLayerId(provider.id);
+        try {
+          await style.addLayer(
+            ml.RasterStyleLayer(
+              id: layerId,
+              sourceId: basemapSourceId(provider.id),
+              paint: {'raster-opacity': opacity},
+            ),
+            belowLayerId: belowLayerId,
+          );
+          _activeBasemapLayerIds.add(layerId);
+          AppLogger.debug(
+            '[MAP] addBasemapLayer(web): ${provider.id} '
+            'opacity=${opacity.toStringAsFixed(2)}',
+          );
+        } catch (e) {
+          AppLogger.debug('[MAP] addBasemapLayer error (${provider.id}): $e');
+        }
+      }
+      return;
+    }
+
     for (final (provider, opacity) in layers) {
-      final sourceId = 'basemap-${provider.id}';
-      final layerId = 'basemap-layer-${provider.id}';
+      final sourceId = basemapSourceId(provider.id);
+      final layerId = basemapLayerId(provider.id);
 
       ml.RasterSource source;
 
@@ -704,15 +724,20 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final style = mapControllerInstance.style;
     if (style == null) return;
 
-    // 既存の全basemapレイヤ・ソースを削除
+    // 既存の全basemapレイヤを削除
     for (final layerId in _activeBasemapLayerIds.reversed) {
       try { await style.removeLayer(layerId); } catch (_) {}
     }
-    for (final sourceId in _activeBasemapSourceIds.reversed) {
-      try { await style.removeSource(sourceId); } catch (_) {}
-    }
     _activeBasemapLayerIds.clear();
-    _activeBasemapSourceIds.clear();
+
+    // ⚠ web のソースは初期スタイルJSONに焼き込んだもので、消すと二度と足せない
+    // （`addSource` が壊れているのがそもそもの発端）。消すのは native だけ。
+    if (!PlatformCapabilities.isWeb) {
+      for (final sourceId in _activeBasemapSourceIds.reversed) {
+        try { await style.removeSource(sourceId); } catch (_) {}
+      }
+      _activeBasemapSourceIds.clear();
+    }
 
     await _addBasemapSources(
       style,
@@ -1622,6 +1647,15 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     return const SizedBox.shrink();
   }
 
+  /// サイドパネル・ボトムパネルの背景色。
+  ///
+  /// > [!NOTE] 2026-08-26 に不透明にした
+  /// > もとは `alpha: 0.9` で、地図がうっすら透けるようにしてあった。
+  /// > 背景地図を航空写真にすると文字が読めなくなるほど目立つので、透過をやめた。
+  /// > （「web版でドロワーに地図が透ける」として上がっていたが、web固有の
+  /// > 合成バグではなくこの指定が原因だった。Android でも同じに見えていたはず）
+  static const _panelBackgroundColor = Colors.white;
+
   /// レイヤードロワーパネル構築
   Widget _buildLayerDrawerPanel() {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1635,7 +1669,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         initialWidth: drawerWidth,
         minWidth: minDrawerWidth,
         maxWidth: maxWidth,
-        backgroundColor: Colors.white.withValues(alpha: 0.9),
+        backgroundColor: _panelBackgroundColor,
         handleColor: Colors.black.withValues(alpha: 0.08),
         onOpenChanged: (isOpen) {
           triggerSetState(() {
@@ -1673,7 +1707,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       initialHeight: attributeTableHeight.clamp(120.0, maxHeight),
       minHeight: 120,
       maxHeight: maxHeight,
-      backgroundColor: Colors.white.withValues(alpha: 0.9),
+      backgroundColor: _panelBackgroundColor,
       handleColor: Colors.black.withValues(alpha: 0.08),
       onOpenChanged: (isOpen) {
         if (!isOpen) {

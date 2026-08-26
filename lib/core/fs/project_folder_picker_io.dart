@@ -21,3 +21,8 @@ import 'package:file_picker/file_picker.dart';
 bool get canPickProjectFolder => true;
 
 Future<String?> pickProjectFolder() => FilePicker.getDirectoryPath();
+
+/// native はブラウザのような「権限が切れる」事情が無いので、この経路は使わない
+Future<String?> lastProjectFolderName() async => null;
+
+Future<String?> reopenLastProjectFolder() async => null;

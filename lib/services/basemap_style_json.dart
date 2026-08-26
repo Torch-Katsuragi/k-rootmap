@@ -24,6 +24,12 @@
 /// >
 /// > スタイルJSONに最初から書いてしまえばこの経路を通らない
 /// > （`jsonDecode` → `jsify` で null が混ざらない）。
+/// >
+/// > **壊れているのは `addSource` だけ**で、`addLayer` は正常に動く。
+/// > そこでスタイルJSONには**全プロバイダのソースだけ**を焼き込み、
+/// > レイヤは native と同じく `_addBasemapSources()` が実行時に積む。
+/// > こうすると背景地図の切り替えが（レイヤの付け外しだけで済むので）
+/// > 再読み込みなしで効く。
 library;
 
 import 'dart:convert';
@@ -43,44 +49,40 @@ String basemapSourceId(String providerId) => 'basemap-$providerId';
 /// プロバイダIDからレイヤIDを作る（`map_page.dart` の命名と一致させること）
 String basemapLayerId(String providerId) => 'basemap-layer-$providerId';
 
-/// [layers]（プロバイダと累積補正済みopacityの組）を焼き込んだスタイルJSONを返す。
+/// 背景地図の**ソース**を全プロバイダぶん焼き込んだスタイルJSONを返す。
 ///
-/// [layers] が空なら背景色だけの最小スタイルになる（オフラインでも
-/// `onStyleLoaded` が発火する）。
+/// レイヤは入れない（背景色の [kBackgroundLayerId] だけ）。
+/// どのプロバイダをどの不透明度で見せるかは実行時に `addLayer` で決める。
+///
+/// > [!NOTE] 使わないソースを書いても転送量は増えない
+/// > maplibre-gl はソースを宣言しただけではタイルを取りに行かない。
+/// > そのソースを参照するレイヤが1枚でも付いて初めてリクエストが飛ぶ。
 String buildBasemapStyleJson({
-  required List<(BaseMapProvider, double)> layers,
+  List<BaseMapProvider> providers = BaseMapProvider.availableProviders,
   String glyphsUrl = _kFallbackGlyphs,
 }) {
-  final sources = <String, dynamic>{};
-  final styleLayers = <Map<String, dynamic>>[
-    {
-      'id': kBackgroundLayerId,
-      'type': 'background',
-      'paint': {'background-color': '#e8e8e8'},
-    },
-  ];
-
-  for (final (provider, opacity) in layers) {
-    sources[basemapSourceId(provider.id)] = {
-      'type': 'raster',
-      'tiles': [provider.urlTemplate],
-      'tileSize': 256,
-      'minzoom': provider.minZoom,
-      'maxzoom': provider.maxZoom,
-      'attribution': provider.attribution,
-    };
-    styleLayers.add({
-      'id': basemapLayerId(provider.id),
-      'type': 'raster',
-      'source': basemapSourceId(provider.id),
-      'paint': {'raster-opacity': opacity},
-    });
-  }
+  final sources = <String, dynamic>{
+    for (final provider in providers)
+      basemapSourceId(provider.id): {
+        'type': 'raster',
+        'tiles': [provider.urlTemplate],
+        'tileSize': 256,
+        'minzoom': provider.minZoom,
+        'maxzoom': provider.maxZoom,
+        'attribution': provider.attribution,
+      },
+  };
 
   return jsonEncode({
     'version': 8,
     'glyphs': glyphsUrl,
     'sources': sources,
-    'layers': styleLayers,
+    'layers': [
+      {
+        'id': kBackgroundLayerId,
+        'type': 'background',
+        'paint': {'background-color': '#e8e8e8'},
+      },
+    ],
   });
 }

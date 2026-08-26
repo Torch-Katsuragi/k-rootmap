@@ -58,6 +58,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _isCheckingPermissions = false; // 権限チェック中フラグ
   bool _navigatedToMapPage = false; // マップ画面に遷移済みフラグ
   bool _isOpeningProject = false; // プロジェクト開始中フラグ
+
+  /// 前回開いたフォルダの名前（web のみ。無ければ null）
+  String? _lastFolderName;
   String _openingProjectStatus = '';
   bool _initCompleted = false; // 初期化（オンボーディング含む）完了フラグ
   bool _hasUnreadChangelog = false; // チェンジログ未読フラグ
@@ -69,6 +72,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     WidgetsBinding.instance.addObserver(this);
     _initPermissions();
     _checkChangelogUnread();
+    _loadLastFolderName();
+  }
+
+  /// 前回のフォルダ名を読む（ボタンを出すかの判断だけ。権限は要求しない）
+  Future<void> _loadLastFolderName() async {
+    final name = await lastProjectFolderName();
+    if (!mounted || name == null) return;
+    setState(() => _lastFolderName = name);
+  }
+
+  /// 前回のフォルダを開き直す
+  ///
+  /// ⚠ **ボタンのハンドラから直接呼ぶこと。** web ではブラウザの再許可プロンプトが
+  /// 要り、それはユーザー操作起点でしか出せない。
+  Future<void> _reopenLastProjectDir() async {
+    final dir = await reopenLastProjectFolder();
+    if (!mounted) return;
+    if (dir == null) {
+      ref
+          .read(notificationCenterProvider.notifier)
+          .add(
+            title: t.home.reopenLastFolderFailed,
+            level: NotificationLevel.warning,
+          );
+      setState(() => _lastFolderName = null);
+      return;
+    }
+    await _openProjectDir(dir);
   }
 
   /// チェンジログの未読状態を確認
@@ -667,6 +698,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                   textStyle: const TextStyle(fontSize: 16),
                                 ),
                               ),
+                              if (_lastFolderName != null &&
+                                  !_isOpeningProject) ...[
+                                const SizedBox(height: 12),
+                                TextButton.icon(
+                                  onPressed:
+                                      _permissionsGranted
+                                          ? _reopenLastProjectDir
+                                          : null,
+                                  icon: const Icon(Icons.history),
+                                  label: Text(
+                                    '${t.home.reopenLastFolder}'
+                                    '（$_lastFolderName）',
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.blue,
+                                  ),
+                                ),
+                              ],
                               if (_isOpeningProject) ...[
                                 const SizedBox(height: 12),
                                 Text(

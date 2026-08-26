@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### 🌐 Web usability improvements
+
+- **Switching the base map now takes effect immediately** (a reload used to be required).
+- **The app now remembers the last folder you opened.**
+  Reopen the browser and you'll see "Reopen last folder".
+  - ⚠ The browser will ask for access permission again when reopening.
+- Opening a folder is faster (it used to be scanned three times).
+
+### 🎨 The layer list and attribute table are now opaque
+
+- The map used to show through them, which made text hard to read over aerial imagery.
+
 ### 🖥️ Windows Support Discontinued
 
 - Windows, macOS and Linux builds are gone; **the web build replaces them**
@@ -17,14 +29,12 @@
   - No local tile server on web — the browser fetches tiles directly
 - Not yet available: opening a project folder, reading or writing GeoPackages
   (file handling comes in the next stage)
-- Known limitation: on web, switching the base map only takes effect after a reload
 
 ### 📂 Project Folders on Web
 
 - Pick a folder in the browser and its subfolders, GeoPackages and photos appear in the layer list
 - ⚠ **Requires Google Chrome or Microsoft Edge.** Firefox and Safari have no way to open
   a folder, so they only show the base map
-- ⚠ The chosen folder is forgotten on reload; pick it again
 
 ### 🗂️ Reading and Writing GeoPackages on Web
 

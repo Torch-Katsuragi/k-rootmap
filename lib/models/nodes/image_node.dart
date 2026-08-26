@@ -116,7 +116,12 @@ class ImageNode extends LayerTreeNode {
 
   /// 指定したフォルダ内の画像ファイルをスキャンし、ImageNodeリストを返す
   /// GeoTIFFタグ（ModelTransformationTag）を持つ.tifファイルはOverlayImageNodeとして生成
-  static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
+  ///
+  /// [entries] を渡すと列挙をやり直さない（[FolderNode.loadNodes] と同じ理由）。
+  static Future<List<LayerTreeNode>> loadNodes(
+    LayerTreeNode? parent, {
+    List<KFileEntry>? entries,
+  }) async {
     final nodes = <LayerTreeNode>[];
     if (parent is! FolderNode) return nodes;
 
@@ -125,7 +130,7 @@ class ImageNode extends LayerTreeNode {
 
     const supportedExtensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'};
 
-    final imageFiles = (await fs.list(absPath))
+    final imageFiles = (entries ?? await fs.list(absPath))
         .where((e) =>
             !e.isDirectory &&
             supportedExtensions.contains(p.extension(e.path).toLowerCase()))

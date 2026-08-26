@@ -14,7 +14,7 @@
 
 - [x] Windows版のビルド復旧・地図バックエンド選定・契約テスト整備（→ 撤去により役目終了）
 - [x] 撤去にあわせて `flutter_inappwebview` が Android APK から落ちた（`maplibre_webview` の推移的依存だった）
-- [ ] 死んだ依存 `flutter_map` を pubspec から外す
+- [x] 死んだ依存 `flutter_map` を pubspec から外す（2026-08-26）
 - [ ] 上流に issue/PR（josxha/flutter-maplibre）は**出さない**（AIが人間のコミュニティに投稿しない方針）。
       踏んだバグは手元の回避策とコメントに残してある
 
@@ -79,24 +79,30 @@
 - [ ] セルフホスト手順を書く（既定にはしない。大口向けの選択肢）
 - [ ] web版でルーム機能を使えるように（`flutterfire configure` に web を追加）
 
-### 段1 の積み残し
+### 段1 の積み残し（2026-08-26 に全て解消）
 
-- [ ] **webで背景地図を切り替えても即時反映されない**（再読み込みが要る）
+- [x] **webで背景地図を切り替えても即時反映されない**（→ 解消）
   - 原因は上流。maplibre_web 0.3.5 の `StyleController.addSource()` が `RasterSource` の
     `tiles` と `url` を**両方**JSに書くため、片方が必ず null になり
     maplibre-gl のバリデータが `url: string expected, null found` で弾く。
     例外もリクエストも出ないので**無言で背景地図が消える**
-  - 段1では初期スタイルJSONに焼き込んで回避（`lib/services/basemap_style_json.dart`）
-  - 直すなら: 上流に報告 / `MapController.setStyle()` でスタイルごと差し替え
-    （`MapSourceManager` に再初期化の口が無いので、そのままだとフィーチャが消える）
-- [ ] **webで地図が右のレイヤドロワーに透けて見える**
-  - Flutter web のプラットフォームビュー合成の問題。Android では出ない
-- [ ] **web: 同じフォルダを3回列挙している**
-  - `FolderNode` / `GeoPackageNode` / `ImageNode` の `loadNodes` がそれぞれ
-    `fs.list()` を呼ぶため。native では syscall 3回で済むが、web はハンドル走査3回。
-    フォルダあたり1回にまとめれば速くなる
-- [ ] **web: 選んだフォルダがリロードで失われる**
-  - ハンドルは IndexedDB に入れれば永続化できる（再許可のプロンプトは要る）
+  - **壊れているのは `addSource` だけで `addLayer` は動く**と分かったので、
+    初期スタイルJSONには**全プロバイダのソースだけ**を焼き込み、
+    レイヤは native と同じ実行時経路（`_addBasemapSources`）で積むようにした。
+    切り替えはレイヤの付け外しだけで済むので再読み込みが要らない
+  - ⚠ web では basemap の**ソースを消してはいけない**（消すと `addSource` が
+    壊れているせいで二度と足せない）。`replaceBasemapSource()` に分岐がある
+- [x] **webで地図が右のレイヤドロワーに透けて見える**（→ 解消）
+  - **web固有の合成バグではなかった。** `map_page.dart` のサイドパネル／
+    ボトムパネルの背景が `Colors.white.withValues(alpha: 0.9)` だったため。
+    航空写真だと文字が読めなくなるので不透明にした
+- [x] **web: 同じフォルダを3回列挙している**（→ 解消）
+  - `LayerTreeNode.listOnce()` で1回だけ列挙し、`FolderNode` / `GeoPackageNode` /
+    `ImageNode` の `loadNodes(entries:)` に配る形にした。
+    `DriveFolderNode` / `GlobalFolderNode` も同じ形に揃えてある
+- [x] **web: 選んだフォルダがリロードで失われる**（→ 解消）
+  - ハンドルを IndexedDB に保存し、ホーム画面に「前回のフォルダを開く」を出す。
+    ⚠ **自動復元はしない**。`requestPermission()` はユーザー操作の中でしか通らない
 
 > [!NOTE] 方針
 > - web版はWindows版を**置き換えた**（2026-08-25 に撤去済み）

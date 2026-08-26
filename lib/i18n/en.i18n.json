@@ -44,7 +44,9 @@
     "webPreviewDesc": "The web build can't open project folders yet. Only the base map is available.",
     "openMap": "Open map",
     "webUnsupportedBrowserTitle": "This browser can't open folders",
-    "webUnsupportedBrowserDesc": "Open the app in Google Chrome or Microsoft Edge to use project folders. Other browsers can only display the base map."
+    "webUnsupportedBrowserDesc": "Open the app in Google Chrome or Microsoft Edge to use project folders. Other browsers can only display the base map.",
+    "reopenLastFolder": "Reopen last folder",
+    "reopenLastFolderFailed": "Couldn't reopen the last folder. Please pick it again."
   },
   "permissions": {
     "storageRequired": "Storage permission is required",

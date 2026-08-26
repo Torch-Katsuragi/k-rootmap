@@ -88,12 +88,14 @@ class GlobalFolderNode extends FolderNode {
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
 
+    // 列挙は1回だけ（web はハンドル走査が高い。FolderNodeと同じ理由）
+    final entries = await fs.list(globalPath);
     // サブフォルダを読み込み
-    final folderNodes = await _loadGlobalSubFolders();
+    final folderNodes = await _loadGlobalSubFolders(entries);
     // GeoPackageを読み込み
-    final gpkgNodes = await _loadGeoPackageNodes();
+    final gpkgNodes = await _loadGeoPackageNodes(entries);
     // 画像ファイルを読み込み
-    final photoNodes = await _loadImageNodes();
+    final photoNodes = await _loadImageNodes(entries);
 
     // 現在のファイルシステムに存在するノード名のセットを作成
     final currentFolderNames = folderNodes.map((n) => n.name).toSet();
@@ -137,9 +139,11 @@ class GlobalFolderNode extends FolderNode {
   }
 
   /// グローバルフォルダ直下のサブフォルダを読み込み
-  Future<List<LayerTreeNode>> _loadGlobalSubFolders() async {
+  Future<List<LayerTreeNode>> _loadGlobalSubFolders(
+    List<KFileEntry> entries,
+  ) async {
     final nodes = <LayerTreeNode>[];
-    final directories = (await fs.list(globalPath))
+    final directories = entries
         .where((e) => e.isDirectory)
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -168,9 +172,11 @@ class GlobalFolderNode extends FolderNode {
   }
 
   /// グローバルフォルダ直下のGeoPackageノードを読み込み
-  Future<List<LayerTreeNode>> _loadGeoPackageNodes() async {
+  Future<List<LayerTreeNode>> _loadGeoPackageNodes(
+    List<KFileEntry> entries,
+  ) async {
     final nodes = <LayerTreeNode>[];
-    final gpkgFiles = (await fs.list(globalPath))
+    final gpkgFiles = entries
         .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -188,10 +194,12 @@ class GlobalFolderNode extends FolderNode {
   }
 
   /// グローバルフォルダ直下の画像ノードを読み込み
-  Future<List<LayerTreeNode>> _loadImageNodes() async {
+  Future<List<LayerTreeNode>> _loadImageNodes(
+    List<KFileEntry> entries,
+  ) async {
     final nodes = <LayerTreeNode>[];
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = (await fs.list(globalPath))
+    final imageFiles = entries
         .where((e) =>
             !e.isDirectory &&
             supportedExtensions.contains(p.extension(e.path).toLowerCase()))
@@ -268,12 +276,14 @@ class GlobalSubFolderNode extends FolderNode {
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
 
+    // 列挙は1回だけ（web はハンドル走査が高い。FolderNodeと同じ理由）
+    final entries = await fs.list(absPath);
     // サブフォルダを読み込み
-    final folderNodes = await _loadSubFolders(absPath);
+    final folderNodes = await _loadSubFolders(entries);
     // GeoPackageを読み込み
-    final gpkgNodes = await _loadGeoPackageNodes(absPath);
+    final gpkgNodes = await _loadGeoPackageNodes(entries);
     // 画像ファイルを読み込み
-    final photoNodes = await _loadImageNodes(absPath);
+    final photoNodes = await _loadImageNodes(entries);
 
     // 現在のファイルシステムに存在するノード名のセットを作成
     final allCurrentNames = {
@@ -306,9 +316,9 @@ class GlobalSubFolderNode extends FolderNode {
     await applyMetaVisibility();
   }
 
-  Future<List<LayerTreeNode>> _loadSubFolders(String absPath) async {
+  Future<List<LayerTreeNode>> _loadSubFolders(List<KFileEntry> entries) async {
     final nodes = <LayerTreeNode>[];
-    final directories = (await fs.list(absPath))
+    final directories = entries
         .where((e) => e.isDirectory)
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -336,9 +346,11 @@ class GlobalSubFolderNode extends FolderNode {
     return nodes;
   }
 
-  Future<List<LayerTreeNode>> _loadGeoPackageNodes(String absPath) async {
+  Future<List<LayerTreeNode>> _loadGeoPackageNodes(
+    List<KFileEntry> entries,
+  ) async {
     final nodes = <LayerTreeNode>[];
-    final gpkgFiles = (await fs.list(absPath))
+    final gpkgFiles = entries
         .where((e) => !e.isDirectory && e.path.endsWith('.gpkg'))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -354,10 +366,12 @@ class GlobalSubFolderNode extends FolderNode {
     return nodes;
   }
 
-  Future<List<LayerTreeNode>> _loadImageNodes(String absPath) async {
+  Future<List<LayerTreeNode>> _loadImageNodes(
+    List<KFileEntry> entries,
+  ) async {
     final nodes = <LayerTreeNode>[];
     const supportedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif'];
-    final imageFiles = (await fs.list(absPath))
+    final imageFiles = entries
         .where((e) =>
             !e.isDirectory &&
             supportedExtensions.contains(p.extension(e.path).toLowerCase()))

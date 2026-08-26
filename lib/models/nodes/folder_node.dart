@@ -98,10 +98,12 @@ class FolderNode extends LayerTreeNode {
     // メタデータを読み込み（展開状態を復元）
     await loadMetaState();
 
-    // ファイルシステムから現在の構造を取得
-    final folderNodes = await FolderNode.loadNodes(this);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this);
-    final photoNodes = await ImageNode.loadNodes(this);
+    // ファイルシステムから現在の構造を取得。
+    // 列挙は1回だけ行い、3つのローダーに配る（web はハンドル走査が高いため）
+    final entries = await listOnce();
+    final folderNodes = await FolderNode.loadNodes(this, entries: entries);
+    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
+    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
 
     // 現在のファイルシステムに存在するノード名のセットを作成
     final currentFolderNames = folderNodes.map((n) => n.name).toSet();
@@ -171,13 +173,19 @@ class FolderNode extends LayerTreeNode {
 
   /// このフォルダ直下のFolderNodeリストのみ返す（名前昇順でソート）
   /// .kmeta.jsonにDrive連携情報があればDriveFolderNodeとして作成
-  static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {
+  ///
+  /// [entries] を渡すと列挙をやり直さない。同じフォルダに対して
+  /// FolderNode / GeoPackageNode / ImageNode の3つを続けて作るときに使う。
+  static Future<List<LayerTreeNode>> loadNodes(
+    LayerTreeNode? parent, {
+    List<KFileEntry>? entries,
+  }) async {
     final nodes = <LayerTreeNode>[];
     if (parent == null) return nodes;
     final absPath = parent.getAbsoluteFilePath();
     if (absPath == null) return nodes;
 
-    final directories = (await fs.list(absPath))
+    final directories = (entries ?? await fs.list(absPath))
         .where((e) => e.isDirectory)
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));

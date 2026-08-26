@@ -23,8 +23,12 @@
 /// > - ルートを `/<選んだフォルダ名>` という仮想パスとして登録する
 /// > - 以降のパスはその接頭辞を剥がし、`/` で分割してハンドルを辿る
 /// >
-/// > つまりこのパスはOSのパスではなく**このセッション限りの識別子**。
-/// > 再読み込みするとハンドルは失われる（永続化は IndexedDB 送りだが、まだやらない）。
+/// > つまりこのパスはOSのパスではなく**その都度決まる識別子**。
+/// >
+/// > ハンドル自体は IndexedDB に保存してある（[reopenLastDirectory]）。
+/// > ただし再読み込み後に**そのまま使えるとは限らない**: ブラウザは
+/// > 権限を切っていることがあり、`requestPermission()` はユーザー操作の中でしか
+/// > 通らない。だから復元は「自動」ではなく**ボタンを押させる**形にしてある。
 ///
 /// > [!WARNING] File System Access API は Chrome / Edge のみ
 /// > Firefox / Safari には `showDirectoryPicker` が無い。
@@ -32,6 +36,7 @@
 /// > 「地図プレビューだけ」を出す。
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -58,6 +63,19 @@ extension type _IterResult._(JSObject _) implements JSObject {
   external JSAny? get value;
 }
 
+/// ハンドルの権限確認。package:web に生えていないので自前で結ぶ。
+///
+/// 戻り値は `'granted'` / `'denied'` / `'prompt'`。
+extension type _PermissionHandle._(JSObject _) implements JSObject {
+  external JSPromise<JSString> queryPermission(JSObject descriptor);
+  external JSPromise<JSString> requestPermission(JSObject descriptor);
+}
+
+/// IndexedDB: ハンドルを1個だけ置いておく棚
+const _dbName = 'k_rootmap_fs';
+const _storeName = 'handles';
+const _handleKey = 'projectRoot';
+
 class WebFileSystem implements KFileSystem {
   WebFileSystem._();
 
@@ -83,15 +101,146 @@ class WebFileSystem implements KFileSystem {
     if (!supportsDirectoryPicker) return null;
     try {
       final handle = await _showDirectoryPicker().toDart;
-      _root = handle;
-      _rootPath = '/${handle.name}';
-      AppLogger.debug('[WebFileSystem] ルートを選択: $_rootPath');
+      _adopt(handle);
+      await _saveHandle(handle);
       return _rootPath;
     } catch (e) {
       // ユーザーがキャンセルすると AbortError が飛ぶ。異常ではない
       AppLogger.debug('[WebFileSystem] フォルダ選択を中止: $e');
       return null;
     }
+  }
+
+  void _adopt(web.FileSystemDirectoryHandle handle) {
+    _root = handle;
+    _rootPath = '/${handle.name}';
+    AppLogger.debug('[WebFileSystem] ルートを選択: $_rootPath');
+  }
+
+  // =============================================
+  // 前回のフォルダ（IndexedDB）
+  // =============================================
+
+  /// 前回開いたフォルダの名前。無ければ null。
+  ///
+  /// **権限は要求しない**（ボタンのラベルに出すためだけ）。
+  Future<String?> lastDirectoryName() async {
+    final handle = await _loadHandle();
+    return handle?.name;
+  }
+
+  /// 前回のフォルダを開き直す。開けなければ null。
+  ///
+  /// > [!IMPORTANT] ユーザー操作の中から呼ぶこと
+  /// > 権限が `prompt` に戻っていると `requestPermission()` が要る。
+  /// > これはボタン押下などのユーザー操作起点でしか通らない
+  /// > （起動直後に勝手に呼んでも `denied` が返るだけ）。
+  Future<String?> reopenLastDirectory() async {
+    final handle = await _loadHandle();
+    if (handle == null) return null;
+
+    final permission = handle as _PermissionHandle;
+    final descriptor = {'mode': 'readwrite'}.jsify() as JSObject;
+    try {
+      var state = (await permission.queryPermission(descriptor).toDart).toDart;
+      if (state != 'granted') {
+        state = (await permission.requestPermission(descriptor).toDart).toDart;
+      }
+      if (state != 'granted') {
+        AppLogger.debug('[WebFileSystem] 前回のフォルダへの権限が得られない: $state');
+        return null;
+      }
+    } catch (e) {
+      AppLogger.debug('[WebFileSystem] 権限確認に失敗: $e');
+      return null;
+    }
+
+    _adopt(handle);
+    return _rootPath;
+  }
+
+  /// 覚えているフォルダを忘れる
+  Future<void> forgetLastDirectory() async {
+    final db = await _openDb();
+    if (db == null) return;
+    try {
+      final store = db
+          .transaction(_storeName.toJS, 'readwrite')
+          .objectStore(_storeName);
+      await _await<JSAny?>(store.delete(_handleKey.toJS));
+    } catch (e) {
+      AppLogger.debug('[WebFileSystem] ハンドルの削除に失敗: $e');
+    } finally {
+      db.close();
+    }
+  }
+
+  Future<void> _saveHandle(web.FileSystemDirectoryHandle handle) async {
+    final db = await _openDb();
+    if (db == null) return;
+    try {
+      final store = db
+          .transaction(_storeName.toJS, 'readwrite')
+          .objectStore(_storeName);
+      await _await<JSAny?>(store.put(handle, _handleKey.toJS));
+      AppLogger.debug('[WebFileSystem] ハンドルを保存: ${handle.name}');
+    } catch (e) {
+      // 保存に失敗しても選択そのものは成立しているので、握って続ける
+      AppLogger.debug('[WebFileSystem] ハンドルの保存に失敗: $e');
+    } finally {
+      db.close();
+    }
+  }
+
+  Future<web.FileSystemDirectoryHandle?> _loadHandle() async {
+    final db = await _openDb();
+    if (db == null) return null;
+    try {
+      final store = db
+          .transaction(_storeName.toJS, 'readonly')
+          .objectStore(_storeName);
+      final value = await _await<JSAny?>(store.get(_handleKey.toJS));
+      if (value == null) return null;
+      return value as web.FileSystemDirectoryHandle;
+    } catch (e) {
+      AppLogger.debug('[WebFileSystem] ハンドルの読み出しに失敗: $e');
+      return null;
+    } finally {
+      db.close();
+    }
+  }
+
+  Future<web.IDBDatabase?> _openDb() async {
+    try {
+      final request = web.window.indexedDB.open(_dbName, 1);
+      request.onupgradeneeded = (web.Event _) {
+        final db = request.result as web.IDBDatabase;
+        if (!db.objectStoreNames.contains(_storeName)) {
+          db.createObjectStore(_storeName);
+        }
+      }.toJS;
+      return await _await<web.IDBDatabase>(request);
+    } catch (e) {
+      // プライベートウィンドウなどで IndexedDB が使えないことがある
+      AppLogger.debug('[WebFileSystem] IndexedDB を開けない: $e');
+      return null;
+    }
+  }
+
+  /// `IDBRequest` を Future にする
+  Future<T> _await<T extends JSAny?>(web.IDBRequest request) {
+    final completer = Completer<T>();
+    request.onsuccess = (web.Event _) {
+      if (!completer.isCompleted) completer.complete(request.result as T);
+    }.toJS;
+    request.onerror = (web.Event _) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          KFileSystemException('IndexedDB: ${request.error?.message}'),
+        );
+      }
+    }.toJS;
+    return completer.future;
   }
 
   // =============================================

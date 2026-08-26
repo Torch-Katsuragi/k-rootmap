@@ -44,7 +44,9 @@
     "webPreviewDesc": "web版はまだプロジェクトフォルダを開けません。背景地図の表示だけ確認できます。",
     "openMap": "地図を開く",
     "webUnsupportedBrowserTitle": "このブラウザではフォルダを開けません",
-    "webUnsupportedBrowserDesc": "プロジェクトフォルダを開くには Google Chrome か Microsoft Edge で開いてください。ほかのブラウザでは背景地図の表示だけ確認できます。"
+    "webUnsupportedBrowserDesc": "プロジェクトフォルダを開くには Google Chrome か Microsoft Edge で開いてください。ほかのブラウザでは背景地図の表示だけ確認できます。",
+    "reopenLastFolder": "前回のフォルダを開く",
+    "reopenLastFolderFailed": "前回のフォルダを開けませんでした。選び直してください"
   },
   "permissions": {
     "storageRequired": "ストレージ権限が必要です",

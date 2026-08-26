@@ -16,8 +16,8 @@
 // Root Maps: Drive連携フォルダノードクラス
 // Google Driveと同期するフォルダを表すレイヤツリーノード
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../core/fs/k_file_system.dart';
 import 'folder_node.dart';
 import 'layer_tree_node.dart';
 import 'global_folder_node.dart';
@@ -114,10 +114,11 @@ class DriveFolderNode extends FolderNode {
     // メタデータを読み込み
     await loadMetaState();
 
-    // ファイルシステムから現在の構造を取得
-    final folderNodes = await _loadDriveFolderNodes(this);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this);
-    final photoNodes = await ImageNode.loadNodes(this);
+    // ファイルシステムから現在の構造を取得（列挙は1回だけ。FolderNodeと同じ理由）
+    final entries = await listOnce();
+    final folderNodes = await _loadDriveFolderNodes(this, entries);
+    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
+    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
 
     // 現在のファイルシステムに存在するノード名のセットを作成
     final currentFolderNames = folderNodes.map((n) => n.name).toSet();
@@ -161,25 +162,18 @@ class DriveFolderNode extends FolderNode {
   /// サブフォルダもDriveFolderNodeとして作成（同じdriveIdを共有）
   static Future<List<LayerTreeNode>> _loadDriveFolderNodes(
     DriveFolderNode parent,
+    List<KFileEntry> entries,
   ) async {
     final nodes = <LayerTreeNode>[];
-    final absPath = parent.getAbsoluteFilePath();
-    if (absPath == null) return nodes;
-    final dir = Directory(absPath);
 
-    if (!dir.existsSync()) return nodes;
-
-    final directories = dir
-        .listSync()
-        .whereType<Directory>()
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = entries.where((e) => e.isDirectory).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (var entity in directories) {
       // サブフォルダはDriveSubFolderNodeとして作成
       nodes.add(
         DriveSubFolderNode(
-          p.basename(entity.path),
+          entity.name,
           rootDriveNode: parent,
           visible: true,
           parent: parent,
@@ -246,9 +240,10 @@ class DriveSubFolderNode extends FolderNode {
   Future<void> updateChildren() async {
     await loadMetaState();
 
-    final folderNodes = await _loadSubFolderNodes(this);
-    final gpkgNodes = await GeoPackageNode.loadNodes(this);
-    final photoNodes = await ImageNode.loadNodes(this);
+    final entries = await listOnce();
+    final folderNodes = await _loadSubFolderNodes(this, entries);
+    final gpkgNodes = await GeoPackageNode.loadNodes(this, entries: entries);
+    final photoNodes = await ImageNode.loadNodes(this, entries: entries);
 
     final currentFolderNames = folderNodes.map((n) => n.name).toSet();
     final currentGpkgNames = gpkgNodes.map((n) => n.name).toSet();
@@ -283,24 +278,17 @@ class DriveSubFolderNode extends FolderNode {
 
   static Future<List<LayerTreeNode>> _loadSubFolderNodes(
     DriveSubFolderNode parent,
+    List<KFileEntry> entries,
   ) async {
     final nodes = <LayerTreeNode>[];
-    final absPath = parent.getAbsoluteFilePath();
-    if (absPath == null) return nodes;
-    final dir = Directory(absPath);
 
-    if (!dir.existsSync()) return nodes;
-
-    final directories = dir
-        .listSync()
-        .whereType<Directory>()
-        .toList()
-      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final directories = entries.where((e) => e.isDirectory).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     for (var entity in directories) {
       nodes.add(
         DriveSubFolderNode(
-          p.basename(entity.path),
+          entity.name,
           rootDriveNode: parent.rootDriveNode,
           visible: true,
           parent: parent,

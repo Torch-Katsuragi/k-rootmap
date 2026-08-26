@@ -166,11 +166,10 @@ mixin MapInitializationMixin<T extends ConsumerStatefulWidget>
       } else {
         // web: TileServerは立てられず（`dart:io` の HttpServer が無い）、
         // そして不要。MapLibre GL JS がタイルURLを直接叩く。
-        // 背景地図はスタイルJSONに焼き込む — 理由は
+        // 背景地図の**ソース**だけをスタイルJSONに焼き込む（レイヤは
+        // `_addBasemapSources()` が積む）— 理由は
         // [[../../../services/basemap_style_json]] を読むこと。
-        basemapStyleUri = buildBasemapStyleJson(
-          layers: baseMapService.activeLayerConfig,
-        );
+        basemapStyleUri = buildBasemapStyleJson();
       }
 
       baseMapService.addListener(onBaseMapServiceUpdate);

@@ -17,6 +17,7 @@
 // FolderNode, GeoPackageGroup, Layerの共通実装
 
 import 'package:flutter/material.dart';
+import '../../core/fs/k_file_system.dart';
 import '../../core/node_types.dart';
 import '../../core/path_resolver.dart';
 
@@ -291,6 +292,20 @@ abstract class LayerTreeNode {
 
   /// 可視状態をkmetaに永続化（サブクラスでオーバーライド）
   Future<void> persistVisibility() async {}
+
+  /// 自分の直下を1回だけ列挙する。パスを解決できなければ空。
+  ///
+  /// > [!NOTE] なぜこれがあるか
+  /// > `updateChildren()` は同じフォルダに対して FolderNode / GeoPackageNode /
+  /// > ImageNode の3種を作る。素直に書くと `fs.list()` が3回走る。
+  /// > native なら syscall 3回で済むが、**web は File System Access API の
+  /// > ハンドル走査が3回**になり、フォルダが大きいほど効く。
+  /// > 1回列挙して各ローダーの `entries` に配ること。
+  Future<List<KFileEntry>> listOnce() async {
+    final absPath = getAbsoluteFilePath();
+    if (absPath == null) return const [];
+    return fs.list(absPath);
+  }
 
   /// （サブクラスでoverride推奨）親ノード直下の自分型インスタンスリストを返す（非同期化）
   static Future<List<LayerTreeNode>> loadNodes(LayerTreeNode? parent) async {

@@ -28,6 +28,7 @@ import 'screens/map_page/map_page.dart';
 import 'core/db/database_factory_setup.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
+import 'services/google_drive/index.dart';
 import 'providers/project_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'providers/selection_providers.dart';
@@ -199,6 +200,24 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         AppLogger.debug('[Root Maps] 背景地図サービス初期化エラー: $e');
       }
     });
+    // Drive のサインインを起動時に仕込んでおく。
+    //
+    // web はここで One Tap（Chromeがアドレスバー下に出すログイン提案）が走る。
+    // Driveダイアログを開いてから呼ぶと、提案が出るころには画面が出揃っていて
+    // 気づかれない。**先に済ませておくと、ダイアログはスコープ認可だけになる。**
+    //
+    // ⚠ One Tap は出ないことがある（FedCMのクールダウン、Chromeの
+    // 「サイト間のログイン」オフ、シークレットウィンドウ等）。
+    // 出ない前提でボタン側の経路を残しておくこと。
+    if (PlatformCapabilities.supportsDriveSync) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await GoogleDriveService().initialize();
+        } catch (e) {
+          AppLogger.debug('[Root Maps] Drive初期化エラー: $e');
+        }
+      });
+    }
   }
 
   @override

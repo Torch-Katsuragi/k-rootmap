@@ -11,9 +11,14 @@
 ### ☁️ Google Drive sync now works on the web build
 
 - Clone a Drive folder from the browser and upload or download it.
+- Google's sign-in prompt (One Tap) now fires as the app opens. When it goes
+  through, linking a Drive folder is just one "allow access" tap.
 - Fixed the "General" settings page, which used to spin forever in a browser.
+- Fixed creating, deleting, moving and renaming folders in a browser.
 - ⚠ A browser has no notion of a storage path, so the "Global folder"
   setting is not shown on the web build.
+- ⚠ Renaming a folder is not possible in a browser (it would mean rebuilding
+  its whole contents).
 
 ### 📱 Hand over a Drive-linked folder with a QR code
 

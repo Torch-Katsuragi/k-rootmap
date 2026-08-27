@@ -19,12 +19,12 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 import 'package:root_maps/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:latlong2/latlong.dart';
+import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import '../../models/nodes/layer_tree_node.dart';
 import '../../models/nodes/folder_node.dart';
@@ -191,7 +191,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     final newPath = p.join(targetDir, baseName);
     if (sourcePath == newPath) return;
 
-    if (FileSystemEntity.typeSync(newPath) != FileSystemEntityType.notFound) {
+    if (await fs.exists(newPath)) {
       ref.read(notificationCenterProvider.notifier).add(
             title: '"$baseName" already exists in ${target.name}',
             level: NotificationLevel.info,
@@ -239,32 +239,37 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     }
   }
 
+  /// ⚠ `dart:io` を直に使わないこと。web では `Directory` / `File` に
+  /// 触れた時点で `Unsupported operation: _Namespace` が飛ぶ（コンパイルは通る）。
   Future<void> _moveFileOrDir(String src, String dst, {required bool isDir}) async {
+    // web の `rename` はフォルダに未対応。ドライブをまたぐ移動も rename では
+    // 通らないので、どちらも「作り直して消す」に落とす
+    if (!isDir) {
+      try {
+        await fs.rename(src, dst);
+        return;
+      } catch (_) {
+        await fs.writeAsBytes(dst, await fs.readAsBytes(src));
+        await fs.delete(src);
+        return;
+      }
+    }
     try {
-      if (isDir) {
-        await Directory(src).rename(dst);
-      } else {
-        await File(src).rename(dst);
-      }
-    } on FileSystemException {
-      if (isDir) {
-        await _copyDirectory(Directory(src), Directory(dst));
-        await Directory(src).delete(recursive: true);
-      } else {
-        await File(src).copy(dst);
-        await File(src).delete();
-      }
+      await fs.rename(src, dst);
+    } catch (_) {
+      await _copyDirectory(src, dst);
+      await fs.delete(src, recursive: true);
     }
   }
 
-  Future<void> _copyDirectory(Directory src, Directory dst) async {
-    await dst.create(recursive: true);
-    await for (final entity in src.list()) {
-      final name = p.basename(entity.path);
-      if (entity is File) {
-        await entity.copy(p.join(dst.path, name));
-      } else if (entity is Directory) {
-        await _copyDirectory(entity, Directory(p.join(dst.path, name)));
+  Future<void> _copyDirectory(String src, String dst) async {
+    await fs.createDirectory(dst);
+    for (final entry in await fs.list(src)) {
+      final to = p.join(dst, entry.name);
+      if (entry.isDirectory) {
+        await _copyDirectory(entry.path, to);
+      } else {
+        await fs.writeAsBytes(to, await fs.readAsBytes(entry.path));
       }
     }
   }
@@ -445,7 +450,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
       final absPath = node.getAbsoluteFilePath();
       if (absPath != null) {
         final newPath = p.join(p.dirname(absPath), result);
-        await Directory(absPath).rename(newPath);
+        await fs.rename(absPath, newPath);
         await LayerDrawerService.notifySyncedPathChange(node, absPath, newPath);
       }
       node.name = result;
@@ -607,7 +612,7 @@ class _LayerDrawerState extends ConsumerState<LayerDrawer>
     if (typeResult == null) return;
     if (typeResult.type == AddFolderType.local) {
       try {
-        LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
+        await LayerDrawerService.createLocalFolder(widget.currentNode as FolderNode, typeResult.folderName!);
         triggerMapRefresh();
       } catch (e) {
         ref.read(notificationCenterProvider.notifier).add(title: '$e', level: NotificationLevel.info);

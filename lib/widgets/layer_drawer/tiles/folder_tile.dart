@@ -16,8 +16,8 @@
 /// Root Maps: フォルダタイルウィジェット
 library;
 
-import 'dart:io' show Directory;
 import 'package:flutter/material.dart';
+import '../../../core/fs/k_file_system.dart';
 import '../../../core/platform_capabilities.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../i18n/strings.g.dart';
@@ -150,9 +150,8 @@ class FolderTile extends ConsumerWidget {
       confirmLabel: t.common.delete,
       successMessage: t.layerDrawer.folder.deleted(name: node.name),
       execute: () async {
-        if (absPath != null) {
-          final dir = Directory(absPath);
-          if (dir.existsSync()) dir.deleteSync(recursive: true);
+        if (absPath != null && await fs.exists(absPath)) {
+          await fs.delete(absPath, recursive: true);
         }
         await node.dispose();
         ref.read(featureRefreshTriggerProvider.notifier).trigger();

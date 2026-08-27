@@ -17,8 +17,8 @@
 /// フォルダ・GeoPackage の作成/リネーム/Driveクローンを UI 非依存で提供
 library;
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../core/fs/k_file_system.dart';
 import '../models/nodes/layer_tree_node.dart';
 import '../models/nodes/folder_node.dart';
 import '../models/nodes/geopackage_node.dart';
@@ -36,13 +36,16 @@ class LayerDrawerService {
   // ---------- フォルダ ----------
 
   /// ローカルフォルダを作成して親ノードに追加。同名が存在すると [StateError]
-  static FolderNode createLocalFolder(FolderNode parent, String name) {
+  ///
+  /// ⚠ `dart:io` を直に使わないこと。web では `Directory` に触れた時点で
+  /// `Unsupported operation: _Namespace` が飛ぶ（コンパイルは通る）。
+  static Future<FolderNode> createLocalFolder(FolderNode parent, String name) async {
     final dir = parent.getAbsoluteFilePath();
     final path = p.join(dir ?? '', name);
-    if (Directory(path).existsSync()) {
+    if (await fs.exists(path)) {
       throw StateError(t.services.folderAlreadyExists);
     }
-    Directory(path).createSync();
+    await fs.createDirectory(path);
 
     final child = switch (parent) {
       GlobalFolderNode p => GlobalSubFolderNode(name, basePath: p.globalPath, visible: true, parent: parent),
@@ -65,7 +68,7 @@ class LayerDrawerService {
     if (parentDir == null) return null;
 
     final localPath = p.join(parentDir, folderName);
-    if (Directory(localPath).existsSync()) {
+    if (await fs.exists(localPath)) {
       throw StateError(t.services.folderAlreadyExists);
     }
 
@@ -99,7 +102,7 @@ class LayerDrawerService {
     final fileName = name.endsWith('.gpkg') ? name : '$name.gpkg';
     final path = p.join(dir ?? '', fileName);
 
-    if (File(path).existsSync()) {
+    if (await fs.exists(path)) {
       throw StateError(t.services.gpkgAlreadyExists);
     }
 

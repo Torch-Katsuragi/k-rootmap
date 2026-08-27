@@ -83,14 +83,22 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   void initState() {
     super.initState();
     _tabController = TabController(length: _hasQrTab ? 2 : 1, vsync: this);
+    // One Tap は開いた後から返ってくる。届いたらボタンを差し替える
+    _driveService.authState.addListener(_onAuthChanged);
     _initializeAuth();
   }
 
   @override
   void dispose() {
+    _driveService.authState.removeListener(_onAuthChanged);
     _tabController.dispose();
     _urlController.dispose();
     super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    setState(() => _isSignedIn = _driveService.authState.isAuthenticated);
   }
 
   /// 認証状態を初期化
@@ -274,33 +282,42 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   /// 未サインインのときの案内
   ///
-  /// web は Google が描画したボタンでしかサインインできないので、それも並べる。
-  /// One Tap が通っていれば通常のボタンだけで済む（そちらはスコープ認可を担う）。
+  /// ⚠ web は「アカウントを選ぶ」と「Driveへのアクセスを許可」が別の操作で、
+  /// 前者は Google が描画したボタンでしか、後者はクリックの直下でしか通らない。
+  /// **どちらが要るかは状態で決まる**ので、出すボタンは常に1つに絞る。
+  /// （native はアカウント選択と認可が `signIn()` 1回で済む）
   Widget _buildSignInPrompt() {
-    final rendered = googleRenderedSignInButton();
+    // アカウントがまだ無い web は、Googleが描画するボタンだけが入口
+    final needsAccount = !_driveService.hasAccount;
+    final rendered = needsAccount ? googleRenderedSignInButton() : null;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Icon(Icons.account_circle, size: 48, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text('Googleアカウントにサインインしてください'),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isLoading ? null : _signIn,
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.login),
-            label: const Text('Googleでサインイン'),
+          Text(
+            needsAccount
+                ? 'Googleアカウントにサインインしてください'
+                : 'Google Driveへのアクセスを許可してください',
+            textAlign: TextAlign.center,
           ),
-          if (rendered != null) ...[
-            const SizedBox(height: 12),
-            SizedBox(height: 44, child: rendered),
-          ],
+          const SizedBox(height: 16),
+          if (rendered != null)
+            SizedBox(height: 44, child: rendered)
+          else
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _signIn,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.login),
+              label: Text(needsAccount ? 'Googleでサインイン' : 'アクセスを許可'),
+            ),
         ],
       ),
     );

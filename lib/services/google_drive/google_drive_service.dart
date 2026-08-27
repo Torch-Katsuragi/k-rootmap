@@ -68,6 +68,13 @@ class GoogleDriveService {
   /// 認証状態
   final DriveAuthState authState = DriveAuthState();
 
+  /// Googleアカウントが取れているか（スコープの認可は別）。
+  ///
+  /// web はこの2段階が分かれる。アカウントが無ければ Googleが描画する
+  /// ボタンでしか進めず、あれば認可のポップアップを開ける。
+  /// UIはこれを見て、出すボタンを1つに絞ること。
+  bool get hasAccount => _currentUser != null;
+
   /// RootMap GIS用Driveフォルダ名
   static const String kMapsFolderName = 'RootMap GIS Projects';
 

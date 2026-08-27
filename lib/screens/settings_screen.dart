@@ -510,14 +510,23 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final appDir = await getApplicationDocumentsDirectory();
-    _defaultPath = p.join(appDir.path, 'k_maps_global');
-    _customPath = prefs.getString(kGlobalFolderCustomPathKey);
+    // ⚠ web に `getApplicationDocumentsDirectory()` は無く、呼ぶと例外が飛ぶ。
+    // 待ち続けて画面がぐるぐるのまま止まるので、ここで分ける。
+    if (_hasGlobalFolder) {
+      final appDir = await getApplicationDocumentsDirectory();
+      _defaultPath = p.join(appDir.path, 'k_maps_global');
+      _customPath = prefs.getString(kGlobalFolderCustomPathKey);
+    }
     if (_isMobileDevice) {
       await _loadPermissions();
     }
     if (mounted) setState(() => _isLoading = false);
   }
+
+  /// グローバルフォルダ（全プロジェクト共有の保存先）を持てるか。
+  ///
+  /// web はブラウザが握るので、パスという概念自体が無い。
+  static bool get _hasGlobalFolder => PlatformCapabilities.hasLocalFileSystem;
 
   static bool get _isMobileDevice => PlatformCapabilities.isMobile;
 
@@ -664,7 +673,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
           // UIサイズ調整セクション
           _buildUiScaleSection(),
 
-          SettingsSection(
+          if (_hasGlobalFolder) SettingsSection(
             title: 'Global Folder',
             icon: Icons.folder_special,
             iconColor: Colors.blue,
@@ -720,7 +729,7 @@ class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
               ),
             ],
           ),
-          SettingsSection(
+          if (_hasGlobalFolder) SettingsSection(
             title: 'Info',
             icon: Icons.info_outline,
             iconColor: Colors.grey,

@@ -22,7 +22,26 @@ tags: [technical, google-drive, setup]
 > ⚠ **web で使うには web用のOAuthクライアントIDが要る。**
 > GCPコンソールでしか発行できない。`--dart-define=GOOGLE_WEB_CLIENT_ID=...`
 > で渡す。未設定の間は `PlatformCapabilities.supportsDriveSync` が
-> web で false のままなので、UIも出ない。
+> web で false のままなので、UIも出ない。→ [[#1.5 OAuthクライアントID（Web）]]
+
+> [!IMPORTANT] web のサインインは native と作りが違う
+> `google_sign_in_web` は `google_sign_in` の他の実装と同じ顔をしていない。
+> 2026-08-27 に踏んだのは次の2点:
+>
+> 1. **`authenticate()` が無い**（`UnimplementedError` を投げる）。
+>    ユーザーの取得は One Tap か、Googleが描画するボタン
+>    （`lib/widgets/auth/google_sign_in_button.dart`）でしかできない。
+> 2. **スコープ認可のポップアップはクリックの直下でしか開けない**
+>    （`authorizationRequiresUserInteraction() == true`）。
+>    認証イベントのハンドラは One Tap から非同期に呼ばれるので、
+>    そこで `authorizeScopes` を呼ぶとブラウザにポップアップを潰される。
+>    console に `[GSI_LOGGER]: Failed to open popup window` だけが残り、
+>    アプリ側は「サインインしてください」のまま動かない。
+>
+> そのため `GoogleDriveService` では、イベントハンドラは
+> **認可済みのときだけ**初期化し（`promptIfUnauthorized: false`）、
+> 未認可なら「サインイン済み・認可待ち」で止める。認可は
+> `signIn()`（＝ボタンのクリック直下）が受け持つ。
 
 # Google Drive連携セットアップ
 
@@ -117,15 +136,34 @@ keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root
 
 > **Note**: AndroidクライアントIDはアプリ内で直接使用しない。Google Play Servicesが自動でマッチングする。
 
-### 1.5 OAuthクライアントID作成（Web）
+### 1.5 OAuthクライアントID（Web）
 
-google_sign_inパッケージはWebクライアントIDも必要：
+google_sign_inパッケージはWebクライアントIDも必要。
+K-Maps では既存の `K-Maps Web` を流用している（新規発行は不要）:
 
-1. 「認証情報を作成」→「OAuthクライアントID」
-2. アプリケーションの種類: 「ウェブ アプリケーション」
-3. 名前: `Root Maps Web`
-4. 「作成」をクリック
-5. **クライアントIDをコピー**
+```
+348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com
+```
+
+新しく作る場合は「認証情報を作成」→「OAuthクライアントID」→
+種類「ウェブ アプリケーション」。
+
+⚠ **配信元のオリジンを「承認済みの JavaScript 生成元」に登録すること。**
+ここが空だと、ポップアップが開いた先で弾かれる。リダイレクトURIは不要
+（`google_sign_in_web` はブラウザ内で完結する）。
+
+| オリジン | 用途 |
+| --- | --- |
+| `http://localhost:8099` | 開発（`build/web` を `python -m http.server 8099` で配信） |
+| （未定） | 本番。Hosting のドメインを決めたら足す |
+
+反映まで5分〜数時間かかることがある。
+
+web版のビルドはこう:
+
+```bash
+flutter build web --release --dart-define=GOOGLE_WEB_CLIENT_ID=348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com
+```
 
 ---
 

@@ -459,7 +459,7 @@
       "deleteTitle": "Delete Folder",
       "deleteConfirm": "Delete \"$name\" and all its contents?",
       "deleted": "$name deleted",
-      "pcSyncDisabled": "Sync not available on PC (use Google Drive Desktop)",
+      "pcSyncDisabled": "Sync unavailable here (hand it to a phone via QR)",
       "synced": "Synced",
       "localChanges": "Local changes pending",
       "remoteChanges": "Drive changes available",

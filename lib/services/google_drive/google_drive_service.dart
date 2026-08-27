@@ -132,7 +132,19 @@ class GoogleDriveService {
       case GoogleSignInAuthenticationEventSignIn():
         _currentUser = event.user;
         try {
-          await _initializeDriveApi(event.user);
+          // ⚠ web の認可ポップアップは**クリックの直下**でしか開けない。
+          // このハンドラは One Tap から非同期に呼ばれるので、ここで
+          // `authorizeScopes` を呼ぶとブラウザにポップアップを潰される。
+          // 認可がまだなら「サインイン済み・認可待ち」で止め、[signIn] に託す。
+          final authorized = await _initializeDriveApi(
+            event.user,
+            promptIfUnauthorized: !PlatformCapabilities.isWeb,
+          );
+          if (!authorized) {
+            authState.setUnauthenticated();
+            AppLogger.debug('[GoogleDriveService] サインイン済み・スコープ認可待ち');
+            return;
+          }
           authState.setAuthenticated(DriveUser.fromGoogleAccount(event.user));
           AppLogger.debug('[GoogleDriveService] サインイン成功: ${event.user.email}');
         } catch (e) {
@@ -156,6 +168,21 @@ class GoogleDriveService {
     authState.setAuthenticating();
 
     try {
+      // ⚠ web に `authenticate()` は無い（`google_sign_in_web` が
+      // `UnimplementedError` を投げる）。ユーザーの取得は One Tap か
+      // [webSignInButton] の担当で、ここは**スコープ認可**を受け持つ。
+      // この経路はボタンのクリック直下なので、ポップアップが開ける。
+      if (PlatformCapabilities.isWeb) {
+        final user = _currentUser;
+        if (user == null) {
+          authState.setUnauthenticated();
+          return false;
+        }
+        await _initializeDriveApi(user);
+        authState.setAuthenticated(DriveUser.fromGoogleAccount(user));
+        return true;
+      }
+
       // v7: authenticate() を呼ぶ
       await GoogleSignIn.instance.authenticate();
       // 認証イベントハンドラが呼ばれて状態が更新される
@@ -201,6 +228,13 @@ class GoogleDriveService {
       // 少し待ってからアカウント選択画面を表示
       await Future.delayed(const Duration(milliseconds: 300));
 
+      // ⚠ web は `authenticate()` を持たない。切断だけして、選び直しは
+      // One Tap / [webSignInButton] に任せる。
+      if (PlatformCapabilities.isWeb) {
+        authState.setUnauthenticated();
+        return false;
+      }
+
       // authenticate() でアカウント選択UIが表示される
       await GoogleSignIn.instance.authenticate();
       // 認証イベントハンドラが呼ばれて状態が更新される
@@ -222,19 +256,27 @@ class GoogleDriveService {
 
   /// Drive APIを初期化
   /// v7: authorizationClient 経由で authClient を取得
-  Future<void> _initializeDriveApi(GoogleSignInAccount account) async {
+  ///
+  /// [promptIfUnauthorized] が false なら、認可済みのときだけ初期化して
+  /// 未認可なら false を返す（認可ダイアログを出さない）。
+  Future<bool> _initializeDriveApi(
+    GoogleSignInAccount account, {
+    bool promptIfUnauthorized = true,
+  }) async {
     // スコープの認可を確認・要求
     final authorization = await account.authorizationClient
         .authorizationForScopes(_scopes);
 
-    if (authorization == null) {
-      // スコープがまだ認可されていない場合、認可を要求
-      final granted = await account.authorizationClient
-          .authorizeScopes(_scopes);
-      _driveApi = drive.DriveApi(granted.authClient(scopes: _scopes));
-    } else {
+    if (authorization != null) {
       _driveApi = drive.DriveApi(authorization.authClient(scopes: _scopes));
+      return true;
     }
+    if (!promptIfUnauthorized) return false;
+
+    // スコープがまだ認可されていない場合、認可を要求
+    final granted = await account.authorizationClient.authorizeScopes(_scopes);
+    _driveApi = drive.DriveApi(granted.authClient(scopes: _scopes));
+    return true;
   }
 
   /// トークンをリフレッシュしてDrive APIを再初期化

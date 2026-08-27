@@ -52,11 +52,19 @@
         **webでも出る**ので「事務所で整えたdirを現場に渡す」の出口はできた
   - [/] **web版のDrive連携**
     - [x] 同期コードの `dart:io` を撤去（2026-08-27）
-    - [ ] ⚠ **web用のOAuthクライアントIDが要る。** GCPコンソールでしか発行できない
+    - [x] ⚠ **web用のOAuthクライアントIDが要る。** GCPコンソールでしか発行できない
           （gcloud にも Firebase CLI にも口が無い）。
-          `--dart-define=GOOGLE_WEB_CLIENT_ID=...` で渡す作りにしてある。
-          未設定の間は `supportsDriveSync` が web で false のままなのでUIも出ない
-    - [ ] 承認済みJavaScript生成元に配信元オリジンを登録（開発は `http://localhost:8099`）
+          `--dart-define=GOOGLE_WEB_CLIENT_ID=...` で渡す作り。
+          既存の `K-Maps Web` を流用した（新規発行は不要だった）:
+          `348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com`
+    - [x] 承認済みJavaScript生成元に `http://localhost:8099` を登録（2026-08-27）
+    - [x] web のサインイン経路を直した。⚠ ここは native と作りが違う:
+          - `google_sign_in_web` に `authenticate()` は**無い**（`UnimplementedError`）。
+            ユーザーの取得は One Tap か `renderButton`（`lib/widgets/auth/`）
+          - スコープ認可のポップアップは**クリックの直下でしか開けない**。
+            認証イベントのハンドラから呼ぶとブラウザに潰される
+    - [ ] 実アカウントでのログイン〜同期の通し確認（ポップアップ操作が要るので本人操作）
+    - [ ] 本番ドメインを決めたら、承認済みJavaScript生成元に追加する
 - [ ] ~~`layer_styles`~~ → **優先度を下げた**。`.qgs` にレンダラを書けば冗長。gpkg単体を渡す場合の保険のみ
 
 ## web版（調査済み・2026-08-21）

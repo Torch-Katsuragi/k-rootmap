@@ -23,6 +23,7 @@ import '../../i18n/strings.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../services/google_drive/index.dart';
+import '../auth/google_sign_in_button.dart';
 import '../../utils/app_logger.dart';
 
 /// Drive URL入力ダイアログの結果
@@ -81,7 +82,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: _hasQrTab ? 2 : 1, vsync: this);
     _initializeAuth();
   }
 
@@ -231,12 +232,12 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // タブバー
+            // タブバー（QRスキャンはカメラのある端末だけ）
             TabBar(
               controller: _tabController,
-              tabs: const [
-                Tab(text: 'URL入力'),
-                Tab(text: 'QRスキャン'),
+              tabs: [
+                const Tab(text: 'URL入力'),
+                if (_hasQrTab) const Tab(text: 'QRスキャン'),
               ],
             ),
             const SizedBox(height: 16),
@@ -248,7 +249,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                 controller: _tabController,
                 children: [
                   _buildUrlInputTab(),
-                  _buildQrScanTab(),
+                  if (_hasQrTab) _buildQrScanTab(),
                 ],
               ),
             ),
@@ -268,33 +269,46 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     );
   }
 
+  /// QRスキャンのタブを出すか
+  bool get _hasQrTab => PlatformCapabilities.supportsQrScan;
+
+  /// 未サインインのときの案内
+  ///
+  /// web は Google が描画したボタンでしかサインインできないので、それも並べる。
+  /// One Tap が通っていれば通常のボタンだけで済む（そちらはスコープ認可を担う）。
+  Widget _buildSignInPrompt() {
+    final rendered = googleRenderedSignInButton();
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.account_circle, size: 48, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text('Googleアカウントにサインインしてください'),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _signIn,
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.login),
+            label: const Text('Googleでサインイン'),
+          ),
+          if (rendered != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(height: 44, child: rendered),
+          ],
+        ],
+      ),
+    );
+  }
+
   /// URL入力タブ
   Widget _buildUrlInputTab() {
-    // 未サインインの場合
-    if (!_isSignedIn) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.account_circle, size: 48, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('Googleアカウントにサインインしてください'),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _signIn,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.login),
-              label: const Text('Googleでサインイン'),
-            ),
-          ],
-        ),
-      );
-    }
+    if (!_isSignedIn) return _buildSignInPrompt();
 
     return SingleChildScrollView(
       child: Column(
@@ -418,49 +432,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   /// QRスキャンタブ
   Widget _buildQrScanTab() {
-    // PC・webではQRスキャン非対応
-    if (!PlatformCapabilities.supportsQrScan) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.qr_code_scanner, size: 48, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'QRスキャンはスマホ専用です',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // 未サインインの場合
-    if (!_isSignedIn) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.account_circle, size: 48, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('Googleアカウントにサインインしてください'),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _signIn,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.login),
-              label: const Text('Googleでサインイン'),
-            ),
-          ],
-        ),
-      );
-    }
+    if (!_isSignedIn) return _buildSignInPrompt();
 
     return Column(
       children: [

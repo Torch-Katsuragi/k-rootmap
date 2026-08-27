@@ -8,13 +8,20 @@
 - ⚠ Browser location is less accurate than the device GPS; use the Android
   app in the field.
 
+### ☁️ Google Drive sync now works on the web build
+
+- Clone a Drive folder from the browser and upload or download it.
+- Fixed the "General" settings page, which used to spin forever in a browser.
+- ⚠ A browser has no notion of a storage path, so the "Global folder"
+  setting is not shown on the web build.
+
 ### 📱 Hand over a Drive-linked folder with a QR code
 
 - "Share via QR code" from a linked folder's row.
 - The receiving device picks it up with "Add folder" → "Scan QR code"
   (data, styles and `project.qgs` all at once — no server involved).
-- ⚠ On the web build this works for folders **already linked on mobile**.
-  Creating a new Drive link from the web build isn't possible yet.
+- ⚠ Reading a QR code needs a camera, so it is phone-only (the web build
+  shows only the URL field).
 
 ### 🗺️ QGIS project (.qgs) export and import
 

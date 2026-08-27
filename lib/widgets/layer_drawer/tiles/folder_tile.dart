@@ -53,11 +53,15 @@ class FolderTile extends ConsumerWidget {
     this.onDeleteDrive,
   });
 
-  static bool get _isMobile => PlatformCapabilities.isMobile;
+  /// このプラットフォームで実際に同期できるか。
+  ///
+  /// 2026-08-27 に web を含むようになった（Drive連携から `dart:io` を撤去）。
+  /// できないときは「QRで渡すだけ」のタイルに落ちる。
+  static bool get _canSync => PlatformCapabilities.supportsDriveSync;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (node is DriveFolderNode && _isMobile) {
+    if (node is DriveFolderNode && _canSync) {
       final driveNode = node as DriveFolderNode;
       return ListTile(
         leading: NodePresenter.buildIconWithSyncOverlay(

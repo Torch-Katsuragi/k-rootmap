@@ -459,7 +459,7 @@
       "deleteTitle": "フォルダ削除",
       "deleteConfirm": "「$name」とその中身をすべて削除しますか？",
       "deleted": "${name} を削除しました",
-      "pcSyncDisabled": "PC版では同期不可（Google Drive Desktop使用）",
+      "pcSyncDisabled": "この環境では同期できません（QRでスマホに渡せます）",
       "synced": "同期済み",
       "localChanges": "ローカル変更あり",
       "remoteChanges": "Drive変更あり",

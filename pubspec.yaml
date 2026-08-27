@@ -91,6 +91,7 @@ dependencies:
   
   # Google Drive連携用パッケージ
   google_sign_in: ^7.0.0            # Google OAuth認証用
+  google_sign_in_web: ^1.1.0        # webのサインインボタン（renderButton）を直接使う
   googleapis: ^16.0.0               # Google APIs（Drive API含む）
   extension_google_sign_in_as_googleapis_auth: ^3.0.0  # google_sign_inとgoogleapisの連携
   # flutter_secure_storage: 削除（lib/内で未使用、win32バージョン競合の原因）

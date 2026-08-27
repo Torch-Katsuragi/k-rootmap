@@ -13,6 +13,8 @@
 - Clone a Drive folder from the browser and upload or download it.
 - Google's sign-in prompt (One Tap) now fires as the app opens. When it goes
   through, linking a Drive folder is just one "allow access" tap.
+- Fixed a Drive URL you had finished typing sometimes staying stuck on
+  "cannot access this folder".
 - Fixed the "General" settings page, which used to spin forever in a browser.
 - Fixed creating, deleting, moving and renaming folders in a browser.
 - ⚠ A browser has no notion of a storage path, so the "Global folder"

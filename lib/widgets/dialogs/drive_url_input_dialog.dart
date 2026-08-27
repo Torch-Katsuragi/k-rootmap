@@ -16,6 +16,7 @@
 // Root Maps: Drive URL入力ダイアログ
 // Google DriveフォルダのURLを入力またはQRスキャンしてクローンする
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/platform_capabilities.dart';
 import 'package:flutter/services.dart';
@@ -23,7 +24,7 @@ import '../../i18n/strings.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../services/google_drive/index.dart';
-import '../auth/google_sign_in_button.dart';
+import 'drive_sign_in_prompt.dart';
 import '../../utils/app_logger.dart';
 
 /// Drive URL入力ダイアログの結果
@@ -74,6 +75,14 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   bool _isLoading = false;
   bool _isSignedIn = false;
+
+  /// URL検証の入力待ちと世代番号
+  ///
+  /// ⚠ 1文字ごとに叩くと、**途中まで打ったURLの応答が後から届いて
+  /// 正しい結果を上書きする**（打ち終わっているのに「アクセスできません」の
+  /// まま止まる）。打ち終わりを待ち、古い応答は捨てること。
+  Timer? _validateDebounce;
+  int _validateSeq = 0;
   String? _errorMessage;
   String? _folderName;
   String? _folderId;
@@ -90,6 +99,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
 
   @override
   void dispose() {
+    _validateDebounce?.cancel();
     _driveService.authState.removeListener(_onAuthChanged);
     _tabController.dispose();
     _urlController.dispose();
@@ -114,27 +124,6 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     }
   }
 
-  /// Googleサインイン
-  Future<void> _signIn() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      final success = await _driveService.signIn();
-      if (success) {
-        _isSignedIn = true;
-      } else {
-        _errorMessage = t.drive.signInFailed;
-      }
-    } catch (e) {
-      _errorMessage = t.drive.signInError(error: e.toString());
-      AppLogger.error('[DriveUrlInputDialog] サインインエラー: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   /// クリップボードから貼り付け
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -145,7 +134,17 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   }
 
   /// URLを検証してフォルダ情報を取得
+  /// 打ち終わりを待ってから検証する
+  void _scheduleValidateUrl() {
+    _validateDebounce?.cancel();
+    _validateDebounce = Timer(
+      const Duration(milliseconds: 400),
+      _validateUrl,
+    );
+  }
+
   Future<void> _validateUrl() async {
+    final seq = ++_validateSeq;
     final url = _urlController.text.trim();
     if (url.isEmpty) {
       setState(() {
@@ -177,6 +176,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
     try {
       // フォルダ情報を取得
       final folderInfo = await _driveService.getFolderInfo(folderId);
+      if (seq != _validateSeq) return; // 追い越された応答は捨てる
       if (folderInfo == null) {
         setState(() {
           _errorMessage = t.drive.accessDenied;
@@ -198,6 +198,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
         _errorMessage = null;
       });
     } catch (e) {
+      if (seq != _validateSeq) return;
       AppLogger.error('[DriveUrlInputDialog] フォルダ情報取得エラー: $e');
       setState(() {
         _errorMessage = t.drive.fetchError(error: e.toString());
@@ -280,48 +281,14 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
   /// QRスキャンのタブを出すか
   bool get _hasQrTab => PlatformCapabilities.supportsQrScan;
 
-  /// 未サインインのときの案内
-  ///
-  /// ⚠ web は「アカウントを選ぶ」と「Driveへのアクセスを許可」が別の操作で、
-  /// 前者は Google が描画したボタンでしか、後者はクリックの直下でしか通らない。
-  /// **どちらが要るかは状態で決まる**ので、出すボタンは常に1つに絞る。
-  /// （native はアカウント選択と認可が `signIn()` 1回で済む）
-  Widget _buildSignInPrompt() {
-    // アカウントがまだ無い web は、Googleが描画するボタンだけが入口
-    final needsAccount = !_driveService.hasAccount;
-    final rendered = needsAccount ? googleRenderedSignInButton() : null;
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.account_circle, size: 48, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            needsAccount
-                ? 'Googleアカウントにサインインしてください'
-                : 'Google Driveへのアクセスを許可してください',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          if (rendered != null)
-            SizedBox(height: 44, child: rendered)
-          else
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _signIn,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.login),
-              label: Text(needsAccount ? 'Googleでサインイン' : 'アクセスを許可'),
-            ),
-        ],
-      ),
-    );
-  }
+  /// 未サインインのときの案内。中身は [DriveSignInPrompt] に任せる
+  Widget _buildSignInPrompt() => Center(
+        child: DriveSignInPrompt(
+          onSignedIn: () {
+            if (mounted) setState(() => _isSignedIn = true);
+          },
+        ),
+      );
 
   /// URL入力タブ
   Widget _buildUrlInputTab() {
@@ -344,7 +311,7 @@ class _DriveUrlInputDialogState extends State<DriveUrlInputDialog>
                 tooltip: t.drive.paste,
               ),
             ),
-            onChanged: (_) => _validateUrl(),
+            onChanged: (_) => _scheduleValidateUrl(),
             maxLines: 2,
           ),
           const SizedBox(height: 16),

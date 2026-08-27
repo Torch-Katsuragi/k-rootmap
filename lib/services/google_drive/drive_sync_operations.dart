@@ -18,6 +18,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,7 +82,7 @@ class DriveSyncOperations {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
 
-    if (!await ensureDriveAuthenticated()) return;
+    if (!await ensureDriveAuthenticated(context)) return;
 
     try {
       node.syncStatus = SyncStatus.syncing;
@@ -309,7 +310,12 @@ class DriveSyncOperations {
   }
 
   /// Drive操作前の認証チェック
-  Future<bool> ensureDriveAuthenticated() async {
+  /// Drive を叩ける状態にする。無理ならサインインUIを出す
+  ///
+  /// ⚠ web は `signIn()` だけでは足りない。アカウントが無ければ
+  /// **Googleが描画したボタン**が要るし、認可のポップアップは
+  /// クリックの直下でしか開けない。どちらも [DriveSignInDialog] が受け持つ。
+  Future<bool> ensureDriveAuthenticated(BuildContext context) async {
     final driveService = GoogleDriveService();
 
     if (driveService.isDriveApiAvailable) {
@@ -327,17 +333,10 @@ class DriveSyncOperations {
           level: NotificationLevel.info,
         );
 
-    final signInResult = await driveService.signIn();
+    if (await driveService.signIn()) return true;
 
-    if (signInResult) {
-      return true;
-    }
-
-    ref.read(notificationCenterProvider.notifier).add(
-          title: t.drive.signInFailed,
-          level: NotificationLevel.error,
-        );
-    return false;
+    if (!context.mounted) return false;
+    return DriveSignInDialog.show(context);
   }
 
   /// ノードの同期状態を更新

@@ -17,11 +17,15 @@
 // OAuth認証とDrive API操作を担当
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:path/path.dart' as p;
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 
+import '../../core/fs/k_file_system.dart';
+import '../../core/platform_capabilities.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
 import 'drive_auth_state.dart';
@@ -84,7 +88,17 @@ class GoogleDriveService {
     _initCompleter = Completer<void>();
     try {
       // v7: シングルトンを初期化
-      await GoogleSignIn.instance.initialize();
+      //
+      // ⚠ web はブラウザ用のOAuthクライアントIDが要る。native は
+      //   `google-services.json` / `Info.plist` から拾うので渡さない
+      //   （渡すと逆に取り違える）。
+      await GoogleSignIn.instance.initialize(
+        clientId:
+            PlatformCapabilities.isWeb &&
+                    PlatformCapabilities.kWebOAuthClientId.isNotEmpty
+                ? PlatformCapabilities.kWebOAuthClientId
+                : null,
+      );
 
       // 認証イベントをリッスン
       GoogleSignIn.instance.authenticationEvents.listen(
@@ -367,26 +381,42 @@ class GoogleDriveService {
   // ========== ファイル操作 ==========
 
   /// ファイルをアップロード
-  /// [localFile] ローカルファイル
+  /// [localPath] ローカルファイルのパス（web では仮想パス）
   /// [parentId] 親フォルダID
   /// [onProgress] 進捗コールバック（0.0〜1.0）
+  ///
+  /// > [!NOTE] 中身は丸ごとメモリに載せる
+  /// > `dart:io` の `openRead()` はストリームで流せるが、web には無い。
+  /// > `fs` は「全部読む」しか持たないので、ここで揃えた。
+  /// > 現場のgpkgは数十MB程度なので許容できる。
   Future<drive.File?> uploadFile(
-    File localFile,
+    String localPath,
     String parentId, {
     void Function(double progress)? onProgress,
   }) async {
     if (_driveApi == null) return null;
+    final bytes = await fs.readAsBytes(localPath);
+    return uploadBytes(bytes, p.basename(localPath), parentId);
+  }
+
+  /// メモリ上の内容をそのままアップロードする。
+  ///
+  /// 一時ファイルを作らずに済ませたいとき用（`.kmeta.json` の加工など）。
+  /// web には一時ディレクトリが無いので、こちらしか使えない。
+  Future<drive.File?> uploadBytes(
+    Uint8List bytes,
+    String fileName,
+    String parentId,
+  ) async {
+    if (_driveApi == null) return null;
 
     try {
-      final fileName = localFile.uri.pathSegments.last;
-      final fileSize = await localFile.length();
-
       // 既存ファイルを検索（同名ファイルがあれば更新）
       final existingFile = await _findFileByName(fileName, parentId);
 
       final media = drive.Media(
-        localFile.openRead(),
-        fileSize,
+        Stream<List<int>>.value(bytes),
+        bytes.length,
       );
 
       drive.File result;
@@ -424,16 +454,19 @@ class GoogleDriveService {
   /// 既知のDriveファイルIDを指定してアップロード（_findFileByName不要）
   /// [existingFileId] が指定されていれば files.update、なければ files.create
   Future<drive.File?> uploadFileById(
-    File localFile,
+    String localPath,
     String parentId, {
     String? existingFileId,
   }) async {
     if (_driveApi == null) return null;
 
     try {
-      final fileName = localFile.uri.pathSegments.last;
-      final fileSize = await localFile.length();
-      final media = drive.Media(localFile.openRead(), fileSize);
+      final fileName = p.basename(localPath);
+      final bytes = await fs.readAsBytes(localPath);
+      final media = drive.Media(
+        Stream<List<int>>.value(bytes),
+        bytes.length,
+      );
 
       if (existingFileId != null) {
         final result = await _driveApi!.files.update(
@@ -581,14 +614,12 @@ class GoogleDriveService {
         return false;
       }
 
-      final file = File(localPath);
-      final sink = file.openWrite();
-
+      // ⚠ 追記していく `openWrite()` は web に無いので、全部集めてから一度に書く
+      final chunks = <int>[];
       await for (final chunk in response.stream) {
-        sink.add(chunk);
+        chunks.addAll(chunk);
       }
-
-      await sink.close();
+      await fs.writeAsBytes(localPath, Uint8List.fromList(chunks));
       AppLogger.debug('[GoogleDriveService] ダウンロード完了: $localPath');
       return true;
     } catch (e) {

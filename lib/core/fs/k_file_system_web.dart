@@ -402,6 +402,15 @@ class WebFileSystem implements KFileSystem {
   }
 
   @override
+  Future<DateTime?> lastModified(String path) async {
+    final handle = await _fileHandle(path);
+    if (handle == null) return null;
+    final file = await handle.getFile().toDart;
+    // JS の lastModified はエポックミリ秒
+    return DateTime.fromMillisecondsSinceEpoch(file.lastModified);
+  }
+
+  @override
   Future<int?> length(String path) async {
     final handle = await _fileHandle(path);
     if (handle == null) return null;

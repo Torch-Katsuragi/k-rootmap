@@ -83,6 +83,12 @@ abstract class KFileSystem {
   /// バイト長。存在しなければ null
   Future<int?> length(String path);
 
+  /// 最終更新日時。存在しなければ null。
+  ///
+  /// Drive同期が「どちらが新しいか」を決めるのに使う。
+  /// web でも `FileSystemFileHandle.getFile()` の `lastModified` で取れる。
+  Future<DateTime?> lastModified(String path);
+
   /// ローカルの実ファイルとして扱えるか。
   ///
   /// ⚠ web は false。`sqflite` や外部プロセスに**パスを渡して開かせる**類の処理は
@@ -98,3 +104,52 @@ KFileSystem get fs => _override ?? (_instance ??= impl.createKFileSystem());
 
 /// テスト用に差し替える。[reset] で戻す。
 void setFileSystemOverrideForTest(KFileSystem? value) => _override = value;
+
+/// [KFileSystem] に足したい、実装を1つで済ませられるもの。
+///
+/// 実装クラスは `implements KFileSystem` なので、抽象クラス側に本体を書いても
+/// 継承されない。共通処理はここに置く。
+extension KFileSystemRecursive on KFileSystem {
+  /// 直下だけでなく、下位のディレクトリも全部たどって**ファイルだけ**を返す。
+  ///
+  /// `dart:io` の `Directory.list(recursive: true)` の置き換え。
+  /// web には再帰列挙が無いので [KFileSystem.list] を積み上げる
+  /// （native も同じ実装で足りるので、ここで一度だけ書く）。
+  ///
+  /// > [!WARNING] 深いツリーでは高くつく
+  /// > web はディレクトリ1つにつきハンドル走査が1回。
+  /// > 呼ぶ側で回数を減らせるなら減らすこと。
+  Future<List<KFileEntry>> listRecursive(String path) async {
+    final result = <KFileEntry>[];
+    final queue = <String>[path];
+    while (queue.isNotEmpty) {
+      final dir = queue.removeLast();
+      for (final entry in await list(dir)) {
+        if (entry.isDirectory) {
+          queue.add(entry.path);
+        } else {
+          result.add(entry);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// 下位のディレクトリを全部たどって**ディレクトリだけ**を返す。
+  ///
+  /// `dart:io` の `Directory.list(recursive: true).whereType<Directory>()` 相当。
+  /// 空フォルダの掃除などに使う。
+  Future<List<KFileEntry>> listDirectoriesRecursive(String path) async {
+    final result = <KFileEntry>[];
+    final queue = <String>[path];
+    while (queue.isNotEmpty) {
+      final dir = queue.removeLast();
+      for (final entry in await list(dir)) {
+        if (!entry.isDirectory) continue;
+        result.add(entry);
+        queue.add(entry.path);
+      }
+    }
+    return result;
+  }
+}

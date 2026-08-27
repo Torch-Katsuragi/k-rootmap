@@ -16,10 +16,10 @@
 // Root Maps: 同期ファイル操作ヘルパー
 // ファイル収集、パス正規化、Driveフォルダ解決、並列実行を担当
 
-import 'dart:io';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
+import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import 'google_drive_service.dart';
@@ -45,22 +45,26 @@ class SyncFileOperations {
   /// 同期対象ファイルを収集
   Future<List<LocalSyncFile>> collectSyncFiles(String projectPath) async {
     final files = <LocalSyncFile>[];
-    final dir = Directory(projectPath);
 
-    await for (final entity in dir.list(recursive: true)) {
-      if (entity is! File) continue;
-
-      final fileName = p.basename(entity.path);
+    for (final entry in await fs.listRecursive(projectPath)) {
+      final fileName = p.basename(entry.path);
       final relativePath = normalizeRelativePath(
-        p.relative(entity.path, from: projectPath),
+        p.relative(entry.path, from: projectPath),
       );
 
-      if (matchesSyncPattern(fileName)) {
-        if (fileName == '.ksync-state.json') continue;
+      if (!matchesSyncPattern(fileName)) continue;
+      if (fileName == '.ksync-state.json') continue;
 
-        files.add(LocalSyncFile(file: entity, relativePath: relativePath));
-        AppLogger.debug('[SyncEngine] 同期対象: $relativePath');
-      }
+      // サイズはここで1回だけ聞いて持ち回る（web は都度問い合わせが高い）
+      final size = await fs.length(entry.path) ?? 0;
+      files.add(
+        LocalSyncFile(
+          path: entry.path,
+          relativePath: relativePath,
+          size: size,
+        ),
+      );
+      AppLogger.debug('[SyncEngine] 同期対象: $relativePath');
     }
 
     return files;
@@ -175,19 +179,19 @@ class SyncFileOperations {
   /// ローカルフォルダ内のファイルを再帰スキャンし、相対パス→更新日時のマップを返す
   Future<Map<String, DateTime>> scanLocalFiles(String localPath) async {
     final localFiles = <String, DateTime>{};
-    final localDir = Directory(localPath);
-    if (!await localDir.exists()) return localFiles;
+    if (!await fs.isDirectory(localPath)) return localFiles;
 
-    await for (final entity in localDir.list(recursive: true)) {
-      final fileName = p.basename(entity.path);
+    for (final entry in await fs.listRecursive(localPath)) {
+      final fileName = p.basename(entry.path);
       if (fileName == kMetaFileName) continue;
-      if (entity is File && matchesSyncPattern(fileName)) {
-        final relativePath = normalizeRelativePath(
-          p.relative(entity.path, from: localPath),
-        );
-        final stat = await entity.stat();
-        localFiles[relativePath] = stat.modified;
-      }
+      if (!matchesSyncPattern(fileName)) continue;
+
+      final modified = await fs.lastModified(entry.path);
+      if (modified == null) continue;
+      final relativePath = normalizeRelativePath(
+        p.relative(entry.path, from: localPath),
+      );
+      localFiles[relativePath] = modified;
     }
     return localFiles;
   }

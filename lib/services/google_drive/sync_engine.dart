@@ -16,8 +16,8 @@
 // Root Maps: 同期エンジン
 // Google DriveとローカルファイルのPush/Pull同期を担当するオーケストレーター
 
-import 'dart:io';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:path/path.dart' as p;
 
 import '../kmeta_service.dart';
 import 'google_drive_service.dart';
@@ -123,14 +123,25 @@ class SyncProgress {
 }
 
 /// ローカル同期対象ファイル
+///
+/// ⚠ `dart:io` の `File` は持たない。web には無いため
+/// （2026-08-27 に載せ替え）。パスとサイズだけあれば足りる。
 class LocalSyncFile {
-  final File file;
+  final String path;
   final String relativePath;
 
+  /// バイト数。列挙時に1回だけ問い合わせて持ち回る
+  /// （web はサイズ取得もハンドル操作なので、都度聞くと高い）。
+  final int size;
+
   const LocalSyncFile({
-    required this.file,
+    required this.path,
     required this.relativePath,
+    required this.size,
   });
+
+  /// ファイル名（拡張子つき）
+  String get name => p.basename(path);
 }
 
 /// Drive側ファイルエントリ（相対パス付き）

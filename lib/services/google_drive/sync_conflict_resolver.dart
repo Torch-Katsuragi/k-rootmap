@@ -16,9 +16,9 @@
 // Root Maps: 同期コンフリクト解決
 // 同期状態チェック、マージエントリ取得、マージ実行を担当
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
 
+import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../kmeta_service.dart';
@@ -77,21 +77,8 @@ class SyncConflictResolver {
         if (fileId != null) driveIdMap[fileId] = entry;
       }
 
-      final localDir = Directory(localPath);
-      final localFiles = <String, DateTime>{};
-      if (await localDir.exists()) {
-        await for (final entity in localDir.list(recursive: true)) {
-          final fileName = p.basename(entity.path);
-          if (fileName == kMetaFileName) continue;
-          if (entity is File && _fileOps.matchesSyncPattern(fileName)) {
-            final relativePath = _fileOps.normalizeRelativePath(
-              p.relative(entity.path, from: localPath),
-            );
-            final stat = await entity.stat();
-            localFiles[relativePath] = stat.modified;
-          }
-        }
-      }
+      // 中身は SyncFileOperations.scanLocalFiles と同じなので、そちらに任せる
+      final localFiles = await _fileOps.scanLocalFiles(localPath);
 
       int localAdded = 0;
       int localDeleted = 0;
@@ -199,10 +186,9 @@ class SyncConflictResolver {
       // Driveにあるがローカルに存在しないフォルダを検出
       for (final relativeFolderPath in driveFolderMap.values) {
         if (relativeFolderPath.isEmpty) continue;
-        final localFolder = Directory(
-          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
-        );
-        if (!localFolder.existsSync()) {
+        final localFolder =
+            _fileOps.relativePathToLocalPath(localPath, relativeFolderPath);
+        if (!await fs.isDirectory(localFolder)) {
           remoteAdded++;
           remoteAddedFiles.add('$relativeFolderPath/');
         }
@@ -444,8 +430,7 @@ class SyncConflictResolver {
           switch (entry.localChange) {
             case MergeChangeType.added:
             case MergeChangeType.modified:
-              final file = File(localFilePath);
-              if (await file.exists()) {
+              if (await fs.exists(localFilePath)) {
                 final relativeDir = p.dirname(relativePath);
                 String targetFolderId = driveId;
                 if (relativeDir != '.' && relativeDir.isNotEmpty) {
@@ -456,7 +441,8 @@ class SyncConflictResolver {
                   }
                 }
 
-                final result = await _driveService.uploadFile(file, targetFolderId);
+                final result =
+                    await _driveService.uploadFile(localFilePath, targetFolderId);
                 if (result != null) {
                   uploadedCount++;
                   syncedFiles[relativePath] = KMetaSyncFile(
@@ -477,8 +463,7 @@ class SyncConflictResolver {
               AppLogger.debug('  → ローカル変更なし、リモート変更を復元: ${entry.remoteChange}');
               switch (entry.remoteChange) {
                 case MergeChangeType.deleted:
-                  final file = File(localFilePath);
-                  if (await file.exists()) {
+                  if (await fs.exists(localFilePath)) {
                     final relativeDir = p.dirname(relativePath);
                     String targetFolderId = driveId;
                     if (relativeDir != '.' && relativeDir.isNotEmpty) {
@@ -489,7 +474,8 @@ class SyncConflictResolver {
                       }
                     }
 
-                    final result = await _driveService.uploadFile(file, targetFolderId);
+                    final result =
+                    await _driveService.uploadFile(localFilePath, targetFolderId);
                     if (result != null) {
                       uploadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
@@ -524,8 +510,7 @@ class SyncConflictResolver {
                   }
                   break;
                 case MergeChangeType.modified:
-                  final file = File(localFilePath);
-                  if (await file.exists()) {
+                  if (await fs.exists(localFilePath)) {
                     final relativeDir = p.dirname(relativePath);
                     String targetFolderId = driveId;
                     if (relativeDir != '.' && relativeDir.isNotEmpty) {
@@ -536,7 +521,8 @@ class SyncConflictResolver {
                       }
                     }
 
-                    final result = await _driveService.uploadFile(file, targetFolderId);
+                    final result =
+                    await _driveService.uploadFile(localFilePath, targetFolderId);
                     if (result != null) {
                       uploadedCount++;
                       syncedFiles[relativePath] = KMetaSyncFile(
@@ -577,10 +563,7 @@ class SyncConflictResolver {
             case MergeChangeType.added:
             case MergeChangeType.modified:
               if (entry.driveFileId != null) {
-                final localFileDir = Directory(p.dirname(localFilePath));
-                if (!await localFileDir.exists()) {
-                  await localFileDir.create(recursive: true);
-                }
+                await fs.createDirectory(p.dirname(localFilePath));
 
                 final success = await _driveService.downloadFile(
                   entry.driveFileId!,
@@ -596,9 +579,8 @@ class SyncConflictResolver {
               }
               break;
             case MergeChangeType.deleted:
-              final file = File(localFilePath);
-              if (await file.exists()) {
-                await file.delete();
+              if (await fs.exists(localFilePath)) {
+                await fs.delete(localFilePath);
                 syncedFiles.remove(relativePath);
                 deletedCount++;
               }
@@ -607,13 +589,9 @@ class SyncConflictResolver {
               if (entry.moveInfo != null && entry.driveFileId != null) {
                 final oldPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedFrom ?? relativePath);
                 final newLocalPath = _fileOps.relativePathToLocalPath(localPath, entry.moveInfo!.movedTo ?? relativePath);
-                final oldFile = File(oldPath);
-                if (await oldFile.exists()) {
-                  final newDir = Directory(p.dirname(newLocalPath));
-                  if (!await newDir.exists()) {
-                    await newDir.create(recursive: true);
-                  }
-                  await oldFile.rename(newLocalPath);
+                if (await fs.exists(oldPath)) {
+                  await fs.createDirectory(p.dirname(newLocalPath));
+                  await fs.rename(oldPath, newLocalPath);
                   syncedFiles.remove(entry.moveInfo!.movedFrom ?? relativePath);
 
                   syncedFiles[entry.moveInfo!.movedTo ?? relativePath] = KMetaSyncFile(
@@ -628,10 +606,7 @@ class SyncConflictResolver {
               switch (entry.localChange) {
                 case MergeChangeType.deleted:
                   if (entry.driveFileId != null) {
-                    final localFileDir = Directory(p.dirname(localFilePath));
-                    if (!await localFileDir.exists()) {
-                      await localFileDir.create(recursive: true);
-                    }
+                    await fs.createDirectory(p.dirname(localFilePath));
 
                     final success = await _driveService.downloadFile(
                       entry.driveFileId!,
@@ -647,9 +622,8 @@ class SyncConflictResolver {
                   }
                   break;
                 case MergeChangeType.added:
-                  final file = File(localFilePath);
-                  if (await file.exists()) {
-                    await file.delete();
+                  if (await fs.exists(localFilePath)) {
+                    await fs.delete(localFilePath);
                     syncedFiles.remove(relativePath);
                     deletedCount++;
                   }
@@ -723,11 +697,10 @@ class SyncConflictResolver {
       int created = 0;
       for (final relativeFolderPath in driveData.folderMap.values) {
         if (relativeFolderPath.isEmpty) continue;
-        final dir = Directory(
-          _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
-        );
-        if (!await dir.exists()) {
-          await dir.create(recursive: true);
+        final dirPath =
+            _fileOps.relativePathToLocalPath(localPath, relativeFolderPath);
+        if (!await fs.isDirectory(dirPath)) {
+          await fs.createDirectory(dirPath);
           created++;
           AppLogger.debug('[SyncEngine] フォルダ作成: $relativeFolderPath');
         }
@@ -750,13 +723,9 @@ class SyncConflictResolver {
           .where((v) => v.isNotEmpty)
           .toSet();
 
-      final localDir = Directory(localPath);
-      if (!await localDir.exists()) return;
+      if (!await fs.isDirectory(localPath)) return;
 
-      final localDirs = <Directory>[];
-      await for (final entity in localDir.list(recursive: true)) {
-        if (entity is Directory) localDirs.add(entity);
-      }
+      final localDirs = await fs.listDirectoriesRecursive(localPath);
       // 深い階層から処理して連鎖削除を可能にする
       localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
 
@@ -765,8 +734,8 @@ class SyncConflictResolver {
           p.relative(dir.path, from: localPath),
         );
         if (driveFolderPaths.contains(relativePath)) continue;
-        if (await dir.list().isEmpty) {
-          await dir.delete();
+        if ((await fs.list(dir.path)).isEmpty) {
+          await fs.delete(dir.path);
           AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
         }
       }

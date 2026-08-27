@@ -3,6 +3,27 @@ title: Google Drive連携セットアップ
 tags: [technical, google-drive, setup]
 ---
 
+
+> [!NOTE] 2026-08-27: 同期コードを web でも動く形にした
+> `lib/services/google_drive/` から `dart:io` を撤去した。API境界が
+> `dart:io` の `File` を持ち回っていたので、そこから変えている:
+>
+> - `uploadFile(File)` → `uploadFile(String localPath)`
+> - `uploadBytes(Uint8List, name, parent)` を追加（一時ファイルを作らないため。
+>   web には一時ディレクトリが無い）
+> - `LocalSyncFile` は `File` ではなく `path` + `size` を持つ
+> - 再帰列挙は `fs.listRecursive()` / `fs.listDirectoriesRecursive()`
+> - 更新日時は `fs.lastModified()`（web も `File.lastModified` で取れる）
+>
+> ⚠ **アップロードは中身を丸ごとメモリに載せる。**
+> `openRead()` のストリームは web に無いので揃えた。
+> 現場のgpkgは数十MB程度なので許容している。
+>
+> ⚠ **web で使うには web用のOAuthクライアントIDが要る。**
+> GCPコンソールでしか発行できない。`--dart-define=GOOGLE_WEB_CLIENT_ID=...`
+> で渡す。未設定の間は `PlatformCapabilities.supportsDriveSync` が
+> web で false のままなので、UIも出ない。
+
 # Google Drive連携セットアップ
 
 Google Drive連携機能を有効にするためのセットアップ手順。

@@ -17,10 +17,12 @@
 // ローカル→Google DriveへのPush（アップロード）処理を担当
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
+import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
@@ -62,8 +64,7 @@ class SyncPushHandler {
       final previousMeta = await _kmetaService.getMergedMeta(projectPath);
       final previousSyncedFiles = previousMeta.sync.files;
 
-      final projectDir = Directory(projectPath);
-      if (!await projectDir.exists()) {
+      if (!await fs.isDirectory(projectPath)) {
         return SyncResult.failure(t.services.projectNotFound);
       }
 
@@ -141,16 +142,15 @@ class SyncPushHandler {
       int completedCount = 0;
       final syncedFiles = <String, KMetaSyncFile>{};
 
-      final totalBytes = filesToSync.fold<int>(
-        0, (sum, f) => sum + f.file.lengthSync(),
-      );
+      // サイズは収集時に取ってある（web は都度問い合わせが高いので持ち回る）
+      final totalBytes = filesToSync.fold<int>(0, (sum, f) => sum + f.size);
       int processedBytes = 0;
 
       // .kmeta.json と通常ファイルを分離
       final kmetaFiles = <LocalSyncFile>[];
       final normalFiles = <LocalSyncFile>[];
       for (final f in filesToSync) {
-        if (p.basename(f.file.path) == kMetaFileName) {
+        if (f.name == kMetaFileName) {
           kmetaFiles.add(f);
         } else {
           normalFiles.add(f);
@@ -159,10 +159,10 @@ class SyncPushHandler {
 
       // .kmeta.json を先に直列処理
       for (final localFile in kmetaFiles) {
-        final file = localFile.file;
+        final filePath = localFile.path;
         final relativePath = localFile.relativePath;
         final relativeDir = p.posix.dirname(relativePath);
-        final fileSize = file.lengthSync();
+        final fileSize = localFile.size;
 
         final targetFolderForFile = await _fileOps.getDriveFolderIdForRelativeDir(
           targetFolderId, relativeDir, folderIdCache,
@@ -172,7 +172,7 @@ class SyncPushHandler {
           processedBytes += fileSize;
           continue;
         }
-        final success = await _uploadKmetaFile(file, targetFolderForFile);
+        final success = await _uploadKmetaFile(filePath, targetFolderForFile);
         if (success) {
           uploadedCount++;
           final kmetaList = await _driveService.listFiles(targetFolderForFile);
@@ -215,10 +215,9 @@ class SyncPushHandler {
         normalFiles.asMap().entries.map((entry) => () async {
           final i = entry.key;
           final localFile = entry.value;
-          final file = localFile.file;
-          final fileName = p.basename(file.path);
+          final fileName = localFile.name;
           final relativePath = localFile.relativePath;
-          final fileSize = file.lengthSync();
+          final fileSize = localFile.size;
 
           final targetFolderForFile = resolvedFolders[i];
           if (targetFolderForFile == null) {
@@ -232,7 +231,7 @@ class SyncPushHandler {
               previousSyncedFiles[relativePath]?.driveFileId;
 
           final result = await _driveService.uploadFileById(
-            file,
+            localFile.path,
             targetFolderForFile,
             existingFileId: existingFileId,
           );
@@ -350,9 +349,12 @@ class SyncPushHandler {
   }
 
   /// .kmeta.jsonをアップロード（deviceIdを除外）
-  Future<bool> _uploadKmetaFile(File file, String targetFolderId) async {
+  ///
+  /// ⚠ 一時ファイルは作らない。web には一時ディレクトリが無いので、
+  /// 加工した中身をそのまま `uploadBytes` に渡す（2026-08-27 に載せ替え）。
+  Future<bool> _uploadKmetaFile(String filePath, String targetFolderId) async {
     try {
-      final content = await file.readAsString();
+      final content = await fs.readAsString(filePath);
       final json = jsonDecode(content) as Map<String, dynamic>;
 
       final kmeta = KMeta.fromJson(json);
@@ -363,15 +365,15 @@ class SyncPushHandler {
         syncedJson['sync'] = syncJson;
       }
 
-      final tempDir = Directory.systemTemp;
-      final tempFile = File(p.join(tempDir.path, kMetaFileName));
-      await tempFile.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(syncedJson),
+      final result = await _driveService.uploadBytes(
+        Uint8List.fromList(
+          utf8.encode(
+            const JsonEncoder.withIndent('  ').convert(syncedJson),
+          ),
+        ),
+        kMetaFileName,
+        targetFolderId,
       );
-
-      final result = await _driveService.uploadFile(tempFile, targetFolderId);
-
-      await tempFile.delete();
 
       return result != null;
     } catch (e) {

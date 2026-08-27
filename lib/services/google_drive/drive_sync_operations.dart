@@ -17,8 +17,8 @@
 /// LayerDrawerやタイトルバーなど、複数のUIから再利用可能
 library;
 
-import 'dart:io' show Directory;
 import 'package:flutter/material.dart';
+import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/app_notification.dart';
@@ -289,9 +289,8 @@ class DriveSyncOperations {
     if (folderPath == null) return;
 
     try {
-      final dir = Directory(folderPath);
-      if (dir.existsSync()) {
-        dir.deleteSync(recursive: true);
+      if (await fs.isDirectory(folderPath)) {
+        await fs.delete(folderPath, recursive: true);
       }
       node.parent?.removeChild(node);
       onStateChanged();

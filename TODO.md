@@ -50,10 +50,13 @@
 - [/] web側のQR発行（受け側の `cloneFromDrive` と QRスキャンは実装済み）
   - [x] QRを出す口を作った（`qr_flutter`）。Drive連携フォルダの行に出る。
         **webでも出る**ので「事務所で整えたdirを現場に渡す」の出口はできた
-  - [ ] ⚠ **web版はDrive連携を作れない**（`supportsDriveSync => isMobile`）。
-        いま web でQRを出せるのは「モバイルで連携済みのフォルダを開いたとき」だけ。
-        webで一から連携するには `google_sign_in` / `googleapis` の web対応が要る
-        → 下の「web版でルーム機能を使えるように」と同じ、web版のGoogle認証の話
+  - [/] **web版のDrive連携**
+    - [x] 同期コードの `dart:io` を撤去（2026-08-27）
+    - [ ] ⚠ **web用のOAuthクライアントIDが要る。** GCPコンソールでしか発行できない
+          （gcloud にも Firebase CLI にも口が無い）。
+          `--dart-define=GOOGLE_WEB_CLIENT_ID=...` で渡す作りにしてある。
+          未設定の間は `supportsDriveSync` が web で false のままなのでUIも出ない
+    - [ ] 承認済みJavaScript生成元に配信元オリジンを登録（開発は `http://localhost:8099`）
 - [ ] ~~`layer_styles`~~ → **優先度を下げた**。`.qgs` にレンダラを書けば冗長。gpkg単体を渡す場合の保険のみ
 
 ## web版（調査済み・2026-08-21）
@@ -90,8 +93,11 @@
   - [x] **段2後半: web実装（File System Access API）＋フォルダ選択**（2026-08-25 完了）
         Chrome/Edge でフォルダを選ぶとツリー（サブフォルダ・.gpkg・画像）が出るところまで到達。
         ⚠ Firefox/Safari は `showDirectoryPicker` が無いので「地図プレビュー」のまま
-  - [ ] 残り156箇所（Drive同期・shapefile・GeoTIFF・TileServer 等）。
+  - [/] 残り（shapefile・GeoTIFF・TileServer 等）。
         web で通らない経路なので、必要になった段で個別に移す
+    - [x] **Drive同期を移した**（2026-08-27）。`lib/services/google_drive/` から
+          `dart:io` が完全に消えた。API境界が `File` を持ち回っていたので、
+          `uploadFile(String path)` / `LocalSyncFile(path, size)` に変えた
 - [x] **段3: GeoPackage を sqlite3 WASM へ**（2026-08-25 完了）
   - `sqflite_common_ffi_web` を採用。既存の `rawQuery` / `transaction` はそのまま動く
   - チェックアウト（元ファイル→WASM）／チェックイン（WASM→元ファイル）を

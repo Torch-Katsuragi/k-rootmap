@@ -140,7 +140,28 @@ class PlatformCapabilities {
   static bool get supportsPartySharing => isMobile || isWeb;
 
   /// Google Drive連携
-  static bool get supportsDriveSync => isMobile;
+  /// Google Drive連携（フォルダの同期）
+  ///
+  /// 2026-08-27 に `lib/services/google_drive/` から `dart:io` を撤去し、
+  /// web でも動く形にした。
+  ///
+  /// ⚠ **web でログインするには web用のOAuthクライアントIDが要る。**
+  /// 未設定のうちは `google_sign_in` の初期化で失敗するので、
+  /// クライアントIDが入るまでは web を false のままにしておくこと。
+  static bool get supportsDriveSync => isMobile || (isWeb && _hasWebOAuthClient);
+
+  /// web用のOAuthクライアントIDが設定されているか。
+  ///
+  /// GCPコンソールでしか発行できない（gcloud にもFirebase CLIにも口が無い）。
+  /// 承認済みJavaScript生成元に配信元のオリジンを登録すること。
+  static bool get _hasWebOAuthClient => kWebOAuthClientId.isNotEmpty;
+
+  /// web用のOAuthクライアントID（`....apps.googleusercontent.com`）。
+  ///
+  /// 空の間は web の Drive連携UIを出さない。
+  static const String kWebOAuthClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+  );
 
   /// カメラでのQRコードスキャン
   static bool get supportsQrScan => isMobile;

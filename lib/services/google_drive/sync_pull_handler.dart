@@ -16,9 +16,9 @@
 // Root Maps: 同期Pullハンドラー
 // Google Drive→ローカルへのPull（ダウンロード）処理を担当
 
-import 'dart:io';
 import 'package:path/path.dart' as p;
 
+import '../../core/fs/k_file_system.dart';
 import '../../models/kmeta.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
@@ -57,9 +57,9 @@ class SyncPullHandler {
     }
 
     try {
-      final localDir = Directory(localPath);
-      if (!await localDir.exists()) {
-        await localDir.create(recursive: true);
+      final localExists = await fs.isDirectory(localPath);
+      if (!localExists) {
+        await fs.createDirectory(localPath);
       }
 
       final folderInfo = await _driveService.getFolderInfo(driveFolderId);
@@ -74,10 +74,9 @@ class SyncPullHandler {
       // Driveに存在する全サブフォルダをローカルに作成（空フォルダ含む）
       for (final relativeFolderPath in driveResult.folderMap.values) {
         if (relativeFolderPath.isEmpty) continue;
-        final dir = Directory(
+        await fs.createDirectory(
           _fileOps.relativePathToLocalPath(localPath, relativeFolderPath),
         );
-        if (!await dir.exists()) await dir.create(recursive: true);
       }
 
       if (filesToDownload.isEmpty) {
@@ -110,8 +109,7 @@ class SyncPullHandler {
               _fileOps.relativePathToLocalPath(localPath, e.relativePath)))
           .toSet();
       for (final dir in fileDirs) {
-        final d = Directory(dir);
-        if (!await d.exists()) await d.create(recursive: true);
+        await fs.createDirectory(dir);
       }
 
       onProgress?.call(SyncProgress(
@@ -162,20 +160,18 @@ class SyncPullHandler {
       final driveFilePaths =
           filesToDownload.map((f) => f.relativePath).toSet();
 
-      if (await localDir.exists()) {
-        await for (final entity in localDir.list(recursive: true)) {
-          if (entity is File) {
-            final localName = p.basename(entity.path);
-            if (localName == kMetaFileName) continue;
-            if (!_fileOps.matchesSyncPattern(localName)) continue;
-            final relativePath = _fileOps.normalizeRelativePath(
-              p.relative(entity.path, from: localPath),
-            );
-            if (!driveFilePaths.contains(relativePath)) {
-              await entity.delete();
-              deletedCount++;
-              AppLogger.debug('[SyncEngine] ローカルから削除: $relativePath');
-            }
+      if (await fs.isDirectory(localPath)) {
+        for (final entity in await fs.listRecursive(localPath)) {
+          final localName = p.basename(entity.path);
+          if (localName == kMetaFileName) continue;
+          if (!_fileOps.matchesSyncPattern(localName)) continue;
+          final relativePath = _fileOps.normalizeRelativePath(
+            p.relative(entity.path, from: localPath),
+          );
+          if (!driveFilePaths.contains(relativePath)) {
+            await fs.delete(entity.path);
+            deletedCount++;
+            AppLogger.debug('[SyncEngine] ローカルから削除: $relativePath');
           }
         }
 
@@ -183,10 +179,7 @@ class SyncPullHandler {
         final driveFolderPaths = driveResult.folderMap.values
             .where((v) => v.isNotEmpty)
             .toSet();
-        final localDirs = <Directory>[];
-        await for (final entity in localDir.list(recursive: true)) {
-          if (entity is Directory) localDirs.add(entity);
-        }
+        final localDirs = await fs.listDirectoriesRecursive(localPath);
         localDirs.sort((a, b) => b.path.length.compareTo(a.path.length));
 
         for (final dir in localDirs) {
@@ -194,8 +187,8 @@ class SyncPullHandler {
             p.relative(dir.path, from: localPath),
           );
           if (driveFolderPaths.contains(relativePath)) continue;
-          if (await dir.list().isEmpty) {
-            await dir.delete();
+          if ((await fs.list(dir.path)).isEmpty) {
+            await fs.delete(dir.path);
             AppLogger.debug('[SyncEngine] 空フォルダ削除: $relativePath');
           }
         }
@@ -269,8 +262,7 @@ class SyncPullHandler {
   }) async {
     AppLogger.debug('[SyncEngine] クローン開始: $folderName ($driveId)');
 
-    final dir = Directory(localPath);
-    if (!await dir.exists()) await dir.create(recursive: true);
+    await fs.createDirectory(localPath);
 
     // クローン固有のメタデータを先にセットアップ
     // pull() 内の setDriveSync はマージ動作なのでこれらを上書きしない

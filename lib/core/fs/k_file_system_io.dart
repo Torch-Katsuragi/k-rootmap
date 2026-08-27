@@ -101,6 +101,13 @@ class IoFileSystem implements KFileSystem {
   }
 
   @override
+  Future<DateTime?> lastModified(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return (await file.stat()).modified;
+  }
+
+  @override
   Future<int?> length(String path) async {
     final file = File(path);
     if (!await file.exists()) return null;

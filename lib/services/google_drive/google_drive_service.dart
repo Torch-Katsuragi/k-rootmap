@@ -151,6 +151,7 @@ class GoogleDriveService {
   /// 同意がまだ／ブラウザにGoogleのセッションが無ければ失敗する。そのときは
   /// 通常のサインインUIに任せる。
   Future<bool> restoreWebAuthorization() async {
+    AppLogger.debug('[GoogleDriveService] 認可の復元を試行（ポップアップが開く）');
     try {
       final granted = await GoogleSignIn.instance.authorizationClient
           .authorizeScopes(_scopes);
@@ -323,26 +324,6 @@ class GoogleDriveService {
     if (authorization != null) {
       _driveApi = drive.DriveApi(authorization.authClient(scopes: _scopes));
       return true;
-    }
-
-    // web は「同意済みなら無言でトークンが降りてくる」経路を先に試す。
-    //
-    // ⚠ ここが分かりにくい。`google_sign_in_web` は
-    // **アカウントを渡すと `prompt=select_account` を付ける**ので、
-    // 一度許可していても毎回アカウント選択が出る（= リロードのたびに切れて見える）。
-    // ユーザーを渡さない `GoogleSignIn.instance.authorizationClient` だけが
-    // `prompt=''` になり、同意済みなら画面を出さずに返る。
-    // 同意がまだなら失敗するので、そのときは下の通常経路に落ちる。
-    if (PlatformCapabilities.isWeb) {
-      try {
-        final silent = await GoogleSignIn.instance.authorizationClient
-            .authorizeScopes(_scopes);
-        _driveApi = drive.DriveApi(silent.authClient(scopes: _scopes));
-        AppLogger.debug('[GoogleDriveService] 無言で認可を復元した');
-        return true;
-      } catch (e) {
-        AppLogger.debug('[GoogleDriveService] 無言の認可は不可: $e');
-      }
     }
 
     if (!promptIfUnauthorized) return false;

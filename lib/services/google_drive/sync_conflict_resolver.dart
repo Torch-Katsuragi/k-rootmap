@@ -260,12 +260,14 @@ class SyncConflictResolver {
       final syncedFiles = meta.sync.files;
 
       if (driveId == null) {
+        AppLogger.debug('[getMergeEntries] driveId が無い');
         return entries;
       }
 
       final localFilesFuture = _fileOps.scanLocalFiles(localPath);
       final folderInfo = await _driveService.getFolderInfo(driveId);
       if (folderInfo == null) {
+        AppLogger.debug('[getMergeEntries] Driveのフォルダを取れない: $driveId');
         return entries;
       }
 
@@ -279,6 +281,11 @@ class SyncConflictResolver {
       }
 
       final localFiles = await localFilesFuture;
+      AppLogger.debug(
+        '[getMergeEntries] local=${localFiles.keys.toList()} '
+        'drive=${driveAllEntries.map((e) => e.relativePath).toList()} '
+        'synced=${syncedFiles.keys.toList()}',
+      );
 
       // syncedFilesを driveFileId → syncedPath に反転
       final syncedIdToPath = <String, String>{};

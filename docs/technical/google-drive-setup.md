@@ -38,6 +38,42 @@ tags: [technical, google-drive, setup]
 >    console に `[GSI_LOGGER]: Failed to open popup window` だけが残り、
 >    アプリ側は「サインインしてください」のまま動かない。
 >
+> ### リロードするとサインインが切れる件
+>
+> ⚠ **ブラウザのOAuthにリフレッシュトークンは無い。**
+> `google_sign_in_web` のトークンキャッシュはメモリ上の `Map` だけで、
+> 保存も更新もしない。ページを離れれば消える。
+> （ポップアップのURLに `response_type=token` が入っているのがその印）
+>
+> Google側の同意は残っているので `prompt=''` で聞き直せる。それになるのは
+> **ユーザーを渡さない** `GoogleSignIn.instance.authorizationClient` だけ。
+> `GoogleSignInAccount.authorizationClient` は `login_hint` を渡すため
+> ライブラリが `prompt=select_account` を付けてしまう
+> （`gis_client.dart`: `prompt: userHint == null ? '' : 'select_account'`）。
+>
+> ⚠ **`prompt=''` でも「無言」とは限らない。** GISは常に別ウィンドウの
+> ポップアップを開く。同意済みかつアカウントが一意なら勝手に閉じるが、
+> そうでなければ選択画面で止まり、**`await` が返らない**。
+> 2026-08-27 に、これで同期が画面に何も出さないまま固まった。
+> 呼ぶときは必ず画面に「別ウィンドウを見てください」を出すこと。
+>
+> ⚠ 復元は**クリックの直下でしか呼べない**。起動時に呼ぶとポップアップが
+> 潰され、console に `Failed to open popup window` だけが残る。
+>
+> 本当に無言にしたいなら `prompt=''` と `login_hint` を**両方**渡す必要があり、
+> それはライブラリを通さず `google.accounts.oauth2.initTokenClient` を
+> 直に叩くことになる。やるなら web 専用の interop を足す。
+> もう一段先は、バックエンドを立てて認可コードフローに移り
+> リフレッシュトークンを持つこと（サーバー要らずという前提を捨てる）。
+
+> [!TIP] リリースの web でログを見る
+> `--dart-define=K_LOG=true` を付けてビルドすると `AppLogger` が
+> リリースでも出る。⚠ 付けないと `kDebugMode` が false で**1行も出ない**。
+>
+> ```bash
+> flutter build web --release --dart-define=GOOGLE_WEB_CLIENT_ID=... --dart-define=K_LOG=true
+> ```
+
 > そのため `GoogleDriveService` では、イベントハンドラは
 > **認可済みのときだけ**初期化し（`promptIfUnauthorized: false`）、
 > 未認可なら「サインイン済み・認可待ち」で止める。認可は

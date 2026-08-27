@@ -18,6 +18,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../core/platform_capabilities.dart';
 import '../../widgets/dialogs/drive_sign_in_prompt.dart';
 import '../../core/fs/k_file_system.dart';
 import '../../i18n/strings.g.dart';
@@ -82,7 +83,10 @@ class DriveSyncOperations {
     final localPath = node.getAbsoluteFilePath();
     if (localPath == null) return;
 
-    if (!await ensureDriveAuthenticated(context)) return;
+    if (!await ensureDriveAuthenticated(context)) {
+      AppLogger.debug('[DriveSync] 認証できないので中断');
+      return;
+    }
 
     try {
       node.syncStatus = SyncStatus.syncing;
@@ -105,10 +109,14 @@ class DriveSyncOperations {
 
       final syncEngine = SyncEngine();
       final entries = await syncEngine.getMergeEntries(localPath);
+      AppLogger.debug('[DriveSync] mode=$mode entries=${entries.length} local=$localPath');
 
       if (context.mounted) Navigator.of(context).pop();
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        AppLogger.debug('[DriveSync] contextが外れたので中断');
+        return;
+      }
 
       if (entries.isEmpty) {
         // ファイル変更なしでもDriveの新フォルダをローカルに作成
@@ -326,6 +334,16 @@ class DriveSyncOperations {
     await driveService.initialize();
     if (driveService.isDriveApiAvailable) {
       return true;
+    }
+
+    // ⚠ web はここで `signIn()` を直に呼ばないこと。
+    // 認可の復元は**別ウィンドウのポップアップ**を開き、それが自動で閉じるとは
+    // 限らない（Googleに複数アカウントがあると選択画面で止まる）。
+    // 画面に何も出さずに待つと、アプリが固まったようにしか見えない。
+    // ダイアログを先に出し、その中で復元させる。
+    if (PlatformCapabilities.isWeb) {
+      if (!context.mounted) return false;
+      return DriveSignInDialog.show(context);
     }
 
     ref.read(notificationCenterProvider.notifier).add(

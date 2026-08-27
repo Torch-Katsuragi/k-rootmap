@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -54,6 +51,16 @@ class DefaultFirebaseOptions {
     appId: '1:348302294570:android:b8e5b42b56014d34044d53',
     messagingSenderId: '348302294570',
     projectId: 'nemurigi-kobo',
+    databaseURL: 'https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'nemurigi-kobo.firebasestorage.app',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDV7T59uTvZ3adaFqOsVO5iw8WbfqDxzIo',
+    appId: '1:348302294570:web:dc3a29637b11e2fa044d53',
+    messagingSenderId: '348302294570',
+    projectId: 'nemurigi-kobo',
+    authDomain: 'nemurigi-kobo.firebaseapp.com',
     databaseURL: 'https://nemurigi-kobo-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'nemurigi-kobo.firebasestorage.app',
   );

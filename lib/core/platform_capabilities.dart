@@ -131,7 +131,13 @@ class PlatformCapabilities {
   // =============================================
 
   /// 位置共有（パーティ）— Firebase の設定があるプラットフォームのみ
-  static bool get supportsPartySharing => isMobile;
+  ///
+  /// 2026-08-27 に web を足した（`firebase_options.dart` に web を追加済み）。
+  /// ルーム機能は RTDB しか触らず `dart:io` に依存しないので、設定さえあれば動く。
+  ///
+  /// ⚠ web で位置を配信するには、ブラウザの位置情報許可が要る。
+  /// 精度は端末のGPSより粗い（[supportsHighAccuracyGps] 参照）。
+  static bool get supportsPartySharing => isMobile || isWeb;
 
   /// Google Drive連携
   static bool get supportsDriveSync => isMobile;

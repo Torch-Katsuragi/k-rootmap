@@ -96,19 +96,52 @@ class RtdbPeerSource implements PeerSource {
     _connectedSub = _connectedRef.onValue.listen((event) {
       final connected = event.snapshot.value == true;
       if (connected) {
-        // 接続確立時にonDisconnectを仕掛ける（切断検知でconnected=false）。
-        // 部分更新なので ts(=== now) 検証には触れない。
-        _selfLiveRef.child('connected').onDisconnect().set(false);
+        _armDisconnectHandler();
+      } else {
+        // 切断したら次の接続で仕掛け直す
+        _disconnectArmed = false;
       }
       _connectedController.add(connected);
     });
   }
+
+  /// 切断検知（`connected` を false にする onDisconnect）を仕掛ける。
+  ///
+  /// 部分更新なので `ts(=== now)` 検証には触れない。
+  ///
+  /// > [!WARNING] 早すぎると RTDBルールに弾かれる
+  /// > `live/$uid` の書き込みは `members/$uid` の存在を要求する。
+  /// > **web では `members/$uid` の書き込みが終わる前に `.info/connected` が
+  /// > 立つことがあり**、そのとき `PERMISSION_DENIED` になる
+  /// > （Androidでは表面化しなかった。2026-08-27 に web で踏んだ）。
+  /// >
+  /// > 失敗しても致命的ではない（切断検知が効かなくなるだけ）ので握るが、
+  /// > 黙って諦めると切断検知が永久に死ぬ。初回の位置送信が通った時点で
+  /// > 仕掛け直す（[publishPosition]）。そこまで来ていれば必ずメンバーである。
+  void _armDisconnectHandler() {
+    if (_disconnectArmed) return;
+    _disconnectArmed = true;
+    unawaited(
+      _selfLiveRef.child('connected').onDisconnect().set(false).catchError((
+        Object e,
+      ) {
+        _disconnectArmed = false;
+        AppLogger.debug('$_logTag: onDisconnectを仕掛けられなかった（後で再試行）: $e');
+      }),
+    );
+  }
+
+  /// 切断検知を仕掛け済みか
+  bool _disconnectArmed = false;
 
   @override
   Future<void> publishPosition(PeerPosition position) async {
     final data = position.toLiveMap();
     data['ts'] = ServerValue.timestamp; // サーバー時刻を強制（ルール: ts === now）
     await _selfLiveRef.set(data);
+    // ここまで通ったならメンバーとして認められている。
+    // 起動直後に弾かれていた切断検知を、ここで確実に仕掛ける。
+    _armDisconnectHandler();
   }
 
   @override

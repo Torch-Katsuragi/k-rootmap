@@ -27,10 +27,10 @@ String get platformName {
 
 /// Firebase の設定が存在するプラットフォームか。
 ///
-/// `lib/firebase_options.dart` は android / ios ぶんしか生成されておらず、
-/// それ以外では `DefaultFirebaseOptions.currentPlatform` が UnsupportedError を投げる。
-/// web対応時に `flutterfire configure` へ web を足したら、ここを更新する。
-bool get hasFirebaseConfig => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+/// `lib/firebase_options.dart` に定義があるものだけ true。
+/// 2026-08-27 に web を追加した（`firebase apps:create WEB` で登録）。
+bool get hasFirebaseConfig =>
+    kIsWeb || Platform.isAndroid || Platform.isIOS;
 
 /// maplibre のプラットフォーム実装が存在するか。
 ///

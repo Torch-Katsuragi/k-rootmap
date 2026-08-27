@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### 👥 Location-sharing parties now work on the web build
+
+- Create or join a room from the browser — the same rooms as the Android app.
+- ⚠ Browser location is less accurate than the device GPS; use the Android
+  app in the field.
+
 ### 📱 Hand over a Drive-linked folder with a QR code
 
 - "Share via QR code" from a linked folder's row.

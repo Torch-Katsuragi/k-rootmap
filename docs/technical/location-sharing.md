@@ -3,6 +3,28 @@ title: 位置共有（パーティ機能）設計
 tags: [technical, location-sharing, firebase, realtime, design]
 ---
 
+
+> [!NOTE] 2026-08-27 に web でも使えるようにした
+> `firebase apps:create WEB` で web アプリを登録し、`firebase_options.dart` に
+> 追加しただけ。ルーム機能は RTDB しか触らず `dart:io` に依存しないので、
+> 設定以外のコード変更はほぼ不要だった。
+>
+> web固有で手を入れたのは2点:
+>
+> - `setPersistenceEnabled` は web 未対応なので呼ばない
+>   （タブが生きている間しか保たないので、そもそも意味が薄い）
+> - **App Check に web のプロバイダを渡していない。**
+>   web は reCAPTCHA のサイトキーが要り、それはコンソール発行のもの。
+>   App Check API はプロジェクトで有効化すらされていないので現状は素通りする。
+>   強制に切り替えるときは `providerWeb: ReCaptchaV3Provider(<siteKey>)` を足すこと
+>
+> ⚠ **`onDisconnect` の仕掛けどころに罠がある。**
+> `live/$uid` の書き込みは RTDBルールが `members/$uid` の存在を要求する。
+> web では `members/$uid` の書き込みが終わる前に `.info/connected` が立つことが
+> あり、そのとき `PERMISSION_DENIED` になる（Androidでは表面化しなかった）。
+> いまは初回の位置送信が通った時点で仕掛け直している
+> （`RtdbPeerSource._armDisconnectHandler`）。
+
 # 位置共有（パーティ機能）設計
 
 ## 1. 目的・ユースケース

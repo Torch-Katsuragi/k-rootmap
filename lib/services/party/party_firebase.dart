@@ -62,24 +62,38 @@ class PartyFirebase {
       // デバッグビルドは debug プロバイダ（起動時にlogcatへ出るデバッグトークンを
       // コンソールに登録して検証）、リリースは Play Integrity / App Attest。
       // コンソール側が monitor の間はブロックしないため、先に入れて段階導入する。
-      try {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: kDebugMode
-              ? AndroidDebugProvider()
-              : AndroidPlayIntegrityProvider(),
-          providerApple: kDebugMode
-              ? AppleDebugProvider()
-              : AppleAppAttestProvider(),
-        );
-      } catch (e) {
-        AppLogger.debug('[Party] App Check activate をスキップ: $e');
+      //
+      // ⚠ **web にはプロバイダを渡していない。**
+      // web の App Check は reCAPTCHA のサイトキーが要り、それはコンソールで
+      // 発行するもの。2026-08-27 時点で App Check API はプロジェクトで
+      // 有効化されておらず、RTDB側も強制していないので、web はこのままで通る。
+      // 強制に切り替えるときは `providerWeb: ReCaptchaV3Provider(<siteKey>)` を足すこと。
+      if (!kIsWeb) {
+        try {
+          await FirebaseAppCheck.instance.activate(
+            providerAndroid: kDebugMode
+                ? AndroidDebugProvider()
+                : AndroidPlayIntegrityProvider(),
+            providerApple: kDebugMode
+                ? AppleDebugProvider()
+                : AppleAppAttestProvider(),
+          );
+        } catch (e) {
+          AppLogger.debug('[Party] App Check activate をスキップ: $e');
+        }
       }
+
       // 圏外中の書き込みをローカルに溜め、再接続時に自動フラッシュ（store-and-forward）。
       // DB初回利用前に呼ぶ必要があるが、失敗しても致命的でない（最適化）ので握りつぶす。
-      try {
-        FirebaseDatabase.instance.setPersistenceEnabled(true);
-      } catch (e) {
-        AppLogger.debug('[Party] persistence設定をスキップ: $e');
+      //
+      // ⚠ web には無い機能（`setPersistenceEnabled` は web 未対応）。
+      // ブラウザのタブが生きている間しか保たないので、そもそも意味が薄い。
+      if (!kIsWeb) {
+        try {
+          FirebaseDatabase.instance.setPersistenceEnabled(true);
+        } catch (e) {
+          AppLogger.debug('[Party] persistence設定をスキップ: $e');
+        }
       }
       return true;
     } catch (e, st) {

@@ -67,6 +67,10 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     setState(() => _isLoading = true);
     try {
       await _driveService.initialize();
+      // ここはダイアログを開いたクリックの直後なので、web の無言の認可が通る
+      if (!_driveService.isDriveApiAvailable) {
+        await _driveService.restoreWebAuthorization();
+      }
     } catch (e) {
       AppLogger.error('[DriveSignInPrompt] 初期化エラー: $e');
     } finally {

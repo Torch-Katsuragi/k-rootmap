@@ -11,8 +11,9 @@
 ### ☁️ Google Drive sync now works on the web build
 
 - Clone a Drive folder from the browser and upload or download it.
-- Google's sign-in prompt (One Tap) now fires as the app opens. When it goes
-  through, linking a Drive folder is just one "allow access" tap.
+- Google's sign-in prompt (One Tap) now fires as the app opens.
+- Once you have granted access, a reload reconnects to Drive **without
+  showing anything** (it is restored inside your first Drive action).
 - Fixed a Drive URL you had finished typing sometimes staying stuck on
   "cannot access this folder".
 - Fixed the "General" settings page, which used to spin forever in a browser.

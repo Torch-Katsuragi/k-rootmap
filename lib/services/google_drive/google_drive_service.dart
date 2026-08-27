@@ -131,6 +131,50 @@ class GoogleDriveService {
     }
   }
 
+  /// web で、リロード後に認可を無言で取り直す
+  ///
+  /// ⚠ **必ずクリックの直下から呼ぶこと。** `prompt=''` でもGISはポップアップを
+  /// 使うので、起動時など操作から切り離された文脈ではブラウザに潰される
+  /// （console に `Failed to open popup window` だけが残る）。
+  ///
+  /// ⚠ **web はページを離れるとトークンが消える。** `google_sign_in_web` の
+  /// トークンキャッシュはただのメモリ上の Map で、保存も更新もしない
+  /// （ブラウザのOAuthにリフレッシュトークンは無い）。
+  /// 放っておくとリロードのたびにサインインし直しになる。
+  ///
+  /// ただしGoogle側の同意は残っているので、`prompt=''` で聞けば画面を出さずに
+  /// トークンが降りてくる。⚠ その `prompt=''` になるのは
+  /// **ユーザーを渡さない** `GoogleSignIn.instance.authorizationClient` だけで、
+  /// `GoogleSignInAccount.authorizationClient` は `prompt=select_account` に
+  /// なり必ず選択画面が出る（[_initializeDriveApi] も同じ理由でこちらを使う）。
+  ///
+  /// 同意がまだ／ブラウザにGoogleのセッションが無ければ失敗する。そのときは
+  /// 通常のサインインUIに任せる。
+  Future<bool> restoreWebAuthorization() async {
+    try {
+      final granted = await GoogleSignIn.instance.authorizationClient
+          .authorizeScopes(_scopes);
+      final api = drive.DriveApi(granted.authClient(scopes: _scopes));
+      // 誰のトークンかはトークン自体には入っていないので、Driveに聞く
+      final about = await api.about.get($fields: 'user');
+      final user = about.user;
+      _driveApi = api;
+      authState.setAuthenticated(
+        DriveUser(
+          id: user?.permissionId ?? '',
+          email: user?.emailAddress ?? '',
+          displayName: user?.displayName,
+          photoUrl: user?.photoLink,
+        ),
+      );
+      AppLogger.debug('[GoogleDriveService] 認可を復元: ${user?.emailAddress}');
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] 認可の復元は不可: $e');
+      return false;
+    }
+  }
+
   /// 認証イベントハンドラ
   Future<void> _handleAuthenticationEvent(
     GoogleSignInAuthenticationEvent event,
@@ -182,6 +226,8 @@ class GoogleDriveService {
       if (PlatformCapabilities.isWeb) {
         final user = _currentUser;
         if (user == null) {
+          // One Tap が通っていなくても、同意済みなら認可だけ拾える
+          if (await restoreWebAuthorization()) return true;
           authState.setUnauthenticated();
           return false;
         }
@@ -278,6 +324,27 @@ class GoogleDriveService {
       _driveApi = drive.DriveApi(authorization.authClient(scopes: _scopes));
       return true;
     }
+
+    // web は「同意済みなら無言でトークンが降りてくる」経路を先に試す。
+    //
+    // ⚠ ここが分かりにくい。`google_sign_in_web` は
+    // **アカウントを渡すと `prompt=select_account` を付ける**ので、
+    // 一度許可していても毎回アカウント選択が出る（= リロードのたびに切れて見える）。
+    // ユーザーを渡さない `GoogleSignIn.instance.authorizationClient` だけが
+    // `prompt=''` になり、同意済みなら画面を出さずに返る。
+    // 同意がまだなら失敗するので、そのときは下の通常経路に落ちる。
+    if (PlatformCapabilities.isWeb) {
+      try {
+        final silent = await GoogleSignIn.instance.authorizationClient
+            .authorizeScopes(_scopes);
+        _driveApi = drive.DriveApi(silent.authClient(scopes: _scopes));
+        AppLogger.debug('[GoogleDriveService] 無言で認可を復元した');
+        return true;
+      } catch (e) {
+        AppLogger.debug('[GoogleDriveService] 無言の認可は不可: $e');
+      }
+    }
+
     if (!promptIfUnauthorized) return false;
 
     // スコープがまだ認可されていない場合、認可を要求

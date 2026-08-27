@@ -120,7 +120,7 @@ class _DriveFolderPickerState extends State<DriveFolderPicker> {
       } else {
         setState(() {
           _currentStep = _DialogStep.selectFolder;
-          _errorMessage = 'RootMap GISフォルダにアクセスできません';
+          _errorMessage = '連携フォルダにアクセスできません';
         });
       }
     } catch (e) {

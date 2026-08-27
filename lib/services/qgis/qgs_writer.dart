@@ -21,7 +21,7 @@
 /// > 印刷レイアウト、リレーション、スナップ設定などは書かない。
 ///
 /// > [!IMPORTANT] 書くときは厳格に
-/// > RootMap が出すものは規格に沿わせる（QGISでそのまま開ける）。
+/// > こかげマップ が出すものは規格に沿わせる（QGISでそのまま開ける）。
 /// > 寛容さは読む側（インポータ）の話で、こちらには持ち込まない。
 library;
 
@@ -41,7 +41,7 @@ const String kQgsFileName = 'project.qgs';
 
 /// px → mm（QGISのシンボル単位はMM）。96dpi 相当。
 ///
-/// ⚠ RootMap のスタイル値は maplibre 向けの画面ピクセルなので、厳密な対応は無い。
+/// ⚠ こかげマップ のスタイル値は maplibre 向けの画面ピクセルなので、厳密な対応は無い。
 /// **見た目が近くなるだけの近似**であって、往復しても同じ値には戻らない。
 const double _kPxToMm = 25.4 / 96;
 
@@ -101,7 +101,7 @@ class QgsWriter {
         for (final node in project.root) {
           _writeTreeNode(builder, node);
         }
-        // custom-order は「ツリーと違う描画順」の指定。RootMap は
+        // custom-order は「ツリーと違う描画順」の指定。こかげマップ は
         // dir構造がそのまま z順なので使わない。
         builder.element('custom-order', attributes: {'enabled': '0'});
       },
@@ -344,7 +344,7 @@ class QgsWriter {
       'outline_width_map_unit_scale': '3x:0,0,0,0,0,0',
       'outline_width_unit': 'MM',
       'scale_method': 'diameter',
-      // RootMap の pointSize は半径感覚の px。QGIS の size は直径(MM)。
+      // こかげマップ の pointSize は半径感覚の px。QGIS の size は直径(MM)。
       'size': _mm((style.pointSizePx ?? 6) * 2),
       'size_map_unit_scale': '3x:0,0,0,0,0,0',
       'size_unit': 'MM',

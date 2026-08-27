@@ -44,7 +44,7 @@
   - [ ] Drive push の直前に自動生成する（いまは手動のみ）
   - [ ] 画像・オーバーレイをラスタレイヤとして書く（いまは除外して報告するだけ）
 - [x] `.qgs` インポータ（root外参照を破棄・グループはdir構造に置換・捨てたものを必ず報告）
-  - 2026-08-26 実装。RootMap → `.qgs` → RootMap の往復を web で確認済み
+  - 2026-08-26 実装。こかげマップ → `.qgs` → こかげマップ の往復を web で確認済み
   - QGIS 3.44.12 に書かせた `.qgs` を `test/fixtures/` に置き、それでテストしている。
     これを入れて2件バグが見つかった（色の浮動小数表記・`<data_defined_properties>`）
 - [/] web側のQR発行（受け側の `cloneFromDrive` と QRスキャンは実装済み）
@@ -55,7 +55,7 @@
     - [x] ⚠ **web用のOAuthクライアントIDが要る。** GCPコンソールでしか発行できない
           （gcloud にも Firebase CLI にも口が無い）。
           `--dart-define=GOOGLE_WEB_CLIENT_ID=...` で渡す作り。
-          既存の `K-Maps Web` を流用した（新規発行は不要だった）:
+          既存の `こかげマップ Web` を流用した（新規発行は不要だった）:
           `348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com`
     - [x] 承認済みJavaScript生成元に `http://localhost:8099` を登録（2026-08-27）
     - [x] web のサインイン経路を直した。⚠ ここは native と作りが違う:
@@ -177,7 +177,7 @@
 
 ## 🔥 直近のアクション
 
-- [/] アプリ名を「RootMap GIS」に改名
+- [/] アプリ名を「こかげマップ」に改名
   - [ ] J-PlatPat（日本特許庁）で「rootmap」の商標検索（Class 9/42）— メンテ明け後に実施
   - [ ] USPTO TESSで「rootmap」の商標検索
   - [x] 改名作業を実施（UI、Android/Windows/Web、changelog、Drive連携フォルダ名）
@@ -318,7 +318,7 @@
   - [x] AndroidManifest `stopWithTask="true"` 設定（OS レベルでのサービス自動停止）
   - [x] ハートビートベース自殺機構（foreground_service.dart: 5秒間隔ping/pong、30秒無応答で自動停止）
   - [x] メインisolate側の応答ハンドラ（internal_gps_location_store.dart）
-- [x] アプリ名を「RootMap GIS」に改名（2026/04/12）
+- [x] アプリ名を「こかげマップ」に改名（2026/04/12）
   - [x] UI、Android/Windows/Web、changelog、Drive連携フォルダ名を一括更新
 
 </details>

@@ -1,5 +1,6 @@
 {
   "common": {
+    "appName": "Kokage Map",
     "ok": "OK",
     "cancel": "Cancel",
     "close": "Close",
@@ -1105,7 +1106,7 @@
   "driveQr": {
     "menu": "Share via QR code",
     "title": "Hand over this folder",
-    "description": "On the receiving device, open RootMap GIS and use \"Add folder\" → \"Scan QR code\".",
+    "description": "On the receiving device, open Kokage Map and use \"Add folder\" → \"Scan QR code\".",
     "copyUrl": "Copy URL",
     "copied": "URL copied",
     "noUrl": "This folder has no Drive URL"

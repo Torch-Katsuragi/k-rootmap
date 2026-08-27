@@ -256,7 +256,7 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
     assert(scaleLevel >= 0);
 
     return MaterialApp(
-      title: 'RootMap GIS',
+      title: t.common.appName,
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

@@ -287,7 +287,7 @@ class QgsImporter {
   /// `renderer-v2` から見た目を拾う。読めない形なら null（＝スタイル無し）。
   ///
   /// > [!NOTE] 拾うのは単一シンボルの1レイヤ目だけ
-  /// > QGISのシンボルは重ね合わせも段階分けもできるが、RootMap 側に受け皿が無い。
+  /// > QGISのシンボルは重ね合わせも段階分けもできるが、こかげマップ 側に受け皿が無い。
   /// > 分類分け（categorizedSymbol 等）は最初のシンボルの色を採るだけ。
   /// > **完全再現は狙わない。** 狙うと「開けるファイルを選り好みする」方向に行く。
   @visibleForTesting
@@ -306,7 +306,7 @@ class QgsImporter {
       case 'marker':
         return KMetaLayerStyle(
           pointColor: _color(props['color']),
-          // QGIS の size は直径(MM)。RootMap は半径感覚の px
+          // QGIS の size は直径(MM)。こかげマップ は半径感覚の px
           pointSize: _px(props['size'], divideBy: 2),
         );
       case 'line':

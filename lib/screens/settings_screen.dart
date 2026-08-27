@@ -421,7 +421,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
       body: SettingsBody(
         sections: [
           SettingsSection(
-            title: 'RootMap GIS',
+            title: t.common.appName,
             icon: Icons.map,
             iconColor: Colors.blue,
             children: [
@@ -469,7 +469,7 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                 onTap: () {
                   showLicensePage(
                     context: context,
-                    applicationName: 'RootMap GIS',
+                    applicationName: t.common.appName,
                     applicationVersion: _packageInfo?.version ?? '',
                   );
                 },

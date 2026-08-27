@@ -1,6 +1,6 @@
 # Google Play 権限申請 動画・宣言 計画
 
-RootMap GIS を Google Play に公開するにあたり、審査で説明が必要な権限のための
+こかげマップ を Google Play に公開するにあたり、審査で説明が必要な権限のための
 **デモ動画**と **Play Console 宣言テキスト**を用意するための計画書。
 
 ---
@@ -122,7 +122,7 @@ adb pull /sdcard/perm_demo.mp4 ./perm_demo.mp4
 ## 6. Play Console 側に書く宣言テキスト（動画と対で提出）
 
 ### 6-1. All files access（MANAGE_EXTERNAL_STORAGE）宣言 ＝ 英語ドラフト
-> RootMap GIS is a field GIS application. Its core function is to let users open,
+> こかげマップ is a field GIS application. Its core function is to let users open,
 > edit, create, and save **GeoPackage (`.gpkg`) spatial databases** located in
 > **any user-chosen folder** on the device, and interoperate with external desktop
 > GIS tools (e.g., QGIS) that read/write the same files by absolute path.

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### 🌳 The app is now called Kokage Map
+
+- It used to be "RootMap GIS" in some places and "K-Maps" in others. One name now.
+- ⚠ The Drive folder name (`RootMap GIS Projects`) is **unchanged** — renaming it
+  would lose track of already-linked folders, and it does no harm.
+
+
 ### 👥 Location-sharing parties now work on the web build
 
 - Create or join a room from the browser — the same rooms as the Android app.

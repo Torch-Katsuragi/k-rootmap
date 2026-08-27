@@ -314,7 +314,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
   // =============================================
 
   Widget _buildAppBarTitle(LayerTreeNode? rootNode) {
-    return Text(p.basename(ref.watch(projectRootDirProvider) ?? 'RootMap GIS'));
+    return Text(p.basename(ref.watch(projectRootDirProvider) ?? t.common.appName));
   }
 
   // =============================================

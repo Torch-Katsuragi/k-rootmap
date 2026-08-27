@@ -28,9 +28,9 @@ import 'package:flutter/material.dart';
 
 import '../../models/geometry_type.dart';
 
-/// RootMap のノードが QGIS の何になるか。
+/// こかげマップ のノードが QGIS の何になるか。
 ///
-/// | RootMap | QGIS |
+/// | こかげマップ | QGIS |
 /// |---|---|
 /// | dir | レイヤグループ |
 /// | GeoPackage | レイヤグループ |
@@ -43,7 +43,7 @@ sealed class QgsTreeNode {
   const QgsTreeNode();
 }
 
-/// QGIS のレイヤグループ（RootMap の dir / GeoPackage / Layer）
+/// QGIS のレイヤグループ（こかげマップ の dir / GeoPackage / Layer）
 class QgsGroup extends QgsTreeNode {
   const QgsGroup({
     required this.name,
@@ -56,7 +56,7 @@ class QgsGroup extends QgsTreeNode {
   final bool visible;
 }
 
-/// QGIS のレイヤ（RootMap の View）
+/// QGIS のレイヤ（こかげマップ の View）
 class QgsLayer extends QgsTreeNode {
   const QgsLayer({
     required this.id,
@@ -138,7 +138,7 @@ class QgsCrs {
 
 /// QGIS のシンプルシンボルに落とせるぶんの見た目。
 ///
-/// RootMap のスタイルは maplibre 向けの値なので、そのままでは QGIS に渡らない
+/// こかげマップ のスタイルは maplibre 向けの値なので、そのままでは QGIS に渡らない
 /// （単位が px と mm で違う）。変換は [[qgs_writer]] で行う。
 class QgsStyle {
   const QgsStyle({

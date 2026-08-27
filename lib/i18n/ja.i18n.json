@@ -1,5 +1,6 @@
 {
   "common": {
+    "appName": "こかげマップ",
     "ok": "OK",
     "cancel": "キャンセル",
     "close": "閉じる",
@@ -1105,7 +1106,7 @@
   "driveQr": {
     "menu": "QRコードで渡す",
     "title": "このフォルダを渡す",
-    "description": "受け取る端末の RootMap GIS で「フォルダを追加」→「QRコードをスキャン」から読み取ってください。",
+    "description": "受け取る端末のこかげマップで「フォルダを追加」→「QRコードをスキャン」から読み取ってください。",
     "copyUrl": "URLをコピー",
     "copied": "URLをコピーしました",
     "noUrl": "このフォルダにはDriveのURLがありません"

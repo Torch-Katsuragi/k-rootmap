@@ -75,7 +75,10 @@ class GoogleDriveService {
   /// UIはこれを見て、出すボタンを1つに絞ること。
   bool get hasAccount => _currentUser != null;
 
-  /// RootMap GIS用Driveフォルダ名
+  /// こかげマップ用のDriveルートフォルダ名
+  ///
+  /// ⚠ **値を変えないこと。** これは客のDriveに実際に作られたフォルダの名前で、
+  /// 変えると連携済みのフォルダを見失う。2026-08-27 の改名でも据え置いた。
   static const String kMapsFolderName = 'RootMap GIS Projects';
 
   /// 必要なOAuthスコープ
@@ -365,7 +368,7 @@ class GoogleDriveService {
 
   // ========== フォルダ操作 ==========
 
-  /// RootMap GISルートフォルダを取得または作成
+  /// こかげマップのルートフォルダを取得または作成
   Future<drive.File?> getOrCreateRootMapsFolder() async {
     if (_driveApi == null) return null;
 
@@ -385,7 +388,7 @@ class GoogleDriveService {
         ..mimeType = 'application/vnd.google-apps.folder';
 
       final created = await _driveApi!.files.create(folder);
-      AppLogger.debug('[GoogleDriveService] RootMap GISフォルダ作成: ${created.id}');
+      AppLogger.debug('[GoogleDriveService] ルートフォルダ作成: ${created.id}');
       return created;
     } catch (e) {
       AppLogger.debug('[GoogleDriveService] フォルダ取得/作成エラー: $e');
@@ -457,7 +460,7 @@ class GoogleDriveService {
     if (_driveApi == null) return null;
 
     try {
-      // 親フォルダが指定されていない場合はRootMap GISフォルダに作成
+      // 親フォルダが指定されていない場合はルートフォルダに作成
       final parent = parentId ?? (await getOrCreateRootMapsFolder())?.id;
       if (parent == null) return null;
 

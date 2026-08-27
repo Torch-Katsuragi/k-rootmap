@@ -132,7 +132,7 @@ class FeatureRepository {
   /// QGIS/GeoPandasが生成するRTree自動更新トリガーは
   /// ST_IsEmpty, ST_MinX等のSpatiaLite関数を使用するが、
   /// sqfliteにはSpatiaLite拡張がないためINSERT/UPDATE時にエラーとなる。
-  /// RootMapは独自のSpatialIndexManagerでrtreeを管理するため、
+  /// こかげマップは独自のSpatialIndexManagerでrtreeを管理するため、
   /// これらのトリガーは不要。
   Future<void> _removeSpatialiteTriggers(Database db, String tableName) async {
     try {

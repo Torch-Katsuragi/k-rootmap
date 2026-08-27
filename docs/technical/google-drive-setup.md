@@ -175,7 +175,7 @@ keytool -list -v -keystore C:\Users\kitay\Root Maps-release.keystore -alias Root
 ### 1.5 OAuthクライアントID（Web）
 
 google_sign_inパッケージはWebクライアントIDも必要。
-K-Maps では既存の `K-Maps Web` を流用している（新規発行は不要）:
+こかげマップ では既存の `こかげマップ Web` を流用している（新規発行は不要）:
 
 ```
 348302294570-7srd6hqqpgpvu8sqilihhvhrd1p720p7.apps.googleusercontent.com

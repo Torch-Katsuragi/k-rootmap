@@ -1,6 +1,6 @@
 {
-    "name": "RootMap GIS",
-    "short_name": "RootMap GIS",
+    "name": "こかげマップ",
+    "short_name": "こかげマップ",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",

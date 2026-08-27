@@ -5,7 +5,7 @@ tags: [technical, geopackage, qgis, interop]
 
 # QGIS相互運用
 
-RootMap GIS は「ユーザーの `.gpkg` をそのまま読み書きする」ことを identity にしている
+こかげマップ は「ユーザーの `.gpkg` をそのまま読み書きする」ことを identity にしている
 （[[../features/concept|コンセプト]]）。変換もパッケージ化も要求しないのが競合に対する差なので、
 **編集して返したファイルが QGIS で普通に開けること**が要件になる。
 
@@ -43,7 +43,7 @@ QgsWriter           XMLにする（純粋関数。DBもFSも要らないので�
 
 対応:
 
-| RootMap | QGIS |
+| こかげマップ | QGIS |
 |---|---|
 | dir | レイヤグループ |
 | GeoPackage | レイヤグループ |
@@ -148,7 +148,7 @@ msiexec /a .temp\QGIS-LTR.msi /qn TARGETDIR=C:\Users\<user>\qgis-extract
 
 QGIS/GDAL 製の GeoPackage は RTree を自動更新するトリガーを持ち、
 それらは `ST_IsEmpty` / `ST_MinX` 等の **SpatiaLite 関数**を使う。
-sqflite にその拡張は無いので、RootMap は書き込み前にトリガーを落とし、
+sqflite にその拡張は無いので、こかげマップ は書き込み前にトリガーを落とし、
 rtree は `SpatialIndexManager` が自前で更新している。
 
 > [!IMPORTANT] 落としたまま返してはいけない
@@ -167,27 +167,27 @@ rtree は `SpatialIndexManager` が自前で更新している。
 
 QGIS はここをレイヤの範囲として使う。空だと「レイヤにズーム」が効かない。
 
-RootMap は新規レイヤ作成時に `min_x`/`min_y`/`max_x`/`max_y` を null で入れていたため、
+こかげマップ は新規レイヤ作成時に `min_x`/`min_y`/`max_x`/`max_y` を null で入れていたため、
 クローズ時に rtree から集計して埋める。
 
-rtree が無い場合はスキップする（全件走査は重く、RootMap は rtree を自前で維持しているので通常は存在する）。
+rtree が無い場合はスキップする（全件走査は重く、こかげマップ は rtree を自前で維持しているので通常は存在する）。
 
 ## 3. `gpkg_ogr_contents` のフィーチャ数
 
-GDAL 拡張の件数キャッシュ。RootMap が直接 INSERT/DELETE すると実態とズレる
+GDAL 拡張の件数キャッシュ。こかげマップ が直接 INSERT/DELETE すると実態とズレる
 （GDAL 製ファイルにはこれを維持するトリガーもあるが、上記1で一緒に落ちることがある）。
 
 存在しない GeoPackage もあるので、**無ければ何もしない**。
-RootMap が勝手に作ると、逆に GDAL の前提を崩す可能性がある。
+こかげマップ が勝手に作ると、逆に GDAL の前提を崩す可能性がある。
 
 ## 既にQGISに合わせてある点
 
-- **主キーは `fid`**（QGIS/GDAL標準）。旧 RootMap 形式の `id` も読める
+- **主キーは `fid`**（QGIS/GDAL標準）。旧 こかげマップ 形式の `id` も読める
 - 任意の EPSG コードに対応（GPKG内蔵WKTから座標系を自動検出）
 
 ## 未対応
 
-- **`layer_styles`**（QGISのスタイル保存テーブル）。RootMap で設定した色・線幅は
+- **`layer_styles`**（QGISのスタイル保存テーブル）。こかげマップ で設定した色・線幅は
   QGIS に引き継がれない。逆も同様
 - `gpkg_metadata` / `gpkg_metadata_reference`
 

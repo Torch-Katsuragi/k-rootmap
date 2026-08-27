@@ -15,24 +15,24 @@
 // 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 /// QGIS / GDAL との相互運用を保つための後始末。
 ///
-/// RootMap は「ユーザーの `.gpkg` をそのまま読み書きする」ことを identity に
+/// こかげマップ は「ユーザーの `.gpkg` をそのまま読み書きする」ことを identity に
 /// しているので、**編集して返したファイルが QGIS で普通に開けること**が要件になる。
 /// ここは編集中には邪魔だがQGIS側では必要、という3点の面倒を見る。
 ///
 /// 1. **SpatiaLiteトリガーの復元**
 ///    QGIS/GDAL製のGeoPackageは RTree自動更新トリガーを持ち、それらは
 ///    `ST_IsEmpty` / `ST_MinX` 等の SpatiaLite 関数を使う。sqflite には
-///    その拡張が無いので、RootMap は書き込み前にトリガーを落とし、rtree は
+///    その拡張が無いので、こかげマップ は書き込み前にトリガーを落とし、rtree は
 ///    [SpatialIndexManager] が自前で更新している。
 ///    ⚠ **落としたまま返すと、その後QGISで編集しても空間インデックスが
 ///    更新されなくなる。** クローズ時に元のSQLで復元する。
 ///
 /// 2. **`gpkg_contents` のバウンディングボックス**
-///    RootMap は新規レイヤ作成時に min_x/min_y/max_x/max_y を null で入れていた。
+///    こかげマップ は新規レイヤ作成時に min_x/min_y/max_x/max_y を null で入れていた。
 ///    QGISはここをレイヤ範囲として使うので、「レイヤにズーム」が効かない。
 ///
 /// 3. **`gpkg_ogr_contents` のフィーチャ数**
-///    GDALが維持する件数キャッシュ。RootMap が直接 INSERT/DELETE すると
+///    GDALが維持する件数キャッシュ。こかげマップ が直接 INSERT/DELETE すると
 ///    実態とズレる（GDAL製ファイルにはこれを維持するトリガーもあるが、
 ///    上記1で一緒に落ちることがある）。
 library;
@@ -83,7 +83,7 @@ class QgisInterop {
 
   /// 控えておいたトリガーを復元する。
   ///
-  /// クローズ時に呼ぶ。RootMap の書き込みが終わったあとでなければならない
+  /// クローズ時に呼ぶ。こかげマップ の書き込みが終わったあとでなければならない
   /// （復元後に書くと ST_ 関数が無くて落ちる）。
   Future<void> restoreTriggers(Database db) async {
     if (_removedTriggers.isEmpty) return;
@@ -106,7 +106,7 @@ class QgisInterop {
   /// `gpkg_contents` のバウンディングボックスを実データから更新する。
   ///
   /// rtree があればそこから、無ければフィーチャを走査せずスキップする
-  /// （全件走査は重く、RootMap は rtree を自前で維持しているため通常は存在する）。
+  /// （全件走査は重く、こかげマップ は rtree を自前で維持しているため通常は存在する）。
   static Future<void> updateContentsBounds(
     Database db,
     String tableName,
@@ -151,7 +151,7 @@ class QgisInterop {
   /// `gpkg_ogr_contents` のフィーチャ数を実データに合わせる。
   ///
   /// このテーブルはGDAL拡張で、存在しないGeoPackageもある。無ければ何もしない
-  /// （RootMapが勝手に作ると、逆にGDALの前提を崩す可能性がある）。
+  /// （こかげマップが勝手に作ると、逆にGDALの前提を崩す可能性がある）。
   static Future<void> syncOgrContents(Database db, String tableName) async {
     try {
       final exists = await db.rawQuery(

@@ -571,7 +571,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RootMap GIS'),
+        title: Text(t.common.appName),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // ユーザーガイドボタン
@@ -609,7 +609,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     const Icon(Icons.map, size: 100, color: Colors.blue),
                     const SizedBox(height: 32),
                     Text(
-                      'RootMap GIS',
+                      t.common.appName,
                       style: Theme.of(
                         context,
                       ).textTheme.headlineLarge?.copyWith(

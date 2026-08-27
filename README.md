@@ -1,4 +1,4 @@
-# RootMap GIS
+# こかげマップ
 
 GISアプリケーション（Flutter製）
 

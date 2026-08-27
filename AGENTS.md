@@ -39,6 +39,16 @@ Flutter製の地図アプリ（RootMap GIS）。**Android と web** の2プラ�
 - `docs/` - 設計書・技術資料（[[docs/index|目次]]）
 - `.agent/skills/` - エージェントスキル
 
+## コード生成
+
+`*.g.dart` はリポジトリに入っていない（`.gitignore` 済み）。
+`flutter pub get` のあとに回すこと。**順番に意味がある**。
+
+```powershell
+dart run slang
+dart run build_runner build --delete-conflicting-outputs
+```
+
 ## テスト
 
 - **Android と web の両方で通すこと**。片方だけ緑の変更は入れない

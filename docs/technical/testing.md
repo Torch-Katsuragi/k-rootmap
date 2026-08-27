@@ -9,6 +9,25 @@ tags: [technical, testing, android, web]
 > 対象は **Android と web**。Windows/macOS/Linux の段は無くなった。
 > 経緯は [[../features/concept#プラットフォームの役割分担]]。
 
+## コード生成
+
+`*.g.dart` は **`.gitignore` 済み**（リポジトリに入っていない）。
+`flutter pub get` のあとに回すこと。
+
+```powershell
+dart run slang                                          # i18n（strings*.g.dart）
+dart run build_runner build --delete-conflicting-outputs # riverpod
+```
+
+> [!WARNING] 順番に意味がある
+> `slang` を先に回さないと、`build_runner` の `slang_build_runner` と
+> 出力がぶつかって `InvalidOutputException: Asset already exists` で落ちる。
+
+> [!IMPORTANT] CI でも回すこと
+> 2026-08-26 まで、CIは**4ジョブ全部が生成コード不足で落ちていた**。
+> `Undefined name 'Translations'` のような、原因の分かりにくい形で出る。
+> ジョブを足すときは codegen ステップを忘れないこと。
+
 ## 一発で回す
 
 ```powershell

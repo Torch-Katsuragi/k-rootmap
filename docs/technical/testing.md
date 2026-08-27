@@ -200,6 +200,32 @@ GeoPackage を作れる（GeoPackageは規約に沿ったSQLiteでしかない�
   （`main.dart` のデスクトップ分岐と同じ）。
 - **`addLayer()` は `fid` と `geom` しか作らない**（QGIS互換の最小スキーマ）。
   属性を扱うテストは `addAttributeColumns()` で明示的にカラムを足す。
+- ⚠ **ワイヤレスデバッグ: `_adb-tls-connect._tcp` が広告されないことがある。**
+  2026-08-27 に踏んだ（adb 35.0.2 / Windows / Openscreen mDNS）。
+  ペア設定用の `_adb-tls-pairing._tcp` は**ダイアログを開いている間だけ**出るが、
+  ペアリング後に出るはずの接続用サービスが最後まで出てこない。
+  `adb kill-server; adb start-server` でも変わらなかった。
+
+  一番早いのは、端末の「ワイヤレスデバッグ」画面に出ている
+  **`IPアドレスとポート` をそのまま使う**こと。
+
+  ```powershell
+  adb connect 192.168.11.21:35221
+  ```
+
+  画面を見られないときはポートスキャンで探せる（1分弱）。
+  ワイヤレスデバッグのポートは 30000〜49999 に入る。
+
+  ```powershell
+  $ip='192.168.11.21'
+  30000..49999 | ForEach-Object -Parallel {
+    $c = [System.Net.Sockets.TcpClient]::new()
+    try { if ($c.ConnectAsync($using:ip, $_).Wait(300)) { $_ } } catch {} finally { $c.Dispose() }
+  } -ThrottleLimit 300
+  ```
+
+  ペアリング自体は一度やれば残る（`adb pair <ip>:<pairPort> <6桁>`）。
+  **ポートは端末を再起動すると変わる**ので、毎回そこだけ拾い直す。
 - **`e2e:android` が無反応で固まったら、まず adb サーバを立て直す。**
   端末側ではなくPC側が詰まっていることがある（APKのインストールまでログが出て、
   そこから先が永久に進まない）。2026-08-24 に20分ハングした実例あり。

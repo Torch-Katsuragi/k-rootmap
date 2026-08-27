@@ -193,6 +193,65 @@ abstract class LayerNode extends LayerTreeNode {
     ];
   }
 
+  /// rowId → スタイルグループのキー。載っていないフィーチャは既定スタイルで描く。
+  ///
+  /// [refreshStyleGroups] が埋める。
+  final Map<int, String> styleKeyByRowId = {};
+
+  /// スタイルグループ（キー → 実際のスタイル）。**挿入順が z順**（View順）。
+  ///
+  /// 空なら「このレイヤに固有のスタイルは無い」＝ View 導入前とまったく同じ描画。
+  final Map<String, KMetaLayerStyle> styleGroups = {};
+
+  /// View（とレイヤ）のスタイル指定を、フィーチャ単位の割り当てに落とす。
+  ///
+  /// > [!NOTE] 「最初に当たった View が勝つ」
+  /// > フィーチャは1つのスタイルでしか描けないので、複数の View に当てはまる
+  /// > フィーチャは**上にある View** のものとして描く。z順の考え方と揃えてある。
+  ///
+  /// > [!IMPORTANT] スタイル指定が1つも無ければ何もしない
+  /// > `styleGroups` が空のままなら描画経路は View 導入前と完全に同じになる。
+  /// > 既存プロジェクトの見え方を変えないための保険。
+  Future<void> refreshStyleGroups() async {
+    styleKeyByRowId.clear();
+    styleGroups.clear();
+
+    if (views.isEmpty) return;
+    final layerStyle = await getKmetaStyle();
+
+    for (final view in views) {
+      if (!view.visible) continue;
+      final style = view.style ?? layerStyle;
+      if (style == null || style.isEmpty) continue;
+
+      final key = view.viewKey;
+      styleGroups[key] = style;
+
+      if (!view.hasFilter) {
+        // フィルタ無しの View は残り全部を受け持つ
+        for (final rowId in _featureMap.keys) {
+          styleKeyByRowId.putIfAbsent(rowId, () => key);
+        }
+        continue;
+      }
+
+      final ids = await geoPackageFile.getFeatureIds(
+        layerName,
+        where: view.filter,
+      );
+      for (final rowId in ids) {
+        styleKeyByRowId.putIfAbsent(rowId, () => key);
+      }
+    }
+
+    // どの View にも当たらなかったフィーチャは既定スタイル。
+    // グループが1つも無ければ、そもそも属性を載せない（[styleGroups] が空）。
+    if (styleGroups.isEmpty) styleKeyByRowId.clear();
+  }
+
+  /// [rowId] のフィーチャが属するスタイルグループのキー。既定なら空文字。
+  String styleKeyOf(int rowId) => styleKeyByRowId[rowId] ?? '';
+
   /// 表示中の View のフィルタを OR で束ねた WHERE 句。絞り込み不要なら null。
   ///
   /// > [!NOTE] なぜ OR なのか
@@ -603,6 +662,8 @@ abstract class LayerNode extends LayerTreeNode {
       clearColumnNamesCache();
       _markDirty();
       _featuresRevision++;
+      // フィーチャが入れ替わったので、どれがどの View のものかも取り直す
+      await refreshStyleGroups();
       _updateChildrenCompleter!.complete();
     } catch (e) {
       _updateChildrenCompleter!.completeError(e);

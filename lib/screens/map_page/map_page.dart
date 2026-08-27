@@ -830,6 +830,13 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     layerCacheDirty = false;
     lastCacheSelection = currentSelection;
 
+    // View / レイヤのスタイル指定が変わっていたらレイヤを積み直す。
+    // ⚠ フィーチャを組み立てる**前**に済ませること。`k-style` を載せるかどうかの
+    //   判断が `sourceManager.styleGroups` を見ているため。
+    if (sourceManager.setStyleGroups(_buildStyleGroups())) {
+      _applyLayerStyles();
+    }
+
     final selectedSet = currentSelection.toSet();
 
     // 選択のみ変更: 選択ソースだけ再構築（通常ソースは不変→送信スキップ）
@@ -839,13 +846,30 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       return;
     }
 
+    // 固有スタイルが1つでもあれば、フィーチャに「どのグループのものか」を載せる。
+    //
+    // ⚠ グループが無いときは載せない。属性が増えるとGeoJSONが太るし、
+    //   何より「View 導入前と完全に同じ」を保てなくなる。
+    final hasStyleGroups = sourceManager.styleGroups.isNotEmpty;
+    Map<String, Object?>? styleProps(FeatureNode f, [String? name]) {
+      if (!hasStyleGroups) return name == null ? null : {'name': name};
+      final key = f.parent.styleKeyOf(f.rowId);
+      return {
+        if (name != null) 'name': name,
+        MapSourceManager.kStyleProp: key,
+      };
+    }
+
     // ポリラインをmaplibre Feature型に変換（通常=全件、選択=追加オーバーレイ）
     cachedPolylines = [];
     cachedSelectedPolylines = [];
     for (final f in lineFeatures) {
       final geoGeom = _turfLineToGeo(f.turfFeature.geometry);
       if (geoGeom == null) continue;
-      final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
+      final feature = geo.Feature<geo.Geometry>(
+        geometry: geoGeom,
+        properties: styleProps(f),
+      );
       cachedPolylines.add(feature);
       if (selectedSet.contains(f)) {
         cachedSelectedPolylines.add(feature);
@@ -858,7 +882,10 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     for (final f in polygonFeatures) {
       final geoGeom = _turfPolyToGeo(f.turfFeature.geometry);
       if (geoGeom == null) continue;
-      final feature = geo.Feature<geo.Geometry>(geometry: geoGeom);
+      final feature = geo.Feature<geo.Geometry>(
+        geometry: geoGeom,
+        properties: styleProps(f),
+      );
       cachedPolygons.add(feature);
       if (selectedSet.contains(f)) {
         cachedSelectedPolygons.add(feature);
@@ -873,7 +900,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       for (final pt in f.geometry as List<LatLng>) {
         final feature = geo.Feature(
           geometry: geo.Point(pt.toGeographic()),
-          properties: {'name': f.name},
+          properties: styleProps(f, f.name),
         );
         cachedMarkers.add(feature);
         if (selectedSet.contains(f)) {
@@ -1221,9 +1248,61 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     sourceManager.refreshClusters(zoom);
   }
 
+  /// View（とレイヤ）に固有のスタイルを、描画用のグループに落とす。
+  ///
+  /// > [!IMPORTANT] 「グローバル設定にKMetaを重ねる」規則はここにしか無い
+  /// > `SettingsStore.resolveXxx(def, kmeta)` が合成を担当する。
+  /// > `MapSourceManager` には解決済みの値だけを渡し、設定の知識を持ち込まない。
+  ///
+  /// 固有スタイルが1つも無ければ空リストを返す。そのとき描画は
+  /// View 導入前とまったく同じになる。
+  List<MapStyleGroup> _buildStyleGroups() {
+    final style = layerStyleSettings;
+    final groups = <MapStyleGroup>[];
+    final seen = <String>{};
+
+    // 可視レイヤを、ツリーの並び（＝z順の根拠）で辿る
+    final tree = ref.read(folderTreeProvider);
+    final layers =
+        tree == null
+            ? const <LayerNode>[]
+            : tree.getVisibleLayerNodes().whereType<LayerNode>();
+
+    for (final layer in layers) {
+      for (final entry in layer.styleGroups.entries) {
+        if (!seen.add(entry.key)) continue;
+        final kmeta = entry.value;
+        groups.add(
+          MapStyleGroup(
+            key: entry.key,
+            fillHex: MapSourceManager.colorToHex(
+              style.resolveColor(polygonFillColorDef, kmeta),
+            ),
+            fillOpacity: style.resolveDouble(polygonFillOpacityDef, kmeta),
+            outlineHex: MapSourceManager.colorToHex(
+              style.resolveColor(polygonBorderColorDef, kmeta),
+            ),
+            outlineOpacity: style.resolveDouble(polygonBorderOpacityDef, kmeta),
+            borderWidth: style.resolveDouble(polygonBorderWidthDef, kmeta),
+            lineHex: MapSourceManager.colorToHex(
+              style.resolveColor(lineColorDef, kmeta),
+            ),
+            lineWidth: style.resolveDouble(lineWidthDef, kmeta),
+            pointHex: MapSourceManager.colorToHex(
+              style.resolveColor(pointColorDef, kmeta),
+            ),
+            pointSize: style.resolveDouble(pointSizeDef, kmeta),
+          ),
+        );
+      }
+    }
+    return groups;
+  }
+
   /// レイヤスタイル設定をMapSourceManagerに反映
   void _applyLayerStyles() {
     final style = layerStyleSettings;
+    sourceManager.setStyleGroups(_buildStyleGroups());
     // クラスタリング設定を反映
     final pointSize = style.getDouble(pointSizeDef);
     sourceManager.configureClustering(

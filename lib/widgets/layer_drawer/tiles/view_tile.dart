@@ -30,6 +30,7 @@ import '../../../models/nodes/view_node.dart';
 import '../../../presentation/node_presenter.dart';
 import '../../../providers/notification_providers.dart';
 import '../../../providers/ui_state_providers.dart';
+import '../../../screens/layer_style_settings_screen.dart';
 import '../common_dialogs.dart';
 
 /// Viewノード用 ListTile（可視切り替え・フィルタ編集・並べ替え）
@@ -79,6 +80,8 @@ class ViewTile extends ConsumerWidget {
         switch (value) {
           case 'rename':
             await _rename(context, ref);
+          case 'style':
+            await _openStyle(context, ref);
           case 'filter':
             await _editFilter(context, ref);
           case 'duplicate':
@@ -94,6 +97,10 @@ class ViewTile extends ConsumerWidget {
       itemBuilder:
           (context) => [
             PopupMenuItem(value: 'rename', child: Text(t.layerDrawer.view.rename)),
+            PopupMenuItem(
+              value: 'style',
+              child: Text(t.layerDrawer.layer.style),
+            ),
             PopupMenuItem(
               value: 'filter',
               child: Text(t.layerDrawer.view.editFilter),
@@ -133,6 +140,33 @@ class ViewTile extends ConsumerWidget {
     }
     node.name = trimmed;
     await _persist(ref, reloadFeatures: false);
+  }
+
+  /// この View の見た目を編集する。
+  ///
+  /// レイヤ用の画面をそのまま使う（`targetView` を渡すと保存先だけ変わる）。
+  Future<void> _openStyle(BuildContext context, WidgetRef ref) async {
+    final folderPath = _layer.folderNode?.getAbsoluteFilePath();
+    if (folderPath == null) {
+      _notify(
+        ref,
+        t.layerDrawer.layer.couldNotDetermineFolder,
+        NotificationLevel.error,
+      );
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => LayerStyleSettingsScreen(
+              targetLayer: _layer,
+              folderPath: folderPath,
+              targetView: node,
+            ),
+      ),
+    );
+    ref.read(featureRefreshTriggerProvider.notifier).trigger();
   }
 
   Future<void> _editFilter(BuildContext context, WidgetRef ref) async {

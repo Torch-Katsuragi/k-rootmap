@@ -29,6 +29,57 @@ import '../core/constants.dart';
 import '../utils/app_logger.dart';
 import '../utils/map_icon_generator.dart';
 
+/// スタイルグループ1つぶんの、解決済みの見た目。
+///
+/// View（またはレイヤ）に固有のスタイルが付いているぶんだけ作られる。
+/// グローバル設定との合成は呼び出し側（`map_page`）が済ませてから渡す。
+/// ここは「与えられた値でレイヤを積む」だけにして、設定の解決規則を持ち込まない。
+class MapStyleGroup {
+  const MapStyleGroup({
+    required this.key,
+    required this.fillHex,
+    required this.fillOpacity,
+    required this.outlineHex,
+    required this.outlineOpacity,
+    required this.borderWidth,
+    required this.lineHex,
+    required this.lineWidth,
+    required this.pointHex,
+    required this.pointSize,
+  });
+
+  /// フィーチャの `k-style` 属性と突き合わせるキー（View のキー）
+  final String key;
+
+  final String fillHex;
+  final double fillOpacity;
+  final String outlineHex;
+  final double outlineOpacity;
+  final double borderWidth;
+  final String lineHex;
+  final double lineWidth;
+  final String pointHex;
+  final double pointSize;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MapStyleGroup &&
+      other.key == key &&
+      other.fillHex == fillHex &&
+      other.fillOpacity == fillOpacity &&
+      other.outlineHex == outlineHex &&
+      other.outlineOpacity == outlineOpacity &&
+      other.borderWidth == borderWidth &&
+      other.lineHex == lineHex &&
+      other.lineWidth == lineWidth &&
+      other.pointHex == pointHex &&
+      other.pointSize == pointSize;
+
+  @override
+  int get hashCode => Object.hash(key, fillHex, fillOpacity, outlineHex,
+      outlineOpacity, borderWidth, lineHex, lineWidth, pointHex, pointSize);
+}
+
 /// GeoJSONソース/スタイルレイヤをStyleController経由で直接管理
 /// layers プロパティによる毎rebuild時のGeoJSONシリアライズを回避
 class MapSourceManager {
@@ -85,6 +136,23 @@ class MapSourceManager {
   static const _iconPhotoMarkerSel = 'photo-marker-sel';
   static const _iconPhotoMarkerNoDir = 'photo-marker-no-dir';
   static const _iconPhotoMarkerNoDirSel = 'photo-marker-no-dir-sel';
+
+  /// フィーチャに載せる「どのスタイルグループのものか」の属性名。
+  ///
+  /// > [!IMPORTANT] グループが1つも無ければ、この属性は載せない
+  /// > 全レイヤのフィーチャは共有ソース（`k-polygons` 等）に流し込まれる。
+  /// > グループが無い＝固有スタイルが1つも無い状態では、フィルタも付けないので
+  /// > 描画経路は View 導入前とまったく同じになる。既存プロジェクトの
+  /// > 見え方を変えないための保険。
+  static const kStyleProp = 'k-style';
+
+  /// スタイルグループ。**並び順が z順**（View の並び）。
+  List<MapStyleGroup> _styleGroups = const [];
+
+  /// グループぶんに増やしたレイヤのID（削除用）
+  final List<String> _groupLayerIds = [];
+
+  List<MapStyleGroup> get styleGroups => _styleGroups;
 
   static const _emptyGeoJson =
       '{"type":"FeatureCollection","features":[]}';
@@ -211,6 +279,27 @@ class MapSourceManager {
     _refreshImageClusters(zoom);
   }
 
+  /// クラスタに入らなかった1点ぶんの GeoJSON を組み立てる。
+  ///
+  /// > [!WARNING] 元のフィーチャの属性は、ここで明示的に写さないと落ちる
+  /// > クラスタリングが有効なとき、`k-points` はこの関数の出力で作り直される。
+  /// > スタイルグループのキー（[kStyleProp]）を写し忘れると、
+  /// > **クラスタリングが有効なときだけ View のスタイルが効かない**という
+  /// > 分かりにくい壊れ方をする（2026-08-26 に実際に踏んだ）。
+  @visibleForTesting
+  static String clusterPointJson(
+    double longitude,
+    double latitude,
+    Map<String, dynamic> properties,
+  ) {
+    final name = properties['name'] ?? '';
+    final styleKey = properties[kStyleProp];
+    return '{"type":"Feature","geometry":{"type":"Point",'
+        '"coordinates":[$longitude,$latitude]},'
+        '"properties":{"name":${jsonEncode(name)}'
+        '${styleKey == null ? '' : ',"$kStyleProp":${jsonEncode(styleKey)}'}}}';
+  }
+
   /// Pointクラスタリング
   void _refreshPointClusters(double zoom) {
     if (!_clusterEnabled || _clusterIndex == null) {
@@ -244,12 +333,11 @@ class MapSourceManager {
         point: (point) {
           if (pointCount > 0) pointBuf.write(',');
           final raw = _rawPoints[point.originalPoint.index];
-          final name = raw.properties['name'] ?? '';
-          pointBuf.write(
-            '{"type":"Feature","geometry":{"type":"Point",'
-            '"coordinates":[${point.originalPoint.longitude},${point.originalPoint.latitude}]},'
-            '"properties":{"name":${jsonEncode(name)}}}',
-          );
+          pointBuf.write(clusterPointJson(
+            point.originalPoint.longitude,
+            point.originalPoint.latitude,
+            raw.properties,
+          ));
           pointCount++;
         },
       );
@@ -748,6 +836,80 @@ class MapSourceManager {
 
   /// ユーザー設定のスタイルをレイヤ再登録で反映
   /// removeLayer+addLayerは全プラットフォームで動作する安全な方式
+  /// スタイルグループを差し替える。変わっていれば true（呼び出し側が再描画する）。
+  ///
+  /// 空リストを渡すと View 導入前と同じ描画に戻る。
+  bool setStyleGroups(List<MapStyleGroup> groups) {
+    if (_listEquals(_styleGroups, groups)) return false;
+    _styleGroups = List.unmodifiable(groups);
+    return true;
+  }
+
+  static bool _listEquals(List<MapStyleGroup> a, List<MapStyleGroup> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// グループに属さないフィーチャだけを通すフィルタ。
+  ///
+  /// `k-style` が無いフィーチャ（属性を載せていない場合）も通す必要があるので
+  /// `coalesce` で空文字に寄せる。
+  List<Object>? get _defaultFilter =>
+      _styleGroups.isEmpty
+          ? null
+          : <Object>[
+            '==',
+            <Object>['coalesce', <Object>['get', kStyleProp], ''],
+            '',
+          ];
+
+  List<Object> _groupFilter(MapStyleGroup group) => <Object>[
+    '==',
+    <Object>['get', kStyleProp],
+    group.key,
+  ];
+
+  /// グループぶんのレイヤを積む。
+  ///
+  /// 同じソースを共有し、フィルタとpaintだけを変える。
+  /// **データ転送は増えない**（ソースは1本のまま）。
+  Future<void> _addGroupLayers(ml.StyleController s) async {
+    _groupLayerIds.clear();
+    for (var i = 0; i < _styleGroups.length; i++) {
+      final g = _styleGroups[i];
+      final filter = _groupFilter(g);
+      Future<void> add(ml.StyleLayer layer) async {
+        await s.addLayer(layer);
+        _groupLayerIds.add(layer.id);
+      }
+
+      await add(ml.FillStyleLayer(
+        id: '$kPolygonsFill#$i', sourceId: kPolygons, filter: filter,
+        paint: {'fill-color': g.fillHex, 'fill-opacity': g.fillOpacity}));
+      await add(ml.LineStyleLayer(
+        id: '$kPolygonsOutline#$i', sourceId: kPolygons, filter: filter,
+        paint: {
+          'line-color': g.outlineHex,
+          'line-opacity': g.outlineOpacity,
+          'line-width': g.borderWidth,
+        }));
+      await add(ml.LineStyleLayer(
+        id: '$kLinesLine#$i', sourceId: kLines, filter: filter,
+        paint: {'line-color': g.lineHex, 'line-width': g.lineWidth}));
+      await add(ml.CircleStyleLayer(
+        id: '$kPointsCircle#$i', sourceId: kPoints, filter: filter,
+        paint: {
+          'circle-radius': g.pointSize,
+          'circle-color': g.pointHex,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#FFFFFF',
+        }));
+    }
+  }
+
   Future<void> updateLayerStyles({
     required Color polygonFillColor,
     required double polygonFillOpacity,
@@ -837,19 +999,28 @@ class MapSourceManager {
     required List<Object> clusterRadius,
     required double clusterTextSize,
   }) async {
-    for (final id in _allLayerIds.reversed) {
+    // グループぶんに増やしたレイヤも消す。順序は問わない
+    for (final id in [..._groupLayerIds, ..._allLayerIds].reversed) {
       try { await s.removeLayer(id); } catch (_) {}
     }
+    _groupLayerIds.clear();
+
+    // ⚠ グループがあるときだけフィルタを付ける。無ければ null が渡り、
+    //    View 導入前とまったく同じレイヤになる
+    final defaultFilter = _defaultFilter;
 
     await s.addLayer(ml.FillStyleLayer(id: kPolygonsFill, sourceId: kPolygons,
+      filter: defaultFilter,
       paint: {'fill-color': fillHex, 'fill-opacity': polygonFillOpacity}));
     await s.addLayer(ml.LineStyleLayer(id: kPolygonsOutline, sourceId: kPolygons,
+      filter: defaultFilter,
       paint: {'line-color': outlineHex, 'line-opacity': polygonOutlineOpacity, 'line-width': polygonBorderWidth}));
     await s.addLayer(ml.FillStyleLayer(id: kPolygonsSelFill, sourceId: kPolygonsSel,
       paint: {'fill-color': selHex, 'fill-opacity': 0.5}));
     await s.addLayer(ml.LineStyleLayer(id: kPolygonsSelOutline, sourceId: kPolygonsSel,
       paint: {'line-color': selHex, 'line-width': 3.0}));
     await s.addLayer(ml.LineStyleLayer(id: kLinesLine, sourceId: kLines,
+      filter: defaultFilter,
       paint: {'line-color': lineHex, 'line-width': lineWidth}));
     await s.addLayer(ml.LineStyleLayer(id: kLinesSelLine, sourceId: kLinesSel,
       paint: {'line-color': selHex, 'line-width': lineWidth * selectedMultiplier}));
@@ -869,6 +1040,7 @@ class MapSourceManager {
       layout: {'text-field': '{point_count_abbreviated}', 'text-font': ['Open Sans Semibold'], 'text-size': clusterTextSize, 'text-allow-overlap': true},
       paint: {'text-color': '#000000', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
     await s.addLayer(ml.CircleStyleLayer(id: kPointsCircle, sourceId: kPoints,
+      filter: defaultFilter,
       paint: {'circle-radius': pointSize, 'circle-color': pointHex, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF'}));
     await s.addLayer(ml.CircleStyleLayer(id: kPointsSelCircle, sourceId: kPointsSel,
       paint: {'circle-radius': pointSize * selectedMultiplier, 'circle-color': selHex, 'circle-stroke-width': 2.0, 'circle-stroke-color': '#FFFFFF'}));
@@ -898,6 +1070,14 @@ class MapSourceManager {
         'text-anchor': 'left', 'text-offset': <Object>[1.0, 0], 'text-max-width': 100.0, 'text-optional': true,
       },
       paint: {'text-color': '#FF9800', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5}));
+
+    // 固有スタイルを持つぶんを最後に積む。
+    //
+    // ⚠ z順は「共有ソース1本」という作りの制約で、**レイヤ間の前後は表現できない**。
+    //   ここで保証できるのは「固有スタイルのフィーチャは既定スタイルより前面」
+    //   までで、それは View 以前から同じ。dir構造どおりの z順にするには
+    //   ソースを分ける必要がある（未着手）。
+    await _addGroupLayers(s);
   }
 
   /// 全ソースをクリア
@@ -1038,6 +1218,9 @@ class MapSourceManager {
   // --------------------------------------------------
 
   /// Color → MapLibre paint用 #RRGGBB 文字列
+  /// `#RRGGBB`。スタイルグループを組み立てる側でも使う（[MapStyleGroup]）
+  static String colorToHex(Color c) => _colorToHex(c);
+
   static String _colorToHex(Color c) {
     final r = (c.r * 255.0).round() & 0xff;
     final g = (c.g * 255.0).round() & 0xff;

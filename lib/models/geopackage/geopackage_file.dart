@@ -425,6 +425,10 @@ class GeoPackageFile {
     return _features.getFeaturesWithGeometry(tableName, geomType, where: where);
   }
 
+  /// [where] に当てはまるフィーチャの主キーだけを返す（View の所属判定用）
+  Future<Set<int>> getFeatureIds(String tableName, {String? where}) =>
+      _features.getFeatureIds(tableName, where: where);
+
   /// 指定レイヤーの全フィーチャの属性データを一括取得
   Future<List<Map<String, dynamic>>> getAllFeatureAttributes(
     String tableName, {

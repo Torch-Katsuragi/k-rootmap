@@ -28,6 +28,7 @@ import '../widgets/settings_widgets.dart';
 import '../utils/app_logger.dart';
 import '../models/kmeta.dart';
 import '../models/nodes/layer_node.dart';
+import '../models/nodes/view_node.dart';
 import '../services/kmeta_service.dart';
 
 // ============================================================
@@ -310,14 +311,24 @@ class LayerStyleSettingsScreen extends StatefulWidget {
   final LayerNode? targetLayer;
   final String? folderPath;
 
+  /// View 単位でスタイルを編集するときに渡す。
+  ///
+  /// 渡すと保存先が `styles.layers[layerKey]` ではなく
+  /// `views[layerKey][i].style` になる。それ以外の見た目は同じ。
+  final ViewNode? targetView;
+
   const LayerStyleSettingsScreen({
     super.key,
     this.isEmbedded = false,
     this.targetLayer,
     this.folderPath,
+    this.targetView,
   });
 
   bool get isLayerMode => targetLayer != null && folderPath != null;
+
+  /// View のスタイルを編集しているか
+  bool get isViewMode => isLayerMode && targetView != null;
 
   @override
   State<LayerStyleSettingsScreen> createState() =>
@@ -328,7 +339,14 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
   bool get _isGlobalMode => !widget.isLayerMode;
 
   String get _title =>
-      _isGlobalMode ? t.settingsWidget.layerDrawingTitle : t.settingsWidget.styleTitle(name: widget.targetLayer!.layerName);
+      _isGlobalMode
+          ? t.settingsWidget.layerDrawingTitle
+          : t.settingsWidget.styleTitle(
+            name:
+                widget.isViewMode
+                    ? '${widget.targetLayer!.layerName} / ${widget.targetView!.name}'
+                    : widget.targetLayer!.layerName,
+          );
 
   /// レイヤータイプに応じてセクションをフィルタ
   bool _sectionFilter(SettingSectionDef section) {
@@ -344,7 +362,16 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
 
   /// KMeta初期化（個別レイヤーモード）
   Future<void> _onInit() async {
-    if (widget.isLayerMode) {
+    if (widget.isViewMode) {
+      // View に指定が無ければレイヤのスタイルを初期値として見せる
+      final meta = await KMetaService.instance.getMergedMeta(
+        widget.folderPath!,
+      );
+      layerStyleSettings.loadOverlay(
+        widget.targetView!.style ??
+            meta.getLayerStyle(widget.targetLayer!.layerKey),
+      );
+    } else if (widget.isLayerMode) {
       final meta = await KMetaService.instance.getMergedMeta(
         widget.folderPath!,
       );
@@ -382,6 +409,15 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
       labelHaloColor: layerStyleSettings.getColor(labelHaloColorDef),
       labelOpacity: layerStyleSettings.getDouble(labelOpacityDef),
     );
+    if (widget.isViewMode) {
+      widget.targetView!.style = style;
+      await widget.targetLayer!.persistViews();
+      widget.targetLayer!.folderNode?.invalidateMetaCache();
+      await widget.targetLayer!.refreshStyleGroups();
+      AppLogger.debug('[LayerStyle] View設定を保存: ${widget.targetView!.viewKey}');
+      return;
+    }
+
     await KMetaService.instance.setLayerStyle(
       widget.folderPath!,
       widget.targetLayer!.layerKey,
@@ -389,6 +425,8 @@ class _LayerStyleSettingsScreenState extends State<LayerStyleSettingsScreen> {
     );
     widget.targetLayer!.folderNode?.invalidateMetaCache();
     widget.targetLayer!.invalidateKmetaStyleCache();
+    // スタイルを変えたら「どのフィーチャがどのグループか」も取り直す
+    await widget.targetLayer!.refreshStyleGroups();
     AppLogger.debug(
       '[LayerStyle] レイヤー固有設定を保存: ${widget.targetLayer!.layerKey}',
     );

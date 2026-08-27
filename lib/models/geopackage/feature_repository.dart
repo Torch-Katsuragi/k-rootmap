@@ -798,6 +798,32 @@ class FeatureRepository {
     }
   }
 
+  /// [where] に当てはまるフィーチャの主キーだけを返す。
+  ///
+  /// View ごとの「どのフィーチャが自分のものか」を知るために使う。
+  /// ジオメトリを読まないので、フィーチャ本体の読み込みに比べてずっと軽い。
+  Future<Set<int>> getFeatureIds(String tableName, {String? where}) async {
+    try {
+      final safeWhere = sanitizeFilter(where);
+      if (safeWhere == null) return const {};
+
+      final db = await connection.getDatabase();
+      final pkColumn = await schema.getPrimaryKeyColumn(tableName);
+      final column = pkColumn == 'rowid' ? 'rowid' : '"$pkColumn"';
+
+      final rows = await db.rawQuery(
+        'SELECT $column AS id FROM "$tableName" WHERE $safeWhere',
+      );
+      return {
+        for (final row in rows)
+          if (row['id'] is int) row['id'] as int,
+      };
+    } catch (e) {
+      AppLogger.debug('[FeatureRepository] getFeatureIds: エラー発生 - $e');
+      return const {};
+    }
+  }
+
   /// フィルタ文字列を検査する。使えないものは null（＝絞り込み無し）にする。
   ///
   /// 弾くのは「文を切り替えられる形」だけ。式として書かれている限りは通す。

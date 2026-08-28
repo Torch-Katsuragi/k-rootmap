@@ -336,12 +336,15 @@ class DriveSyncOperations {
       return true;
     }
 
-    // ⚠ web はここで `signIn()` を直に呼ばないこと。
-    // 認可の復元は**別ウィンドウのポップアップ**を開き、それが自動で閉じるとは
-    // 限らない（Googleに複数アカウントがあると選択画面で止まる）。
-    // 画面に何も出さずに待つと、アプリが固まったようにしか見えない。
-    // ダイアログを先に出し、その中で復元させる。
+    // ⚠ web は**ここで**復元を試すこと。ダイアログを出してからでは遅い。
+    // GISのポップアップはユーザー操作の有効時間（Chromeで約5秒）の中でしか
+    // 開けず、ダイアログを組み立てているうちに切れてブロックされる
+    // （2026-08-28 に `Failed to open popup window` で踏んだ）。
+    //
+    // 覚えているアドレスがあれば無音で通り、無ければ即座に false が返る。
+    // 待たされないので、ここで呼んでも画面が固まったようには見えない。
     if (PlatformCapabilities.isWeb) {
+      if (await driveService.restoreWebAuthorization()) return true;
       if (!context.mounted) return false;
       return DriveSignInDialog.show(context);
     }

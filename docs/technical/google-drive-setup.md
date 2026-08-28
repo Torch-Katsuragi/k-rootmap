@@ -38,6 +38,30 @@ tags: [technical, google-drive, setup]
 >    console に `[GSI_LOGGER]: Failed to open popup window` だけが残り、
 >    アプリ側は「サインインしてください」のまま動かない。
 >
+> ### 実測: 無音化の決め手は `login_hint`（2026-08-28）
+>
+> 同一ブラウザ・同意済み・Googleにログイン済みで、
+> `google.accounts.oauth2.initTokenClient` を直に叩いて計測した。
+>
+> | 設定 | 結果 |
+> | --- | --- |
+> | `prompt:''` のみ（＝`google_sign_in_web` と同じ） | ポップアップが開いたまま**10秒待っても返らない** |
+> | `prompt:'' + login_hint` | **858ms でトークン。ポップアップは自動で閉じる** |
+> | `prompt:'none' + login_hint` | 755ms でトークン |
+>
+> 決め手は `prompt` ではなく **`login_hint`**。無いとGoogleが
+> 「どのアカウントか」を決められず選択画面で止まる。
+> ⚠ そして `google_sign_in_web` は `login_hint` を渡すと
+> `prompt` を `select_account` に固定する。**ライブラリが自分で無音化を潰している。**
+>
+> だから `lib/services/google_drive/web_token_client_web.dart` で GIS を直に叩く。
+> 必要なのは**メールアドレスを覚えておくこと**だけで、トークンは保存しない
+> （localStorageに置くとXSS一発でDrive全体が漏れる）。
+>
+> ⚠ それでもポップアップ自体は開くので、**ユーザー操作の直後（Chromeで約5秒）**
+> にしか呼べない。`main.dart` の `Listener` で、アプリ内の操作に便乗して
+> 繋ぎ直している。
+
 > ### リロードするとサインインが切れる件
 >
 > ⚠ **ブラウザのOAuthにリフレッシュトークンは無い。**

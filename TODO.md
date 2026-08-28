@@ -74,6 +74,17 @@
             ⚠ 残: ポップアップを本当に無言にするなら `prompt=''` と
             `login_hint` を両方渡す必要があり、`google_sign_in_web` を
             通さず `initTokenClient` を直に叩くことになる
+          - [x] **無音化の決め手を実測で特定（2026-08-28）**: `login_hint`。
+                `prompt:''` だけだと返らないが、`login_hint` を足すと858msで返る。
+                `google_sign_in_web` が `login_hint` に `select_account` を
+                抱き合わせているのが原因だったので、GISを直に叩く実装に変えた
+                （`web_token_client_web.dart`）
+          - [ ] ⚠ **実装は未検証。** ブラウザでアプリのログが拾えず
+                （`debugPrint` も `print` も拡張のコンソール取得に出ない）、
+                どこで止まっているか特定できていない。
+                次はここから: ページ内で `console.log` を差し替えても0件だったので、
+                Dart側が `console.log` の参照を起動時に掴んでいる可能性が高い。
+                `dart:developer` の `log()` か、`window` に直接書く仕掛けで観測する
           - [ ] その上でアップロードが実際に上がるかを見る
     - [ ] ⚠ **web はリロードでサインインが切れる。** 起動時に One Tap を投げる
           ようにしたが、FedCMのクールダウンやChromeの「サイト間のログイン」

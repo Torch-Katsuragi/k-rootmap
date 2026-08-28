@@ -75,12 +75,9 @@ void main() async {
   // sqflite の実装をプラットフォームごとに選ぶ（web は sqlite3 WASM）
   setupDatabaseFactory();
 
-  runApp(
-    TranslationProvider(
-      child: const ProviderScope(child: RootMapsApp()),
-    ),
-  );
+  runApp(TranslationProvider(child: const ProviderScope(child: RootMapsApp())));
 }
+
 /// 言語設定のSharedPreferencesキー
 const kAppLocaleKey = 'app_locale';
 
@@ -92,7 +89,10 @@ Future<void> _initLocale() async {
 
   if (savedLocale != null) {
     // 保存済みの言語設定を使用
-    final locale = AppLocale.values.where((l) => l.languageCode == savedLocale).firstOrNull;
+    final locale =
+        AppLocale.values
+            .where((l) => l.languageCode == savedLocale)
+            .firstOrNull;
     if (locale != null) {
       LocaleSettings.instance.setLocale(locale);
       return;
@@ -102,7 +102,10 @@ Future<void> _initLocale() async {
   // 保存値がない場合は端末の言語設定を自動検出して初期値に設定
   LocaleSettings.useDeviceLocaleSync();
   // 検出結果を保存（次回起動時に使用）
-  await prefs.setString(kAppLocaleKey, LocaleSettings.currentLocale.languageCode);
+  await prefs.setString(
+    kAppLocaleKey,
+    LocaleSettings.currentLocale.languageCode,
+  );
 }
 
 void _setupErrorHandlers() {
@@ -175,6 +178,27 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         ref.read(selectedFeaturesProvider.notifier).remove(node);
       }
     });
+  }
+
+  bool _driveRestoreInFlight = false;
+
+  /// ユーザーの操作に便乗して、web のDrive認可を無音で取り直す。
+  ///
+  /// ⚠ **1回きりにしないこと。** 最初のクリックの時点では GIS の
+  /// スクリプトがまだ読み込まれていないことがあり、その回は必ず失敗する。
+  /// 失敗は速いので、繋がるまで操作のたびに試してよい。
+  void _restoreDriveOnce() {
+    if (_driveRestoreInFlight) return;
+    if (!PlatformCapabilities.supportsDriveSync) return;
+    final service = GoogleDriveService();
+    if (service.isDriveApiAvailable) return;
+    _driveRestoreInFlight = true;
+    // 待たない。失敗しても通常のサインインUIが受け止める
+    unawaited(
+      service.restoreWebAuthorization().whenComplete(
+            () => _driveRestoreInFlight = false,
+          ),
+    );
   }
 
   Future<void> _initializeServices() async {
@@ -269,21 +293,30 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         final mq = MediaQuery.of(context);
         // 論理サイズを逆スケールして、Transform.scaleで拡大した時に
         // 実際の画面サイズにぴったり収まるようにする
-        return MediaQuery(
-          data: mq.copyWith(
-            size: mq.size / scaleFactor,
-            padding: mq.padding / scaleFactor,
-            viewInsets: mq.viewInsets / scaleFactor,
-            viewPadding: mq.viewPadding / scaleFactor,
-          ),
-          child: FractionallySizedBox(
-            widthFactor: 1.0 / scaleFactor,
-            heightFactor: 1.0 / scaleFactor,
-            alignment: Alignment.topLeft,
-            child: Transform.scale(
-              scale: scaleFactor,
+        // ⚠ web の認可ポップアップは**ユーザー操作の直後（Chromeで約5秒）**
+        // でしか開けない。Driveの操作を押してから復元しようとすると、
+        // ダイアログを組み立てているうちに切れてブロックされる。
+        // アプリ内の最初の操作でここで済ませておけば、Driveに触る頃には
+        // もう繋がっている。何も起きない環境ではすぐ諦めるので害は無い。
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _restoreDriveOnce(),
+          child: MediaQuery(
+            data: mq.copyWith(
+              size: mq.size / scaleFactor,
+              padding: mq.padding / scaleFactor,
+              viewInsets: mq.viewInsets / scaleFactor,
+              viewPadding: mq.viewPadding / scaleFactor,
+            ),
+            child: FractionallySizedBox(
+              widthFactor: 1.0 / scaleFactor,
+              heightFactor: 1.0 / scaleFactor,
               alignment: Alignment.topLeft,
-              child: child,
+              child: Transform.scale(
+                scale: scaleFactor,
+                alignment: Alignment.topLeft,
+                child: child,
+              ),
             ),
           ),
         );

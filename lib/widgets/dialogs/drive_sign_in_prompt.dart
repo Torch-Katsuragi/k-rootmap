@@ -41,7 +41,6 @@ class DriveSignInPrompt extends StatefulWidget {
 class _DriveSignInPromptState extends State<DriveSignInPrompt> {
   final GoogleDriveService _driveService = GoogleDriveService();
   bool _isLoading = false;
-  bool _isRestoring = false;
   String? _errorMessage;
 
   @override
@@ -67,16 +66,10 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
   Future<void> _initialize() async {
     setState(() => _isLoading = true);
     try {
+      // ⚠ ここで認可の復元を呼ばないこと。ダイアログを組み立てている間に
+      // ユーザー操作の有効時間が切れ、ポップアップがブロックされる。
+      // 復元は `ensureDriveAuthenticated` がクリック直後に済ませている。
       await _driveService.initialize();
-      // ここはダイアログを開いたクリックの直後なので、認可の復元を試せる。
-      // ⚠ 別ウィンドウのポップアップが開く。同意済み＆アカウントが一意なら
-      // 勝手に閉じるが、そうでなければ選択画面で止まる。待っている間は
-      // [_isRestoring] で「別ウィンドウを見てください」と出す。
-      if (!_driveService.isDriveApiAvailable) {
-        if (mounted) setState(() => _isRestoring = true);
-        await _driveService.restoreWebAuthorization();
-        if (mounted) setState(() => _isRestoring = false);
-      }
     } catch (e) {
       AppLogger.error('[DriveSignInPrompt] 初期化エラー: $e');
     } finally {
@@ -109,20 +102,6 @@ class _DriveSignInPromptState extends State<DriveSignInPrompt> {
     // アカウントがまだ無い web は、Googleが描画するボタンだけが入口
     final needsAccount = !_driveService.hasAccount;
     final rendered = needsAccount ? googleRenderedSignInButton() : null;
-
-    if (_isRestoring) {
-      return const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            '別ウィンドウでGoogleの確認が出ています。そちらで進めてください。',
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

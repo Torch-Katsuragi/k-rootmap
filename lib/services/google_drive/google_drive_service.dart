@@ -20,7 +20,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 
@@ -29,6 +31,7 @@ import '../../core/platform_capabilities.dart';
 import '../../utils/app_logger.dart';
 import '../../i18n/strings.g.dart';
 import 'drive_auth_state.dart';
+import 'web_token_client.dart';
 
 /// Driveファイルのメタデータ
 class DriveFileMetadata {
@@ -67,6 +70,13 @@ class GoogleDriveService {
 
   /// 認証状態
   final DriveAuthState authState = DriveAuthState();
+
+  /// 前回サインインしたメールアドレスを覚えておくキー。
+  ///
+  /// ⚠ **トークンは保存しない。** 保存するのはメールアドレスだけで、これは
+  /// `login_hint` に渡すためだけに使う。トークンをlocalStorageに置くと、
+  /// XSS一発でDrive全体が漏れる。
+  static const String _kLastEmailKey = 'drive_last_email';
 
   /// Googleアカウントが取れているか（スコープの認可は別）。
   ///
@@ -154,29 +164,63 @@ class GoogleDriveService {
   /// 同意がまだ／ブラウザにGoogleのセッションが無ければ失敗する。そのときは
   /// 通常のサインインUIに任せる。
   Future<bool> restoreWebAuthorization() async {
-    AppLogger.debug('[GoogleDriveService] 認可の復元を試行（ポップアップが開く）');
+    final hint = await _rememberedEmail();
+    if (hint == null || hint.isEmpty) {
+      // ⚠ `login_hint` が無いと、Googleがアカウントを決められず
+      // 選択画面で止まる（＝無音にならない）。ここは諦めてUIに渡す。
+      AppLogger.debug('[GoogleDriveService] 覚えているアドレスが無いので復元しない');
+      return false;
+    }
+
+    AppLogger.debug('[GoogleDriveService] 認可を無音で復元: $hint');
+    String? token;
     try {
-      final granted = await GoogleSignIn.instance.authorizationClient
-          .authorizeScopes(_scopes);
-      final api = drive.DriveApi(granted.authClient(scopes: _scopes));
-      // 誰のトークンかはトークン自体には入っていないので、Driveに聞く
+      token = await requestTokenSilently(
+        clientId: PlatformCapabilities.kWebOAuthClientId,
+        scopes: _scopes,
+        loginHint: hint,
+      );
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] トークン要求で例外: $e');
+      return false;
+    }
+    if (token == null) {
+      AppLogger.debug('[GoogleDriveService] 無音の復元は不可');
+      return false;
+    }
+
+    try {
+      final api = drive.DriveApi(_BearerClient(token));
+      // 誰のトークンかはトークン自体に入っていないので、Driveに聞く
       final about = await api.about.get($fields: 'user');
       final user = about.user;
       _driveApi = api;
       authState.setAuthenticated(
         DriveUser(
           id: user?.permissionId ?? '',
-          email: user?.emailAddress ?? '',
+          email: user?.emailAddress ?? hint,
           displayName: user?.displayName,
           photoUrl: user?.photoLink,
         ),
       );
-      AppLogger.debug('[GoogleDriveService] 認可を復元: ${user?.emailAddress}');
+      await _rememberEmail(user?.emailAddress ?? hint);
+      AppLogger.debug('[GoogleDriveService] 復元できた: ${user?.emailAddress}');
       return true;
     } catch (e) {
-      AppLogger.debug('[GoogleDriveService] 認可の復元は不可: $e');
+      AppLogger.debug('[GoogleDriveService] 復元したトークンが使えない: $e');
       return false;
     }
+  }
+
+  Future<void> _rememberEmail(String email) async {
+    if (email.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLastEmailKey, email);
+  }
+
+  Future<String?> _rememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kLastEmailKey);
   }
 
   /// 認証イベントハンドラ
@@ -201,6 +245,7 @@ class GoogleDriveService {
             return;
           }
           authState.setAuthenticated(DriveUser.fromGoogleAccount(event.user));
+          await _rememberEmail(event.user.email);
           AppLogger.debug('[GoogleDriveService] サインイン成功: ${event.user.email}');
         } catch (e) {
           AppLogger.debug('[GoogleDriveService] Drive API初期化エラー: $e');
@@ -834,4 +879,27 @@ class GoogleDriveService {
     }
   }
 
+}
+
+/// アクセストークンを `Authorization` に付けるだけのHTTPクライアント
+///
+/// web の無音復元では生のトークンしか手に入らないので、
+/// `googleapis` に食わせるためにこれで包む。
+class _BearerClient extends http.BaseClient {
+  final String _token;
+  final http.Client _inner = http.Client();
+
+  _BearerClient(this._token);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers['Authorization'] = 'Bearer $_token';
+    return _inner.send(request);
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
+  }
 }

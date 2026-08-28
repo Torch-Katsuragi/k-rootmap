@@ -28,22 +28,35 @@ class AppLogger {
   /// ログを出す条件
   static bool get _enabled => kDebugMode || _forceLog;
 
+  /// 実際に書き出す
+  ///
+  /// ⚠ `debugPrint` はリリースのwebでコンソールに出なかった（2026-08-28）。
+  /// `K_LOG` で焼き込んだときは `print` を使う。
+  static void _emit(String line) {
+    if (_forceLog) {
+      // ignore: avoid_print
+      print(line);
+    } else {
+      debugPrint(line);
+    }
+  }
+
   /// 一般的なログ出力
   static void log(Object? message) {
     if (_enabled) {
-      debugPrint('[LOG] $message');
+      _emit('[LOG] $message');
     }
   }
 
   /// エラーログ出力
   static void error(Object? message, [dynamic error, StackTrace? stackTrace]) {
     if (_enabled) {
-      debugPrint('[ERROR] $message');
+      _emit('[ERROR] $message');
       if (error != null) {
-        debugPrint(error.toString());
+        _emit(error.toString());
       }
       if (stackTrace != null) {
-        debugPrint(stackTrace.toString());
+        _emit(stackTrace.toString());
       }
     }
   }
@@ -51,7 +64,7 @@ class AppLogger {
   /// デバッグ用ログ出力
   static void debug(Object? message) {
     if (_enabled) {
-      debugPrint('[DEBUG] $message');
+      _emit('[DEBUG] $message');
     }
   }
 }

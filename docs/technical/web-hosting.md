@@ -6,7 +6,9 @@ tags: [technical, hosting, web]
 # web版のホスティング
 
 **本番URL: `https://kokage-map.sleeptree.jp`**（Firebase Hosting、サイトID `kokage-map`）。
-リンクを張らない「隠しページ」運用で、`firebase.json` の `X-Robots-Tag: noindex` で検索除け。
+「隠しページ」運用: **GitHubのREADMEに載せるURLと、直接共有した相手だけが入口**。
+`sleeptree.jp` 本体が公開されても、当分そこからはリンクしない（2026-08-28決定）。
+検索除けは `firebase.json` の `X-Robots-Tag: noindex`。
 
 ## デプロイ
 

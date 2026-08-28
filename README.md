@@ -2,6 +2,12 @@
 
 GISアプリケーション（Flutter製）
 
+**web版**: https://kokage-map.sleeptree.jp
+
+> このREADMEを見た方と、URLを共有した関係者向けの控えめな公開です。
+> 検索には載せていません（noindex）。Chrome / Edge 推奨
+> （フォルダを開くのに File System Access API を使うため）。
+
 ## 機能概要
 
 ### 🗺️ 地図・レイヤー機能

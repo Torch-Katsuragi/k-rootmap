@@ -63,7 +63,9 @@ import '../../providers/device_tool_providers.dart';
 import '../../providers/party_providers.dart';
 import '../../models/party/peer_position.dart';
 import '../../models/party/party_room.dart';
+import '../../services/party/party_invite.dart';
 import 'widgets/map_menu_button.dart';
+import 'widgets/party_controls.dart';
 import '../layer_style_settings_screen.dart'
     show
         layerStyleSettings,
@@ -121,6 +123,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(mapControllerHolderProvider.notifier).set(mapController);
+      // 招待URL（web の `?room=CODE`）経由の起動なら、参加ダイアログを
+      // コード充填済みで開く（「ルーム参加がURLで済む」の受け側）。
+      final inviteCode = consumePendingRoomCode();
+      if (inviteCode != null && mounted) {
+        showPartyEntry(context, ref, initialCode: inviteCode);
+      }
     });
   }
 
@@ -558,6 +566,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
           ),
         // 描画プレビュー: ライン
         ..._buildDrawingPreviewPolylines(currentTool, drawingState),
+        // パーティ位置共有: 仲間の圏外区間軌跡（gap backfill）
+        ..._buildPartyTrackPolylines(),
         // 外部機器ツールのオーバーレイ（DeviceTool抽象経由）
         if (currentTool is DeviceTool)
           ...currentTool.buildOverlayLayers(),
@@ -1481,6 +1491,12 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final markers = <ml.Marker>[];
     for (final peer in session.peers.values) {
+      // メンバー一覧に居ないpeerはキック済みの残骸（live はhostが消せない）。
+      // 一覧ロード前（空）のときは描く。
+      if (session.members.isNotEmpty &&
+          !session.members.any((m) => m.uid == peer.uid)) {
+        continue;
+      }
       final member = session.members.firstWhere(
         (m) => m.uid == peer.uid,
         orElse: () => PartyMember(uid: peer.uid, name: '', role: PartyRole.guest),
@@ -1494,6 +1510,38 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
       );
     }
     return markers;
+  }
+
+  /// パーティの仲間の圏外区間軌跡（gap backfill の受信側）
+  ///
+  /// 「ブラックアウト中どこを通ったか」をピアマーカーと同系色の細線で描く。
+  /// 揮発データ（ルーム退出で消える。GeoPackageには保存しない）。
+  List<ml.PolylineLayer> _buildPartyTrackPolylines() {
+    final session = ref.read(partySessionProvider);
+    if (session.tracks.isEmpty) return const [];
+    final layers = <ml.PolylineLayer>[];
+    for (final entry in session.tracks.entries) {
+      // キック済みメンバーの軌跡は描かない（マーカーと同じ判定）
+      if (session.members.isNotEmpty &&
+          !session.members.any((m) => m.uid == entry.key)) {
+        continue;
+      }
+      layers.add(
+        ml.PolylineLayer(
+          polylines: [
+            for (final track in entry.value)
+              geo.Feature(
+                geometry: geo.LineString.from(
+                  track.points.toGeographics(),
+                ),
+              ),
+          ],
+          color: Colors.deepOrange.withValues(alpha: 0.5),
+          width: 3,
+        ),
+      );
+    }
+    return layers;
   }
 
   /// 他メンバー1人のマーカーウィジェット（鮮度で淡色化＋経過時間ラベル）
@@ -1512,7 +1560,7 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
         opacity = 0.4;
         color = Colors.blueGrey;
     }
-    final displayName = name.isEmpty ? 'メンバー' : name;
+    final displayName = name.isEmpty ? t.party.memberFallback : name;
     final label = freshness == PeerFreshness.fresh
         ? displayName
         : '$displayName・${_peerAgeLabel(peer.ageAt(nowMs))}';
@@ -1554,8 +1602,8 @@ class _RootMapsHomePageState extends ConsumerState<RootMapsHomePage>
 
   /// 経過時間の短いラベル
   String _peerAgeLabel(Duration age) {
-    if (age.inMinutes >= 1) return '${age.inMinutes}分前';
-    return '${age.inSeconds}秒前';
+    if (age.inMinutes >= 1) return t.party.minAgo(min: age.inMinutes);
+    return t.party.secAgo(sec: age.inSeconds);
   }
 
   /// 描画開始の1点目インジケータ（十字マーク）

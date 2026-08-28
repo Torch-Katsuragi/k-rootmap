@@ -27,6 +27,7 @@ import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 
 import '../../models/party/peer_position.dart';
+import '../../models/party/peer_track.dart';
 import '../../utils/app_logger.dart';
 import 'peer_source.dart';
 
@@ -50,20 +51,27 @@ class RtdbPeerSource implements PeerSource {
 
   final StreamController<Map<String, PeerPosition>> _peersController =
       StreamController<Map<String, PeerPosition>>.broadcast();
+  final StreamController<Map<String, List<PeerTrack>>> _tracksController =
+      StreamController<Map<String, List<PeerTrack>>>.broadcast();
   final StreamController<bool> _connectedController =
       StreamController<bool>.broadcast();
 
   StreamSubscription<DatabaseEvent>? _liveSub;
+  StreamSubscription<DatabaseEvent>? _tracksSub;
   StreamSubscription<DatabaseEvent>? _connectedSub;
   bool _started = false;
 
   DatabaseReference get _roomRef => _db.ref('rooms/$roomCode');
   DatabaseReference get _liveRef => _roomRef.child('live');
+  DatabaseReference get _tracksRef => _roomRef.child('tracks');
   DatabaseReference get _selfLiveRef => _liveRef.child(selfUid);
   DatabaseReference get _connectedRef => _db.ref('.info/connected');
 
   @override
   Stream<Map<String, PeerPosition>> get peers => _peersController.stream;
+
+  @override
+  Stream<Map<String, List<PeerTrack>>> get tracks => _tracksController.stream;
 
   @override
   Stream<bool> get serverConnected => _connectedController.stream;
@@ -90,6 +98,30 @@ class RtdbPeerSource implements PeerSource {
         _peersController.add(result);
       },
       onError: (Object e) => AppLogger.debug('$_logTag: live購読エラー: $e'),
+    );
+
+    // 全メンバーの圏外区間軌跡（gap backfill の受信側。自分含む）
+    _tracksSub = _tracksRef.onValue.listen(
+      (event) {
+        final result = <String, List<PeerTrack>>{};
+        for (final member in event.snapshot.children) {
+          final uid = member.key;
+          if (uid == null) continue;
+          final tracks = <PeerTrack>[];
+          for (final child in member.children) {
+            final val = child.value;
+            if (val is! Map) continue;
+            final track = PeerTrack.fromMap(uid, val);
+            if (track != null) tracks.add(track);
+          }
+          if (tracks.isNotEmpty) {
+            tracks.sort((a, b) => a.fromMs.compareTo(b.fromMs));
+            result[uid] = tracks;
+          }
+        }
+        _tracksController.add(result);
+      },
+      onError: (Object e) => AppLogger.debug('$_logTag: tracks購読エラー: $e'),
     );
 
     // 実サーバー接続状態（.info/connected）
@@ -169,8 +201,10 @@ class RtdbPeerSource implements PeerSource {
   @override
   Future<void> dispose() async {
     await _liveSub?.cancel();
+    await _tracksSub?.cancel();
     await _connectedSub?.cancel();
     await _peersController.close();
+    await _tracksController.close();
     await _connectedController.close();
   }
 }

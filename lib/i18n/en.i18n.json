@@ -31,7 +31,7 @@
     "menu": "Menu"
   },
   "home": {
-    "title": "Root Maps",
+    "title": "Kokage Map",
     "subtitle": "GeoPackage-based geographic information management and editing application",
     "startProject": "Start Project",
     "selectProjectFolder": "Select a project folder to start editing maps",
@@ -88,7 +88,7 @@
     "feedback": {
       "title": "Feedback",
       "callToAction": "We'd love to hear from you",
-      "description": "Help us make Root Maps a better app by sharing your feedback.\n\nFeel free to send feature requests, bug reports, or anything else.\nYour input helps guide our development.",
+      "description": "Help us make Kokage Map a better app by sharing your feedback.\n\nFeel free to send feature requests, bug reports, or anything else.\nYour input helps guide our development.",
       "openForm": "Open Feedback Form",
       "featureRequest": "Feature Request",
       "featureRequestDesc": "Ideas for new features that would be useful",
@@ -106,7 +106,7 @@
       "buildLabel": "Build $number",
       "packageName": "Package Name",
       "overview": "Overview",
-      "overviewText": "Root Maps is a cross-platform map application built with Flutter.\n\nIt provides features such as GeoPackage-based data management, GPS surveying and track recording, external GNSS device connectivity, and offline map support.",
+      "overviewText": "Kokage Map is a cross-platform map application built with Flutter.\n\nIt provides features such as GeoPackage-based data management, GPS surveying and track recording, external GNSS device connectivity, and offline map support.",
       "licenses": "Licenses",
       "openSourceLicenses": "Open Source Licenses",
       "openSourceLicensesDesc": "List of licenses for packages used"
@@ -991,7 +991,7 @@
     "columnNotFound": "Column \"$name\" does not exist"
   },
   "geometryType": {
-    "rootMapsFolder": "Cannot access Root Maps folder"
+    "rootMapsFolder": "Cannot access Kokage Map folder"
   },
   "qgisFilter": {
     "emptyExpression": "Expression is empty",
@@ -1001,18 +1001,18 @@
     "unclosedQuotes": "Unclosed quotes"
   },
   "onboarding": {
-    "welcome": "Welcome to Root Maps",
+    "welcome": "Welcome to Kokage Map",
     "welcomeDesc": "A GeoPackage-based geographic information management app.\nLet's set up the required permissions to get started.",
     "next": "Next",
     "getStarted": "Get Started",
     "permissionGranted": "Granted",
     "laterSettings": "Set up later",
     "storageTitle": "File Access",
-    "storageDisclosure": "Root Maps requires full storage access to read and write GeoPackage files, save map cache, and manage project data.",
+    "storageDisclosure": "Kokage Map requires full storage access to read and write GeoPackage files, save map cache, and manage project data.",
     "storageButton": "Allow Storage Access",
     "storageRequired": "Basic app features are unavailable without this permission",
     "locationTitle": "Location",
-    "locationDisclosure": "Root Maps collects location data to display your current position on the map, perform GPS surveys, and record GPS tracks.\n\nLocation data is stored on your device and is never sent to external servers.",
+    "locationDisclosure": "Kokage Map collects location data to display your current position on the map, perform GPS surveys, record GPS tracks, and share your live location with party members.\n\nLocation data is stored on your device. Your live location is shared with room members only while you are in a location-sharing party.",
     "locationButton": "Allow Location Access",
     "locationDeniedNote": "GPS features will be unavailable. You can enable it later in Settings.",
     "bluetoothTitle": "Bluetooth",
@@ -1069,8 +1069,8 @@
     "title": "Location Sharing Party",
     "displayName": "Display name",
     "displayNameHint": "e.g. Tanaka",
-    "joinPrompt": "To join, enter a code",
-    "roomCodeLabel": "Room code (8 chars)",
+    "joinPrompt": "To join, enter a code or invite link",
+    "roomCodeLabel": "Room code / invite link",
     "roomCodeHint": "e.g. AB23CD45",
     "join": "Join",
     "createHost": "Create (Host)",
@@ -1086,7 +1086,21 @@
     "connConnecting": "Connecting…",
     "connOffline": "Offline (queued)",
     "initFailed": "Could not initialize location sharing",
-    "signInUnconfirmed": "Sign-in could not be confirmed"
+    "signInUnconfirmed": "Sign-in could not be confirmed",
+    "paste": "Paste",
+    "scanQr": "Scan QR",
+    "invalidCode": "Check the code or invite link",
+    "copyInviteLink": "Invite link",
+    "inviteLinkCopied": "Invite link copied",
+    "showQr": "QR code",
+    "inviteQrTitle": "Invite to room",
+    "inviteQrDesc": "Scan with a phone camera to open the join page in a browser. The QR scanner on the app's join screen reads it too.",
+    "kick": "Remove",
+    "kickConfirm": "Remove ${name} from the room?",
+    "kickedNotice": "You were removed from the room by the host",
+    "memberFallback": "Member",
+    "minAgo": "${min} min ago",
+    "secAgo": "${sec}s ago"
   },
   "qgis": {
     "exportProject": "Export QGIS project",

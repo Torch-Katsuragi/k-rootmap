@@ -33,6 +33,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../models/gps_position_record.dart';
 import '../../models/party/peer_position.dart';
+import '../../models/party/peer_track.dart';
 import '../../utils/app_logger.dart';
 import 'party_connection_monitor.dart';
 import 'peer_source.dart';
@@ -94,6 +95,10 @@ class PartyLocationStore {
   final StreamController<Map<String, PeerPosition>> _peersController =
       StreamController<Map<String, PeerPosition>>.broadcast();
 
+  Map<String, List<PeerTrack>> _tracks = const {};
+  final StreamController<Map<String, List<PeerTrack>>> _tracksController =
+      StreamController<Map<String, List<PeerTrack>>>.broadcast();
+
   /// ゴーストモード（自分の位置を共有しない＝他メンバーから見えない）
   bool _ghost = false;
   final StreamController<bool> _ghostController =
@@ -111,6 +116,7 @@ class PartyLocationStore {
 
   bool _started = false;
   StreamSubscription<Map<String, PeerPosition>>? _peersSub;
+  StreamSubscription<Map<String, List<PeerTrack>>>? _tracksSub;
   StreamSubscription<GpsPositionRecord>? _ownSub;
   StreamSubscription<void>? _recoveredSub;
   StreamSubscription<PartyConnectionState>? _stateSub;
@@ -120,6 +126,13 @@ class PartyLocationStore {
 
   /// 現在のピアスナップショット（同期アクセス）
   Map<String, PeerPosition> get peers => _peers;
+
+  /// 他メンバーの圏外区間軌跡（自分を除く）
+  Stream<Map<String, List<PeerTrack>>> get tracksStream =>
+      _tracksController.stream;
+
+  /// 現在の軌跡スナップショット（同期アクセス）
+  Map<String, List<PeerTrack>> get tracks => _tracks;
 
   /// ゴーストモードの状態変化
   Stream<bool> get ghostStream => _ghostController.stream;
@@ -136,6 +149,7 @@ class PartyLocationStore {
     _started = true;
 
     _peersSub = peerSource.peers.listen(_onPeers);
+    _tracksSub = peerSource.tracks.listen(_onTracks);
     _ownSub = ownPositions.listen(_onOwnPosition);
     _recoveredSub = monitor.onRecovered.listen((_) => _onRecovered());
     _stateSub = monitor.stateStream.listen(_onStateChanged);
@@ -146,6 +160,12 @@ class PartyLocationStore {
     final next = Map<String, PeerPosition>.from(incoming)..remove(selfUid);
     _peers = next;
     _peersController.add(next);
+  }
+
+  void _onTracks(Map<String, List<PeerTrack>> incoming) {
+    final next = Map<String, List<PeerTrack>>.from(incoming)..remove(selfUid);
+    _tracks = next;
+    _tracksController.add(next);
   }
 
   void _onStateChanged(PartyConnectionState state) {
@@ -269,10 +289,12 @@ class PartyLocationStore {
   /// リソース解放
   Future<void> dispose() async {
     await _peersSub?.cancel();
+    await _tracksSub?.cancel();
     await _ownSub?.cancel();
     await _recoveredSub?.cancel();
     await _stateSub?.cancel();
     await _peersController.close();
+    await _tracksController.close();
     await _ghostController.close();
   }
 }

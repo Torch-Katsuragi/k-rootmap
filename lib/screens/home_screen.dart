@@ -36,6 +36,7 @@ import '../models/app_notification.dart';
 import '../providers/notification_providers.dart';
 import '../providers/ui_state_providers.dart';
 import '../services/changelog_service.dart';
+import '../services/party/party_invite.dart';
 import '../utils/folder_utils.dart';
 import 'changelog_screen.dart';
 import 'user_guide_screen.dart';
@@ -144,6 +145,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _initCompleted = true;
     await _checkPermissions();
     await _maybeAutoOpenProjectDir();
+    _maybeOpenPartyInvite();
+  }
+
+  /// 招待URL（web の `?room=CODE`）で開かれたら、フォルダ選択を挟まず
+  /// 地図画面へ直行する（参加ダイアログは MapPage 側がコード充填済みで開く）。
+  ///
+  /// 「ルーム参加がURLで済む」= web版の主力機能。ゲストはプロジェクトを
+  /// 持っていない前提なので、プロジェクト無しの地図で十分。
+  void _maybeOpenPartyInvite() {
+    if (!hasPendingRoomCode()) return;
+    if (_navigatedToMapPage) return;
+    AppLogger.debug('[HomeScreen] 招待URLを検出、地図画面へ直行');
+    _openMapWithoutProject();
   }
 
   /// `--dart-define=PROJECT_DIR=...` が指定されていれば、フォルダ選択を挟まずに開く。

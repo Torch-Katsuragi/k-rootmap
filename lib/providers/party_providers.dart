@@ -30,8 +30,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../i18n/strings.g.dart';
+import '../models/app_notification.dart';
 import '../models/party/party_room.dart';
 import '../models/party/peer_position.dart';
+import '../models/party/peer_track.dart';
+import '../providers/notification_providers.dart';
 import '../services/gps_history_recorder.dart';
 import '../services/internal_gps_location_store.dart';
 import '../services/party/battery_monitor.dart';
@@ -48,6 +51,9 @@ class PartySessionState {
   /// 参加中のルームコード（null = 未参加）
   final String? roomCode;
 
+  /// 自分のuid（メンバー一覧から自分を見分けるため。未参加は null）
+  final String? selfUid;
+
   /// 自分の役割
   final PartyRole? role;
 
@@ -56,6 +62,9 @@ class PartySessionState {
 
   /// 他メンバーの最新位置（自分を除く）
   final Map<String, PeerPosition> peers;
+
+  /// 他メンバーの圏外区間軌跡（自分を除く）
+  final Map<String, List<PeerTrack>> tracks;
 
   /// メンバー一覧
   final List<PartyMember> members;
@@ -71,9 +80,11 @@ class PartySessionState {
 
   const PartySessionState({
     this.roomCode,
+    this.selfUid,
     this.role,
     this.connection = PartyConnectionState.offline,
     this.peers = const {},
+    this.tracks = const {},
     this.members = const [],
     this.busy = false,
     this.ghost = false,
@@ -85,9 +96,11 @@ class PartySessionState {
 
   PartySessionState copyWith({
     String? roomCode,
+    String? selfUid,
     PartyRole? role,
     PartyConnectionState? connection,
     Map<String, PeerPosition>? peers,
+    Map<String, List<PeerTrack>>? tracks,
     List<PartyMember>? members,
     bool? busy,
     bool? ghost,
@@ -96,9 +109,11 @@ class PartySessionState {
   }) {
     return PartySessionState(
       roomCode: roomCode ?? this.roomCode,
+      selfUid: selfUid ?? this.selfUid,
       role: role ?? this.role,
       connection: connection ?? this.connection,
       peers: peers ?? this.peers,
+      tracks: tracks ?? this.tracks,
       members: members ?? this.members,
       busy: busy ?? this.busy,
       ghost: ghost ?? this.ghost,
@@ -119,6 +134,7 @@ class PartySession extends Notifier<PartySessionState> {
   PartyLocationStore? _store;
   BatteryMonitor? _battery;
   StreamSubscription<Map<String, PeerPosition>>? _peersSub;
+  StreamSubscription<Map<String, List<PeerTrack>>>? _tracksSub;
   StreamSubscription<PartyConnectionState>? _connSub;
   StreamSubscription<List<PartyMember>>? _membersSub;
   StreamSubscription<bool>? _ghostSub;
@@ -200,16 +216,29 @@ class PartySession extends Notifier<PartySessionState> {
 
     _peersSub = store.peersStream
         .listen((peers) => state = state.copyWith(peers: peers));
+    _tracksSub = store.tracksStream
+        .listen((tracks) => state = state.copyWith(tracks: tracks));
     _connSub = monitor.stateStream
         .listen((c) => state = state.copyWith(connection: c));
-    _membersSub = _repository
-        .watchMembers(code)
-        .listen((m) => state = state.copyWith(members: m));
+    _membersSub = _repository.watchMembers(code).listen(
+      (m) {
+        state = state.copyWith(members: m);
+        // 一覧から自分が消えた＝hostに退出させられた。
+        // （自発的な退出は _teardown が先に購読を止めるのでここへ来ない）
+        if (m.isNotEmpty && !m.any((member) => member.uid == uid)) {
+          unawaited(_onKicked());
+        }
+      },
+      // members から外れると room 全体の `.read` が失効し購読がエラーで死ぬ。
+      // これもキック（またはルーム消滅）として扱う。
+      onError: (Object _) => unawaited(_onKicked()),
+    );
     _ghostSub =
         store.ghostStream.listen((g) => state = state.copyWith(ghost: g));
 
     state = state.copyWith(
       roomCode: code,
+      selfUid: uid,
       role: role,
       busy: false,
       ghost: store.ghost,
@@ -221,6 +250,28 @@ class PartySession extends Notifier<PartySessionState> {
   /// ゴーストモードを切り替える（自分の位置共有を一時停止/再開）
   Future<void> setGhost(bool on) async {
     await _store?.setGhost(on);
+  }
+
+  /// メンバーを退出させる（host のみ）
+  Future<void> kick(String uid) async {
+    final code = state.roomCode;
+    if (code == null || state.role != PartyRole.host) return;
+    try {
+      await _repository.kickMember(code, uid);
+    } catch (e) {
+      state = state.copyWith(error: '$e');
+    }
+  }
+
+  /// hostに退出させられた（または部屋が消えた）ときの自動退出
+  Future<void> _onKicked() async {
+    if (!state.active) return;
+    await _teardown();
+    state = const PartySessionState();
+    ref.read(notificationCenterProvider.notifier).add(
+          title: t.party.kickedNotice,
+          level: NotificationLevel.warning,
+        );
   }
 
   /// 退出（host の場合はルームを終了）
@@ -241,6 +292,7 @@ class PartySession extends Notifier<PartySessionState> {
 
   Future<void> _teardown() async {
     await _peersSub?.cancel();
+    await _tracksSub?.cancel();
     await _connSub?.cancel();
     await _membersSub?.cancel();
     await _ghostSub?.cancel();
@@ -249,6 +301,7 @@ class PartySession extends Notifier<PartySessionState> {
     await _source?.dispose();
     await _battery?.dispose();
     _peersSub = null;
+    _tracksSub = null;
     _connSub = null;
     _membersSub = null;
     _ghostSub = null;

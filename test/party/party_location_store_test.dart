@@ -3,21 +3,26 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:root_maps/models/gps_position_record.dart';
 import 'package:root_maps/models/party/peer_position.dart';
+import 'package:root_maps/models/party/peer_track.dart';
 import 'package:root_maps/services/party/party_connection_monitor.dart';
 import 'package:root_maps/services/party/party_location_store.dart';
 import 'package:root_maps/services/party/peer_source.dart';
 
 class _FakePeerSource implements PeerSource {
   final peersCtrl = StreamController<Map<String, PeerPosition>>.broadcast();
+  final tracksCtrl =
+      StreamController<Map<String, List<PeerTrack>>>.broadcast();
   final srvCtrl = StreamController<bool>.broadcast();
   final published = <PeerPosition>[];
-  final tracks = <Map<String, Object?>>[];
+  final publishedTracks = <Map<String, Object?>>[];
   int onlineCalls = 0;
   int offlineCalls = 0;
   int clearCalls = 0;
 
   @override
   Stream<Map<String, PeerPosition>> get peers => peersCtrl.stream;
+  @override
+  Stream<Map<String, List<PeerTrack>>> get tracks => tracksCtrl.stream;
   @override
   Stream<bool> get serverConnected => srvCtrl.stream;
   @override
@@ -31,7 +36,7 @@ class _FakePeerSource implements PeerSource {
     required int fromMs,
     required int toMs,
   }) async =>
-      tracks.add({'pts': encodedPolyline, 'from': fromMs, 'to': toMs});
+      publishedTracks.add({'pts': encodedPolyline, 'from': fromMs, 'to': toMs});
   @override
   Future<void> goOnline() async => onlineCalls++;
   @override
@@ -91,6 +96,7 @@ void main() {
       await ifCtrl.close();
       await ownCtrl.close();
       await source.peersCtrl.close();
+      await source.tracksCtrl.close();
       await source.srvCtrl.close();
     });
 
@@ -105,6 +111,18 @@ void main() {
       });
       await pumpEventQueue();
       expect(store.peers.keys, ['other']);
+    });
+
+    test('tracksStream は自分を除外する', () async {
+      store = build();
+      store.start();
+      const track = PeerTrack(uid: 'x', points: [], fromMs: 0, toMs: 1);
+      source.tracksCtrl.add({
+        'self': [track],
+        'other': [track],
+      });
+      await pumpEventQueue();
+      expect(store.tracks.keys, ['other']);
     });
 
     test('online のとき自分の位置を publish する', () async {
@@ -209,8 +227,8 @@ void main() {
       expect(source.published.length, sentWhileOnline + 1,
           reason: '復帰時に最新位置を即送信');
       expect(gapCalls, 1);
-      expect(source.tracks, hasLength(1));
-      expect(source.tracks.first['pts'], 'abc');
+      expect(source.publishedTracks, hasLength(1));
+      expect(source.publishedTracks.first['pts'], 'abc');
     });
   });
 }

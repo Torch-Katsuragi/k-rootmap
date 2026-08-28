@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### 🔗 Invite links and QR codes for location-sharing parties
+
+- Copy an invite link or show a QR code from the room sheet.
+- Opening the link launches the web build with the join dialog pre-filled — no app needed.
+- The app's join screen can also scan the QR code.
+- The join field accepts either a room code or an invite link.
+
+### 👣 See where party members went while offline
+
+- Tracks walked while a member was out of coverage now arrive when they
+  reconnect, drawn as a faint line on the map.
+
+### 🚪 Hosts can now remove members
+
+- From the member list on the room sheet. The removed member gets a notification.
+
+### 📝 Cleaned up leftover old names (Root Maps)
+
+- Onboarding, permission disclosures, and the user guide now all say "Kokage Map".
+- The location disclosure now matches the location-sharing feature
+  (on-device only, shared with room members only while in a party).
+
 ### 🌳 The app is now called Kokage Map
 
 - It used to be "RootMap GIS" in some places and "K-Maps" in others. One name now.

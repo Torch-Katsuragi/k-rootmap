@@ -31,7 +31,7 @@
     "menu": "メニュー"
   },
   "home": {
-    "title": "Root Maps",
+    "title": "こかげマップ",
     "subtitle": "GeoPackageベースの地理情報管理・編集アプリケーション",
     "startProject": "プロジェクトを開始",
     "selectProjectFolder": "プロジェクトフォルダを選択して地図編集を開始してください",
@@ -88,7 +88,7 @@
     "feedback": {
       "title": "フィードバック",
       "callToAction": "ご意見・ご要望をお聞かせください",
-      "description": "Root Mapsをより良いアプリにするために、あなたのフィードバックをお待ちしています。\n\n機能の要望やバグ報告など、お気軽にお送りください。開発の参考にさせていただきます。",
+      "description": "こかげマップをより良いアプリにするために、あなたのフィードバックをお待ちしています。\n\n機能の要望やバグ報告など、お気軽にお送りください。開発の参考にさせていただきます。",
       "openForm": "フィードバックフォームを開く",
       "featureRequest": "機能の要望",
       "featureRequestDesc": "こんな機能があったら便利！というアイデア",
@@ -106,7 +106,7 @@
       "buildLabel": "ビルド $number",
       "packageName": "パッケージ名",
       "overview": "概要",
-      "overviewText": "Root MapsはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\nGeoPackage形式でのデータ管理、GPS測量・軌跡記録、外部GNSS機器連携、オフライン地図対応などの機能を提供します。",
+      "overviewText": "こかげマップはFlutter製のクロスプラットフォーム地図アプリケーションです。\n\nGeoPackage形式でのデータ管理、GPS測量・軌跡記録、外部GNSS機器連携、オフライン地図対応などの機能を提供します。",
       "licenses": "ライセンス",
       "openSourceLicenses": "オープンソースライセンス",
       "openSourceLicensesDesc": "使用しているパッケージのライセンス一覧"
@@ -991,7 +991,7 @@
     "columnNotFound": "カラム \"$name\" は存在しません"
   },
   "geometryType": {
-    "rootMapsFolder": "Root Mapsフォルダにアクセスできません"
+    "rootMapsFolder": "こかげマップフォルダにアクセスできません"
   },
   "qgisFilter": {
     "emptyExpression": "式が空です",
@@ -1001,18 +1001,18 @@
     "unclosedQuotes": "引用符が閉じられていません"
   },
   "onboarding": {
-    "welcome": "Root Mapsへようこそ",
+    "welcome": "こかげマップへようこそ",
     "welcomeDesc": "GeoPackageベースの地理情報管理アプリです。\nはじめに、アプリの利用に必要な設定を行います。",
     "next": "次へ",
     "getStarted": "はじめる",
     "permissionGranted": "許可済み",
     "laterSettings": "後で設定する",
     "storageTitle": "ファイルアクセス",
-    "storageDisclosure": "Root MapsはGeoPackageファイルの読み書き、地図キャッシュの保存、プロジェクトデータの管理のためにストレージへの完全アクセスが必要です。",
+    "storageDisclosure": "こかげマップはGeoPackageファイルの読み書き、地図キャッシュの保存、プロジェクトデータの管理のためにストレージへの完全アクセスが必要です。",
     "storageButton": "ストレージ権限を許可",
     "storageRequired": "この権限なしではアプリの基本機能を使えません",
     "locationTitle": "位置情報",
-    "locationDisclosure": "Root Mapsは、現在地のマップ表示、GPS測量、GPS軌跡の記録のために位置情報を取得します。\n\n位置情報はデバイス内に保存され、外部サーバーに送信されることはありません。",
+    "locationDisclosure": "こかげマップは、現在地のマップ表示、GPS測量、GPS軌跡の記録、位置共有パーティのために位置情報を取得します。\n\n位置情報はデバイス内に保存されます。位置共有パーティに参加している間だけ、あなたの現在位置がルームのメンバーと共有されます。",
     "locationButton": "位置情報を許可する",
     "locationDeniedNote": "GPS機能が利用できません。設定アプリから後で許可できます。",
     "bluetoothTitle": "Bluetooth接続",
@@ -1069,8 +1069,8 @@
     "title": "位置共有パーティ",
     "displayName": "表示名",
     "displayNameHint": "例: 田中",
-    "joinPrompt": "参加する場合はコードを入力",
-    "roomCodeLabel": "ルームコード（8文字）",
+    "joinPrompt": "参加する場合はコードか招待リンクを入力",
+    "roomCodeLabel": "ルームコード / 招待リンク",
     "roomCodeHint": "例: AB23CD45",
     "join": "参加",
     "createHost": "新規作成（ホスト）",
@@ -1086,7 +1086,21 @@
     "connConnecting": "接続中…",
     "connOffline": "圏外（保留中）",
     "initFailed": "位置共有を初期化できませんでした",
-    "signInUnconfirmed": "サインインが確認できません"
+    "signInUnconfirmed": "サインインが確認できません",
+    "paste": "貼り付け",
+    "scanQr": "QRスキャン",
+    "invalidCode": "コードまたは招待リンクを確認してください",
+    "copyInviteLink": "招待リンク",
+    "inviteLinkCopied": "招待リンクをコピーしました",
+    "showQr": "QRコード",
+    "inviteQrTitle": "ルームに招待",
+    "inviteQrDesc": "スマホのカメラで読み取るとブラウザの参加ページが開きます。アプリの参加画面のQRスキャンでも読み取れます。",
+    "kick": "退出させる",
+    "kickConfirm": "${name} をルームから退出させますか？",
+    "kickedNotice": "ホストによってルームから退出しました",
+    "memberFallback": "メンバー",
+    "minAgo": "${min}分前",
+    "secAgo": "${sec}秒前"
   },
   "qgis": {
     "exportProject": "QGISプロジェクトを書き出す",

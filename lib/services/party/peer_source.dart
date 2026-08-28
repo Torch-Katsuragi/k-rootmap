@@ -22,6 +22,7 @@
 library;
 
 import '../../models/party/peer_position.dart';
+import '../../models/party/peer_track.dart';
 
 /// ピア位置ソース
 abstract class PeerSource {
@@ -29,6 +30,11 @@ abstract class PeerSource {
   ///
   /// 自分自身を含むか否かは実装依存。除外は [PartyLocationStore] 側で行う。
   Stream<Map<String, PeerPosition>> get peers;
+
+  /// 全メンバーの圏外区間軌跡（uid -> [PeerTrack] のリスト）のスナップショットを流す。
+  ///
+  /// gap backfill の受信側。自分自身の除外は [PartyLocationStore] 側で行う。
+  Stream<Map<String, List<PeerTrack>>> get tracks;
 
   /// 実サーバーとの接続状態（RTDBの `.info/connected` 相当）。
   ///

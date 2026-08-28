@@ -16,7 +16,21 @@
 import 'package:flutter/foundation.dart';
 
 /// アプリケーション全体のロギングを管理するクラス
+///
+/// > [!IMPORTANT] web でログを読む方法
+/// > **画面のオーバーレイで読む**（[buffer] を `DebugLogOverlay` が表示する）。
+/// > ⚠ ブラウザのコンソールも、`window` への書き出しも、DOMへの書き出しも
+/// > 当てにしないこと。2026-08-27〜28 に4通り試して全部読めず、丸一日溶かした。
+/// > Flutterの外へ出そうとせず、Flutterの中で見るのが唯一確実だった。
 class AppLogger {
+  /// ログの控え（リングバッファ）。**条件を付けずに常に**積む
+  static final List<String> buffer = <String>[];
+
+  /// [buffer] の更新通知。`DebugLogOverlay` が監視する
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  static const int _kMaxLines = 2000;
+
   /// リリースビルドでもログを出すか（`--dart-define=K_LOG=true`）
   ///
   /// ⚠ **web のリリースビルドは `kDebugMode` が false** なので、既定だと
@@ -33,38 +47,28 @@ class AppLogger {
   /// ⚠ `debugPrint` はリリースのwebでコンソールに出なかった（2026-08-28）。
   /// `K_LOG` で焼き込んだときは `print` を使う。
   static void _emit(String line) {
+    // ⚠ 控えは条件無しで積む。ここに条件を足すと、また「何も見えない」に戻る
+    buffer.add(line);
+    if (buffer.length > _kMaxLines) buffer.removeAt(0);
+    revision.value++;
     if (_forceLog) {
       // ignore: avoid_print
       print(line);
-    } else {
+    } else if (_enabled) {
       debugPrint(line);
     }
   }
 
   /// 一般的なログ出力
-  static void log(Object? message) {
-    if (_enabled) {
-      _emit('[LOG] $message');
-    }
-  }
+  static void log(Object? message) => _emit('[LOG] $message');
 
   /// エラーログ出力
   static void error(Object? message, [dynamic error, StackTrace? stackTrace]) {
-    if (_enabled) {
-      _emit('[ERROR] $message');
-      if (error != null) {
-        _emit(error.toString());
-      }
-      if (stackTrace != null) {
-        _emit(stackTrace.toString());
-      }
-    }
+    _emit('[ERROR] $message');
+    if (error != null) _emit(error.toString());
+    if (stackTrace != null) _emit(stackTrace.toString());
   }
 
   /// デバッグ用ログ出力
-  static void debug(Object? message) {
-    if (_enabled) {
-      _emit('[DEBUG] $message');
-    }
-  }
+  static void debug(Object? message) => _emit('[DEBUG] $message');
 }

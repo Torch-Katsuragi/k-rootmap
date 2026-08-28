@@ -21,6 +21,8 @@
 - Google's sign-in prompt (One Tap) now fires as the app opens.
 - Once you have granted access, a reload reconnects to Drive **without
   showing anything** (it is restored inside your first Drive action).
+- A small "LOG" chip sits in the bottom-left corner. Tap it to see the
+  activity record (copy and paste it when reporting a problem).
 - Fixed a Drive URL you had finished typing sometimes staying stuck on
   "cannot access this folder".
 - Fixed the "General" settings page, which used to spin forever in a browser.

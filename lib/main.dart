@@ -29,6 +29,7 @@ import 'core/db/database_factory_setup.dart';
 import 'core/path_resolver.dart';
 import 'core/platform_capabilities.dart';
 import 'services/google_drive/index.dart';
+import 'widgets/debug_log_overlay.dart';
 import 'providers/project_providers.dart';
 import 'providers/ui_state_providers.dart';
 import 'providers/selection_providers.dart';
@@ -75,6 +76,7 @@ void main() async {
   // sqflite の実装をプラットフォームごとに選ぶ（web は sqlite3 WASM）
   setupDatabaseFactory();
 
+  AppLogger.debug('[Boot] runApp');
   runApp(TranslationProvider(child: const ProviderScope(child: RootMapsApp())));
 }
 
@@ -289,19 +291,12 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
         useMaterial3: true,
       ),
       builder: (context, child) {
-        if (scaleFactor == 1.0) return child!;
-        final mq = MediaQuery.of(context);
-        // 論理サイズを逆スケールして、Transform.scaleで拡大した時に
-        // 実際の画面サイズにぴったり収まるようにする
-        // ⚠ web の認可ポップアップは**ユーザー操作の直後（Chromeで約5秒）**
-        // でしか開けない。Driveの操作を押してから復元しようとすると、
-        // ダイアログを組み立てているうちに切れてブロックされる。
-        // アプリ内の最初の操作でここで済ませておけば、Driveに触る頃には
-        // もう繋がっている。何も起きない環境ではすぐ諦めるので害は無い。
-        return Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => _restoreDriveOnce(),
-          child: MediaQuery(
+        Widget content = child!;
+        if (scaleFactor != 1.0) {
+          // 論理サイズを逆スケールして、Transform.scaleで拡大した時に
+          // 実際の画面サイズにぴったり収まるようにする
+          final mq = MediaQuery.of(context);
+          content = MediaQuery(
             data: mq.copyWith(
               size: mq.size / scaleFactor,
               padding: mq.padding / scaleFactor,
@@ -315,9 +310,25 @@ class _RootMapsAppState extends ConsumerState<RootMapsApp>
               child: Transform.scale(
                 scale: scaleFactor,
                 alignment: Alignment.topLeft,
-                child: child,
+                child: content,
               ),
             ),
+          );
+        }
+        // ⚠ web の認可ポップアップは**ユーザー操作の直後（Chromeで約5秒）**
+        // でしか開けない。Driveの操作を押してから復元しようとすると、
+        // ダイアログを組み立てているうちに切れてブロックされる。
+        // アプリ内の最初の操作でここで済ませておけば、Driveに触る頃には
+        // もう繋がっている。何も起きない環境ではすぐ諦めるので害は無い。
+        //
+        // ⚠ この Listener はスケールの有無に関わらず**必ず**通すこと。
+        // 以前は等倍のとき `return child!` で早期に抜けており、
+        // **復元が一度も走らない**というバグになっていた（2026-08-28に発見）。
+        return DebugLogOverlay(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => _restoreDriveOnce(),
+            child: content,
           ),
         );
       },

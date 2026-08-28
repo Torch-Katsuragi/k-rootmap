@@ -164,7 +164,10 @@ class GoogleDriveService {
   /// 同意がまだ／ブラウザにGoogleのセッションが無ければ失敗する。そのときは
   /// 通常のサインインUIに任せる。
   Future<bool> restoreWebAuthorization() async {
-    final hint = await _rememberedEmail();
+    // ⚠ hint はこの2択。**ライブラリの authorizeScopes に落とさないこと。**
+    // あちらは `prompt=select_account` を抱き合わせるので、同意済みでも
+    // 毎回アカウント選択が出る（2026-08-28、本番で毎回クリックさせていた）。
+    final hint = await _rememberedEmail() ?? _currentUser?.email;
     if (hint == null || hint.isEmpty) {
       // ⚠ `login_hint` が無いと、Googleがアカウントを決められず
       // 選択画面で止まる（＝無音にならない）。ここは諦めてUIに渡す。
@@ -273,15 +276,22 @@ class GoogleDriveService {
       // [webSignInButton] の担当で、ここは**スコープ認可**を受け持つ。
       // この経路はボタンのクリック直下なので、ポップアップが開ける。
       if (PlatformCapabilities.isWeb) {
+        // ⚠ アカウントの有無に関わらず、まず無音復元（login_hint 直叩き）。
+        // 以前はアカウントがあるとライブラリの `authorizeScopes` に落ちており、
+        // `select_account` 抱き合わせで**毎回アカウント選択が出ていた**。
+        if (await restoreWebAuthorization()) return true;
+
         final user = _currentUser;
         if (user == null) {
-          // One Tap が通っていなくても、同意済みなら認可だけ拾える
-          if (await restoreWebAuthorization()) return true;
+          // hint が本当に無い＝このブラウザで初めて。ここは画面が出て正しい
           authState.setUnauthenticated();
           return false;
         }
+        // hint があったのに無音で通らなかった＝同意がまだ（本当の初回）。
+        // ここで出る同意画面は正当。ただしライブラリ経由なので選択画面も付く
         await _initializeDriveApi(user);
         authState.setAuthenticated(DriveUser.fromGoogleAccount(user));
+        await _rememberEmail(user.email);
         return true;
       }
 

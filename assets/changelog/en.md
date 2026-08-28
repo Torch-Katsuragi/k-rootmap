@@ -20,7 +20,8 @@
 - Clone a Drive folder from the browser and upload or download it.
 - Google's sign-in prompt (One Tap) now fires as the app opens.
 - Once you have granted access, a reload reconnects to Drive **without
-  showing anything** (it is restored inside your first Drive action).
+  asking anything** (a small window opens for about a second and closes
+  itself; no interaction needed).
 - Syncing after leaving the tab open for over an hour now reconnects
   automatically before running.
 - A small "LOG" chip sits in the bottom-left corner. Tap it to see the

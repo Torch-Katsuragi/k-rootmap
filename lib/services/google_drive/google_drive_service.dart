@@ -382,10 +382,40 @@ class GoogleDriveService {
     return true;
   }
 
+  /// いまの API が実際に使えるか確かめ、死んでいれば取り直す
+  ///
+  /// ⚠ **web のトークンは約1時間で失効し、失効しても `_driveApi` は
+  /// 残ったまま**になる（リフレッシュトークンが無いので自動更新できない）。
+  /// タブを開きっぱなしにした翌操作で 401 を踏み、同期エラーに化けていた。
+  /// 同期の入口では [isDriveApiAvailable] ではなくこれを使うこと。
+  /// 軽い実呼び出し（about.get）で生存確認する。
+  ///
+  /// ⚠ 取り直しはポップアップを使うので、**クリックの直下から呼ぶこと**。
+  Future<bool> ensureUsableApi() async {
+    final api = _driveApi;
+    if (api == null) return false;
+    try {
+      await api.about.get($fields: 'user');
+      return true;
+    } catch (e) {
+      AppLogger.debug('[GoogleDriveService] APIが失効している: $e');
+      _driveApi = null;
+      if (PlatformCapabilities.isWeb) return restoreWebAuthorization();
+      return refreshToken();
+    }
+  }
+
   /// トークンをリフレッシュしてDrive APIを再初期化
   /// トークン期限切れエラー時に呼び出す
   Future<bool> refreshToken() async {
     if (!_isInitialized) return false;
+
+    // ⚠ web の復元セッション（無音復元）には GoogleSignInAccount が無く、
+    // 下の native 向けの経路では立て直せない。復元をやり直す。
+    if (PlatformCapabilities.isWeb) {
+      _driveApi = null;
+      return restoreWebAuthorization();
+    }
 
     try {
       if (_currentUser == null) {

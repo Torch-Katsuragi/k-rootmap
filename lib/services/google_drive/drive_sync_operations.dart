@@ -326,9 +326,11 @@ class DriveSyncOperations {
   Future<bool> ensureDriveAuthenticated(BuildContext context) async {
     final driveService = GoogleDriveService();
 
+    // ⚠ `isDriveApiAvailable` だけ見て通すと、失効した API を掴んだまま
+    // 同期に入って 401 を踏む（webは約1時間で失効）。実呼び出しで確かめる。
     if (driveService.isDriveApiAvailable) {
-      await driveService.refreshToken();
-      return true;
+      if (await driveService.ensureUsableApi()) return true;
+      // 失効していて取り直しも失敗 → 下のサインイン経路に落とす
     }
 
     await driveService.initialize();

@@ -175,6 +175,20 @@
   - [ ] ⚠ **既定基盤地図のOSMタイルが 403 "Access blocked"**（Pixel 9 のデバッグビルドで確認。
         OSMのタイル利用ポリシー由来 = User-Agent/Referer。**公開前に要対応**:
         UA設定 or 既定を地理院タイルへ）
+- [x] **写真インポートでGPS位置情報が欠落するのを修正（2026-08-28）**
+  - 原因: `GET_CONTENT` が**システム Photo Picker**（`com.google.android.photopicker`）に
+    ルーティングされ、picker URI は ①`openInputStream` が GPS ゼロ埋めの複製を返す
+    ②`_data` クエリも「成功」するが返るのは `/sdcard/.transforms/synthetic/...`
+    という**リダクション済み合成パス**（ここに既存対策が騙されていた）
+  - 修正: picker URI からメディアIDを取り出し `MediaStore.Images` の実体で `_data` を
+    引き直す＋synthetic パスは実パス扱いしない（`MainActivity.resolveRealPath`）。
+    実パス直読みは FUSE リダクション対象外なので EXIF が丸ごと残る（Pixel 9 実測）
+  - ついでに Photo Picker が表示名をメディアID（`20.jpg`）にする問題も
+    `resolveDisplayName` で元名に戻した
+  - ⚠ クラウド専用アイテム（ローカル実体なし）は実パスが無く、従来どおり
+    リダクション済みで取り込まれる（「位置情報なし」表示で見分けられる）
+  - ℹ 端末の Photo Picker ⋮ メニューに「位置情報を含める」は未搭載だった
+    （2026年8月の mainline 更新で入る見込みの機能。入ればユーザー側でも回避可能になる）
 
 ### 段1 の積み残し（2026-08-26 に全て解消）
 

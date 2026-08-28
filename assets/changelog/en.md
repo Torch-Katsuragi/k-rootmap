@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### 📷 Photos keep their location info when added (Android)
+
+- The system photo picker strips GPS metadata for privacy; imported photos
+  lost their capture location and direction.
+- The app now re-reads the original file directly, preserving all metadata.
+- Also fixed imports being named after a number (like "20.jpg") — the
+  original file name is kept.
+- ⚠ Cloud-only photos (no local copy on the device) still have no location;
+  those show "no location info" as before.
+
 ### 🔗 Invite links and QR codes for location-sharing parties
 
 - Copy an invite link or show a QR code from the room sheet.

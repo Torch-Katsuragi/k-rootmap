@@ -69,11 +69,15 @@ class GalleryImporter {
     int imported = 0;
     for (final file in result.files) {
       try {
+        // Photo Picker は表示名がメディアID（例: "20.jpg"）になるので、
+        // MediaStore から元のファイル名を引き直せたらそちらを使う
+        final name = await _resolveSourceName(file);
+
         // 拡張子を name から取得（identifier 経由だと srcPath が無い場合がある）
-        final ext = p.extension(file.name).toLowerCase();
+        final ext = p.extension(name).toLowerCase();
         if (ext.isEmpty) continue;
 
-        final baseName = p.basenameWithoutExtension(file.name);
+        final baseName = p.basenameWithoutExtension(name);
         final destPath = _uniquePath(folderPath, baseName, ext);
 
         // Android: content URI からネイティブ側で実ファイルを直接コピー（EXIF 保持）
@@ -99,6 +103,22 @@ class GalleryImporter {
       );
     }
     return imported > 0;
+  }
+
+  /// 元のファイル名を解決する（Android のみ MediaStore へ問い合わせ）。
+  /// 取れなければピッカーが報告した表示名のまま。
+  static Future<String> _resolveSourceName(PlatformFile file) async {
+    if (PlatformCapabilities.supportsNativeGalleryCopy &&
+        file.identifier != null) {
+      try {
+        final name = await _channel.invokeMethod<String>(
+          'resolveDisplayName',
+          {'uri': file.identifier},
+        );
+        if (name != null && name.isNotEmpty) return name;
+      } catch (_) {}
+    }
+    return file.name;
   }
 
   /// ファイルをコピーする。

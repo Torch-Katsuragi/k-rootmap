@@ -1,1 +1,24 @@
-{"database":{"rules":"database.rules.json"},"functions":[{"source":"functions","codebase":"default","ignore":["node_modules",".git","firebase-debug.log","firebase-debug.*.log"]}],"flutter":{"platforms":{"android":{"default":{"projectId":"nemurigi-kobo","appId":"1:348302294570:android:b8e5b42b56014d34044d53","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"nemurigi-kobo","configurations":{"android":"1:348302294570:android:b8e5b42b56014d34044d53","ios":"1:348302294570:ios:484ebda2f76caf23044d53"}}}}}}
+{
+  "hosting": {
+    "site": "kokage-map",
+    "public": "build/web",
+    "ignore": ["firebase.json", "**/.*"],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Robots-Tag", "value": "noindex" }
+        ]
+      },
+      {
+        "source": "**/*.@(js|wasm)",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=3600" }
+        ]
+      }
+    ],
+    "rewrites": [
+      { "source": "**", "destination": "/index.html" }
+    ]
+  }
+}

@@ -215,7 +215,7 @@ google_sign_inパッケージはWebクライアントIDも必要。
 | オリジン | 用途 |
 | --- | --- |
 | `http://localhost:8099` | 開発（`build/web` を `python -m http.server 8099` で配信） |
-| （未定） | 本番。Hosting のドメインを決めたら足す |
+| `https://kokage-map.sleeptree.jp` | 本番（[[web-hosting]]、2026-08-28 登録） |
 
 反映まで5分〜数時間かかることがある。
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### 🗾 The default basemap is now GSI (standard map)
+
+- Fixed OpenStreetMap tiles all turning into "Access blocked" images
+  (the app now identifies itself the way the tile usage policy requires).
+- The initial basemap is now the GSI standard map. OpenStreetMap remains
+  available as a basemap choice.
+- ⚠ Bulk download is no longer available for OpenStreetMap (prohibited by
+  its tile usage policy; GSI maps can still be bulk-downloaded).
+- ℹ If "Access blocked" images got cached, clear them via
+  Settings → Basemap → Clear cache.
+
 ### 📷 Photos keep their location info when added (Android)
 
 - The system photo picker strips GPS metadata for privacy; imported photos

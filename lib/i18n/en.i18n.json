@@ -187,7 +187,8 @@
       "progress": "$percent% complete ($processed / $total)",
       "successDownloaded": "Downloaded",
       "skipped": "Skipped",
-      "errors": "Errors"
+      "errors": "Errors",
+      "osmNotAllowed": "OpenStreetMap cannot be bulk-downloaded (prohibited by its tile usage policy). Switch to a GSI map before downloading."
     },
     "cacheDialog": {
       "title": "Clear Cache",

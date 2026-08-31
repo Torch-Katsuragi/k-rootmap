@@ -252,6 +252,15 @@ class _BaseMapSettingsScreenState extends ConsumerState<BaseMapSettingsScreen> {
 
   /// ダウンロード設定ダイアログを表示
   Future<void> _showDownloadDialog() async {
+    // OSMは一括ダウンロード禁止（タイル利用ポリシー: prefetchはブロック対象）
+    if (_baseMapService.currentProvider.type == BaseMapType.openStreetMap) {
+      ref.read(notificationCenterProvider.notifier).add(
+            title: t.basemap.download.osmNotAllowed,
+            level: NotificationLevel.warning,
+          );
+      return;
+    }
+
     // 現在の地図中心座標を取得
     LatLng center;
     try {

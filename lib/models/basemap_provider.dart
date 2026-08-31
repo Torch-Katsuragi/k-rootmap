@@ -18,6 +18,16 @@
 library;
 import 'package:flutter/material.dart';
 
+/// タイル取得時の User-Agent（Android/iOS のみ。webはブラウザが付ける）。
+///
+/// ⚠ OSMのタイル利用ポリシーは「アプリを特定できる固有のUA＋連絡先」を要求し、
+/// 汎用UA・偽装UAは**予告なくブロック**される。以前の `com.example.k_maps` は
+/// これに引っかかり、全タイルが 403 "Access blocked" になっていた
+/// （2026-08-28 Pixel 9 で確認）。文字列を変えるときはポリシーを読み直すこと:
+/// https://operations.osmfoundation.org/policies/tiles/
+const String kTileUserAgent =
+    'KokageMap/1.0 (+https://kokage-map.sleeptree.jp; k-root@googlegroups.com)';
+
 /// 背景地図の種類を定義するenum
 enum BaseMapType {
   openStreetMap,
@@ -38,7 +48,6 @@ class BaseMapProvider {
   final int maxZoom;
   final int minZoom;
   final String attribution;
-  final String? userAgentPackageName;
   final BaseMapType type;
   final IconData icon;
 
@@ -50,7 +59,6 @@ class BaseMapProvider {
     this.maxZoom = 18,
     this.minZoom = 1,
     required this.attribution,
-    this.userAgentPackageName,
     required this.type,
     required this.icon,
   });
@@ -58,6 +66,8 @@ class BaseMapProvider {
   /// 利用可能な背景地図プロバイダーのリスト
   static const List<BaseMapProvider> availableProviders = [
     // OpenStreetMap
+    // ⚠ 一括ダウンロードは不可（ポリシーで prefetch がブロック対象）。
+    //   既定地図にもしない（community運営サーバへの負荷配慮）。
     BaseMapProvider(
       id: 'osm',
       name: 'OpenStreetMap',
@@ -65,7 +75,6 @@ class BaseMapProvider {
       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       maxZoom: 19,
       attribution: '© OpenStreetMap contributors',
-      userAgentPackageName: 'com.example.k_maps',
       type: BaseMapType.openStreetMap,
       icon: Icons.public,
     ),
@@ -156,8 +165,13 @@ class BaseMapProvider {
     }
   }
 
-  /// デフォルトの背景地図プロバイダー（OpenStreetMap）
-  static BaseMapProvider get defaultProvider => availableProviders.first;
+  /// デフォルトの背景地図プロバイダー（国土地理院 標準地図）
+  ///
+  /// OSMを既定にしない: タイル利用ポリシー上、配布アプリの既定として
+  /// community運営サーバへ全ユーザーのトラフィックを向けるのは避ける
+  /// （2026-08-28 変更。OSMは選択肢としては残る）。
+  static BaseMapProvider get defaultProvider =>
+      availableProviders.firstWhere((p) => p.id == 'gsi_std');
 
   /// 国土地理院地図のプロバイダーのみを取得
   static List<BaseMapProvider> get gsiProviders =>

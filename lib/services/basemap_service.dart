@@ -565,8 +565,9 @@ class BaseMapService extends ChangeNotifier {
           .get(
             Uri.parse(url),
             headers: {
-              if (provider.userAgentPackageName != null)
-                'User-Agent': provider.userAgentPackageName!,
+              // アプリを特定できるUAを常に送る（OSMポリシー要件。GSIにも礼儀として）。
+              // webはブラウザのUAが付く上、User-Agentは禁止ヘッダなので送らない
+              if (!kIsWeb) 'User-Agent': kTileUserAgent,
             },
           )
           .timeout(Duration(seconds: timeout));
